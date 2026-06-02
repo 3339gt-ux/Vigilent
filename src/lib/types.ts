@@ -1,9 +1,20 @@
-export type UserRole = 'Admin' | 'Editor' | 'Auditor' | 'Viewer';
+export type UserRole = 'Owner' | 'Admin' | 'Editor' | 'Auditor' | 'Viewer';
 
 export interface Organization {
   id: string;
   name: string;
   compliance_profile: string;
+  industry: string | null;
+  country: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrganizationMember {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  role: UserRole;
   created_at: string;
   updated_at: string;
 }

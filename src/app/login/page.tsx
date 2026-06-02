@@ -8,12 +8,19 @@ import { ShieldCheck, ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useApp();
+  const { login, resetPassword, isAuthenticated, hasOrganization, isLoading } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [agreedDisclaimers, setAgreedDisclaimers] = useState(true);
+
+  React.useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.push(hasOrganization ? '/dashboard' : '/onboarding');
+    }
+  }, [isLoading, isAuthenticated, hasOrganization, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,9 +37,7 @@ export default function LoginPage() {
     setError('');
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 800));
-      const success = await login(email);
+      const success = await login(email, password);
       if (success) {
         router.push('/dashboard');
       } else {
@@ -40,6 +45,25 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred during authentication.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    if (!email) {
+      setError('Enter your email address first.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError('');
+    setNotice('');
+    try {
+      await resetPassword(email);
+      setNotice('Password reset instructions have been sent if the email is registered.');
+    } catch (err: any) {
+      setError(err.message || 'Unable to send password reset instructions.');
     } finally {
       setIsSubmitting(false);
     }
@@ -77,6 +101,12 @@ export default function LoginPage() {
             <div className="p-3 bg-destructive/15 border border-destructive/20 text-destructive text-xs font-semibold rounded-lg flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {notice && (
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold rounded-lg">
+              {notice}
             </div>
           )}
 
@@ -142,6 +172,15 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+
+          <button
+            type="button"
+            onClick={handlePasswordReset}
+            disabled={isSubmitting}
+            className="w-full text-center text-xs text-indigo-500 hover:underline font-semibold disabled:opacity-50"
+          >
+            Send password reset email
+          </button>
 
           <p className="text-center text-xs text-muted-foreground">
             Don't have an workspace yet?{' '}

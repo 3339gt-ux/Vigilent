@@ -6,19 +6,22 @@ The repository is a prototype with useful Supabase schema groundwork, but produc
 
 ## Authentication
 
-Status: blocking.
+Status: partially implemented.
 
-- Login and registration are mock-only in demo mode.
-- Production sign-in and registration now fail closed instead of silently accepting any credentials.
-- Required next step: implement Supabase Auth and server-side organization onboarding.
+- Demo login and registration remain available only with `NEXT_PUBLIC_VIGILEN_APP_MODE=demo`.
+- Production login, signup, logout, session loading, and password reset now use Supabase Auth.
+- Authenticated users without an organization are routed to onboarding.
+- Required next step: test Supabase email-confirmation settings and add an update-password callback page if password recovery should complete inside Vigilen.
 
 ## Tenant Isolation
 
-Status: partial.
+Status: improved, pending test.
 
 - Tenant-owned tables include `organization_id`.
 - RLS is enabled on core tables.
-- Schema policies now include a `current_organization_id()` helper and `with check` clauses for tenant-owned writes.
+- Schema policies include organization membership helpers and `with check` clauses for tenant-owned writes.
+- `organization_members` is now the production membership authority.
+- First-organization onboarding is performed by `create_organization_for_current_user`, a security-definer RPC called by the authenticated user through the anon client.
 - Required next step: test RLS with multiple real Supabase users and organizations.
 
 ## RLS Risks

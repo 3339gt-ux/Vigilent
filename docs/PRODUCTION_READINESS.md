@@ -30,9 +30,9 @@ Future production variables:
 
 ## Production Blockers
 
-- Supabase Auth is not wired into login/register.
-- Organization creation is not server-side or transactional.
-- No server-side authorization layer exists for tenant-sensitive mutations.
+- Supabase Auth is wired into login/register/logout/password-reset from the browser anon client.
+- Organization creation is handled by the `create_organization_for_current_user` Supabase RPC, which creates the organization, owner membership, and profile atomically for the authenticated user.
+- Tenant-sensitive mutations still need deeper role enforcement and test coverage beyond baseline RLS and client scoping.
 - Evidence files are not stored in private Supabase Storage.
 - Signed URLs are not implemented.
 - Billing is simulated and must be replaced with Stripe-hosted flows.

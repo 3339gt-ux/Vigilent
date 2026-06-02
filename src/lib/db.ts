@@ -17,6 +17,8 @@ export const MOCK_ORG: Organization = {
   id: 'org-apex-101',
   name: 'Apex Logistics Ltd',
   compliance_profile: 'Transport & Warehousing',
+  industry: 'Transport & Warehousing',
+  country: 'Ireland',
   created_at: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString(),
   updated_at: new Date().toISOString()
 };
@@ -355,16 +357,51 @@ const shouldUseSupabase = () => {
   return !isDemoMode;
 };
 
-const getCurrentSupabaseProfile = async (): Promise<Profile> => {
+export const getCurrentSupabaseUserId = async (): Promise<string> => {
   if (!supabase) throw new Error('Supabase client is not configured.');
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Unauthenticated');
+  return user.id;
+};
 
-  const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+export const getCurrentSupabaseProfile = async (): Promise<Profile | null> => {
+  if (!supabase) throw new Error('Supabase client is not configured.');
+
+  const userId = await getCurrentSupabaseUserId();
+  const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
   if (error) throw error;
-  if (!data?.organization_id) throw new Error('Authenticated user is not linked to an organization.');
   return data;
+};
+
+export const getCurrentSupabaseOrganization = async (): Promise<Organization | null> => {
+  if (!supabase) throw new Error('Supabase client is not configured.');
+
+  const userId = await getCurrentSupabaseUserId();
+  const { data: membership, error: memberError } = await supabase
+    .from('organization_members')
+    .select('organization_id, role')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (memberError) throw memberError;
+  if (!membership?.organization_id) return null;
+
+  const { data, error } = await supabase
+    .from('organizations')
+    .select('*')
+    .eq('id', membership.organization_id)
+    .single();
+  if (error) throw error;
+  return data;
+};
+
+const getCurrentSupabaseOrganizationId = async (): Promise<string> => {
+  const org = await getCurrentSupabaseOrganization();
+  if (!org) throw new Error('Authenticated user is not linked to an organization.');
+  return org.id;
 };
 
 // Database Service Implementation
@@ -372,7 +409,9 @@ export const dbService = {
   // Current Org & Profile Info
   async getProfile(): Promise<Profile> {
     if (shouldUseSupabase()) {
-      return getCurrentSupabaseProfile();
+      const profile = await getCurrentSupabaseProfile();
+      if (!profile) throw new Error('Authenticated user profile has not been created.');
+      return profile;
     } else {
       initMockDb();
       return getStorageItem('vigilen_profile', MOCK_PROFILE);
@@ -406,7 +445,8 @@ export const dbService = {
   // Compliance Requirements
   async getRequirements(): Promise<ComplianceRequirement[]> {
     if (shouldUseSupabase()) {
-      const { data, error } = await supabase!.from('compliance_requirements').select('*');
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!.from('compliance_requirements').select('*').eq('organization_id', orgId);
       if (error) throw error;
       return data || [];
     } else {
@@ -417,7 +457,8 @@ export const dbService = {
 
   async addRequirement(req: Omit<ComplianceRequirement, 'id' | 'created_at'>): Promise<ComplianceRequirement> {
     if (shouldUseSupabase()) {
-      const { data, error } = await supabase!.from('compliance_requirements').insert([req]).select().single();
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!.from('compliance_requirements').insert([{ ...req, organization_id: orgId }]).select().single();
       if (error) throw error;
       return data;
     } else {
@@ -437,7 +478,8 @@ export const dbService = {
   // Evidence Documents (Vault)
   async getDocuments(): Promise<EvidenceDocument[]> {
     if (shouldUseSupabase()) {
-      const { data, error } = await supabase!.from('evidence_documents').select('*');
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!.from('evidence_documents').select('*').eq('organization_id', orgId);
       if (error) throw error;
       return data || [];
     } else {
@@ -447,8 +489,7 @@ export const dbService = {
   },
 
   async addDocument(doc: Omit<EvidenceDocument, 'id' | 'created_at' | 'updated_at' | 'organization_id'>): Promise<EvidenceDocument> {
-    const profile = shouldUseSupabase() ? await getCurrentSupabaseProfile() : null;
-    const orgId = profile?.organization_id || MOCK_ORG.id;
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('evidence_documents').insert([{ ...doc, organization_id: orgId }]).select().single();
       if (error) throw error;
@@ -477,7 +518,8 @@ export const dbService = {
 
   async updateDocument(docId: string, updates: Partial<EvidenceDocument>): Promise<EvidenceDocument> {
     if (shouldUseSupabase()) {
-      const { data, error } = await supabase!.from('evidence_documents').update(updates).eq('id', docId).select().single();
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!.from('evidence_documents').update(updates).eq('id', docId).eq('organization_id', orgId).select().single();
       if (error) throw error;
       return data;
     } else {
@@ -512,7 +554,8 @@ export const dbService = {
 
   async deleteDocument(docId: string): Promise<void> {
     if (shouldUseSupabase()) {
-      const { error } = await supabase!.from('evidence_documents').delete().eq('id', docId);
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { error } = await supabase!.from('evidence_documents').delete().eq('id', docId).eq('organization_id', orgId);
       if (error) throw error;
     } else {
       const docs = getStorageItem('vigilen_documents', MOCK_DOCUMENTS);
@@ -535,7 +578,8 @@ export const dbService = {
   // Matrix Cells
   async getMatrixCells(): Promise<MatrixCell[]> {
     if (shouldUseSupabase()) {
-      const { data, error } = await supabase!.from('matrix_cells').select('*');
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!.from('matrix_cells').select('*').eq('organization_id', orgId);
       if (error) throw error;
       return data || [];
     } else {
@@ -546,7 +590,8 @@ export const dbService = {
 
   async updateMatrixCell(cellId: string, updates: Partial<MatrixCell>): Promise<MatrixCell> {
     if (shouldUseSupabase()) {
-      const { data, error } = await supabase!.from('matrix_cells').update(updates).eq('id', cellId).select().single();
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!.from('matrix_cells').update(updates).eq('id', cellId).eq('organization_id', orgId).select().single();
       if (error) throw error;
       return data;
     } else {
@@ -563,7 +608,8 @@ export const dbService = {
   // Audit Packs
   async getAuditPacks(): Promise<AuditPack[]> {
     if (shouldUseSupabase()) {
-      const { data, error } = await supabase!.from('audit_packs').select('*');
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!.from('audit_packs').select('*').eq('organization_id', orgId);
       if (error) throw error;
       return data || [];
     } else {
@@ -573,8 +619,7 @@ export const dbService = {
   },
 
   async addAuditPack(pack: Omit<AuditPack, 'id' | 'created_at' | 'updated_at' | 'organization_id'>): Promise<AuditPack> {
-    const profile = shouldUseSupabase() ? await getCurrentSupabaseProfile() : null;
-    const orgId = profile?.organization_id || MOCK_ORG.id;
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('audit_packs').insert([{ ...pack, organization_id: orgId }]).select().single();
       if (error) throw error;
@@ -600,7 +645,8 @@ export const dbService = {
 
   async updateAuditPack(packId: string, updates: Partial<AuditPack>): Promise<AuditPack> {
     if (shouldUseSupabase()) {
-      const { data, error } = await supabase!.from('audit_packs').update(updates).eq('id', packId).select().single();
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!.from('audit_packs').update(updates).eq('id', packId).eq('organization_id', orgId).select().single();
       if (error) throw error;
       return data;
     } else {
@@ -617,7 +663,8 @@ export const dbService = {
   // Audit Logs
   async getAuditLogs(): Promise<AuditLog[]> {
     if (shouldUseSupabase()) {
-      const { data, error } = await supabase!.from('audit_logs').select('*').order('created_at', { ascending: false });
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!.from('audit_logs').select('*').eq('organization_id', orgId).order('created_at', { ascending: false });
       if (error) throw error;
       return data || [];
     } else {
@@ -628,7 +675,7 @@ export const dbService = {
 
   async logActivity(action: string, details: string): Promise<AuditLog> {
     const profile = shouldUseSupabase() ? await getCurrentSupabaseProfile() : null;
-    const orgId = profile?.organization_id || MOCK_ORG.id;
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
     const profileId = profile?.id || MOCK_PROFILE.id;
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('audit_logs').insert([{

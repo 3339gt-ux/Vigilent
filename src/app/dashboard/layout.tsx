@@ -24,15 +24,20 @@ import {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, organization, logout, theme, toggleTheme, isLoading } = useApp();
+  const { user, organization, logout, theme, toggleTheme, isLoading, isAuthenticated } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
   // Authentication gate
   useEffect(() => {
-    if (!isLoading && !user) {
+    if (isLoading) return;
+    if (!isAuthenticated) {
       router.push('/login');
+      return;
     }
-  }, [user, isLoading, router]);
+    if (!organization) {
+      router.push('/onboarding');
+    }
+  }, [isAuthenticated, organization, isLoading, router]);
 
   if (isLoading) {
     return (
@@ -132,8 +137,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </button>
               
               <button
-                onClick={() => {
-                  logout();
+                onClick={async () => {
+                  await logout();
                   router.push('/');
                 }}
                 className="flex items-center gap-2 justify-center flex-grow px-3 py-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold transition-colors"
@@ -210,9 +215,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
                   </button>
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       setMobileMenuOpen(false);
-                      logout();
+                      await logout();
                       router.push('/');
                     }}
                     className="p-2 rounded-lg bg-rose-500/10 text-rose-600 text-xs font-bold"

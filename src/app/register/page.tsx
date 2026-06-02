@@ -8,11 +8,9 @@ import { ShieldCheck, ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { register } = useApp();
+  const { register, isAuthenticated, hasOrganization, isLoading } = useApp();
   
   const [fullName, setFullName] = useState('');
-  const [organizationName, setOrganizationName] = useState('');
-  const [complianceProfile, setComplianceProfile] = useState('Transport & Logistics');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   
@@ -20,9 +18,15 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [agreedDisclaimers, setAgreedDisclaimers] = useState(true);
 
+  React.useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.push(hasOrganization ? '/dashboard' : '/onboarding');
+    }
+  }, [isLoading, isAuthenticated, hasOrganization, router]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName || !organizationName || !email || !password) {
+    if (!fullName || !email || !password) {
       setError('Please fill in all required fields.');
       return;
     }
@@ -35,13 +39,11 @@ export default function RegisterPage() {
     setError('');
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const success = await register(fullName, organizationName, complianceProfile);
+      const success = await register(fullName, email, password);
       if (success) {
-        router.push('/dashboard');
+        router.push('/onboarding');
       } else {
-        setError('Failed to configure workspace.');
+        setError('Failed to create account.');
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred during account registration.');
@@ -74,7 +76,7 @@ export default function RegisterPage() {
               Initialize your workspace
             </h1>
             <p className="text-sm text-muted-foreground">
-              Create an account and setup your compliance tracking profile in minutes.
+              Create your user account first. Organisation setup follows after signup.
             </p>
           </div>
 
@@ -86,8 +88,7 @@ export default function RegisterPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
+            <div>
                 <label htmlFor="reg-name" className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
                   Full Name
                 </label>
@@ -100,38 +101,6 @@ export default function RegisterPage() {
                   placeholder="Jane Doe"
                   className="w-full px-4 py-2.5 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-sm transition-colors outline-none"
                 />
-              </div>
-
-              <div>
-                <label htmlFor="reg-org" className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Company Name
-                </label>
-                <input
-                  id="reg-org"
-                  type="text"
-                  required
-                  value={organizationName}
-                  onChange={e => setOrganizationName(e.target.value)}
-                  placeholder="Apex Logistics Ltd"
-                  className="w-full px-4 py-2.5 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-sm transition-colors outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="reg-profile" className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
-                Compliance Profile Profile
-              </label>
-              <select
-                id="reg-profile"
-                value={complianceProfile}
-                onChange={e => setComplianceProfile(e.target.value)}
-                className="w-full px-4 py-2.5 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-sm transition-colors outline-none"
-              >
-                <option value="Transport & Logistics">Transport & Logistics (O-Licence, Driver CPC, MOTs)</option>
-                <option value="Cold Storage & Warehousing">Cold Storage & Warehousing (LOLER, Fire Safety, HACCP)</option>
-                <option value="General Commercial Distribution">General Commercial Distribution (Insurance, Site Safety)</option>
-              </select>
             </div>
 
             <div>
@@ -188,10 +157,10 @@ export default function RegisterPage() {
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Creating Workspace...
+                  Creating Account...
                 </>
               ) : (
-                'Create Ready Workspace'
+                'Create Account'
               )}
             </button>
           </form>
