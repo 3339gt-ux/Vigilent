@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
+import { isDemoMode } from '@/lib/env';
 import { Building2, Users, Shield, UserPlus, Save, CheckCircle2, Mail, Trash2, ArrowRight, X } from 'lucide-react';
 
 interface Member {
@@ -34,6 +35,11 @@ export default function OrganisationManagement() {
     if (organization) {
       setOrgName(organization.name);
       setComplianceProfile(organization.compliance_profile);
+    }
+
+    if (!isDemoMode) {
+      setMembers([]);
+      return;
     }
 
     // Seed mock members if not exists
@@ -76,6 +82,10 @@ export default function OrganisationManagement() {
   const handleInviteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteName || !inviteEmail) return;
+    if (!isDemoMode) {
+      alert('Member invites require production onboarding and authorization before they can be enabled.');
+      return;
+    }
 
     setIsInviting(true);
     try {
@@ -118,6 +128,11 @@ export default function OrganisationManagement() {
   };
 
   const handleRemoveMember = (id: string) => {
+    if (!isDemoMode) {
+      alert('Member removal requires production authorization before it can be enabled.');
+      return;
+    }
+
     if (confirm('Are you sure you want to remove this user from the organization workspace?')) {
       const updated = members.filter(m => m.id !== id);
       setMembers(updated);

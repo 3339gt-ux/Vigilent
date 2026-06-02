@@ -97,7 +97,7 @@ export default function AuditPackBuilder() {
       <div>
         <h1 className="text-3xl font-extrabold tracking-tight" id="packs-heading">Audit Pack Builder</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Compile compliance files into structured bundles and generate encrypted share links for auditors.
+          Compile evidence files into structured bundles and track prototype share links for auditors.
         </p>
       </div>
 
@@ -277,7 +277,7 @@ export default function AuditPackBuilder() {
               <div className="space-y-1">
                 <h3 className="text-lg font-extrabold text-foreground">Bundle Compiled Successfully!</h3>
                 <p className="text-xs text-muted-foreground">
-                  The evidence package has been archived and hosted in a secure external viewer.
+                  The evidence package has been assembled in the prototype share-link registry.
                 </p>
               </div>
 

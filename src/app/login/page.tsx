@@ -69,7 +69,7 @@ export default function LoginPage() {
               Access your workspace
             </h1>
             <p className="text-sm text-muted-foreground">
-              Sign in with your organization email. Use any email & password for mock login.
+              Sign in with your organization email. Demo login is available only when explicitly enabled.
             </p>
           </div>
 
@@ -174,7 +174,7 @@ export default function LoginPage() {
         </div>
 
         <div className="z-10 text-[10px] text-zinc-500">
-          Vigilen is a continuous evidence monitoring platform. All data is securely locked under multi-tenant policies.
+          Vigilen is a continuous evidence monitoring platform. Production security depends on completed Supabase Auth, RLS, and storage configuration.
         </div>
       </div>
     </div>

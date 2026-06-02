@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
+import { isDemoMode } from '@/lib/env';
 import { CreditCard, CheckCircle2, ShieldCheck, ArrowRight, DollarSign, Download, Loader2, X, AlertCircle } from 'lucide-react';
 
 interface Invoice {
@@ -35,6 +36,11 @@ export default function BillingPage() {
   ]);
 
   const handleOpenCheckout = (plan: 'Standard' | 'Professional' | 'Enterprise') => {
+    if (!isDemoMode) {
+      alert('Billing checkout is not configured for production. Set explicit Stripe environment variables and server-side checkout first.');
+      return;
+    }
+
     setSelectedPlan(plan);
     setShowCheckoutModal(true);
     setCardNumber('');
@@ -46,6 +52,7 @@ export default function BillingPage() {
   const handleCheckoutSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!cardNumber || !cardExpiry || !cardCvc) return;
+    if (!isDemoMode) return;
 
     setIsProcessing(true);
     try {
@@ -283,8 +290,8 @@ export default function BillingPage() {
                 <div className="flex items-center gap-2 border-b border-border pb-3 mb-4">
                   <ShieldCheck className="w-5 h-5 text-indigo-500" />
                   <div>
-                    <h3 className="text-base font-extrabold text-foreground">Secure Checkout (Stripe)</h3>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">Upgrade workspace to {selectedPlan} Plan.</p>
+                    <h3 className="text-base font-extrabold text-foreground">Demo Checkout Simulator</h3>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Prototype-only plan change for {selectedPlan} Plan.</p>
                   </div>
                 </div>
 

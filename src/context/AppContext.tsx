@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { dbService, initMockDb, MOCK_ORG, MOCK_CELLS, getStorageItem, setStorageItem } from '@/lib/db';
+import { isDemoMode } from '@/lib/env';
 import {
   Profile,
   Organization,
@@ -95,10 +96,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      initMockDb();
-      // Check if session is stored in localStorage
-      const cachedUser = localStorage.getItem('vigilen_session_user');
-      const cachedOrg = localStorage.getItem('vigilen_session_org');
+      if (isDemoMode) {
+        initMockDb();
+      }
+      const cachedUser = isDemoMode ? localStorage.getItem('vigilen_session_user') : null;
+      const cachedOrg = isDemoMode ? localStorage.getItem('vigilen_session_org') : null;
 
       if (cachedUser && cachedOrg) {
         setUser(JSON.parse(cachedUser));
@@ -109,8 +111,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const org = await dbService.getOrganization(profile.organization_id || '');
         setUser(profile);
         setOrganization(org);
-        localStorage.setItem('vigilen_session_user', JSON.stringify(profile));
-        localStorage.setItem('vigilen_session_org', JSON.stringify(org));
+        if (isDemoMode) {
+          localStorage.setItem('vigilen_session_user', JSON.stringify(profile));
+          localStorage.setItem('vigilen_session_org', JSON.stringify(org));
+        }
       }
 
       const [reqs, docs, cells, packs, logs] = await Promise.all([
@@ -174,11 +178,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const toggleTheme = () => {
     const nextTheme = theme === 'light' ? 'dark' : 'light';
     setTheme(nextTheme);
-    localStorage.setItem('vigilen_theme', nextTheme);
+    if (isDemoMode) {
+      localStorage.setItem('vigilen_theme', nextTheme);
+    }
   };
 
   // Auth Operations
   const login = async (email: string): Promise<boolean> => {
+    if (!isDemoMode) {
+      throw new Error('Production authentication is not implemented in this prototype. Configure Supabase Auth before enabling production sign-in.');
+    }
+
     // Normalizing email to set profile
     const name = email.split('@')[0];
     const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
@@ -201,6 +211,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const register = async (name: string, orgName: string, complianceProfile: string): Promise<boolean> => {
+    if (!isDemoMode) {
+      throw new Error('Production registration is not implemented in this prototype. Configure a server-side organization onboarding flow before enabling production registration.');
+    }
+
     const newOrg: Organization = {
       id: `org-${Math.random().toString(36).substr(2, 9)}`,
       name: orgName,
@@ -318,15 +332,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setUser(null);
     setOrganization(null);
-    localStorage.removeItem('vigilen_session_user');
-    localStorage.removeItem('vigilen_session_org');
+    if (isDemoMode) {
+      localStorage.removeItem('vigilen_session_user');
+      localStorage.removeItem('vigilen_session_org');
+    }
   };
 
   const updateOrgProfile = async (updates: Partial<Organization>) => {
     if (!organization) return;
     const updated = await dbService.updateOrganization(organization.id, updates);
     setOrganization(updated);
-    localStorage.setItem('vigilen_session_org', JSON.stringify(updated));
+    if (isDemoMode) {
+      localStorage.setItem('vigilen_session_org', JSON.stringify(updated));
+    }
     const logs = await dbService.getAuditLogs();
     setAuditLogs(logs);
   };
@@ -445,6 +463,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const reqs = await dbService.getRequirements();
     setRequirements(reqs);
+
+    if (!isDemoMode) {
+      return newReq;
+    }
 
     // Auto seed blank matrix cell for at least one target of this type to maintain grid structure
     const cells = getStorageItem('vigilen_cells', MOCK_CELLS);

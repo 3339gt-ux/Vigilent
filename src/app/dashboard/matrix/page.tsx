@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { MatrixCell, ComplianceRequirement, EvidenceDocument, CellStatus } from '@/lib/types';
+import { isDemoMode } from '@/lib/env';
 import { 
   Grid, 
   Plus, 
@@ -98,6 +99,10 @@ export default function EvidenceMatrix() {
   const handleAddTarget = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTargetName) return;
+    if (!isDemoMode) {
+      alert('Asset registration requires a production database mutation path before it can be enabled.');
+      return;
+    }
 
     // In local context, we add blank cell linkages for this target across matching requirements
     const matchedReqs = requirements.filter(r => {
@@ -161,7 +166,7 @@ export default function EvidenceMatrix() {
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight" id="matrix-heading">Evidence Matrix</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Visual compliance catalog mapping standards to personnel, fleets, and facilities.
+            Visual evidence catalog mapping requirements to personnel, fleets, and facilities.
           </p>
         </div>
         
@@ -332,7 +337,7 @@ export default function EvidenceMatrix() {
               <LinkIcon className="w-5 h-5 text-indigo-500 shrink-0" />
               <div>
                 <h3 className="text-base font-extrabold text-foreground">Verify Compliance Requirement</h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Link a supporting document to verify safety standing.</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Link a supporting document to update evidence status.</p>
               </div>
             </div>
 

@@ -100,47 +100,88 @@ alter table public.matrix_cells enable row level security;
 alter table public.audit_packs enable row level security;
 alter table public.audit_logs enable row level security;
 
--- Row Level Security (RLS) Policies (Simple tenant-isolated access)
--- Note: auth.uid() links to profiles.id
+-- Row Level Security (RLS) Policies
+-- auth.uid() links to profiles.id. The helper avoids recursive profile policy checks.
+create or replace function public.current_organization_id()
+returns uuid
+language sql
+stable
+security definer
+set search_path = public
+as $$
+    select organization_id from public.profiles where id = auth.uid()
+$$;
+
+drop policy if exists "Users can read own organization" on public.organizations;
+drop policy if exists "Users can update own organization" on public.organizations;
+drop policy if exists "Users can read/write profiles in own organization" on public.profiles;
+drop policy if exists "Users can read/write requirements in own organization" on public.compliance_requirements;
+drop policy if exists "Users can read/write documents in own organization" on public.evidence_documents;
+drop policy if exists "Users can read/write matrix cells in own organization" on public.matrix_cells;
+drop policy if exists "Users can read/write audit packs in own organization" on public.audit_packs;
+drop policy if exists "Users can read logs in own organization" on public.audit_logs;
+drop policy if exists "Users can insert logs in own organization" on public.audit_logs;
 
 -- Organizations
 create policy "Users can read own organization" on public.organizations
     for select using (
-        id in (select organization_id from public.profiles where id = auth.uid())
+        id = public.current_organization_id()
+    );
+
+create policy "Users can update own organization" on public.organizations
+    for update using (
+        id = public.current_organization_id()
+    ) with check (
+        id = public.current_organization_id()
     );
 
 -- Profiles
 create policy "Users can read/write profiles in own organization" on public.profiles
     for all using (
-        organization_id in (select organization_id from public.profiles where id = auth.uid())
+        organization_id = public.current_organization_id()
+    ) with check (
+        organization_id = public.current_organization_id()
     );
 
 -- Compliance Requirements
 create policy "Users can read/write requirements in own organization" on public.compliance_requirements
     for all using (
-        organization_id in (select organization_id from public.profiles where id = auth.uid())
+        organization_id = public.current_organization_id()
+    ) with check (
+        organization_id = public.current_organization_id()
     );
 
 -- Evidence Documents
 create policy "Users can read/write documents in own organization" on public.evidence_documents
     for all using (
-        organization_id in (select organization_id from public.profiles where id = auth.uid())
+        organization_id = public.current_organization_id()
+    ) with check (
+        organization_id = public.current_organization_id()
     );
 
 -- Matrix Cells
 create policy "Users can read/write matrix cells in own organization" on public.matrix_cells
     for all using (
-        organization_id in (select organization_id from public.profiles where id = auth.uid())
+        organization_id = public.current_organization_id()
+    ) with check (
+        organization_id = public.current_organization_id()
     );
 
 -- Audit Packs
 create policy "Users can read/write audit packs in own organization" on public.audit_packs
     for all using (
-        organization_id in (select organization_id from public.profiles where id = auth.uid())
+        organization_id = public.current_organization_id()
+    ) with check (
+        organization_id = public.current_organization_id()
     );
 
 -- Audit Logs
 create policy "Users can read logs in own organization" on public.audit_logs
     for select using (
-        organization_id in (select organization_id from public.profiles where id = auth.uid())
+        organization_id = public.current_organization_id()
+    );
+
+create policy "Users can insert logs in own organization" on public.audit_logs
+    for insert with check (
+        organization_id = public.current_organization_id()
     );

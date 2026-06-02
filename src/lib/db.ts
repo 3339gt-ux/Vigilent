@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { isDemoMode, requireDemoMode, requireProductionEnv } from './env';
 import {
   Profile,
   Organization,
@@ -320,12 +321,14 @@ const MOCK_LOGS: AuditLog[] = [
 
 // Helper to check localStorage browser availability
 export const getStorageItem = (key: string, defaultVal: any) => {
+  requireDemoMode();
   if (typeof window === 'undefined') return defaultVal;
   const item = localStorage.getItem(key);
   return item ? JSON.parse(item) : defaultVal;
 };
 
 export const setStorageItem = (key: string, val: any) => {
+  requireDemoMode();
   if (typeof window !== 'undefined') {
     localStorage.setItem(key, JSON.stringify(val));
   }
@@ -333,6 +336,7 @@ export const setStorageItem = (key: string, val: any) => {
 
 // Initialize Mock database structure
 export const initMockDb = () => {
+  requireDemoMode();
   if (typeof window === 'undefined') return;
   if (!localStorage.getItem('vigilen_initialized')) {
     localStorage.setItem('vigilen_org', JSON.stringify(MOCK_ORG));
@@ -346,16 +350,29 @@ export const initMockDb = () => {
   }
 };
 
+const shouldUseSupabase = () => {
+  requireProductionEnv(isSupabaseConfigured);
+  return !isDemoMode;
+};
+
+const getCurrentSupabaseProfile = async (): Promise<Profile> => {
+  if (!supabase) throw new Error('Supabase client is not configured.');
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Unauthenticated');
+
+  const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+  if (error) throw error;
+  if (!data?.organization_id) throw new Error('Authenticated user is not linked to an organization.');
+  return data;
+};
+
 // Database Service Implementation
 export const dbService = {
   // Current Org & Profile Info
   async getProfile(): Promise<Profile> {
-    if (isSupabaseConfigured) {
-      const { data: { user } } = await supabase!.auth.getUser();
-      if (!user) throw new Error('Unauthenticated');
-      const { data, error } = await supabase!.from('profiles').select('*').eq('id', user.id).single();
-      if (error) throw error;
-      return data;
+    if (shouldUseSupabase()) {
+      return getCurrentSupabaseProfile();
     } else {
       initMockDb();
       return getStorageItem('vigilen_profile', MOCK_PROFILE);
@@ -363,7 +380,7 @@ export const dbService = {
   },
 
   async getOrganization(orgId: string): Promise<Organization> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('organizations').select('*').eq('id', orgId).single();
       if (error) throw error;
       return data;
@@ -374,7 +391,7 @@ export const dbService = {
   },
 
   async updateOrganization(orgId: string, updates: Partial<Organization>): Promise<Organization> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('organizations').update(updates).eq('id', orgId).select().single();
       if (error) throw error;
       return data;
@@ -388,7 +405,7 @@ export const dbService = {
 
   // Compliance Requirements
   async getRequirements(): Promise<ComplianceRequirement[]> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('compliance_requirements').select('*');
       if (error) throw error;
       return data || [];
@@ -399,7 +416,7 @@ export const dbService = {
   },
 
   async addRequirement(req: Omit<ComplianceRequirement, 'id' | 'created_at'>): Promise<ComplianceRequirement> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('compliance_requirements').insert([req]).select().single();
       if (error) throw error;
       return data;
@@ -419,7 +436,7 @@ export const dbService = {
 
   // Evidence Documents (Vault)
   async getDocuments(): Promise<EvidenceDocument[]> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('evidence_documents').select('*');
       if (error) throw error;
       return data || [];
@@ -430,8 +447,9 @@ export const dbService = {
   },
 
   async addDocument(doc: Omit<EvidenceDocument, 'id' | 'created_at' | 'updated_at' | 'organization_id'>): Promise<EvidenceDocument> {
-    const orgId = MOCK_ORG.id;
-    if (isSupabaseConfigured) {
+    const profile = shouldUseSupabase() ? await getCurrentSupabaseProfile() : null;
+    const orgId = profile?.organization_id || MOCK_ORG.id;
+    if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('evidence_documents').insert([{ ...doc, organization_id: orgId }]).select().single();
       if (error) throw error;
       return data;
@@ -458,7 +476,7 @@ export const dbService = {
   },
 
   async updateDocument(docId: string, updates: Partial<EvidenceDocument>): Promise<EvidenceDocument> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('evidence_documents').update(updates).eq('id', docId).select().single();
       if (error) throw error;
       return data;
@@ -493,7 +511,7 @@ export const dbService = {
   },
 
   async deleteDocument(docId: string): Promise<void> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase()) {
       const { error } = await supabase!.from('evidence_documents').delete().eq('id', docId);
       if (error) throw error;
     } else {
@@ -516,7 +534,7 @@ export const dbService = {
 
   // Matrix Cells
   async getMatrixCells(): Promise<MatrixCell[]> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('matrix_cells').select('*');
       if (error) throw error;
       return data || [];
@@ -527,7 +545,7 @@ export const dbService = {
   },
 
   async updateMatrixCell(cellId: string, updates: Partial<MatrixCell>): Promise<MatrixCell> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('matrix_cells').update(updates).eq('id', cellId).select().single();
       if (error) throw error;
       return data;
@@ -544,7 +562,7 @@ export const dbService = {
 
   // Audit Packs
   async getAuditPacks(): Promise<AuditPack[]> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('audit_packs').select('*');
       if (error) throw error;
       return data || [];
@@ -555,8 +573,9 @@ export const dbService = {
   },
 
   async addAuditPack(pack: Omit<AuditPack, 'id' | 'created_at' | 'updated_at' | 'organization_id'>): Promise<AuditPack> {
-    const orgId = MOCK_ORG.id;
-    if (isSupabaseConfigured) {
+    const profile = shouldUseSupabase() ? await getCurrentSupabaseProfile() : null;
+    const orgId = profile?.organization_id || MOCK_ORG.id;
+    if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('audit_packs').insert([{ ...pack, organization_id: orgId }]).select().single();
       if (error) throw error;
       return data;
@@ -580,7 +599,7 @@ export const dbService = {
   },
 
   async updateAuditPack(packId: string, updates: Partial<AuditPack>): Promise<AuditPack> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('audit_packs').update(updates).eq('id', packId).select().single();
       if (error) throw error;
       return data;
@@ -597,7 +616,7 @@ export const dbService = {
 
   // Audit Logs
   async getAuditLogs(): Promise<AuditLog[]> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('audit_logs').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       return data || [];
@@ -608,9 +627,10 @@ export const dbService = {
   },
 
   async logActivity(action: string, details: string): Promise<AuditLog> {
-    const orgId = MOCK_ORG.id;
-    const profileId = MOCK_PROFILE.id;
-    if (isSupabaseConfigured) {
+    const profile = shouldUseSupabase() ? await getCurrentSupabaseProfile() : null;
+    const orgId = profile?.organization_id || MOCK_ORG.id;
+    const profileId = profile?.id || MOCK_PROFILE.id;
+    if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('audit_logs').insert([{
         organization_id: orgId,
         profile_id: profileId,
@@ -637,6 +657,7 @@ export const dbService = {
 
   // Private helper to automatically map a uploaded document to a matrix cell if it fits requirements
   async autoMapCell(doc: EvidenceDocument): Promise<void> {
+    requireDemoMode();
     const cells = getStorageItem('vigilen_cells', MOCK_CELLS);
     const reqs = getStorageItem('vigilen_requirements', MOCK_REQUIREMENTS);
 

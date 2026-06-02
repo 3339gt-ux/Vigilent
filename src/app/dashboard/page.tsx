@@ -172,10 +172,10 @@ export default function DashboardPage() {
               
               <div className="space-y-2.5">
                 <h3 className="text-lg font-bold">
-                  {readinessScore >= 80 ? 'Operationally Compliant' : readinessScore >= 50 ? 'Medium Compliance Risks' : 'Critical Compliance Actions Required'}
+                  {readinessScore >= 80 ? 'High Evidence Readiness' : readinessScore >= 50 ? 'Evidence Gaps Present' : 'Critical Evidence Gaps'}
                 </h3>
                 <p className="text-xs text-muted-foreground leading-normal max-w-md">
-                  This score aggregates matched files inside the Evidence Matrix. Active certificates add to safety standing. Missing slots and expired items detract from score readiness.
+                  This score aggregates matched files inside the Evidence Matrix. Active records increase readiness. Missing slots and expired items reduce the internal readiness score.
                 </p>
                 <div className="flex flex-wrap gap-4 pt-1.5 text-[11px] font-semibold text-muted-foreground">
                   <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>{stats.compliantCount} Compliant Items</div>

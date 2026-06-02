@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
+import { isDemoMode } from '@/lib/env';
 import { Settings, Save, ShieldAlert, Key, Bell, User, CheckCircle2, Copy, Check } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -21,7 +22,7 @@ export default function SettingsPage() {
   const [smsAlerts, setSmsAlerts] = useState(false);
 
   // API Key States
-  const [apiKey, setApiKey] = useState('vig_live_c10a4e3ff98d5c64c781e002da76e');
+  const [apiKey, setApiKey] = useState('vig_demo_c10a4e3ff98d5c64c781e002da76e');
   const [isCopied, setIsCopied] = useState(false);
 
   const handleSaveProfile = (e: React.FormEvent) => {
@@ -31,8 +32,12 @@ export default function SettingsPage() {
   };
 
   const handleGenerateKey = () => {
+    if (!isDemoMode) {
+      alert('API token generation requires a production secrets service before it can be enabled.');
+      return;
+    }
     const randomHex = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-    setApiKey(`vig_live_${randomHex}`);
+    setApiKey(`vig_demo_${randomHex}`);
   };
 
   const handleCopyKey = () => {

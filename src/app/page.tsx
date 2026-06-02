@@ -214,7 +214,7 @@ export default function LandingPage() {
                 Core Compliance Infrastructure
               </h2>
               <p className="text-muted-foreground">
-                Ditch messy folders and spreadsheets. Keep your logistics, warehousing, and transport operations continuously verified.
+                Ditch messy folders and spreadsheets. Keep your logistics, warehousing, and transport evidence easier to review.
               </p>
             </div>
 
@@ -226,7 +226,7 @@ export default function LandingPage() {
                 </div>
                 <h3 className="text-lg font-bold mb-2">Evidence Vault</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  Secure storage with expiration alert configurations, category metadata tags, and document verification trails.
+                  Evidence storage with expiration alert configurations, category metadata tags, and document activity trails.
                 </p>
               </div>
 

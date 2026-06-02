@@ -225,14 +225,14 @@ export default function RegisterPage() {
           </p>
           <ul className="space-y-3.5 text-xs text-zinc-300">
             <li className="flex items-center gap-2">✓ Dynamic 30/60/90 Day Expiry Alerting</li>
-            <li className="flex items-center gap-2">✓ Multi-tenant isolated storage schemas</li>
-            <li className="flex items-center gap-2">✓ Safe sharing portals with PIN credentials</li>
+            <li className="flex items-center gap-2">✓ Multi-tenant isolation planned through RLS</li>
+            <li className="flex items-center gap-2">✓ Share portal security pending production implementation</li>
             <li className="flex items-center gap-2">✓ Direct evidence mapping matrices</li>
           </ul>
         </div>
 
         <div className="z-10 text-[10px] text-zinc-500">
-          Vigilen satisfies document security standards and operates fully in local-sandbox and Supabase cloud.
+          Vigilen is currently a prototype and requires production security hardening before live use.
         </div>
       </div>
     </div>
