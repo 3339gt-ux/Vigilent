@@ -18,6 +18,11 @@ import {
   RequirementEvidenceType,
   Review,
   Action,
+  ActionDocument,
+  ActionObjectLink,
+  ActionStatus,
+  ActionUpdate,
+  ActionUpdateType,
   MatrixCell,
   AuditPack,
   AuditLog,
@@ -482,6 +487,13 @@ const MOCK_ACTIONS: Action[] = [
     owner: 'Facilities',
     status: 'Open',
     due_date: daysFromNow(14),
+    target_due_date: daysFromNow(14),
+    opened_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+    opened_by: MOCK_PROFILE.id,
+    closed_at: null,
+    closed_by: null,
+    status_changed_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+    status_changed_by: MOCK_PROFILE.id,
     created_by: MOCK_PROFILE.id,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
@@ -495,6 +507,32 @@ const MOCK_REQUIREMENT_ACTIONS: RequirementAction[] = [
     action_id: 'fw-action-renew-fire',
     organisation_id: MOCK_ORG.id,
     created_at: new Date().toISOString()
+  }
+];
+
+const MOCK_ACTION_UPDATES: ActionUpdate[] = [
+  {
+    id: 'fw-action-update-open-fire',
+    organisation_id: MOCK_ORG.id,
+    action_id: 'fw-action-renew-fire',
+    user_id: MOCK_PROFILE.id,
+    update_type: 'Status Change',
+    note: 'Action opened. Previous status: none. New status: Open.',
+    created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
+  }
+];
+
+const MOCK_ACTION_DOCUMENTS: ActionDocument[] = [];
+
+const MOCK_ACTION_OBJECT_LINKS: ActionObjectLink[] = [
+  {
+    id: 'fw-action-object-fire',
+    organisation_id: MOCK_ORG.id,
+    action_id: 'fw-action-renew-fire',
+    object_type: 'requirement',
+    object_id: 'fw-req-fire-training',
+    linked_by: MOCK_PROFILE.id,
+    linked_at: new Date().toISOString()
   }
 ];
 
@@ -531,6 +569,9 @@ export const initMockDb = () => {
     localStorage.setItem('vigilen_reviews', JSON.stringify(MOCK_REVIEWS));
     localStorage.setItem('vigilen_actions', JSON.stringify(MOCK_ACTIONS));
     localStorage.setItem('vigilen_requirement_actions', JSON.stringify(MOCK_REQUIREMENT_ACTIONS));
+    localStorage.setItem('vigilen_action_updates', JSON.stringify(MOCK_ACTION_UPDATES));
+    localStorage.setItem('vigilen_action_documents', JSON.stringify(MOCK_ACTION_DOCUMENTS));
+    localStorage.setItem('vigilen_action_object_links', JSON.stringify(MOCK_ACTION_OBJECT_LINKS));
     localStorage.setItem('vigilen_initialized', 'true');
   }
 };
@@ -538,6 +579,90 @@ export const initMockDb = () => {
 const shouldUseSupabase = () => {
   requireProductionEnv(isSupabaseConfigured);
   return !isDemoMode;
+};
+
+const nowIso = () => new Date().toISOString();
+
+const buildStatusNote = (previousStatus: string | null, newStatus: string, note?: string | null) => {
+  const statusLine = `Previous status: ${previousStatus || 'none'}. New status: ${newStatus}.`;
+  return note?.trim() ? `${statusLine} ${note.trim()}` : statusLine;
+};
+
+const getActionUpdateTypeForStatus = (previous: Action | null, nextStatus: ActionStatus): ActionUpdateType => {
+  if (nextStatus === 'Complete') return 'Completion Note';
+  if (nextStatus === 'Cancelled') return 'Cancellation Note';
+  if (previous && (previous.status === 'Complete' || previous.status === 'Cancelled') && nextStatus === 'Open') return 'Reopen Note';
+  return 'Status Change';
+};
+
+const prepareActionLifecycleUpdate = (
+  previous: Action | null,
+  updates: Partial<Action>,
+  userId: string
+): { patch: Partial<Action>; timeline?: { update_type: ActionUpdateType; note: string; action: string; details: string } } => {
+  const patch: Partial<Action> = { ...updates };
+  const timestamp = nowIso();
+  const nextStatus = updates.status || previous?.status || 'Open';
+
+  if (!previous && !patch.opened_at) patch.opened_at = timestamp;
+  if (!previous && !patch.opened_by) patch.opened_by = userId;
+  if (patch.due_date && !patch.target_due_date) patch.target_due_date = patch.due_date;
+
+  if (!previous || (updates.status && updates.status !== previous.status)) {
+    patch.status_changed_at = timestamp;
+    patch.status_changed_by = userId;
+  }
+
+  if (updates.status === 'Complete') {
+    if (!updates.completion_note?.trim()) {
+      throw new Error('Completion note is required before an action can be completed.');
+    }
+    patch.closed_at = updates.closed_at || updates.completed_at || timestamp;
+    patch.closed_by = updates.closed_by || updates.completed_by || userId;
+    patch.completed_at = patch.closed_at;
+    patch.completed_by = patch.closed_by;
+  }
+
+  if (updates.status === 'Cancelled') {
+    patch.closed_at = updates.closed_at || updates.cancelled_at || timestamp;
+    patch.closed_by = updates.closed_by || updates.cancelled_by || userId;
+    patch.cancelled_at = patch.closed_at;
+    patch.cancelled_by = patch.closed_by;
+  }
+
+  if (previous && (previous.status === 'Complete' || previous.status === 'Cancelled') && updates.status === 'Open') {
+    patch.closed_at = null;
+    patch.closed_by = null;
+    patch.completed_at = null;
+    patch.completed_by = null;
+    patch.completion_note = null;
+    patch.cancelled_at = null;
+    patch.cancelled_by = null;
+    patch.cancellation_note = null;
+  }
+
+  if (!previous || (updates.status && updates.status !== previous.status)) {
+    const note =
+      updates.status === 'Complete'
+        ? updates.completion_note
+        : updates.status === 'Cancelled'
+          ? updates.cancellation_note
+          : updates.status === 'Open' && previous
+            ? updates.completion_note || updates.cancellation_note || 'Action reopened.'
+            : null;
+    const updateType = getActionUpdateTypeForStatus(previous, nextStatus);
+    return {
+      patch,
+      timeline: {
+        update_type: updateType,
+        note: buildStatusNote(previous?.status || null, nextStatus, note),
+        action: `Action ${nextStatus}`,
+        details: `Action "${previous?.title || updates.title || 'Untitled'}" changed from ${previous?.status || 'none'} to ${nextStatus}.`
+      }
+    };
+  }
+
+  return { patch };
 };
 
 export const getCurrentSupabaseUserId = async (): Promise<string> => {
@@ -868,13 +993,59 @@ export const dbService = {
         .from('actions')
         .select('*')
         .eq('organisation_id', orgId)
-        .order('due_date', { ascending: true, nullsFirst: false });
+        .order('target_due_date', { ascending: true, nullsFirst: false });
       if (error) throwSupabaseError('actions.select active organisation', error);
       return data || [];
     }
 
     initMockDb();
     return getStorageItem('vigilen_actions', MOCK_ACTIONS);
+  },
+
+  async getActionUpdates(): Promise<ActionUpdate[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('action_updates')
+        .select('*')
+        .eq('organisation_id', orgId)
+        .order('created_at', { ascending: false });
+      if (error) throwSupabaseError('action_updates.select active organisation', error);
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_action_updates', MOCK_ACTION_UPDATES);
+  },
+
+  async getActionDocuments(): Promise<ActionDocument[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('action_documents')
+        .select('*')
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('action_documents.select active organisation', error);
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_action_documents', MOCK_ACTION_DOCUMENTS);
+  },
+
+  async getActionObjectLinks(): Promise<ActionObjectLink[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('action_object_links')
+        .select('*')
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('action_object_links.select active organisation', error);
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_action_object_links', MOCK_ACTION_OBJECT_LINKS);
   },
 
   async getRequirementActions(): Promise<RequirementAction[]> {
@@ -897,58 +1068,175 @@ export const dbService = {
   ): Promise<Action> {
     const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
     const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+    const { patch } = prepareActionLifecycleUpdate(null, action, userId);
 
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('actions')
-        .insert([{ ...action, organisation_id: orgId, created_by: userId }])
+        .insert([{ ...patch, organisation_id: orgId, created_by: userId }])
         .select()
         .single();
       if (error) throwSupabaseError('actions.insert active organisation', error);
+      await this.addActionUpdate(data.id, 'Status Change', buildStatusNote(null, data.status || 'Open', 'Action opened.'));
+      await this.logActivity('Action Opened', `Opened action "${data.title}"`);
       return data;
     }
 
     const actions = getStorageItem('vigilen_actions', MOCK_ACTIONS);
     const newAction: Action = {
       ...action,
+      ...patch,
       id: `fw-action-${Math.random().toString(36).substr(2, 9)}`,
       organisation_id: orgId,
       created_by: userId,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      created_at: nowIso(),
+      updated_at: nowIso()
     };
     actions.unshift(newAction);
     setStorageItem('vigilen_actions', actions);
-    await this.logActivity('Action Created', `Created action "${newAction.title}"`);
+    await this.addActionUpdate(newAction.id, 'Status Change', buildStatusNote(null, newAction.status, 'Action opened.'));
+    await this.logActivity('Action Opened', `Opened action "${newAction.title}"`);
     return newAction;
   },
 
   async updateAction(actionId: string, updates: Partial<Action>): Promise<Action> {
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
+      const { data: existing, error: existingError } = await supabase!
+        .from('actions')
+        .select('*')
+        .eq('id', actionId)
+        .eq('organisation_id', orgId)
+        .single();
+      if (existingError) throwSupabaseError('actions.select before lifecycle update', existingError);
+
+      const prepared = prepareActionLifecycleUpdate(existing, updates, userId);
       const { data, error } = await supabase!
         .from('actions')
-        .update(updates)
+        .update({ ...prepared.patch, updated_at: nowIso() })
         .eq('id', actionId)
         .eq('organisation_id', orgId)
         .select()
         .single();
       if (error) throwSupabaseError('actions.update active organisation', error);
+      if (prepared.timeline) {
+        await this.addActionUpdate(actionId, prepared.timeline.update_type, prepared.timeline.note);
+        await this.logActivity(prepared.timeline.action, prepared.timeline.details);
+      }
       return data;
     }
 
     const actions = getStorageItem('vigilen_actions', MOCK_ACTIONS);
     const idx = actions.findIndex((item: Action) => item.id === actionId);
     if (idx === -1) throw new Error('Action not found');
-    const updated = { ...actions[idx], ...updates, updated_at: new Date().toISOString() };
+    const prepared = prepareActionLifecycleUpdate(actions[idx], updates, userId);
+    const updated = { ...actions[idx], ...prepared.patch, updated_at: nowIso() };
     actions[idx] = updated;
     setStorageItem('vigilen_actions', actions);
+    if (prepared.timeline) {
+      await this.addActionUpdate(actionId, prepared.timeline.update_type, prepared.timeline.note);
+      await this.logActivity(prepared.timeline.action, prepared.timeline.details);
+    }
     return updated;
+  },
+
+  async addActionUpdate(actionId: string, updateType: ActionUpdateType, note: string): Promise<ActionUpdate> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+    const cleanNote = note.trim();
+    if (!cleanNote) throw new Error('Action update note is required.');
+
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('action_updates')
+        .insert([{ organisation_id: orgId, action_id: actionId, user_id: userId, update_type: updateType, note: cleanNote }])
+        .select()
+        .single();
+      if (error) throwSupabaseError('action_updates.insert active organisation', error);
+      return data;
+    }
+
+    const updates = getStorageItem('vigilen_action_updates', MOCK_ACTION_UPDATES);
+    const newUpdate: ActionUpdate = {
+      id: `fw-action-update-${Math.random().toString(36).substr(2, 9)}`,
+      organisation_id: orgId,
+      action_id: actionId,
+      user_id: userId,
+      update_type: updateType,
+      note: cleanNote,
+      created_at: nowIso()
+    };
+    updates.unshift(newUpdate);
+    setStorageItem('vigilen_action_updates', updates);
+    return newUpdate;
+  },
+
+  async linkDocumentToAction(actionId: string, documentId: string, timelineNote?: string): Promise<ActionDocument> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+    const note = timelineNote?.trim() || `Evidence document ${documentId} linked to action.`;
+
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('action_documents')
+        .insert([{ organisation_id: orgId, action_id: actionId, document_id: documentId, linked_by: userId }])
+        .select()
+        .single();
+      if (error) throwSupabaseError('action_documents.insert active organisation', error);
+      await this.addActionUpdate(actionId, 'Evidence Added', note);
+      await this.logActivity('Action Evidence Linked', `Linked evidence document ${documentId} to action ${actionId}.`);
+      return data;
+    }
+
+    const links = getStorageItem('vigilen_action_documents', MOCK_ACTION_DOCUMENTS);
+    const existing = links.find((link: ActionDocument) => link.action_id === actionId && link.document_id === documentId);
+    if (existing) return existing;
+    const newLink: ActionDocument = {
+      id: `fw-action-doc-${Math.random().toString(36).substr(2, 9)}`,
+      organisation_id: orgId,
+      action_id: actionId,
+      document_id: documentId,
+      linked_by: userId,
+      linked_at: nowIso()
+    };
+    links.push(newLink);
+    setStorageItem('vigilen_action_documents', links);
+    await this.addActionUpdate(actionId, 'Evidence Added', note);
+    await this.logActivity('Action Evidence Linked', `Linked evidence document ${documentId} to action ${actionId}.`);
+    return newLink;
+  },
+
+  async unlinkDocumentFromAction(actionId: string, documentId: string): Promise<void> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+
+    if (shouldUseSupabase()) {
+      const { error } = await supabase!
+        .from('action_documents')
+        .delete()
+        .eq('action_id', actionId)
+        .eq('document_id', documentId)
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('action_documents.delete active organisation', error);
+      await this.addActionUpdate(actionId, 'Evidence Added', `Evidence document ${documentId} unlinked from action.`);
+      await this.logActivity('Action Evidence Unlinked', `Unlinked evidence document ${documentId} from action ${actionId}.`);
+      return;
+    }
+
+    const links = getStorageItem('vigilen_action_documents', MOCK_ACTION_DOCUMENTS);
+    setStorageItem(
+      'vigilen_action_documents',
+      links.filter((link: ActionDocument) => !(link.action_id === actionId && link.document_id === documentId))
+    );
+    await this.addActionUpdate(actionId, 'Evidence Added', `Evidence document ${documentId} unlinked from action.`);
+    await this.logActivity('Action Evidence Unlinked', `Unlinked evidence document ${documentId} from action ${actionId}.`);
   },
 
 
   async linkActionToRequirement(requirementId: string, actionId: string): Promise<RequirementAction> {
     const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
 
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
@@ -957,6 +1245,12 @@ export const dbService = {
         .select()
         .single();
       if (error) throwSupabaseError('requirement_actions.insert link', error);
+      const { error: objectLinkError } = await supabase!
+        .from('action_object_links')
+        .upsert([{ organisation_id: orgId, action_id: actionId, object_type: 'requirement', object_id: requirementId, linked_by: userId }], {
+          onConflict: 'organisation_id,action_id,object_type,object_id'
+        });
+      if (objectLinkError) throwSupabaseError('action_object_links.upsert requirement link', objectLinkError);
       return data;
     }
 
@@ -970,6 +1264,19 @@ export const dbService = {
     };
     links.push(newLink);
     setStorageItem('vigilen_requirement_actions', links);
+    const objectLinks = getStorageItem('vigilen_action_object_links', MOCK_ACTION_OBJECT_LINKS);
+    if (!objectLinks.some((link: ActionObjectLink) => link.action_id === actionId && link.object_type === 'requirement' && link.object_id === requirementId)) {
+      objectLinks.push({
+        id: `fw-action-object-${Math.random().toString(36).substr(2, 9)}`,
+        organisation_id: orgId,
+        action_id: actionId,
+        object_type: 'requirement',
+        object_id: requirementId,
+        linked_by: userId,
+        linked_at: nowIso()
+      });
+      setStorageItem('vigilen_action_object_links', objectLinks);
+    }
     return newLink;
   },
 

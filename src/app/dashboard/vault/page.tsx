@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { EvidenceDocument } from '@/lib/types';
+import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
+import { Action, EvidenceDocument } from '@/lib/types';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import { 
   FolderLock, 
@@ -24,12 +25,21 @@ export default function EvidenceVault() {
     documents, 
     frameworkRequirements,
     requirementDocuments,
+    actions,
+    requirementActions,
+    actionUpdates,
+    actionDocuments,
     uploadDocument, 
     updateDocumentMetadata, 
     getDocumentSignedUrl,
     deleteDocument,
     linkDocumentToRequirement,
-    unlinkDocumentFromRequirement
+    unlinkDocumentFromRequirement,
+    updateAction,
+    addActionUpdate,
+    linkDocumentToAction,
+    unlinkDocumentFromAction,
+    uploadActionAttachment
   } = useApp();
 
   // Search & Filter state
@@ -68,6 +78,7 @@ export default function EvidenceVault() {
   const [isOpeningFile, setIsOpeningFile] = useState(false);
   const [fileError, setFileError] = useState('');
   const [selectedRequirementId, setSelectedRequirementId] = useState('');
+  const [selectedAction, setSelectedAction] = useState<Action | null>(null);
 
   // Heuristic metadata auto-suggester based on filename
   const handleFileNameChange = (val: string) => {
@@ -294,6 +305,21 @@ export default function EvidenceVault() {
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
 
+  const selectedDocumentActionLinks = selectedDoc
+    ? actionDocuments.filter(link => link.document_id === selectedDoc.id)
+    : [];
+  const selectedDocumentActions = selectedDocumentActionLinks
+    .map(link => actions.find(action => action.id === link.action_id))
+    .filter((action): action is Action => Boolean(action));
+  const currentSelectedAction = selectedAction
+    ? actions.find(action => action.id === selectedAction.id) || selectedAction
+    : null;
+  const selectedActionRequirements = currentSelectedAction
+    ? frameworkRequirements.filter(requirement =>
+        requirementActions.some(link => link.action_id === currentSelectedAction.id && link.requirement_id === requirement.id)
+      )
+    : [];
+
   return (
     <div className="space-y-6">
       
@@ -357,6 +383,7 @@ export default function EvidenceVault() {
                   <option value="Driver">Driver</option>
                   <option value="Facility">Facility</option>
                   <option value="General">General</option>
+                  <option value="Actions">Actions</option>
                 </select>
               </div>
 
@@ -567,6 +594,7 @@ export default function EvidenceVault() {
                     <option value="Driver">Driver</option>
                     <option value="Facility">Facility</option>
                     <option value="General">General</option>
+                    <option value="Actions">Actions</option>
                   </select>
                 </div>
 
@@ -705,6 +733,53 @@ export default function EvidenceVault() {
                     Link
                   </button>
                 </div>
+              </div>
+
+              <div className="border-t border-border/60 pt-4 space-y-4">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Linked Actions</span>
+                {selectedDocumentActions.length === 0 ? (
+                  <p className="text-[10px] text-muted-foreground italic">This record is not attached to any action.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {selectedDocumentActions.map(action => {
+                      const relatedRequirement = frameworkRequirements.find(requirement =>
+                        requirementActions.some(link => link.action_id === action.id && link.requirement_id === requirement.id)
+                      );
+                      return (
+                        <div key={action.id} className="p-3 bg-muted/50 border border-border/60 rounded-lg text-[11px] space-y-2">
+                          <div className="flex justify-between gap-3">
+                            <div className="min-w-0">
+                              <span className="font-bold block truncate">{action.title}</span>
+                              <span className="text-[10px] text-muted-foreground block truncate">
+                                {relatedRequirement?.title || 'No related requirement'} | Owner: {action.owner || 'Unassigned'}
+                              </span>
+                            </div>
+                            <span className={`px-2 py-0.5 text-[9px] rounded-full border font-bold uppercase shrink-0 ${
+                              action.status === 'Complete'
+                                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                                : action.status === 'Cancelled'
+                                  ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
+                                  : action.status === 'In Progress'
+                                    ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400'
+                                    : 'bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400'
+                            }`}>
+                              {action.status}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+                            <span>Due: <strong className="text-foreground">{action.target_due_date || action.due_date || 'No date'}</strong></span>
+                            <button
+                              onClick={() => setSelectedAction(action)}
+                              className="px-2 py-1 bg-indigo-500/10 text-indigo-500 font-bold rounded hover:bg-indigo-500/20"
+                            >
+                              Open linked action
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div className="border-t border-border/60 pt-4 space-y-4">
@@ -876,6 +951,7 @@ export default function EvidenceVault() {
                     <option value="Driver">Driver</option>
                     <option value="Facility">Facility</option>
                     <option value="General">General</option>
+                    <option value="Actions">Actions</option>
                   </select>
                 </div>
 
@@ -934,6 +1010,21 @@ export default function EvidenceVault() {
           </div>
         </div>
       )}
+
+      <ActionDetailDrawer
+        action={currentSelectedAction}
+        requirements={selectedActionRequirements}
+        documents={documents}
+        actionUpdates={actionUpdates}
+        actionDocuments={actionDocuments}
+        onClose={() => setSelectedAction(null)}
+        onUpdateAction={updateAction}
+        onAddUpdate={addActionUpdate}
+        onLinkDocument={linkDocumentToAction}
+        onUnlinkDocument={unlinkDocumentFromAction}
+        onUploadAttachment={uploadActionAttachment}
+        onOpenDocument={getDocumentSignedUrl}
+      />
 
     </div>
   );

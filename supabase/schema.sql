@@ -142,6 +142,13 @@ create table if not exists public.actions (
     owner text,
     status text not null default 'Open',
     due_date date,
+    target_due_date date,
+    opened_at timestamp with time zone default timezone('utc'::text, now()),
+    opened_by uuid references public.profiles(id) on delete set null,
+    closed_at timestamp with time zone,
+    closed_by uuid references public.profiles(id) on delete set null,
+    status_changed_at timestamp with time zone default timezone('utc'::text, now()),
+    status_changed_by uuid references public.profiles(id) on delete set null,
     created_by uuid references public.profiles(id) on delete set null,
     created_at timestamp with time zone default timezone('utc'::text, now()) not null,
     updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
@@ -153,6 +160,23 @@ create table if not exists public.actions (
     cancellation_note text
 );
 
+-- Existing projects may already have public.actions. CREATE TABLE IF NOT EXISTS
+-- does not add newly introduced columns, so keep this migration block before
+-- any indexes, policies, or data backfills reference action record columns.
+alter table public.actions add column if not exists opened_at timestamp with time zone;
+alter table public.actions add column if not exists opened_by uuid references public.profiles(id) on delete set null;
+alter table public.actions add column if not exists target_due_date date;
+alter table public.actions add column if not exists closed_at timestamp with time zone;
+alter table public.actions add column if not exists closed_by uuid references public.profiles(id) on delete set null;
+alter table public.actions add column if not exists status_changed_at timestamp with time zone;
+alter table public.actions add column if not exists status_changed_by uuid references public.profiles(id) on delete set null;
+alter table public.actions add column if not exists completed_at timestamp with time zone;
+alter table public.actions add column if not exists completed_by uuid references public.profiles(id) on delete set null;
+alter table public.actions add column if not exists completion_note text;
+alter table public.actions add column if not exists cancelled_at timestamp with time zone;
+alter table public.actions add column if not exists cancelled_by uuid references public.profiles(id) on delete set null;
+alter table public.actions add column if not exists cancellation_note text;
+
 create table if not exists public.requirement_actions (
     id uuid primary key default uuid_generate_v4(),
     requirement_id uuid not null references public.requirements(id) on delete cascade,
@@ -162,10 +186,45 @@ create table if not exists public.requirement_actions (
     unique (requirement_id, action_id)
 );
 
+create table if not exists public.action_updates (
+    id uuid primary key default uuid_generate_v4(),
+    organisation_id uuid not null references public.organizations(id) on delete cascade,
+    action_id uuid not null references public.actions(id) on delete cascade,
+    user_id uuid references public.profiles(id) on delete set null,
+    update_type text not null default 'Note',
+    note text not null,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create table if not exists public.action_documents (
+    id uuid primary key default uuid_generate_v4(),
+    organisation_id uuid not null references public.organizations(id) on delete cascade,
+    action_id uuid not null references public.actions(id) on delete cascade,
+    document_id uuid not null references public.evidence_documents(id) on delete cascade,
+    linked_by uuid references public.profiles(id) on delete set null,
+    linked_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    unique (action_id, document_id)
+);
+
+create table if not exists public.action_object_links (
+    id uuid primary key default uuid_generate_v4(),
+    organisation_id uuid not null references public.organizations(id) on delete cascade,
+    action_id uuid not null references public.actions(id) on delete cascade,
+    object_type text not null,
+    object_id uuid not null,
+    linked_by uuid references public.profiles(id) on delete set null,
+    linked_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    unique (organisation_id, action_id, object_type, object_id)
+);
+
 create index if not exists requirements_organisation_status_idx on public.requirements (organisation_id, status);
 create index if not exists requirement_documents_organisation_idx on public.requirement_documents (organisation_id, requirement_id, document_id);
 create index if not exists reviews_organisation_requirement_idx on public.reviews (organisation_id, requirement_id, review_date desc);
 create index if not exists actions_organisation_status_idx on public.actions (organisation_id, status, due_date);
+create index if not exists actions_organisation_target_due_idx on public.actions (organisation_id, status, target_due_date);
+create index if not exists action_updates_organisation_action_idx on public.action_updates (organisation_id, action_id, created_at desc);
+create index if not exists action_documents_organisation_action_idx on public.action_documents (organisation_id, action_id, document_id);
+create index if not exists action_object_links_organisation_action_idx on public.action_object_links (organisation_id, action_id, object_type, object_id);
 
 -- Storage bucket and storage.objects policies are managed separately in
 -- supabase/storage_setup.sql because hosted Supabase projects may reject
@@ -229,6 +288,9 @@ alter table public.requirement_documents enable row level security;
 alter table public.reviews enable row level security;
 alter table public.actions enable row level security;
 alter table public.requirement_actions enable row level security;
+alter table public.action_updates enable row level security;
+alter table public.action_documents enable row level security;
+alter table public.action_object_links enable row level security;
 
 -- Row Level Security (RLS) Policies
 -- auth.uid() links to profiles.id. The helper avoids recursive profile policy checks.
@@ -619,10 +681,110 @@ create policy "Members can write requirement actions in own organisation" on pub
         public.can_write_organization(organisation_id)
     );
 
--- Ensure existing actions table is migrated
-alter table public.actions add column if not exists completed_at timestamp with time zone;
-alter table public.actions add column if not exists completed_by uuid references public.profiles(id) on delete set null;
-alter table public.actions add column if not exists completion_note text;
-alter table public.actions add column if not exists cancelled_at timestamp with time zone;
-alter table public.actions add column if not exists cancelled_by uuid references public.profiles(id) on delete set null;
-alter table public.actions add column if not exists cancellation_note text;
+drop policy if exists "Users can read action updates in own organisation" on public.action_updates;
+create policy "Users can read action updates in own organisation" on public.action_updates
+    for select using (
+        public.is_organization_member(organisation_id)
+    );
+
+drop policy if exists "Members can write action updates in own organisation" on public.action_updates;
+create policy "Members can write action updates in own organisation" on public.action_updates
+    for all using (
+        public.can_write_organization(organisation_id)
+        and exists (
+            select 1 from public.actions
+            where actions.id = action_updates.action_id
+              and actions.organisation_id = action_updates.organisation_id
+        )
+    ) with check (
+        public.can_write_organization(organisation_id)
+        and exists (
+            select 1 from public.actions
+            where actions.id = action_updates.action_id
+              and actions.organisation_id = action_updates.organisation_id
+        )
+    );
+
+drop policy if exists "Users can read action documents in own organisation" on public.action_documents;
+create policy "Users can read action documents in own organisation" on public.action_documents
+    for select using (
+        public.is_organization_member(organisation_id)
+    );
+
+drop policy if exists "Members can write action documents in own organisation" on public.action_documents;
+create policy "Members can write action documents in own organisation" on public.action_documents
+    for all using (
+        public.can_write_organization(organisation_id)
+        and exists (
+            select 1 from public.actions
+            where actions.id = action_documents.action_id
+              and actions.organisation_id = action_documents.organisation_id
+        )
+        and exists (
+            select 1 from public.evidence_documents
+            where evidence_documents.id = action_documents.document_id
+              and evidence_documents.organization_id = action_documents.organisation_id
+        )
+    ) with check (
+        public.can_write_organization(organisation_id)
+        and exists (
+            select 1 from public.actions
+            where actions.id = action_documents.action_id
+              and actions.organisation_id = action_documents.organisation_id
+        )
+        and exists (
+            select 1 from public.evidence_documents
+            where evidence_documents.id = action_documents.document_id
+              and evidence_documents.organization_id = action_documents.organisation_id
+        )
+    );
+
+drop policy if exists "Users can read action object links in own organisation" on public.action_object_links;
+create policy "Users can read action object links in own organisation" on public.action_object_links
+    for select using (
+        public.is_organization_member(organisation_id)
+    );
+
+drop policy if exists "Members can write action object links in own organisation" on public.action_object_links;
+create policy "Members can write action object links in own organisation" on public.action_object_links
+    for all using (
+        public.can_write_organization(organisation_id)
+        and exists (
+            select 1 from public.actions
+            where actions.id = action_object_links.action_id
+              and actions.organisation_id = action_object_links.organisation_id
+        )
+    ) with check (
+        public.can_write_organization(organisation_id)
+        and exists (
+            select 1 from public.actions
+            where actions.id = action_object_links.action_id
+              and actions.organisation_id = action_object_links.organisation_id
+        )
+);
+
+-- Backfill action record fields for existing rows after all RLS policies are in place.
+
+update public.actions
+set opened_at = coalesce(opened_at, created_at),
+    opened_by = coalesce(opened_by, created_by),
+    status_changed_at = coalesce(status_changed_at, updated_at, created_at),
+    status_changed_by = coalesce(status_changed_by, created_by),
+    target_due_date = coalesce(target_due_date, due_date)
+where opened_at is null
+   or opened_by is null
+   or status_changed_at is null
+   or status_changed_by is null
+   or (target_due_date is null and due_date is not null);
+
+update public.actions
+set closed_at = coalesce(closed_at, completed_at),
+    closed_by = coalesce(closed_by, completed_by)
+where status = 'Complete'
+  and (closed_at is null or closed_by is null);
+
+update public.actions
+set closed_at = coalesce(closed_at, cancelled_at),
+    closed_by = coalesce(closed_by, cancelled_by)
+where status = 'Cancelled'
+  and (closed_at is null or closed_by is null);

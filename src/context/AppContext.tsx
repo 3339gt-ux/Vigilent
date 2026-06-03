@@ -34,6 +34,10 @@ import {
   RequirementEvidenceType,
   Review,
   Action,
+  ActionDocument,
+  ActionObjectLink,
+  ActionUpdate,
+  ActionUpdateType,
   ActionStatus,
   RequirementTemplateItem
 } from '@/lib/types';
@@ -66,6 +70,9 @@ interface AppContextType {
   reviews: Review[];
   actions: Action[];
   requirementActions: RequirementAction[];
+  actionUpdates: ActionUpdate[];
+  actionDocuments: ActionDocument[];
+  actionObjectLinks: ActionObjectLink[];
   matrixCells: MatrixCell[];
   auditPacks: AuditPack[];
   auditLogs: AuditLog[];
@@ -99,6 +106,10 @@ interface AppContextType {
     }
   ) => Promise<void>;
   updateAction: (actionId: string, updates: Partial<Action>) => Promise<Action>;
+  addActionUpdate: (actionId: string, updateType: ActionUpdateType, note: string) => Promise<ActionUpdate>;
+  linkDocumentToAction: (actionId: string, documentId: string) => Promise<void>;
+  unlinkDocumentFromAction: (actionId: string, documentId: string) => Promise<void>;
+  uploadActionAttachment: (actionId: string, file: File) => Promise<EvidenceDocument>;
   createRequirement: (title: string, description: string, category: 'Vehicle' | 'Driver' | 'Facility' | 'General', frequency_months?: number, is_mandatory?: boolean) => Promise<ComplianceRequirement>;
   createPack: (name: string, description: string, requirementIds: string[], docIds: string[]) => Promise<AuditPack>;
   updatePackStatus: (packId: string, status: 'Draft' | 'Ready' | 'Sent' | 'Archived') => Promise<void>;
@@ -127,6 +138,9 @@ const emptyCollections = {
   reviews: [] as Review[],
   actions: [] as Action[],
   requirementActions: [] as RequirementAction[],
+  actionUpdates: [] as ActionUpdate[],
+  actionDocuments: [] as ActionDocument[],
+  actionObjectLinks: [] as ActionObjectLink[],
   matrixCells: [] as MatrixCell[],
   auditPacks: [] as AuditPack[],
   auditLogs: [] as AuditLog[]
@@ -178,6 +192,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [actions, setActions] = useState<Action[]>([]);
   const [requirementActions, setRequirementActions] = useState<RequirementAction[]>([]);
+  const [actionUpdates, setActionUpdates] = useState<ActionUpdate[]>([]);
+  const [actionDocuments, setActionDocuments] = useState<ActionDocument[]>([]);
+  const [actionObjectLinks, setActionObjectLinks] = useState<ActionObjectLink[]>([]);
   const [matrixCells, setMatrixCells] = useState<MatrixCell[]>([]);
   const [auditPacks, setAuditPacks] = useState<AuditPack[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -213,6 +230,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setReviews([]);
     setActions([]);
     setRequirementActions([]);
+    setActionUpdates([]);
+    setActionDocuments([]);
+    setActionObjectLinks([]);
     setMatrixCells([]);
     setAuditPacks([]);
     setAuditLogs([]);
@@ -230,7 +250,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [theme]);
 
   const loadWorkspaceCollections = async () => {
-    const [reqs, docs, frameworkReqs, evidenceTypes, requirementDocLinks, reviewRows, actionRows, reqActionLinks, cells, packs, logs] = await Promise.all([
+    const [reqs, docs, frameworkReqs, evidenceTypes, requirementDocLinks, reviewRows, actionRows, reqActionLinks, actionUpdateRows, actionDocumentRows, actionObjectRows, cells, packs, logs] = await Promise.all([
       dbService.getRequirements(),
       dbService.getDocuments(),
       dbService.getFrameworkRequirements(),
@@ -239,6 +259,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dbService.getReviews(),
       dbService.getActions(),
       dbService.getRequirementActions(),
+      dbService.getActionUpdates(),
+      dbService.getActionDocuments(),
+      dbService.getActionObjectLinks(),
       dbService.getMatrixCells(),
       dbService.getAuditPacks(),
       dbService.getAuditLogs()
@@ -252,6 +275,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setReviews(reviewRows);
     setActions(actionRows);
     setRequirementActions(reqActionLinks);
+    setActionUpdates(actionUpdateRows);
+    setActionDocuments(actionDocumentRows);
+    setActionObjectLinks(actionObjectRows);
     setMatrixCells(cells);
     setAuditPacks(packs);
     setAuditLogs(logs);
@@ -314,6 +340,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setReviews(emptyCollections.reviews);
       setActions(emptyCollections.actions);
       setRequirementActions(emptyCollections.requirementActions);
+      setActionUpdates(emptyCollections.actionUpdates);
+      setActionDocuments(emptyCollections.actionDocuments);
+      setActionObjectLinks(emptyCollections.actionObjectLinks);
       setMatrixCells(emptyCollections.matrixCells);
       setAuditPacks(emptyCollections.auditPacks);
       setAuditLogs(emptyCollections.auditLogs);
@@ -548,7 +577,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       'vigilen_requirement_documents',
       'vigilen_reviews',
       'vigilen_actions',
-      'vigilen_requirement_actions'
+      'vigilen_requirement_actions',
+      'vigilen_action_updates',
+      'vigilen_action_documents',
+      'vigilen_action_object_links'
     ].forEach(key => localStorage.removeItem(key));
 
     initMockDb();
@@ -688,6 +720,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return updated;
   };
 
+  const addActionUpdate = async (actionId: string, updateType: ActionUpdateType, note: string): Promise<ActionUpdate> => {
+    const update = await dbService.addActionUpdate(actionId, updateType, note);
+    await loadWorkspaceCollections();
+    return update;
+  };
+
+  const linkDocumentToAction = async (actionId: string, documentId: string): Promise<void> => {
+    await dbService.linkDocumentToAction(actionId, documentId);
+    await loadWorkspaceCollections();
+  };
+
+  const unlinkDocumentFromAction = async (actionId: string, documentId: string): Promise<void> => {
+    await dbService.unlinkDocumentFromAction(actionId, documentId);
+    await loadWorkspaceCollections();
+  };
+
+  const uploadActionAttachment = async (actionId: string, file: File): Promise<EvidenceDocument> => {
+    const title = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim() || file.name;
+    const doc = await dbService.uploadDocumentFile({
+      file,
+      title,
+      category: 'Actions',
+      expiry_date: null,
+      issue_date: new Date().toISOString().split('T')[0],
+      metadata: {
+        source: 'action_attachment',
+        action_id: actionId
+      },
+      tags: ['action-attachment'],
+      status: 'Unclassified'
+    });
+    await dbService.linkDocumentToAction(actionId, doc.id, `Uploaded attachment: ${doc.original_file_name || file.name}`);
+    await loadWorkspaceCollections();
+    return doc;
+  };
+
   const createRequirement = async (
     title: string,
     description: string,
@@ -801,6 +869,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         reviews,
         actions,
         requirementActions,
+        actionUpdates,
+        actionDocuments,
+        actionObjectLinks,
         matrixCells,
         auditPacks,
         auditLogs,
@@ -815,6 +886,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         unlinkDocumentFromRequirement,
         createActionForRequirement,
         updateAction,
+        addActionUpdate,
+        linkDocumentToAction,
+        unlinkDocumentFromAction,
+        uploadActionAttachment,
         createRequirement,
         createPack,
         updatePackStatus,
