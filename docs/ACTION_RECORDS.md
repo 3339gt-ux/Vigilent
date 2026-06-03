@@ -56,3 +56,8 @@ RLS keeps action records, timeline updates, attachments, and generic links organ
 - Requirement detail action rows open the Action Record drawer.
 - Dashboard Open Actions opens the same drawer.
 - Dashboard Top Risks links to the related open action when one exists.
+- Competency Matrix gap actions create the same `actions` records and link them through `action_object_links` to the person, competency type, and competency record where available.
+
+## Competency Gaps
+
+Competency gap actions reuse the existing Action Record model. They do not create a separate training action table. This keeps the model reusable for future objects such as audit findings, CAPAs, non-conformances, document reviews, and risk register entries.

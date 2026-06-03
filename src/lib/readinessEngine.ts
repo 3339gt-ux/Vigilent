@@ -1,14 +1,23 @@
 import type {
   Action,
+  CompetencyRecord,
+  CompetencyType,
   EvidenceDocument,
+  Person,
   Requirement,
   RequirementAction,
+  RequirementCompetencyType,
   RequirementDocument,
+  RequirementEvidenceCoverage,
+  RequirementEvidenceCriterion,
+  RequirementEvidenceCriterionMatch,
   RequirementRiskLevel,
   RequirementStatus,
   Review
 } from './types';
 import { getLinkedDocumentsForRequirement } from './requirementsEngine';
+import { calculateCompetencyStatus } from './competencyEngine';
+import { buildRequirementEvidenceCoverage } from './evidenceCriteriaEngine';
 
 export const READINESS_STATUS_POINTS: Record<RequirementStatus, number | null> = {
   GREEN: 100,
@@ -30,6 +39,15 @@ export interface RequirementReadiness {
   status: RequirementStatus;
   score: number | null;
   linkedDocuments: EvidenceDocument[];
+  evidenceCoverage: RequirementEvidenceCoverage;
+  linkedCompetencyTypes: CompetencyType[];
+  competencySignals: Array<{
+    competencyType: CompetencyType;
+    status: RequirementStatus;
+    matchingRecords: CompetencyRecord[];
+    people: Person[];
+    message: string;
+  }>;
   latestReview: Review | null;
   openActions: Action[];
   reasons: ReadinessReason[];
@@ -133,19 +151,44 @@ export const assessRequirementReadiness = (
   reviews: Review[],
   actions: Action[],
   requirementActions: RequirementAction[],
+  evidenceCriteria: RequirementEvidenceCriterion[] = [],
+  evidenceCriterionMatches: RequirementEvidenceCriterionMatch[] = [],
+  competencyTypes: CompetencyType[] = [],
+  competencyRecords: CompetencyRecord[] = [],
+  requirementCompetencyTypes: RequirementCompetencyType[] = [],
+  people: Person[] = [],
   today: Date = new Date()
 ): RequirementReadiness => {
   const linkedDocuments = getLinkedDocumentsForRequirement(requirement.id, documents, requirementDocuments);
+  const evidenceCoverage = buildRequirementEvidenceCoverage({
+    requirement,
+    documents,
+    requirementDocuments,
+    criteria: evidenceCriteria,
+    criterionMatches: evidenceCriterionMatches,
+    competencyRecords,
+    actions,
+    today
+  });
+  const linkedCompetencyTypeIds = new Set(
+    requirementCompetencyTypes
+      .filter(link => link.requirement_id === requirement.id)
+      .map(link => link.competency_type_id)
+  );
+  const linkedCompetencyTypes = competencyTypes.filter(type => linkedCompetencyTypeIds.has(type.id));
   const latestReview = getLatestReview(requirement.id, reviews);
   const openActions = getOpenActions(requirement.id, actions, requirementActions);
   const reasons: ReadinessReason[] = [];
   const statusSignals: RequirementStatus[] = [];
+  const competencySignals: RequirementReadiness['competencySignals'] = [];
 
   if (
     requirement.status === 'GREY' &&
     !requirement.review_date &&
     !requirement.next_due_date &&
     linkedDocuments.length === 0 &&
+    linkedCompetencyTypes.length === 0 &&
+    evidenceCoverage.status === 'Not Assessed' &&
     openActions.length === 0
   ) {
     reasons.push({ level: 'GREY', message: 'Requirement has not been assessed yet and is excluded from scoring.' });
@@ -154,20 +197,37 @@ export const assessRequirementReadiness = (
       status: 'GREY',
       score: null,
       linkedDocuments,
+      evidenceCoverage,
+      linkedCompetencyTypes,
+      competencySignals,
       latestReview,
       openActions,
       reasons
     };
   }
 
-  if (linkedDocuments.length === 0) {
+  if (evidenceCoverage.status === 'Not Assessed') {
+    statusSignals.push('GREY');
+    reasons.push({ level: 'GREY', message: evidenceCoverage.summary });
+  } else if (evidenceCoverage.status === 'Not Covered') {
     statusSignals.push('RED');
-    reasons.push({ level: 'RED', message: 'No evidence documents are linked to this requirement.' });
-  } else {
-    reasons.push({ level: 'GREEN', message: `${linkedDocuments.length} evidence document${linkedDocuments.length === 1 ? ' is' : 's are'} linked.` });
+    reasons.push({ level: 'RED', message: evidenceCoverage.summary });
+  } else if (evidenceCoverage.status === 'Partially Covered') {
+    statusSignals.push('AMBER');
+    reasons.push({ level: 'AMBER', message: evidenceCoverage.summary });
+  } else if (evidenceCoverage.status === 'Fully Covered') {
+    statusSignals.push('GREEN');
+    reasons.push({ level: 'GREEN', message: evidenceCoverage.summary });
+  }
+
+  if (evidenceCoverage.status === 'Not Assessed') {
+    evidenceCoverage.legacyLinkedDocuments.forEach(document => {
+      reasons.push({ level: 'GREY', message: `${document.title} is a legacy evidence link - criteria not configured.` });
+    });
   }
 
   linkedDocuments.forEach(document => {
+    if (evidenceCoverage.status !== 'Not Assessed') return;
     const expiryDays = daysUntil(document.expiry_date, today);
     if (document.status === 'Expired' || (expiryDays !== null && expiryDays < 0)) {
       statusSignals.push('RED');
@@ -176,6 +236,50 @@ export const assessRequirementReadiness = (
       statusSignals.push('AMBER');
       reasons.push({ level: 'AMBER', message: `${document.title} expires within ${WARNING_DAYS} days.` });
     }
+  });
+
+  linkedCompetencyTypes.forEach(competencyType => {
+    const matchingRecords = competencyRecords.filter(record => record.competency_type_id === competencyType.id);
+    const matchingPeople = people.filter(person => matchingRecords.some(record => record.person_id === person.id));
+
+    if (matchingRecords.length === 0) {
+      statusSignals.push('RED');
+      const message = `Required competency "${competencyType.title}" has no records.`;
+      reasons.push({ level: 'RED', message });
+      competencySignals.push({ competencyType, status: 'RED', matchingRecords, people: [], message });
+      return;
+    }
+
+    const expiringRecords = matchingRecords.filter(record => calculateCompetencyStatus(record, today) === 'Expiring Soon');
+    const expiredOrMissingRecords = matchingRecords.filter(record => {
+      const status = calculateCompetencyStatus(record, today);
+      return status === 'Expired' || status === 'Missing';
+    });
+
+    if (expiredOrMissingRecords.length > 0) {
+      statusSignals.push('RED');
+      const personNames = matchingPeople
+        .filter(person => expiredOrMissingRecords.some(record => record.person_id === person.id))
+        .map(person => person.display_name)
+        .slice(0, 3)
+        .join(', ');
+      const message = `Required competency "${competencyType.title}" is expired or missing${personNames ? ` for ${personNames}` : ''}.`;
+      reasons.push({ level: 'RED', message });
+      competencySignals.push({ competencyType, status: 'RED', matchingRecords, people: matchingPeople, message });
+      return;
+    }
+
+    if (expiringRecords.length > 0) {
+      statusSignals.push('AMBER');
+      const message = `Required competency "${competencyType.title}" has records expiring soon.`;
+      reasons.push({ level: 'AMBER', message });
+      competencySignals.push({ competencyType, status: 'AMBER', matchingRecords, people: matchingPeople, message });
+      return;
+    }
+
+    const message = `Required competency "${competencyType.title}" is currently valid.`;
+    reasons.push({ level: 'GREEN', message });
+    competencySignals.push({ competencyType, status: 'GREEN', matchingRecords, people: matchingPeople, message });
   });
 
   const dueDays = daysUntil(requirement.next_due_date, today);
@@ -212,6 +316,9 @@ export const assessRequirementReadiness = (
     status,
     score: scoreFromStatus(status),
     linkedDocuments,
+    evidenceCoverage,
+    linkedCompetencyTypes,
+    competencySignals,
     latestReview,
     openActions,
     reasons
@@ -225,6 +332,12 @@ export const buildReadinessReport = (input: {
   reviews: Review[];
   actions: Action[];
   requirementActions: RequirementAction[];
+  requirementEvidenceCriteria?: RequirementEvidenceCriterion[];
+  requirementEvidenceCriterionMatches?: RequirementEvidenceCriterionMatch[];
+  competencyTypes?: CompetencyType[];
+  competencyRecords?: CompetencyRecord[];
+  requirementCompetencyTypes?: RequirementCompetencyType[];
+  people?: Person[];
   today?: Date;
 }): ReadinessReport => {
   const today = input.today || new Date();
@@ -236,6 +349,12 @@ export const buildReadinessReport = (input: {
       input.reviews,
       input.actions,
       input.requirementActions,
+      input.requirementEvidenceCriteria || [],
+      input.requirementEvidenceCriterionMatches || [],
+      input.competencyTypes || [],
+      input.competencyRecords || [],
+      input.requirementCompetencyTypes || [],
+      input.people || [],
       today
     )
   );
@@ -249,7 +368,10 @@ export const buildReadinessReport = (input: {
     .filter(risk => requirementReadiness.some(item => item.requirement.risk_level === risk))
     .map(risk => buildScoreGroup(risk, requirementReadiness.filter(item => item.requirement.risk_level === risk)));
 
-  const missingEvidence = requirementReadiness.filter(item => item.linkedDocuments.length === 0 && item.status !== 'GREY');
+  const missingEvidence = requirementReadiness.filter(item =>
+    item.evidenceCoverage.status === 'Not Covered' ||
+    item.evidenceCoverage.criteria.some(result => result.criterion.is_required && result.status === 'Not Covered')
+  );
   const upcomingDue = requirementReadiness.filter(item => {
     const dueDays = daysUntil(item.requirement.next_due_date, today);
     return dueDays !== null && dueDays >= 0 && dueDays <= WARNING_DAYS;

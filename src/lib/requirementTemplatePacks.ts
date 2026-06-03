@@ -87,6 +87,19 @@ export const REQUIREMENT_TEMPLATE_PACKS: RequirementTemplatePack[] = [
     description: 'Requirements for induction, task training, refreshers, and competency tracking.',
     requirements: [
       {
+        title: 'Forklift Training',
+        category: 'Training Records',
+        suggested_owner: 'Warehouse Manager',
+        review_frequency: 'Annually',
+        risk_level: 'High',
+        suggested_evidence_types: ['Training certificate', 'Person competency record', 'Refresher or expiry date'],
+        suggested_criteria: [
+          { title: 'Valid training certificate', evidence_type: 'Training Certificate', is_required: true, minimum_count: 1, validity_required: true },
+          { title: 'Person competency record', evidence_type: 'Competency Record', is_required: true, minimum_count: 1, validity_required: true },
+          { title: 'Refresher/expiry date recorded', evidence_type: 'Dated Record', is_required: true, minimum_count: 1, validity_required: true }
+        ]
+      },
+      {
         title: 'New Starter Induction',
         category: 'Training Records',
         suggested_owner: 'People Lead',
@@ -131,7 +144,12 @@ export const REQUIREMENT_TEMPLATE_PACKS: RequirementTemplatePack[] = [
         suggested_owner: 'Process Owner',
         review_frequency: 'Annually',
         risk_level: 'Medium',
-        suggested_evidence_types: ['Approved procedure', 'Approval record', 'Version history']
+        suggested_evidence_types: ['Approved procedure', 'Approval record', 'Version history'],
+        suggested_criteria: [
+          { title: 'Controlled procedure', evidence_type: 'Procedure', is_required: true, minimum_count: 1, validity_required: true },
+          { title: 'Revision/approval evidence', evidence_type: 'Approval Record', is_required: true, minimum_count: 1, validity_required: false },
+          { title: 'Review date recorded', evidence_type: 'Dated Review Record', is_required: true, minimum_count: 1, validity_required: true }
+        ]
       },
       {
         title: 'Document Review Schedule',
@@ -209,7 +227,10 @@ export const REQUIREMENT_TEMPLATE_PACKS: RequirementTemplatePack[] = [
         suggested_owner: 'Fleet Manager',
         review_frequency: 'Annually',
         risk_level: 'Critical',
-        suggested_evidence_types: ['Insurance policy', 'Renewal confirmation', 'Vehicle schedule']
+        suggested_evidence_types: ['Insurance policy', 'Renewal confirmation', 'Vehicle schedule'],
+        suggested_criteria: [
+          { title: 'Valid insurance certificate', evidence_type: 'Insurance Certificate', is_required: true, minimum_count: 1, validity_required: true }
+        ]
       },
       {
         title: 'Vehicle Inspection Records',

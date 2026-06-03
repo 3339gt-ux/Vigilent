@@ -1,5 +1,9 @@
 # Requirements Engine
 
+Requirements are evaluated through evidence criteria before legacy document links. A requirement can have many criteria, and each criterion must be explicitly matched to evidence.
+
+If no criteria exist, the requirement is treated as `Not Assessed`; broad legacy links are labelled as legacy evidence links and do not create full coverage.
+
 ## Purpose
 
 The Requirements Framework is the standards-agnostic foundation for Vygilence. It models operational things that must exist, be maintained, checked, or demonstrated without making any external framework the primary object.

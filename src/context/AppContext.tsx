@@ -17,6 +17,7 @@ import { isDemoMode, requireProductionEnv } from '@/lib/env';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { formatSupabaseError, logSupabaseError } from '@/lib/supabaseDiagnostics';
 import { buildReadinessReport, ReadinessReport } from '@/lib/readinessEngine';
+import { buildCompetencySummary, CompetencySummary } from '@/lib/competencyEngine';
 import {
   Profile,
   Organization,
@@ -30,6 +31,8 @@ import {
   EvidenceUploadInput,
   Requirement,
   RequirementAction,
+  RequirementEvidenceCriterion,
+  RequirementEvidenceCriterionMatch,
   RequirementDocument,
   RequirementEvidenceType,
   Review,
@@ -39,6 +42,12 @@ import {
   ActionUpdate,
   ActionUpdateType,
   ActionStatus,
+  CompetencyRecord,
+  CompetencyRecordDocument,
+  CompetencyTemplateItem,
+  CompetencyType,
+  Person,
+  RequirementCompetencyType,
   RequirementTemplateItem
 } from '@/lib/types';
 
@@ -67,12 +76,19 @@ interface AppContextType {
   frameworkRequirements: Requirement[];
   requirementEvidenceTypes: RequirementEvidenceType[];
   requirementDocuments: RequirementDocument[];
+  requirementEvidenceCriteria: RequirementEvidenceCriterion[];
+  requirementEvidenceCriterionMatches: RequirementEvidenceCriterionMatch[];
   reviews: Review[];
   actions: Action[];
   requirementActions: RequirementAction[];
   actionUpdates: ActionUpdate[];
   actionDocuments: ActionDocument[];
   actionObjectLinks: ActionObjectLink[];
+  people: Person[];
+  competencyTypes: CompetencyType[];
+  competencyRecords: CompetencyRecord[];
+  competencyRecordDocuments: CompetencyRecordDocument[];
+  requirementCompetencyTypes: RequirementCompetencyType[];
   matrixCells: MatrixCell[];
   auditPacks: AuditPack[];
   auditLogs: AuditLog[];
@@ -95,6 +111,11 @@ interface AppContextType {
   importRequirementTemplateItems: (items: RequirementTemplateItem[]) => Promise<Requirement[]>;
   linkDocumentToRequirement: (requirementId: string, documentId: string) => Promise<void>;
   unlinkDocumentFromRequirement: (requirementId: string, documentId: string) => Promise<void>;
+  upsertRequirementEvidenceCriterion: (input: Partial<RequirementEvidenceCriterion> & Pick<RequirementEvidenceCriterion, 'requirement_id' | 'title'>) => Promise<RequirementEvidenceCriterion>;
+  deleteRequirementEvidenceCriterion: (criterionId: string) => Promise<void>;
+  linkDocumentToEvidenceCriterion: (criterionId: string, documentId: string, notes?: string | null) => Promise<void>;
+  unlinkDocumentFromEvidenceCriterion: (criterionId: string, documentId: string) => Promise<void>;
+  uploadEvidenceForCriterion: (criterionId: string, file: File, category?: string) => Promise<EvidenceDocument>;
   createActionForRequirement: (
     requirementId: string,
     actionInput: {
@@ -110,12 +131,29 @@ interface AppContextType {
   linkDocumentToAction: (actionId: string, documentId: string) => Promise<void>;
   unlinkDocumentFromAction: (actionId: string, documentId: string) => Promise<void>;
   uploadActionAttachment: (actionId: string, file: File) => Promise<EvidenceDocument>;
+  upsertPerson: (input: Partial<Person> & Pick<Person, 'first_name' | 'last_name' | 'person_type'>) => Promise<Person>;
+  upsertCompetencyType: (input: Partial<CompetencyType> & Pick<CompetencyType, 'title' | 'category'>) => Promise<CompetencyType>;
+  importCompetencyTemplateItems: (items: CompetencyTemplateItem[]) => Promise<CompetencyType[]>;
+  upsertCompetencyRecord: (input: Partial<CompetencyRecord> & Pick<CompetencyRecord, 'person_id' | 'competency_type_id'>) => Promise<CompetencyRecord>;
+  linkDocumentToCompetencyRecord: (recordId: string, documentId: string) => Promise<void>;
+  unlinkDocumentFromCompetencyRecord: (recordId: string, documentId: string) => Promise<void>;
+  uploadCompetencyEvidence: (recordId: string, file: File) => Promise<EvidenceDocument>;
+  linkCompetencyTypeToRequirement: (requirementId: string, competencyTypeId: string) => Promise<void>;
+  unlinkCompetencyTypeFromRequirement: (requirementId: string, competencyTypeId: string) => Promise<void>;
+  createActionForCompetencyGap: (input: {
+    personId: string;
+    competencyTypeId: string;
+    competencyRecordId?: string | null;
+    title: string;
+    dueDate?: string | null;
+  }) => Promise<Action>;
   createRequirement: (title: string, description: string, category: 'Vehicle' | 'Driver' | 'Facility' | 'General', frequency_months?: number, is_mandatory?: boolean) => Promise<ComplianceRequirement>;
   createPack: (name: string, description: string, requirementIds: string[], docIds: string[]) => Promise<AuditPack>;
   updatePackStatus: (packId: string, status: 'Draft' | 'Ready' | 'Sent' | 'Archived') => Promise<void>;
   updateCellMapping: (cellId: string, docId: string | null, status: CellStatus) => Promise<void>;
 
   readinessReport: ReadinessReport;
+  competencySummary: CompetencySummary;
   readinessScore: number;
   stats: {
     totalRequirements: number;
@@ -135,12 +173,19 @@ const emptyCollections = {
   frameworkRequirements: [] as Requirement[],
   requirementEvidenceTypes: [] as RequirementEvidenceType[],
   requirementDocuments: [] as RequirementDocument[],
+  requirementEvidenceCriteria: [] as RequirementEvidenceCriterion[],
+  requirementEvidenceCriterionMatches: [] as RequirementEvidenceCriterionMatch[],
   reviews: [] as Review[],
   actions: [] as Action[],
   requirementActions: [] as RequirementAction[],
   actionUpdates: [] as ActionUpdate[],
   actionDocuments: [] as ActionDocument[],
   actionObjectLinks: [] as ActionObjectLink[],
+  people: [] as Person[],
+  competencyTypes: [] as CompetencyType[],
+  competencyRecords: [] as CompetencyRecord[],
+  competencyRecordDocuments: [] as CompetencyRecordDocument[],
+  requirementCompetencyTypes: [] as RequirementCompetencyType[],
   matrixCells: [] as MatrixCell[],
   auditPacks: [] as AuditPack[],
   auditLogs: [] as AuditLog[]
@@ -189,12 +234,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [frameworkRequirements, setFrameworkRequirements] = useState<Requirement[]>([]);
   const [requirementEvidenceTypes, setRequirementEvidenceTypes] = useState<RequirementEvidenceType[]>([]);
   const [requirementDocuments, setRequirementDocuments] = useState<RequirementDocument[]>([]);
+  const [requirementEvidenceCriteria, setRequirementEvidenceCriteria] = useState<RequirementEvidenceCriterion[]>([]);
+  const [requirementEvidenceCriterionMatches, setRequirementEvidenceCriterionMatches] = useState<RequirementEvidenceCriterionMatch[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [actions, setActions] = useState<Action[]>([]);
   const [requirementActions, setRequirementActions] = useState<RequirementAction[]>([]);
   const [actionUpdates, setActionUpdates] = useState<ActionUpdate[]>([]);
   const [actionDocuments, setActionDocuments] = useState<ActionDocument[]>([]);
   const [actionObjectLinks, setActionObjectLinks] = useState<ActionObjectLink[]>([]);
+  const [people, setPeople] = useState<Person[]>([]);
+  const [competencyTypes, setCompetencyTypes] = useState<CompetencyType[]>([]);
+  const [competencyRecords, setCompetencyRecords] = useState<CompetencyRecord[]>([]);
+  const [competencyRecordDocuments, setCompetencyRecordDocuments] = useState<CompetencyRecordDocument[]>([]);
+  const [requirementCompetencyTypes, setRequirementCompetencyTypes] = useState<RequirementCompetencyType[]>([]);
   const [matrixCells, setMatrixCells] = useState<MatrixCell[]>([]);
   const [auditPacks, setAuditPacks] = useState<AuditPack[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -207,8 +259,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     requirementDocuments,
     reviews,
     actions,
-    requirementActions
-  }), [actions, documents, frameworkRequirements, requirementActions, requirementDocuments, reviews]);
+    requirementActions,
+    requirementEvidenceCriteria,
+    requirementEvidenceCriterionMatches,
+    competencyTypes,
+    competencyRecords,
+    requirementCompetencyTypes,
+    people
+  }), [actions, competencyRecords, competencyTypes, documents, frameworkRequirements, people, requirementActions, requirementCompetencyTypes, requirementDocuments, requirementEvidenceCriteria, requirementEvidenceCriterionMatches, reviews]);
+
+  const competencySummary = useMemo(
+    () => buildCompetencySummary(people, competencyTypes, competencyRecords),
+    [competencyRecords, competencyTypes, people]
+  );
 
   const readinessScore = readinessReport.overallScore || 0;
   const stats = useMemo(() => ({
@@ -227,12 +290,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setFrameworkRequirements([]);
     setRequirementEvidenceTypes([]);
     setRequirementDocuments([]);
+    setRequirementEvidenceCriteria([]);
+    setRequirementEvidenceCriterionMatches([]);
     setReviews([]);
     setActions([]);
     setRequirementActions([]);
     setActionUpdates([]);
     setActionDocuments([]);
     setActionObjectLinks([]);
+    setPeople([]);
+    setCompetencyTypes([]);
+    setCompetencyRecords([]);
+    setCompetencyRecordDocuments([]);
+    setRequirementCompetencyTypes([]);
     setMatrixCells([]);
     setAuditPacks([]);
     setAuditLogs([]);
@@ -250,18 +320,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [theme]);
 
   const loadWorkspaceCollections = async () => {
-    const [reqs, docs, frameworkReqs, evidenceTypes, requirementDocLinks, reviewRows, actionRows, reqActionLinks, actionUpdateRows, actionDocumentRows, actionObjectRows, cells, packs, logs] = await Promise.all([
+    const [
+      reqs,
+      docs,
+      frameworkReqs,
+      evidenceTypes,
+      requirementDocLinks,
+      evidenceCriteriaRows,
+      criterionMatchRows,
+      reviewRows,
+      actionRows,
+      reqActionLinks,
+      actionUpdateRows,
+      actionDocumentRows,
+      actionObjectRows,
+      peopleRows,
+      competencyTypeRows,
+      competencyRecordRows,
+      competencyRecordDocumentRows,
+      requirementCompetencyTypeRows,
+      cells,
+      packs,
+      logs
+    ] = await Promise.all([
       dbService.getRequirements(),
       dbService.getDocuments(),
       dbService.getFrameworkRequirements(),
       dbService.getRequirementEvidenceTypes(),
       dbService.getRequirementDocuments(),
+      dbService.getRequirementEvidenceCriteria(),
+      dbService.getRequirementEvidenceCriterionMatches(),
       dbService.getReviews(),
       dbService.getActions(),
       dbService.getRequirementActions(),
       dbService.getActionUpdates(),
       dbService.getActionDocuments(),
       dbService.getActionObjectLinks(),
+      dbService.getPeople(),
+      dbService.getCompetencyTypes(),
+      dbService.getCompetencyRecords(),
+      dbService.getCompetencyRecordDocuments(),
+      dbService.getRequirementCompetencyTypes(),
       dbService.getMatrixCells(),
       dbService.getAuditPacks(),
       dbService.getAuditLogs()
@@ -272,12 +371,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setFrameworkRequirements(frameworkReqs);
     setRequirementEvidenceTypes(evidenceTypes);
     setRequirementDocuments(requirementDocLinks);
+    setRequirementEvidenceCriteria(evidenceCriteriaRows);
+    setRequirementEvidenceCriterionMatches(criterionMatchRows);
     setReviews(reviewRows);
     setActions(actionRows);
     setRequirementActions(reqActionLinks);
     setActionUpdates(actionUpdateRows);
     setActionDocuments(actionDocumentRows);
     setActionObjectLinks(actionObjectRows);
+    setPeople(peopleRows);
+    setCompetencyTypes(competencyTypeRows);
+    setCompetencyRecords(competencyRecordRows);
+    setCompetencyRecordDocuments(competencyRecordDocumentRows);
+    setRequirementCompetencyTypes(requirementCompetencyTypeRows);
     setMatrixCells(cells);
     setAuditPacks(packs);
     setAuditLogs(logs);
@@ -337,12 +443,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setFrameworkRequirements(emptyCollections.frameworkRequirements);
       setRequirementEvidenceTypes(emptyCollections.requirementEvidenceTypes);
       setRequirementDocuments(emptyCollections.requirementDocuments);
+      setRequirementEvidenceCriteria(emptyCollections.requirementEvidenceCriteria);
+      setRequirementEvidenceCriterionMatches(emptyCollections.requirementEvidenceCriterionMatches);
       setReviews(emptyCollections.reviews);
       setActions(emptyCollections.actions);
       setRequirementActions(emptyCollections.requirementActions);
       setActionUpdates(emptyCollections.actionUpdates);
       setActionDocuments(emptyCollections.actionDocuments);
       setActionObjectLinks(emptyCollections.actionObjectLinks);
+      setPeople(emptyCollections.people);
+      setCompetencyTypes(emptyCollections.competencyTypes);
+      setCompetencyRecords(emptyCollections.competencyRecords);
+      setCompetencyRecordDocuments(emptyCollections.competencyRecordDocuments);
+      setRequirementCompetencyTypes(emptyCollections.requirementCompetencyTypes);
       setMatrixCells(emptyCollections.matrixCells);
       setAuditPacks(emptyCollections.auditPacks);
       setAuditLogs(emptyCollections.auditLogs);
@@ -575,12 +688,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       'vigilen_framework_requirements',
       'vigilen_requirement_evidence_types',
       'vigilen_requirement_documents',
+      'vigilen_requirement_evidence_criteria',
+      'vigilen_requirement_evidence_criterion_matches',
       'vigilen_reviews',
       'vigilen_actions',
       'vigilen_requirement_actions',
       'vigilen_action_updates',
       'vigilen_action_documents',
-      'vigilen_action_object_links'
+      'vigilen_action_object_links',
+      'vigilen_people',
+      'vigilen_competency_types',
+      'vigilen_competency_records',
+      'vigilen_competency_record_documents',
+      'vigilen_requirement_competency_types'
     ].forEach(key => localStorage.removeItem(key));
 
     initMockDb();
@@ -675,6 +795,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
         risk_level: item.risk_level
       });
       await dbService.addRequirementEvidenceTypes(created.id, item.suggested_evidence_types);
+      const starterCriteria: NonNullable<RequirementTemplateItem['suggested_criteria']> = item.suggested_criteria?.length
+        ? item.suggested_criteria
+        : item.suggested_evidence_types.map(name => ({
+            title: name,
+            description: undefined,
+            evidence_type: name,
+            is_required: true,
+            weight: 1,
+            minimum_count: 1,
+            frequency: item.review_frequency,
+            validity_required: true
+          }));
+      for (const criterion of starterCriteria) {
+        await dbService.upsertRequirementEvidenceCriterion({
+          requirement_id: created.id,
+          title: criterion.title,
+          description: criterion.description || null,
+          evidence_type: criterion.evidence_type || criterion.title,
+          is_required: criterion.is_required ?? true,
+          weight: criterion.weight ?? 1,
+          minimum_count: criterion.minimum_count ?? 1,
+          frequency: criterion.frequency || item.review_frequency,
+          coverage_period: null,
+          validity_required: criterion.validity_required ?? true
+        });
+      }
       existingKeys.add(key);
       createdRequirements.push(created);
     }
@@ -691,6 +837,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const unlinkDocumentFromRequirement = async (requirementId: string, documentId: string): Promise<void> => {
     await dbService.unlinkDocumentFromRequirement(requirementId, documentId);
     await loadWorkspaceCollections();
+  };
+
+  const upsertRequirementEvidenceCriterion: AppContextType['upsertRequirementEvidenceCriterion'] = async (input) => {
+    const criterion = await dbService.upsertRequirementEvidenceCriterion(input);
+    await loadWorkspaceCollections();
+    return criterion;
+  };
+
+  const deleteRequirementEvidenceCriterion = async (criterionId: string): Promise<void> => {
+    await dbService.deleteRequirementEvidenceCriterion(criterionId);
+    await loadWorkspaceCollections();
+  };
+
+  const linkDocumentToEvidenceCriterion = async (criterionId: string, documentId: string, notes: string | null = null): Promise<void> => {
+    await dbService.linkDocumentToEvidenceCriterion(criterionId, documentId, notes);
+    await loadWorkspaceCollections();
+  };
+
+  const unlinkDocumentFromEvidenceCriterion = async (criterionId: string, documentId: string): Promise<void> => {
+    await dbService.unlinkDocumentFromEvidenceCriterion(criterionId, documentId);
+    await loadWorkspaceCollections();
+  };
+
+  const uploadEvidenceForCriterion = async (criterionId: string, file: File, category: string = 'Evidence'): Promise<EvidenceDocument> => {
+    const document = await dbService.uploadEvidenceForCriterion(criterionId, file, category);
+    await loadWorkspaceCollections();
+    return document;
   };
 
   const createActionForRequirement = async (
@@ -754,6 +927,67 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await dbService.linkDocumentToAction(actionId, doc.id, `Uploaded attachment: ${doc.original_file_name || file.name}`);
     await loadWorkspaceCollections();
     return doc;
+  };
+
+  const upsertPerson: AppContextType['upsertPerson'] = async (input) => {
+    const person = await dbService.upsertPerson(input);
+    await loadWorkspaceCollections();
+    return person;
+  };
+
+  const upsertCompetencyType: AppContextType['upsertCompetencyType'] = async (input) => {
+    const competencyType = await dbService.upsertCompetencyType(input);
+    await loadWorkspaceCollections();
+    return competencyType;
+  };
+
+  const importCompetencyTemplateItems: AppContextType['importCompetencyTemplateItems'] = async (items) => {
+    const existingKeys = new Set(
+      competencyTypes.map(type => `${type.title.trim().toLowerCase()}::${type.category.trim().toLowerCase()}`)
+    );
+    const imported = await dbService.importCompetencyTemplateItems(
+      items.filter(item => !existingKeys.has(`${item.title.trim().toLowerCase()}::${item.category.trim().toLowerCase()}`))
+    );
+    await loadWorkspaceCollections();
+    return imported;
+  };
+
+  const upsertCompetencyRecord: AppContextType['upsertCompetencyRecord'] = async (input) => {
+    const record = await dbService.upsertCompetencyRecord(input);
+    await loadWorkspaceCollections();
+    return record;
+  };
+
+  const linkDocumentToCompetencyRecord = async (recordId: string, documentId: string): Promise<void> => {
+    await dbService.linkDocumentToCompetencyRecord(recordId, documentId);
+    await loadWorkspaceCollections();
+  };
+
+  const unlinkDocumentFromCompetencyRecord = async (recordId: string, documentId: string): Promise<void> => {
+    await dbService.unlinkDocumentFromCompetencyRecord(recordId, documentId);
+    await loadWorkspaceCollections();
+  };
+
+  const uploadCompetencyEvidence = async (recordId: string, file: File): Promise<EvidenceDocument> => {
+    const document = await dbService.uploadCompetencyEvidence(recordId, file);
+    await loadWorkspaceCollections();
+    return document;
+  };
+
+  const linkCompetencyTypeToRequirement = async (requirementId: string, competencyTypeId: string): Promise<void> => {
+    await dbService.linkCompetencyTypeToRequirement(requirementId, competencyTypeId);
+    await loadWorkspaceCollections();
+  };
+
+  const unlinkCompetencyTypeFromRequirement = async (requirementId: string, competencyTypeId: string): Promise<void> => {
+    await dbService.unlinkCompetencyTypeFromRequirement(requirementId, competencyTypeId);
+    await loadWorkspaceCollections();
+  };
+
+  const createActionForCompetencyGap: AppContextType['createActionForCompetencyGap'] = async (input) => {
+    const action = await dbService.createActionForCompetencyGap(input);
+    await loadWorkspaceCollections();
+    return action;
   };
 
   const createRequirement = async (
@@ -866,12 +1100,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
         frameworkRequirements,
         requirementEvidenceTypes,
         requirementDocuments,
+        requirementEvidenceCriteria,
+        requirementEvidenceCriterionMatches,
         reviews,
         actions,
         requirementActions,
         actionUpdates,
         actionDocuments,
         actionObjectLinks,
+        people,
+        competencyTypes,
+        competencyRecords,
+        competencyRecordDocuments,
+        requirementCompetencyTypes,
         matrixCells,
         auditPacks,
         auditLogs,
@@ -884,17 +1125,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
         importRequirementTemplateItems,
         linkDocumentToRequirement,
         unlinkDocumentFromRequirement,
+        upsertRequirementEvidenceCriterion,
+        deleteRequirementEvidenceCriterion,
+        linkDocumentToEvidenceCriterion,
+        unlinkDocumentFromEvidenceCriterion,
+        uploadEvidenceForCriterion,
         createActionForRequirement,
         updateAction,
         addActionUpdate,
         linkDocumentToAction,
         unlinkDocumentFromAction,
         uploadActionAttachment,
+        upsertPerson,
+        upsertCompetencyType,
+        importCompetencyTemplateItems,
+        upsertCompetencyRecord,
+        linkDocumentToCompetencyRecord,
+        unlinkDocumentFromCompetencyRecord,
+        uploadCompetencyEvidence,
+        linkCompetencyTypeToRequirement,
+        unlinkCompetencyTypeFromRequirement,
+        createActionForCompetencyGap,
         createRequirement,
         createPack,
         updatePackStatus,
         updateCellMapping,
         readinessReport: readinessReport || emptyReadinessReport,
+        competencySummary,
         readinessScore,
         stats
       }}

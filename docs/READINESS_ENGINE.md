@@ -10,6 +10,9 @@ The Readiness Engine calculates organisation readiness from the generic Requirem
 - `reviews`: review history and due dates.
 - `actions`: open, in-progress, and closed follow-up work.
 - `requirement_actions`: links between requirements and actions.
+- `competency_types`: generic competency requirements linked to operating requirements.
+- `competency_records`: person-level competency completions and expiry dates.
+- `requirement_competency_types`: links between requirements and competency types.
 
 All inputs are already scoped to the active organisation by the app data layer and Supabase RLS.
 
@@ -29,7 +32,7 @@ All inputs are already scoped to the active organisation by the app data layer a
 
 - `GREEN`: requirement has linked evidence and no due, expiry or open-action warnings.
 - `AMBER`: requirement has a warning, such as review due soon, evidence expiring soon, or an unresolved linked action.
-- `RED`: requirement is missing evidence, has overdue review work, expired evidence, or an overdue linked action.
+- `RED`: requirement is missing evidence, has overdue review work, expired evidence, an overdue linked action, or required competency gaps.
 - `GREY`: requirement is not yet assessed and is excluded from scoring.
 
 ## Transparency
@@ -41,6 +44,17 @@ Each scored requirement includes reasons explaining why the score changed, for e
 - A review is overdue.
 - A review is due within the warning window.
 - A linked action remains unresolved.
+- A linked competency type is valid, expiring soon, missing, or expired.
+
+## Competency Integration
+
+Competency records are an additional readiness signal. A requirement can link to one or more competency types. The readiness engine then adds transparent reasons:
+
+- Green when linked competency records are valid.
+- Amber when linked competency records expire within the warning window.
+- Red when linked competency records are expired, missing, or absent.
+
+Competency scoring remains standards-agnostic and does not certify compliance.
 
 The dashboard shows these reasons in the Top 10 Risks list.
 

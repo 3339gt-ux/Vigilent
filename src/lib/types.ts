@@ -83,6 +83,19 @@ export type RequirementStatus = 'GREEN' | 'AMBER' | 'RED' | 'GREY';
 export type RequirementRiskLevel = 'Low' | 'Medium' | 'High' | 'Critical';
 export type ReviewFrequency = 'Weekly' | 'Monthly' | 'Quarterly' | 'Annually' | 'Custom';
 export type ActionStatus = 'Open' | 'In Progress' | 'Complete' | 'Cancelled';
+export type PersonType = 'Employee' | 'Contractor' | 'Agency' | 'Driver' | 'Visitor' | 'Consultant' | 'Other';
+export type CompetencyCategory =
+  | 'Safety'
+  | 'Equipment & Vehicle'
+  | 'Transport'
+  | 'Security'
+  | 'Quality & Compliance'
+  | 'Environmental'
+  | 'Operational'
+  | 'Professional'
+  | 'Industry Certification'
+  | 'Other';
+export type CompetencyStatus = 'Valid' | 'Expiring Soon' | 'Expired' | 'Missing' | 'Not Required';
 export type ActionUpdateType =
   | 'Note'
   | 'Progress Update'
@@ -126,6 +139,66 @@ export interface RequirementDocument {
   organisation_id: string;
   linked_by: string | null;
   created_at: string;
+}
+
+export type EvidenceCriterionFrequency = 'One-off' | 'Monthly' | 'Quarterly' | 'Annually' | 'Custom';
+export type EvidenceCriterionMatchStatus = 'Matched' | 'Needs Review' | 'Rejected';
+export type EvidenceCoverageStatus = 'Fully Covered' | 'Partially Covered' | 'Not Covered' | 'Not Assessed';
+
+export interface RequirementEvidenceCriterion {
+  id: string;
+  organisation_id: string;
+  requirement_id: string;
+  title: string;
+  description: string | null;
+  evidence_type: string | null;
+  is_required: boolean;
+  weight: number;
+  minimum_count: number;
+  frequency: EvidenceCriterionFrequency | string | null;
+  coverage_period: string | null;
+  validity_required: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RequirementEvidenceCriterionMatch {
+  id: string;
+  organisation_id: string;
+  criterion_id: string;
+  document_id: string | null;
+  competency_record_id: string | null;
+  action_id: string | null;
+  match_status: EvidenceCriterionMatchStatus;
+  matched_by: string | null;
+  matched_at: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RequirementEvidenceCoverage {
+  requirement_id: string;
+  status: EvidenceCoverageStatus;
+  coveragePercent: number | null;
+  coveredRequired: number;
+  totalRequired: number;
+  weightedCovered: number;
+  weightedTotal: number;
+  bestCoverageDate: string | null;
+  summary: string;
+  reasons: string[];
+  criteria: Array<{
+    criterion: RequirementEvidenceCriterion;
+    status: EvidenceCoverageStatus;
+    matchedDocuments: EvidenceDocument[];
+    matchedCompetencyRecords: CompetencyRecord[];
+    matchedActions: Action[];
+    bestCoverageDate: string | null;
+    reasons: string[];
+  }>;
+  legacyLinkedDocuments: EvidenceDocument[];
 }
 
 export interface Review {
@@ -210,6 +283,16 @@ export interface RequirementTemplateItem {
   review_frequency: ReviewFrequency;
   risk_level: RequirementRiskLevel;
   suggested_evidence_types: string[];
+  suggested_criteria?: Array<{
+    title: string;
+    description?: string;
+    evidence_type?: string;
+    is_required?: boolean;
+    weight?: number;
+    minimum_count?: number;
+    frequency?: EvidenceCriterionFrequency | string | null;
+    validity_required?: boolean;
+  }>;
   description?: string;
 }
 
@@ -218,6 +301,92 @@ export interface RequirementTemplatePack {
   name: string;
   description: string;
   requirements: RequirementTemplateItem[];
+}
+
+export interface Person {
+  id: string;
+  organisation_id: string;
+  employee_number: string | null;
+  first_name: string;
+  last_name: string;
+  display_name: string;
+  email: string | null;
+  department: string | null;
+  role: string | null;
+  person_type: PersonType;
+  start_date: string | null;
+  end_date: string | null;
+  active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompetencyType {
+  id: string;
+  organisation_id: string;
+  title: string;
+  category: CompetencyCategory;
+  description: string | null;
+  validity_period_months: number | null;
+  refresher_period_months: number | null;
+  evidence_required: boolean;
+  default_risk_level: RequirementRiskLevel;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompetencyRecord {
+  id: string;
+  organisation_id: string;
+  person_id: string;
+  competency_type_id: string;
+  completed_date: string | null;
+  expiry_date: string | null;
+  trainer: string | null;
+  provider: string | null;
+  certificate_number: string | null;
+  status: CompetencyStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompetencyRecordDocument {
+  id: string;
+  organisation_id: string;
+  competency_record_id: string;
+  document_id: string;
+  linked_by: string | null;
+  linked_at: string;
+}
+
+export interface RequirementCompetencyType {
+  id: string;
+  organisation_id: string;
+  requirement_id: string;
+  competency_type_id: string;
+  linked_by: string | null;
+  linked_at: string;
+}
+
+export interface CompetencyTemplateItem {
+  title: string;
+  category: CompetencyCategory;
+  description?: string;
+  validity_period_months?: number | null;
+  refresher_period_months?: number | null;
+  evidence_required?: boolean;
+  default_risk_level?: RequirementRiskLevel;
+}
+
+export interface CompetencyTemplatePack {
+  id: string;
+  name: string;
+  description: string;
+  category: CompetencyCategory;
+  competencies: CompetencyTemplateItem[];
 }
 
 export type CellStatus = 'Compliant' | 'Expiring Soon' | 'Expired' | 'Missing' | 'N/A';

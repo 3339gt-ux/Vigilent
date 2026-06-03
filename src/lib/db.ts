@@ -14,7 +14,10 @@ import {
   EvidenceUploadInput,
   Requirement,
   RequirementAction,
+  RequirementCompetencyType,
   RequirementDocument,
+  RequirementEvidenceCriterion,
+  RequirementEvidenceCriterionMatch,
   RequirementEvidenceType,
   Review,
   Action,
@@ -23,12 +26,18 @@ import {
   ActionStatus,
   ActionUpdate,
   ActionUpdateType,
+  CompetencyRecord,
+  CompetencyRecordDocument,
+  CompetencyTemplateItem,
+  CompetencyType,
   MatrixCell,
   AuditPack,
   AuditLog,
+  Person,
   CellStatus,
   DocumentStatus
 } from './types';
+import { calculateCompetencyStatus } from './competencyEngine';
 
 // Pre-seeded mock data
 export const MOCK_ORG: Organization = {
@@ -464,6 +473,105 @@ const MOCK_REQUIREMENT_DOCUMENTS: RequirementDocument[] = [
   }
 ];
 
+const MOCK_REQUIREMENT_EVIDENCE_CRITERIA: RequirementEvidenceCriterion[] = [
+  {
+    id: 'crit-forklift-cert',
+    organisation_id: MOCK_ORG.id,
+    requirement_id: 'fw-req-forklift-training',
+    title: 'Valid training certificate',
+    description: 'Current certificate or training evidence for the relevant person.',
+    evidence_type: 'Training Certificate',
+    is_required: true,
+    weight: 1,
+    minimum_count: 1,
+    frequency: 'Annually',
+    coverage_period: null,
+    validity_required: true,
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'crit-forklift-competency',
+    organisation_id: MOCK_ORG.id,
+    requirement_id: 'fw-req-forklift-training',
+    title: 'Person competency record',
+    description: 'Competency record showing person-level coverage.',
+    evidence_type: 'Competency Record',
+    is_required: true,
+    weight: 1,
+    minimum_count: 1,
+    frequency: 'Annually',
+    coverage_period: null,
+    validity_required: true,
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'crit-insurance-cert',
+    organisation_id: MOCK_ORG.id,
+    requirement_id: 'fw-req-vehicle-insurance',
+    title: 'Valid insurance certificate',
+    description: 'Current certificate or policy record for fleet coverage.',
+    evidence_type: 'Insurance Certificate',
+    is_required: true,
+    weight: 1,
+    minimum_count: 1,
+    frequency: 'Annually',
+    coverage_period: null,
+    validity_required: true,
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+];
+
+const MOCK_REQUIREMENT_EVIDENCE_CRITERION_MATCHES: RequirementEvidenceCriterionMatch[] = [
+  {
+    id: 'crit-match-forklift-cert',
+    organisation_id: MOCK_ORG.id,
+    criterion_id: 'crit-forklift-cert',
+    document_id: 'doc-loler-flt3',
+    competency_record_id: null,
+    action_id: null,
+    match_status: 'Matched',
+    matched_by: MOCK_PROFILE.id,
+    matched_at: new Date().toISOString(),
+    notes: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'crit-match-forklift-competency',
+    organisation_id: MOCK_ORG.id,
+    criterion_id: 'crit-forklift-competency',
+    document_id: null,
+    competency_record_id: 'comp-rec-john-forklift',
+    action_id: null,
+    match_status: 'Matched',
+    matched_by: MOCK_PROFILE.id,
+    matched_at: new Date().toISOString(),
+    notes: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'crit-match-insurance-cert',
+    organisation_id: MOCK_ORG.id,
+    criterion_id: 'crit-insurance-cert',
+    document_id: 'doc-insurance-2026',
+    competency_record_id: null,
+    action_id: null,
+    match_status: 'Matched',
+    matched_by: MOCK_PROFILE.id,
+    matched_at: new Date().toISOString(),
+    notes: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+];
+
 const MOCK_REVIEWS: Review[] = [
   {
     id: 'fw-review-fire',
@@ -536,6 +644,288 @@ const MOCK_ACTION_OBJECT_LINKS: ActionObjectLink[] = [
   }
 ];
 
+const MOCK_PEOPLE: Person[] = [
+  {
+    id: 'person-john-smith',
+    organisation_id: MOCK_ORG.id,
+    employee_number: 'EMP-1001',
+    first_name: 'John',
+    last_name: 'Smith',
+    display_name: 'John Smith',
+    email: 'john.smith@example.com',
+    department: 'Warehouse',
+    role: 'Forklift Operator',
+    person_type: 'Employee',
+    start_date: daysFromNow(-900),
+    end_date: null,
+    active: true,
+    notes: 'Primary warehouse operator.',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'person-maria-byrne',
+    organisation_id: MOCK_ORG.id,
+    employee_number: 'DRV-204',
+    first_name: 'Maria',
+    last_name: 'Byrne',
+    display_name: 'Maria Byrne',
+    email: 'maria.byrne@example.com',
+    department: 'Transport',
+    role: 'Driver',
+    person_type: 'Driver',
+    start_date: daysFromNow(-500),
+    end_date: null,
+    active: true,
+    notes: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'person-ali-khan',
+    organisation_id: MOCK_ORG.id,
+    employee_number: 'CON-087',
+    first_name: 'Ali',
+    last_name: 'Khan',
+    display_name: 'Ali Khan',
+    email: 'ali.khan@example.com',
+    department: 'Facilities',
+    role: 'Maintenance Contractor',
+    person_type: 'Contractor',
+    start_date: daysFromNow(-120),
+    end_date: null,
+    active: true,
+    notes: 'Contractor inducted for site works.',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'person-emma-ryan',
+    organisation_id: MOCK_ORG.id,
+    employee_number: 'TMP-332',
+    first_name: 'Emma',
+    last_name: 'Ryan',
+    display_name: 'Emma Ryan',
+    email: null,
+    department: 'Quality',
+    role: 'Agency Operative',
+    person_type: 'Agency',
+    start_date: daysFromNow(-45),
+    end_date: null,
+    active: true,
+    notes: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'person-sarah-lee',
+    organisation_id: MOCK_ORG.id,
+    employee_number: 'VIS-010',
+    first_name: 'Sarah',
+    last_name: 'Lee',
+    display_name: 'Sarah Lee',
+    email: 'sarah.lee@example.com',
+    department: 'Security',
+    role: 'Consultant',
+    person_type: 'Consultant',
+    start_date: daysFromNow(-20),
+    end_date: null,
+    active: true,
+    notes: 'External improvement consultant.',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+];
+
+const MOCK_COMPETENCY_TYPES: CompetencyType[] = [
+  {
+    id: 'comp-type-forklift',
+    organisation_id: MOCK_ORG.id,
+    title: 'Forklift',
+    category: 'Equipment & Vehicle',
+    description: 'Configurable competency for operating forklift equipment.',
+    validity_period_months: 36,
+    refresher_period_months: 12,
+    evidence_required: true,
+    default_risk_level: 'High',
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'comp-type-manual-handling',
+    organisation_id: MOCK_ORG.id,
+    title: 'Manual Handling',
+    category: 'Safety',
+    description: 'Configurable manual handling competency.',
+    validity_period_months: 36,
+    refresher_period_months: 12,
+    evidence_required: true,
+    default_risk_level: 'Medium',
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'comp-type-driver-cpc',
+    organisation_id: MOCK_ORG.id,
+    title: 'Driver CPC',
+    category: 'Transport',
+    description: 'Configurable driver competency record.',
+    validity_period_months: 60,
+    refresher_period_months: 12,
+    evidence_required: true,
+    default_risk_level: 'High',
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'comp-type-data-protection',
+    organisation_id: MOCK_ORG.id,
+    title: 'Data Protection',
+    category: 'Security',
+    description: 'Configurable information handling competency.',
+    validity_period_months: 24,
+    refresher_period_months: 12,
+    evidence_required: true,
+    default_risk_level: 'Medium',
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'comp-type-customer-service',
+    organisation_id: MOCK_ORG.id,
+    title: 'Customer Service',
+    category: 'Professional',
+    description: 'Configurable professional competency.',
+    validity_period_months: null,
+    refresher_period_months: 12,
+    evidence_required: false,
+    default_risk_level: 'Low',
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+];
+
+const MOCK_COMPETENCY_RECORDS: CompetencyRecord[] = [
+  {
+    id: 'comp-rec-john-forklift',
+    organisation_id: MOCK_ORG.id,
+    person_id: 'person-john-smith',
+    competency_type_id: 'comp-type-forklift',
+    completed_date: daysFromNow(-180),
+    expiry_date: daysFromNow(820),
+    trainer: 'Apex Trainer',
+    provider: 'Internal',
+    certificate_number: 'FLT-JS-2026',
+    status: 'Valid',
+    notes: 'Practical sign-off complete.',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'comp-rec-john-manual',
+    organisation_id: MOCK_ORG.id,
+    person_id: 'person-john-smith',
+    competency_type_id: 'comp-type-manual-handling',
+    completed_date: daysFromNow(-700),
+    expiry_date: daysFromNow(18),
+    trainer: 'Apex Trainer',
+    provider: 'Internal',
+    certificate_number: 'MH-JS-2024',
+    status: 'Expiring Soon',
+    notes: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'comp-rec-maria-cpc',
+    organisation_id: MOCK_ORG.id,
+    person_id: 'person-maria-byrne',
+    competency_type_id: 'comp-type-driver-cpc',
+    completed_date: daysFromNow(-1200),
+    expiry_date: daysFromNow(260),
+    trainer: null,
+    provider: 'External Provider',
+    certificate_number: 'CPC-MB-998',
+    status: 'Valid',
+    notes: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'comp-rec-ali-data',
+    organisation_id: MOCK_ORG.id,
+    person_id: 'person-ali-khan',
+    competency_type_id: 'comp-type-data-protection',
+    completed_date: daysFromNow(-800),
+    expiry_date: daysFromNow(-35),
+    trainer: null,
+    provider: 'External Provider',
+    certificate_number: 'DP-AK-2023',
+    status: 'Expired',
+    notes: 'Needs refresher before next data-handling task.',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'comp-rec-sarah-service',
+    organisation_id: MOCK_ORG.id,
+    person_id: 'person-sarah-lee',
+    competency_type_id: 'comp-type-customer-service',
+    completed_date: daysFromNow(-30),
+    expiry_date: null,
+    trainer: 'Line Manager',
+    provider: 'Internal',
+    certificate_number: null,
+    status: 'Valid',
+    notes: 'Consultant onboarding competency.',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+];
+
+const MOCK_COMPETENCY_RECORD_DOCUMENTS: CompetencyRecordDocument[] = [
+  {
+    id: 'comp-doc-john-forklift',
+    organisation_id: MOCK_ORG.id,
+    competency_record_id: 'comp-rec-john-forklift',
+    document_id: 'doc-loler-flt3',
+    linked_by: MOCK_PROFILE.id,
+    linked_at: new Date().toISOString()
+  },
+  {
+    id: 'comp-doc-maria-cpc',
+    organisation_id: MOCK_ORG.id,
+    competency_record_id: 'comp-rec-maria-cpc',
+    document_id: 'doc-cpc-jane',
+    linked_by: MOCK_PROFILE.id,
+    linked_at: new Date().toISOString()
+  }
+];
+
+const MOCK_REQUIREMENT_COMPETENCY_TYPES: RequirementCompetencyType[] = [
+  {
+    id: 'req-comp-forklift-type',
+    organisation_id: MOCK_ORG.id,
+    requirement_id: 'fw-req-forklift-training',
+    competency_type_id: 'comp-type-forklift',
+    linked_by: MOCK_PROFILE.id,
+    linked_at: new Date().toISOString()
+  },
+  {
+    id: 'req-comp-manual-type',
+    organisation_id: MOCK_ORG.id,
+    requirement_id: 'fw-req-forklift-training',
+    competency_type_id: 'comp-type-manual-handling',
+    linked_by: MOCK_PROFILE.id,
+    linked_at: new Date().toISOString()
+  }
+];
+
 // Helper to check localStorage browser availability
 export const getStorageItem = (key: string, defaultVal: any) => {
   requireDemoMode();
@@ -566,12 +956,19 @@ export const initMockDb = () => {
     localStorage.setItem('vigilen_framework_requirements', JSON.stringify(MOCK_FRAMEWORK_REQUIREMENTS));
     localStorage.setItem('vigilen_requirement_evidence_types', JSON.stringify(MOCK_REQUIREMENT_EVIDENCE_TYPES));
     localStorage.setItem('vigilen_requirement_documents', JSON.stringify(MOCK_REQUIREMENT_DOCUMENTS));
+    localStorage.setItem('vigilen_requirement_evidence_criteria', JSON.stringify(MOCK_REQUIREMENT_EVIDENCE_CRITERIA));
+    localStorage.setItem('vigilen_requirement_evidence_criterion_matches', JSON.stringify(MOCK_REQUIREMENT_EVIDENCE_CRITERION_MATCHES));
     localStorage.setItem('vigilen_reviews', JSON.stringify(MOCK_REVIEWS));
     localStorage.setItem('vigilen_actions', JSON.stringify(MOCK_ACTIONS));
     localStorage.setItem('vigilen_requirement_actions', JSON.stringify(MOCK_REQUIREMENT_ACTIONS));
     localStorage.setItem('vigilen_action_updates', JSON.stringify(MOCK_ACTION_UPDATES));
     localStorage.setItem('vigilen_action_documents', JSON.stringify(MOCK_ACTION_DOCUMENTS));
     localStorage.setItem('vigilen_action_object_links', JSON.stringify(MOCK_ACTION_OBJECT_LINKS));
+    localStorage.setItem('vigilen_people', JSON.stringify(MOCK_PEOPLE));
+    localStorage.setItem('vigilen_competency_types', JSON.stringify(MOCK_COMPETENCY_TYPES));
+    localStorage.setItem('vigilen_competency_records', JSON.stringify(MOCK_COMPETENCY_RECORDS));
+    localStorage.setItem('vigilen_competency_record_documents', JSON.stringify(MOCK_COMPETENCY_RECORD_DOCUMENTS));
+    localStorage.setItem('vigilen_requirement_competency_types', JSON.stringify(MOCK_REQUIREMENT_COMPETENCY_TYPES));
     localStorage.setItem('vigilen_initialized', 'true');
   }
 };
@@ -991,6 +1388,207 @@ export const dbService = {
     );
   },
 
+  async getRequirementEvidenceCriteria(): Promise<RequirementEvidenceCriterion[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('requirement_evidence_criteria')
+        .select('*')
+        .eq('organisation_id', orgId)
+        .order('created_at', { ascending: true });
+      if (error) throwSupabaseError('requirement_evidence_criteria.select active organisation', error);
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_requirement_evidence_criteria', MOCK_REQUIREMENT_EVIDENCE_CRITERIA);
+  },
+
+  async upsertRequirementEvidenceCriterion(
+    input: Partial<RequirementEvidenceCriterion> & Pick<RequirementEvidenceCriterion, 'requirement_id' | 'title'>
+  ): Promise<RequirementEvidenceCriterion> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+    const payload = {
+      ...input,
+      organisation_id: orgId,
+      description: input.description || null,
+      evidence_type: input.evidence_type || null,
+      is_required: input.is_required ?? true,
+      weight: input.weight ?? 1,
+      minimum_count: input.minimum_count ?? 1,
+      frequency: input.frequency || null,
+      coverage_period: input.coverage_period || null,
+      validity_required: input.validity_required ?? true,
+      created_by: input.created_by || userId,
+      updated_at: nowIso()
+    };
+
+    if (shouldUseSupabase()) {
+      const query = input.id
+        ? supabase!.from('requirement_evidence_criteria').update(payload).eq('id', input.id).eq('organisation_id', orgId)
+        : supabase!.from('requirement_evidence_criteria').insert([payload]);
+      const { data, error } = await query.select().single();
+      if (error) throwSupabaseError('requirement_evidence_criteria.upsert active organisation', error);
+      await this.logActivity('Evidence Criterion Saved', `Saved evidence criterion "${data.title}".`);
+      return data;
+    }
+
+    const criteria = getStorageItem('vigilen_requirement_evidence_criteria', MOCK_REQUIREMENT_EVIDENCE_CRITERIA);
+    if (input.id) {
+      const idx = criteria.findIndex((criterion: RequirementEvidenceCriterion) => criterion.id === input.id);
+      if (idx !== -1) {
+        const updated = { ...criteria[idx], ...payload };
+        criteria[idx] = updated;
+        setStorageItem('vigilen_requirement_evidence_criteria', criteria);
+        await this.logActivity('Evidence Criterion Saved', `Saved evidence criterion "${updated.title}".`);
+        return updated;
+      }
+    }
+    const created: RequirementEvidenceCriterion = {
+      id: `crit-${Math.random().toString(36).substr(2, 9)}`,
+      organisation_id: orgId,
+      requirement_id: input.requirement_id,
+      title: input.title,
+      description: input.description || null,
+      evidence_type: input.evidence_type || null,
+      is_required: input.is_required ?? true,
+      weight: input.weight ?? 1,
+      minimum_count: input.minimum_count ?? 1,
+      frequency: input.frequency || null,
+      coverage_period: input.coverage_period || null,
+      validity_required: input.validity_required ?? true,
+      created_by: userId,
+      created_at: nowIso(),
+      updated_at: nowIso()
+    };
+    criteria.push(created);
+    setStorageItem('vigilen_requirement_evidence_criteria', criteria);
+    await this.logActivity('Evidence Criterion Created', `Created evidence criterion "${created.title}".`);
+    return created;
+  },
+
+  async deleteRequirementEvidenceCriterion(criterionId: string): Promise<void> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    if (shouldUseSupabase()) {
+      const { error } = await supabase!
+        .from('requirement_evidence_criteria')
+        .delete()
+        .eq('id', criterionId)
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('requirement_evidence_criteria.delete active organisation', error);
+      await this.logActivity('Evidence Criterion Deleted', `Deleted evidence criterion ${criterionId}.`);
+      return;
+    }
+
+    setStorageItem(
+      'vigilen_requirement_evidence_criteria',
+      getStorageItem('vigilen_requirement_evidence_criteria', MOCK_REQUIREMENT_EVIDENCE_CRITERIA)
+        .filter((criterion: RequirementEvidenceCriterion) => criterion.id !== criterionId)
+    );
+    setStorageItem(
+      'vigilen_requirement_evidence_criterion_matches',
+      getStorageItem('vigilen_requirement_evidence_criterion_matches', MOCK_REQUIREMENT_EVIDENCE_CRITERION_MATCHES)
+        .filter((match: RequirementEvidenceCriterionMatch) => match.criterion_id !== criterionId)
+    );
+    await this.logActivity('Evidence Criterion Deleted', `Deleted evidence criterion ${criterionId}.`);
+  },
+
+  async getRequirementEvidenceCriterionMatches(): Promise<RequirementEvidenceCriterionMatch[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('requirement_evidence_criterion_matches')
+        .select('*')
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('requirement_evidence_criterion_matches.select active organisation', error);
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_requirement_evidence_criterion_matches', MOCK_REQUIREMENT_EVIDENCE_CRITERION_MATCHES);
+  },
+
+  async linkDocumentToEvidenceCriterion(criterionId: string, documentId: string, notes: string | null = null): Promise<RequirementEvidenceCriterionMatch> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+    const payload = {
+      organisation_id: orgId,
+      criterion_id: criterionId,
+      document_id: documentId,
+      competency_record_id: null,
+      action_id: null,
+      match_status: 'Matched',
+      matched_by: userId,
+      matched_at: nowIso(),
+      notes
+    };
+
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('requirement_evidence_criterion_matches')
+        .upsert([payload], { onConflict: 'criterion_id,document_id' })
+        .select()
+        .single();
+      if (error) throwSupabaseError('requirement_evidence_criterion_matches.upsert document', error);
+      await this.logActivity('Evidence Criterion Matched', `Linked document ${documentId} to evidence criterion ${criterionId}.`);
+      return data;
+    }
+
+    const matches = getStorageItem('vigilen_requirement_evidence_criterion_matches', MOCK_REQUIREMENT_EVIDENCE_CRITERION_MATCHES);
+    const existing = matches.find((match: RequirementEvidenceCriterionMatch) => match.criterion_id === criterionId && match.document_id === documentId);
+    if (existing) return existing;
+    const created: RequirementEvidenceCriterionMatch = {
+      id: `crit-match-${Math.random().toString(36).substr(2, 9)}`,
+      ...payload,
+      match_status: 'Matched',
+      created_at: nowIso(),
+      updated_at: nowIso()
+    };
+    matches.push(created);
+    setStorageItem('vigilen_requirement_evidence_criterion_matches', matches);
+    await this.logActivity('Evidence Criterion Matched', `Linked document ${documentId} to evidence criterion ${criterionId}.`);
+    return created;
+  },
+
+  async unlinkDocumentFromEvidenceCriterion(criterionId: string, documentId: string): Promise<void> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    if (shouldUseSupabase()) {
+      const { error } = await supabase!
+        .from('requirement_evidence_criterion_matches')
+        .delete()
+        .eq('criterion_id', criterionId)
+        .eq('document_id', documentId)
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('requirement_evidence_criterion_matches.delete document', error);
+      await this.logActivity('Evidence Criterion Unlinked', `Unlinked document ${documentId} from evidence criterion ${criterionId}.`);
+      return;
+    }
+
+    setStorageItem(
+      'vigilen_requirement_evidence_criterion_matches',
+      getStorageItem('vigilen_requirement_evidence_criterion_matches', MOCK_REQUIREMENT_EVIDENCE_CRITERION_MATCHES)
+        .filter((match: RequirementEvidenceCriterionMatch) => !(match.criterion_id === criterionId && match.document_id === documentId))
+    );
+    await this.logActivity('Evidence Criterion Unlinked', `Unlinked document ${documentId} from evidence criterion ${criterionId}.`);
+  },
+
+  async uploadEvidenceForCriterion(criterionId: string, file: File, category: string = 'Evidence'): Promise<EvidenceDocument> {
+    const title = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim() || file.name;
+    const document = await this.uploadDocumentFile({
+      file,
+      title,
+      category,
+      expiry_date: null,
+      issue_date: new Date().toISOString().split('T')[0],
+      metadata: { source: 'evidence_criterion', criterion_id: criterionId },
+      tags: ['evidence-criteria'],
+      status: 'Unclassified'
+    });
+    await this.linkDocumentToEvidenceCriterion(criterionId, document.id, `Uploaded for criterion: ${title}`);
+    return document;
+  },
+
   async getReviews(): Promise<Review[]> {
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
@@ -1299,6 +1897,473 @@ export const dbService = {
       setStorageItem('vigilen_action_object_links', objectLinks);
     }
     return newLink;
+  },
+
+  async getPeople(): Promise<Person[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('people')
+        .select('*')
+        .eq('organisation_id', orgId)
+        .order('display_name', { ascending: true });
+      if (error) throwSupabaseError('people.select active organisation', error);
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_people', MOCK_PEOPLE);
+  },
+
+  async upsertPerson(input: Partial<Person> & Pick<Person, 'first_name' | 'last_name' | 'person_type'>): Promise<Person> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const displayName = input.display_name || `${input.first_name} ${input.last_name}`.trim();
+    const payload = {
+      ...input,
+      organisation_id: orgId,
+      display_name: displayName,
+      active: input.active ?? true,
+      updated_at: nowIso()
+    };
+
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('people')
+        .upsert([payload])
+        .select()
+        .single();
+      if (error) throwSupabaseError('people.upsert active organisation', error);
+      await this.logActivity('Person Saved', `Saved person "${data.display_name}".`);
+      return data;
+    }
+
+    const people = getStorageItem('vigilen_people', MOCK_PEOPLE);
+    if (input.id) {
+      const idx = people.findIndex((person: Person) => person.id === input.id);
+      if (idx !== -1) {
+        const updated = { ...people[idx], ...payload };
+        people[idx] = updated;
+        setStorageItem('vigilen_people', people);
+        await this.logActivity('Person Saved', `Saved person "${updated.display_name}".`);
+        return updated;
+      }
+    }
+
+    const created: Person = {
+      id: `person-${Math.random().toString(36).substr(2, 9)}`,
+      organisation_id: orgId,
+      employee_number: input.employee_number || null,
+      first_name: input.first_name,
+      last_name: input.last_name,
+      display_name: displayName,
+      email: input.email || null,
+      department: input.department || null,
+      role: input.role || null,
+      person_type: input.person_type,
+      start_date: input.start_date || null,
+      end_date: input.end_date || null,
+      active: input.active ?? true,
+      notes: input.notes || null,
+      created_at: nowIso(),
+      updated_at: nowIso()
+    };
+    people.unshift(created);
+    setStorageItem('vigilen_people', people);
+    await this.logActivity('Person Added', `Created person "${created.display_name}".`);
+    return created;
+  },
+
+  async getCompetencyTypes(): Promise<CompetencyType[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('competency_types')
+        .select('*')
+        .eq('organisation_id', orgId)
+        .order('category')
+        .order('title');
+      if (error) throwSupabaseError('competency_types.select active organisation', error);
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_competency_types', MOCK_COMPETENCY_TYPES);
+  },
+
+  async upsertCompetencyType(input: Partial<CompetencyType> & Pick<CompetencyType, 'title' | 'category'>): Promise<CompetencyType> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const payload = {
+      ...input,
+      organisation_id: orgId,
+      description: input.description || null,
+      validity_period_months: input.validity_period_months ?? null,
+      refresher_period_months: input.refresher_period_months ?? null,
+      evidence_required: input.evidence_required ?? true,
+      default_risk_level: input.default_risk_level || 'Medium',
+      active: input.active ?? true,
+      updated_at: nowIso()
+    };
+
+    if (shouldUseSupabase()) {
+      let existingId = input.id || null;
+      if (!existingId) {
+        const { data: existing, error: existingError } = await supabase!
+          .from('competency_types')
+          .select('id')
+          .eq('organisation_id', orgId)
+          .eq('title', input.title)
+          .eq('category', input.category)
+          .maybeSingle();
+        if (existingError) throwSupabaseError('competency_types.select before upsert', existingError);
+        existingId = existing?.id || null;
+      }
+
+      const query = existingId
+        ? supabase!.from('competency_types').update(payload).eq('id', existingId).eq('organisation_id', orgId)
+        : supabase!.from('competency_types').insert([payload]);
+      const { data, error } = await query.select().single();
+      if (error) throwSupabaseError('competency_types.upsert active organisation', error);
+      await this.logActivity('Competency Type Saved', `Saved competency type "${data.title}".`);
+      return data;
+    }
+
+    const types = getStorageItem('vigilen_competency_types', MOCK_COMPETENCY_TYPES);
+    const idx = types.findIndex((type: CompetencyType) =>
+      input.id ? type.id === input.id : type.title.toLowerCase() === input.title.toLowerCase() && type.category === input.category
+    );
+    if (idx !== -1) {
+      const updated = { ...types[idx], ...payload };
+      types[idx] = updated;
+      setStorageItem('vigilen_competency_types', types);
+      await this.logActivity('Competency Type Saved', `Saved competency type "${updated.title}".`);
+      return updated;
+    }
+
+    const created: CompetencyType = {
+      id: `comp-type-${Math.random().toString(36).substr(2, 9)}`,
+      organisation_id: orgId,
+      title: input.title,
+      category: input.category,
+      description: input.description || null,
+      validity_period_months: input.validity_period_months ?? null,
+      refresher_period_months: input.refresher_period_months ?? null,
+      evidence_required: input.evidence_required ?? true,
+      default_risk_level: input.default_risk_level || 'Medium',
+      active: input.active ?? true,
+      created_at: nowIso(),
+      updated_at: nowIso()
+    };
+    types.unshift(created);
+    setStorageItem('vigilen_competency_types', types);
+    await this.logActivity('Competency Type Added', `Created competency type "${created.title}".`);
+    return created;
+  },
+
+  async importCompetencyTemplateItems(items: CompetencyTemplateItem[]): Promise<CompetencyType[]> {
+    const created: CompetencyType[] = [];
+    for (const item of items) {
+      const competencyType = await this.upsertCompetencyType({
+        title: item.title,
+        category: item.category,
+        description: item.description || null,
+        validity_period_months: item.validity_period_months ?? 36,
+        refresher_period_months: item.refresher_period_months ?? 12,
+        evidence_required: item.evidence_required ?? true,
+        default_risk_level: item.default_risk_level || 'Medium',
+        active: true
+      });
+      created.push(competencyType);
+    }
+    await this.logActivity('Competency Templates Imported', `Imported ${created.length} competency type${created.length === 1 ? '' : 's'}.`);
+    return created;
+  },
+
+  async getCompetencyRecords(): Promise<CompetencyRecord[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('competency_records')
+        .select('*')
+        .eq('organisation_id', orgId)
+        .order('expiry_date', { ascending: true, nullsFirst: false });
+      if (error) throwSupabaseError('competency_records.select active organisation', error);
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_competency_records', MOCK_COMPETENCY_RECORDS);
+  },
+
+  async upsertCompetencyRecord(input: Partial<CompetencyRecord> & Pick<CompetencyRecord, 'person_id' | 'competency_type_id'>): Promise<CompetencyRecord> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const status = input.status || calculateCompetencyStatus({
+      completed_date: input.completed_date || null,
+      expiry_date: input.expiry_date || null,
+      status: 'Missing'
+    });
+    const payload = {
+      ...input,
+      organisation_id: orgId,
+      completed_date: input.completed_date || null,
+      expiry_date: input.expiry_date || null,
+      trainer: input.trainer || null,
+      provider: input.provider || null,
+      certificate_number: input.certificate_number || null,
+      status,
+      notes: input.notes || null,
+      updated_at: nowIso()
+    };
+
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('competency_records')
+        .upsert([payload], { onConflict: 'organisation_id,person_id,competency_type_id' })
+        .select()
+        .single();
+      if (error) throwSupabaseError('competency_records.upsert active organisation', error);
+      await this.logActivity('Competency Record Saved', `Saved competency record ${data.id}.`);
+      return data;
+    }
+
+    const records = getStorageItem('vigilen_competency_records', MOCK_COMPETENCY_RECORDS);
+    const idx = records.findIndex((record: CompetencyRecord) =>
+      input.id
+        ? record.id === input.id
+        : record.person_id === input.person_id && record.competency_type_id === input.competency_type_id
+    );
+    if (idx !== -1) {
+      const updated = { ...records[idx], ...payload };
+      records[idx] = updated;
+      setStorageItem('vigilen_competency_records', records);
+      await this.logActivity('Competency Record Saved', `Saved competency record ${updated.id}.`);
+      return updated;
+    }
+
+    const created: CompetencyRecord = {
+      id: `comp-rec-${Math.random().toString(36).substr(2, 9)}`,
+      organisation_id: orgId,
+      person_id: input.person_id,
+      competency_type_id: input.competency_type_id,
+      completed_date: input.completed_date || null,
+      expiry_date: input.expiry_date || null,
+      trainer: input.trainer || null,
+      provider: input.provider || null,
+      certificate_number: input.certificate_number || null,
+      status,
+      notes: input.notes || null,
+      created_at: nowIso(),
+      updated_at: nowIso()
+    };
+    records.unshift(created);
+    setStorageItem('vigilen_competency_records', records);
+    await this.logActivity('Competency Record Added', `Created competency record ${created.id}.`);
+    return created;
+  },
+
+  async getCompetencyRecordDocuments(): Promise<CompetencyRecordDocument[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('competency_record_documents')
+        .select('*')
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('competency_record_documents.select active organisation', error);
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_competency_record_documents', MOCK_COMPETENCY_RECORD_DOCUMENTS);
+  },
+
+  async linkDocumentToCompetencyRecord(recordId: string, documentId: string): Promise<CompetencyRecordDocument> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('competency_record_documents')
+        .upsert([{ organisation_id: orgId, competency_record_id: recordId, document_id: documentId, linked_by: userId }], {
+          onConflict: 'competency_record_id,document_id'
+        })
+        .select()
+        .single();
+      if (error) throwSupabaseError('competency_record_documents.insert active organisation', error);
+      await this.logActivity('Competency Evidence Linked', `Linked evidence document ${documentId} to competency record ${recordId}.`);
+      return data;
+    }
+
+    const links = getStorageItem('vigilen_competency_record_documents', MOCK_COMPETENCY_RECORD_DOCUMENTS);
+    const existing = links.find((link: CompetencyRecordDocument) => link.competency_record_id === recordId && link.document_id === documentId);
+    if (existing) return existing;
+    const newLink: CompetencyRecordDocument = {
+      id: `comp-doc-${Math.random().toString(36).substr(2, 9)}`,
+      organisation_id: orgId,
+      competency_record_id: recordId,
+      document_id: documentId,
+      linked_by: userId,
+      linked_at: nowIso()
+    };
+    links.push(newLink);
+    setStorageItem('vigilen_competency_record_documents', links);
+    await this.logActivity('Competency Evidence Linked', `Linked evidence document ${documentId} to competency record ${recordId}.`);
+    return newLink;
+  },
+
+  async unlinkDocumentFromCompetencyRecord(recordId: string, documentId: string): Promise<void> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    if (shouldUseSupabase()) {
+      const { error } = await supabase!
+        .from('competency_record_documents')
+        .delete()
+        .eq('competency_record_id', recordId)
+        .eq('document_id', documentId)
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('competency_record_documents.delete active organisation', error);
+      await this.logActivity('Competency Evidence Unlinked', `Unlinked evidence document ${documentId} from competency record ${recordId}.`);
+      return;
+    }
+
+    const links = getStorageItem('vigilen_competency_record_documents', MOCK_COMPETENCY_RECORD_DOCUMENTS);
+    setStorageItem(
+      'vigilen_competency_record_documents',
+      links.filter((link: CompetencyRecordDocument) => !(link.competency_record_id === recordId && link.document_id === documentId))
+    );
+    await this.logActivity('Competency Evidence Unlinked', `Unlinked evidence document ${documentId} from competency record ${recordId}.`);
+  },
+
+  async uploadCompetencyEvidence(recordId: string, file: File): Promise<EvidenceDocument> {
+    const title = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim() || file.name;
+    const doc = await this.uploadDocumentFile({
+      file,
+      title,
+      category: 'Training & Competency',
+      expiry_date: null,
+      issue_date: new Date().toISOString().split('T')[0],
+      metadata: {
+        source: 'competency_record',
+        competency_record_id: recordId
+      },
+      tags: ['competency'],
+      status: 'Unclassified'
+    });
+    await this.linkDocumentToCompetencyRecord(recordId, doc.id);
+    return doc;
+  },
+
+  async getRequirementCompetencyTypes(): Promise<RequirementCompetencyType[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('requirement_competency_types')
+        .select('*')
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('requirement_competency_types.select active organisation', error);
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_requirement_competency_types', MOCK_REQUIREMENT_COMPETENCY_TYPES);
+  },
+
+  async linkCompetencyTypeToRequirement(requirementId: string, competencyTypeId: string): Promise<RequirementCompetencyType> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('requirement_competency_types')
+        .upsert([{ organisation_id: orgId, requirement_id: requirementId, competency_type_id: competencyTypeId, linked_by: userId }], {
+          onConflict: 'requirement_id,competency_type_id'
+        })
+        .select()
+        .single();
+      if (error) throwSupabaseError('requirement_competency_types.insert active organisation', error);
+      return data;
+    }
+
+    const links = getStorageItem('vigilen_requirement_competency_types', MOCK_REQUIREMENT_COMPETENCY_TYPES);
+    const existing = links.find((link: RequirementCompetencyType) => link.requirement_id === requirementId && link.competency_type_id === competencyTypeId);
+    if (existing) return existing;
+    const newLink: RequirementCompetencyType = {
+      id: `req-comp-${Math.random().toString(36).substr(2, 9)}`,
+      organisation_id: orgId,
+      requirement_id: requirementId,
+      competency_type_id: competencyTypeId,
+      linked_by: userId,
+      linked_at: nowIso()
+    };
+    links.push(newLink);
+    setStorageItem('vigilen_requirement_competency_types', links);
+    return newLink;
+  },
+
+  async unlinkCompetencyTypeFromRequirement(requirementId: string, competencyTypeId: string): Promise<void> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    if (shouldUseSupabase()) {
+      const { error } = await supabase!
+        .from('requirement_competency_types')
+        .delete()
+        .eq('requirement_id', requirementId)
+        .eq('competency_type_id', competencyTypeId)
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('requirement_competency_types.delete active organisation', error);
+      return;
+    }
+
+    const links = getStorageItem('vigilen_requirement_competency_types', MOCK_REQUIREMENT_COMPETENCY_TYPES);
+    setStorageItem(
+      'vigilen_requirement_competency_types',
+      links.filter((link: RequirementCompetencyType) => !(link.requirement_id === requirementId && link.competency_type_id === competencyTypeId))
+    );
+  },
+
+  async createActionForCompetencyGap(input: {
+    personId: string;
+    competencyTypeId: string;
+    competencyRecordId?: string | null;
+    title: string;
+    dueDate?: string | null;
+  }): Promise<Action> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+    const action = await this.createAction({
+      title: input.title,
+      description: 'Created from a competency gap.',
+      owner: null,
+      status: 'Open',
+      due_date: input.dueDate || null
+    });
+    const objectLinks = [
+      { organisation_id: orgId, action_id: action.id, object_type: 'person', object_id: input.personId, linked_by: userId },
+      { organisation_id: orgId, action_id: action.id, object_type: 'competency_type', object_id: input.competencyTypeId, linked_by: userId },
+      ...(input.competencyRecordId ? [{ organisation_id: orgId, action_id: action.id, object_type: 'competency_record', object_id: input.competencyRecordId, linked_by: userId }] : [])
+    ];
+
+    if (shouldUseSupabase()) {
+      const { error } = await supabase!
+        .from('action_object_links')
+        .upsert(objectLinks, { onConflict: 'organisation_id,action_id,object_type,object_id' });
+      if (error) throwSupabaseError('action_object_links.upsert competency gap links', error);
+    } else {
+      const links = getStorageItem('vigilen_action_object_links', MOCK_ACTION_OBJECT_LINKS);
+      objectLinks.forEach(link => {
+        if (!links.some((existing: ActionObjectLink) =>
+          existing.action_id === link.action_id &&
+          existing.object_type === link.object_type &&
+          existing.object_id === link.object_id
+        )) {
+          links.push({
+            id: `fw-action-object-${Math.random().toString(36).substr(2, 9)}`,
+            ...link,
+            linked_at: nowIso()
+          });
+        }
+      });
+      setStorageItem('vigilen_action_object_links', links);
+    }
+
+    await this.addActionUpdate(action.id, 'Note', 'Action created from competency gap.');
+    return action;
   },
 
 
