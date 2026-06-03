@@ -34,7 +34,9 @@ export default function RequirementsPage() {
     importRequirementTemplateItems,
     updateFrameworkRequirement,
     linkDocumentToRequirement,
-    unlinkDocumentFromRequirement
+    unlinkDocumentFromRequirement,
+    createActionForRequirement,
+    readinessReport
   } = useApp();
 
   const [search, setSearch] = useState('');
@@ -54,17 +56,28 @@ export default function RequirementsPage() {
   const [newNextDue, setNewNextDue] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [linkingDocumentId, setLinkingDocumentId] = useState('');
+  const [showAddActionForm, setShowAddActionForm] = useState(false);
+  const [actionTitle, setActionTitle] = useState('');
+  const [actionDescription, setActionDescription] = useState('');
+  const [actionOwner, setActionOwner] = useState('');
+  const [actionDueDate, setActionDueDate] = useState('');
+
+  const selectRequirement = (req: Requirement | null) => {
+    setSelectedRequirement(req);
+    setShowAddActionForm(false);
+    setActionTitle('');
+    setActionDescription('');
+    setActionOwner('');
+    setActionDueDate('');
+  };
 
   const assessedRequirements = useMemo(() => {
-    return frameworkRequirements.map(requirement => {
-      const linkedDocuments = getLinkedDocumentsForRequirement(requirement.id, documents, requirementDocuments);
-      return {
-        ...requirement,
-        status: calculateRequirementStatus(requirement, linkedDocuments),
-        linkedDocuments
-      };
-    });
-  }, [documents, frameworkRequirements, requirementDocuments]);
+    return readinessReport.requirements.map(item => ({
+      ...item.requirement,
+      status: item.status,
+      linkedDocuments: item.linkedDocuments
+    }));
+  }, [readinessReport.requirements]);
 
   const filteredRequirements = assessedRequirements.filter(requirement => {
     const matchesSearch =
@@ -167,6 +180,25 @@ export default function RequirementsPage() {
   const handleUnlinkDocument = async (documentId: string) => {
     if (!selectedRequirement) return;
     await unlinkDocumentFromRequirement(selectedRequirement.id, documentId);
+  };
+
+  const handleCreateAction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRequirement || !actionTitle.trim()) return;
+
+    await createActionForRequirement(selectedRequirement.id, {
+      title: actionTitle.trim(),
+      description: actionDescription.trim() || null,
+      owner: actionOwner.trim() || null,
+      due_date: actionDueDate || null,
+      status: 'Open'
+    });
+
+    setShowAddActionForm(false);
+    setActionTitle('');
+    setActionDescription('');
+    setActionOwner('');
+    setActionDueDate('');
   };
 
   const toggleTemplateItem = (key: string) => {
@@ -299,7 +331,7 @@ export default function RequirementsPage() {
                       return (
                         <tr
                           key={requirement.id}
-                          onClick={() => setSelectedRequirement(requirement)}
+                          onClick={() => selectRequirement(requirement)}
                           className="hover:bg-muted/30 cursor-pointer transition-colors"
                         >
                           <td className="p-4 font-bold">{requirement.title}</td>
@@ -332,7 +364,7 @@ export default function RequirementsPage() {
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Requirement Detail</span>
                   <h2 className="text-base font-extrabold">{selectedAssessed.title}</h2>
                 </div>
-                <button onClick={() => setSelectedRequirement(null)} className="p-1 hover:bg-muted rounded">
+                <button onClick={() => selectRequirement(null)} className="p-1 hover:bg-muted rounded">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -380,7 +412,67 @@ export default function RequirementsPage() {
               </div>
 
               <div className="border-t border-border/60 pt-4 space-y-3">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Open Actions</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Open Actions</span>
+                  <button
+                    onClick={() => setShowAddActionForm(!showAddActionForm)}
+                    className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                  >
+                    {showAddActionForm ? 'Cancel' : '+ Add Action'}
+                  </button>
+                </div>
+
+                {showAddActionForm && (
+                  <form onSubmit={handleCreateAction} className="p-3 bg-muted/50 rounded-lg border border-border/80 space-y-2 text-[11px]">
+                    <div>
+                      <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">Title</label>
+                      <input
+                        required
+                        value={actionTitle}
+                        onChange={e => setActionTitle(e.target.value)}
+                        placeholder="e.g. Verify exhaust values"
+                        className="w-full px-2 py-1.5 bg-muted border border-border rounded text-[11px] outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">Description (Optional)</label>
+                      <textarea
+                        value={actionDescription}
+                        onChange={e => setActionDescription(e.target.value)}
+                        placeholder="Add some details..."
+                        rows={2}
+                        className="w-full px-2 py-1.5 bg-muted border border-border rounded text-[11px] outline-none resize-none"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">Owner / Assignee</label>
+                        <input
+                          value={actionOwner}
+                          onChange={e => setActionOwner(e.target.value)}
+                          placeholder="e.g. Stephen Gray"
+                          className="w-full px-2 py-1.5 bg-muted border border-border rounded text-[11px] outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">Due Date</label>
+                        <input
+                          type="date"
+                          value={actionDueDate}
+                          onChange={e => setActionDueDate(e.target.value)}
+                          className="w-full px-2 py-1.5 bg-muted border border-border rounded text-[11px] outline-none"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded"
+                    >
+                      Save Action
+                    </button>
+                  </form>
+                )}
+
                 {selectedActions.length === 0 ? (
                   <p className="text-[10px] text-muted-foreground italic">No actions linked.</p>
                 ) : (

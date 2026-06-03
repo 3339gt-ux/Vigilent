@@ -892,6 +892,64 @@ export const dbService = {
     return getStorageItem('vigilen_requirement_actions', MOCK_REQUIREMENT_ACTIONS);
   },
 
+  async createAction(
+    action: Omit<Action, 'id' | 'created_at' | 'updated_at' | 'organisation_id' | 'created_by'>
+  ): Promise<Action> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('actions')
+        .insert([{ ...action, organisation_id: orgId, created_by: userId }])
+        .select()
+        .single();
+      if (error) throwSupabaseError('actions.insert active organisation', error);
+      return data;
+    }
+
+    const actions = getStorageItem('vigilen_actions', MOCK_ACTIONS);
+    const newAction: Action = {
+      ...action,
+      id: `fw-action-${Math.random().toString(36).substr(2, 9)}`,
+      organisation_id: orgId,
+      created_by: userId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    actions.unshift(newAction);
+    setStorageItem('vigilen_actions', actions);
+    await this.logActivity('Action Created', `Created action "${newAction.title}"`);
+    return newAction;
+  },
+
+  async linkActionToRequirement(requirementId: string, actionId: string): Promise<RequirementAction> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('requirement_actions')
+        .insert([{ requirement_id: requirementId, action_id: actionId, organisation_id: orgId }])
+        .select()
+        .single();
+      if (error) throwSupabaseError('requirement_actions.insert link', error);
+      return data;
+    }
+
+    const links = getStorageItem('vigilen_requirement_actions', MOCK_REQUIREMENT_ACTIONS);
+    const newLink: RequirementAction = {
+      id: `fw-req-action-${Math.random().toString(36).substr(2, 9)}`,
+      requirement_id: requirementId,
+      action_id: actionId,
+      organisation_id: orgId,
+      created_at: new Date().toISOString()
+    };
+    links.push(newLink);
+    setStorageItem('vigilen_requirement_actions', links);
+    return newLink;
+  },
+
+
   // Evidence Documents (Vault)
   async getDocuments(): Promise<EvidenceDocument[]> {
     if (shouldUseSupabase()) {

@@ -34,6 +34,7 @@ import {
   RequirementEvidenceType,
   Review,
   Action,
+  ActionStatus,
   RequirementTemplateItem
 } from '@/lib/types';
 
@@ -87,6 +88,16 @@ interface AppContextType {
   importRequirementTemplateItems: (items: RequirementTemplateItem[]) => Promise<Requirement[]>;
   linkDocumentToRequirement: (requirementId: string, documentId: string) => Promise<void>;
   unlinkDocumentFromRequirement: (requirementId: string, documentId: string) => Promise<void>;
+  createActionForRequirement: (
+    requirementId: string,
+    actionInput: {
+      title: string;
+      description: string | null;
+      owner: string | null;
+      due_date: string | null;
+      status: ActionStatus;
+    }
+  ) => Promise<void>;
   createRequirement: (title: string, description: string, category: 'Vehicle' | 'Driver' | 'Facility' | 'General', frequency_months?: number, is_mandatory?: boolean) => Promise<ComplianceRequirement>;
   createPack: (name: string, description: string, requirementIds: string[], docIds: string[]) => Promise<AuditPack>;
   updatePackStatus: (packId: string, status: 'Draft' | 'Ready' | 'Sent' | 'Archived') => Promise<void>;
@@ -649,6 +660,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await loadWorkspaceCollections();
   };
 
+  const createActionForRequirement = async (
+    requirementId: string,
+    actionInput: {
+      title: string;
+      description: string | null;
+      owner: string | null;
+      due_date: string | null;
+      status: ActionStatus;
+    }
+  ): Promise<void> => {
+    const action = await dbService.createAction({
+      title: actionInput.title.trim(),
+      description: actionInput.description || null,
+      owner: actionInput.owner || null,
+      status: actionInput.status,
+      due_date: actionInput.due_date || null
+    });
+    await dbService.linkActionToRequirement(requirementId, action.id);
+    await loadWorkspaceCollections();
+  };
+
   const createRequirement = async (
     title: string,
     description: string,
@@ -774,6 +806,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         importRequirementTemplateItems,
         linkDocumentToRequirement,
         unlinkDocumentFromRequirement,
+        createActionForRequirement,
         createRequirement,
         createPack,
         updatePackStatus,
