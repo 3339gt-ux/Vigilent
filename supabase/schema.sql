@@ -85,6 +85,82 @@ create unique index if not exists evidence_documents_storage_path_idx
     on public.evidence_documents (storage_path)
     where storage_path is not null;
 
+-- 4b. Standards-agnostic Requirements Framework
+create table if not exists public.requirements (
+    id uuid primary key default uuid_generate_v4(),
+    title text not null,
+    description text,
+    owner text,
+    category text not null default 'General',
+    status text not null default 'GREY',
+    review_frequency text not null default 'Annually',
+    review_date date,
+    next_due_date date,
+    risk_level text not null default 'Medium',
+    organisation_id uuid not null references public.organizations(id) on delete cascade,
+    created_by uuid references public.profiles(id) on delete set null,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create table if not exists public.requirement_evidence_types (
+    id uuid primary key default uuid_generate_v4(),
+    requirement_id uuid not null references public.requirements(id) on delete cascade,
+    organisation_id uuid not null references public.organizations(id) on delete cascade,
+    name text not null,
+    description text,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create table if not exists public.requirement_documents (
+    id uuid primary key default uuid_generate_v4(),
+    requirement_id uuid not null references public.requirements(id) on delete cascade,
+    document_id uuid not null references public.evidence_documents(id) on delete cascade,
+    organisation_id uuid not null references public.organizations(id) on delete cascade,
+    linked_by uuid references public.profiles(id) on delete set null,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    unique (requirement_id, document_id)
+);
+
+create table if not exists public.reviews (
+    id uuid primary key default uuid_generate_v4(),
+    requirement_id uuid not null references public.requirements(id) on delete cascade,
+    organisation_id uuid not null references public.organizations(id) on delete cascade,
+    reviewed_by uuid references public.profiles(id) on delete set null,
+    review_date date not null,
+    next_due_date date,
+    status text not null default 'GREY',
+    notes text,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create table if not exists public.actions (
+    id uuid primary key default uuid_generate_v4(),
+    organisation_id uuid not null references public.organizations(id) on delete cascade,
+    title text not null,
+    description text,
+    owner text,
+    status text not null default 'Open',
+    due_date date,
+    created_by uuid references public.profiles(id) on delete set null,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create table if not exists public.requirement_actions (
+    id uuid primary key default uuid_generate_v4(),
+    requirement_id uuid not null references public.requirements(id) on delete cascade,
+    action_id uuid not null references public.actions(id) on delete cascade,
+    organisation_id uuid not null references public.organizations(id) on delete cascade,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    unique (requirement_id, action_id)
+);
+
+create index if not exists requirements_organisation_status_idx on public.requirements (organisation_id, status);
+create index if not exists requirement_documents_organisation_idx on public.requirement_documents (organisation_id, requirement_id, document_id);
+create index if not exists reviews_organisation_requirement_idx on public.reviews (organisation_id, requirement_id, review_date desc);
+create index if not exists actions_organisation_status_idx on public.actions (organisation_id, status, due_date);
+
 -- Storage bucket and storage.objects policies are managed separately in
 -- supabase/storage_setup.sql because hosted Supabase projects may reject
 -- repeated storage.objects policy drops from the core schema runner.
@@ -137,6 +213,12 @@ alter table public.evidence_documents enable row level security;
 alter table public.matrix_cells enable row level security;
 alter table public.audit_packs enable row level security;
 alter table public.audit_logs enable row level security;
+alter table public.requirements enable row level security;
+alter table public.requirement_evidence_types enable row level security;
+alter table public.requirement_documents enable row level security;
+alter table public.reviews enable row level security;
+alter table public.actions enable row level security;
+alter table public.requirement_actions enable row level security;
 
 -- Row Level Security (RLS) Policies
 -- auth.uid() links to profiles.id. The helper avoids recursive profile policy checks.
@@ -307,6 +389,18 @@ drop policy if exists "Users can read/write matrix cells in own organization" on
 drop policy if exists "Users can read/write audit packs in own organization" on public.audit_packs;
 drop policy if exists "Users can read logs in own organization" on public.audit_logs;
 drop policy if exists "Users can insert logs in own organization" on public.audit_logs;
+drop policy if exists "Users can read requirements framework in own organisation" on public.requirements;
+drop policy if exists "Members can write requirements framework in own organisation" on public.requirements;
+drop policy if exists "Users can read requirement evidence types in own organisation" on public.requirement_evidence_types;
+drop policy if exists "Members can write requirement evidence types in own organisation" on public.requirement_evidence_types;
+drop policy if exists "Users can read requirement document links in own organisation" on public.requirement_documents;
+drop policy if exists "Members can write requirement document links in own organisation" on public.requirement_documents;
+drop policy if exists "Users can read reviews in own organisation" on public.reviews;
+drop policy if exists "Members can write reviews in own organisation" on public.reviews;
+drop policy if exists "Users can read actions in own organisation" on public.actions;
+drop policy if exists "Members can write actions in own organisation" on public.actions;
+drop policy if exists "Users can read requirement actions in own organisation" on public.requirement_actions;
+drop policy if exists "Members can write requirement actions in own organisation" on public.requirement_actions;
 
 -- Organizations
 drop policy if exists "Users can read own organization" on public.organizations;
@@ -428,4 +522,89 @@ drop policy if exists "Users can insert logs in own organization" on public.audi
 create policy "Users can insert logs in own organization" on public.audit_logs
     for insert with check (
         organization_id = public.current_organization_id()
+    );
+
+-- Requirements Framework
+drop policy if exists "Users can read requirements framework in own organisation" on public.requirements;
+create policy "Users can read requirements framework in own organisation" on public.requirements
+    for select using (
+        public.is_organization_member(organisation_id)
+    );
+
+drop policy if exists "Members can write requirements framework in own organisation" on public.requirements;
+create policy "Members can write requirements framework in own organisation" on public.requirements
+    for all using (
+        public.can_write_organization(organisation_id)
+    ) with check (
+        public.can_write_organization(organisation_id)
+    );
+
+drop policy if exists "Users can read requirement evidence types in own organisation" on public.requirement_evidence_types;
+create policy "Users can read requirement evidence types in own organisation" on public.requirement_evidence_types
+    for select using (
+        public.is_organization_member(organisation_id)
+    );
+
+drop policy if exists "Members can write requirement evidence types in own organisation" on public.requirement_evidence_types;
+create policy "Members can write requirement evidence types in own organisation" on public.requirement_evidence_types
+    for all using (
+        public.can_write_organization(organisation_id)
+    ) with check (
+        public.can_write_organization(organisation_id)
+    );
+
+drop policy if exists "Users can read requirement document links in own organisation" on public.requirement_documents;
+create policy "Users can read requirement document links in own organisation" on public.requirement_documents
+    for select using (
+        public.is_organization_member(organisation_id)
+    );
+
+drop policy if exists "Members can write requirement document links in own organisation" on public.requirement_documents;
+create policy "Members can write requirement document links in own organisation" on public.requirement_documents
+    for all using (
+        public.can_write_organization(organisation_id)
+    ) with check (
+        public.can_write_organization(organisation_id)
+    );
+
+drop policy if exists "Users can read reviews in own organisation" on public.reviews;
+create policy "Users can read reviews in own organisation" on public.reviews
+    for select using (
+        public.is_organization_member(organisation_id)
+    );
+
+drop policy if exists "Members can write reviews in own organisation" on public.reviews;
+create policy "Members can write reviews in own organisation" on public.reviews
+    for all using (
+        public.can_write_organization(organisation_id)
+    ) with check (
+        public.can_write_organization(organisation_id)
+    );
+
+drop policy if exists "Users can read actions in own organisation" on public.actions;
+create policy "Users can read actions in own organisation" on public.actions
+    for select using (
+        public.is_organization_member(organisation_id)
+    );
+
+drop policy if exists "Members can write actions in own organisation" on public.actions;
+create policy "Members can write actions in own organisation" on public.actions
+    for all using (
+        public.can_write_organization(organisation_id)
+    ) with check (
+        public.can_write_organization(organisation_id)
+    );
+
+drop policy if exists "Users can read requirement actions in own organisation" on public.requirement_actions;
+create policy "Users can read requirement actions in own organisation" on public.requirement_actions
+    for select using (
+        public.is_organization_member(organisation_id)
+    );
+
+drop policy if exists "Members can write requirement actions in own organisation" on public.requirement_actions;
+create policy "Members can write requirement actions in own organisation" on public.requirement_actions
+    for all using (
+        public.can_write_organization(organisation_id)
+    ) with check (
+        public.can_write_organization(organisation_id)
     );

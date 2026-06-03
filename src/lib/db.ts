@@ -12,6 +12,12 @@ import {
   ComplianceRequirement,
   EvidenceDocument,
   EvidenceUploadInput,
+  Requirement,
+  RequirementAction,
+  RequirementDocument,
+  RequirementEvidenceType,
+  Review,
+  Action,
   MatrixCell,
   AuditPack,
   AuditLog,
@@ -328,6 +334,169 @@ const MOCK_LOGS: AuditLog[] = [
   }
 ];
 
+const daysFromNow = (days: number) =>
+  new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+const MOCK_FRAMEWORK_REQUIREMENTS: Requirement[] = [
+  {
+    id: 'fw-req-forklift-training',
+    title: 'Forklift Training',
+    description: 'Operators must have current training evidence before operating lifting equipment.',
+    owner: 'Operations',
+    category: 'Training',
+    status: 'GREEN',
+    review_frequency: 'Annually',
+    review_date: daysFromNow(-45),
+    next_due_date: daysFromNow(320),
+    risk_level: 'High',
+    organisation_id: MOCK_ORG.id,
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'fw-req-fire-training',
+    title: 'Fire Training',
+    description: 'Personnel must receive periodic fire response training.',
+    owner: 'Facilities',
+    category: 'Training',
+    status: 'AMBER',
+    review_frequency: 'Annually',
+    review_date: daysFromNow(-320),
+    next_due_date: daysFromNow(20),
+    risk_level: 'High',
+    organisation_id: MOCK_ORG.id,
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date(Date.now() - 300 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'fw-req-pest-control',
+    title: 'Pest Control',
+    description: 'Site controls must be monitored and recorded on a recurring schedule.',
+    owner: 'Facilities',
+    category: 'Site Controls',
+    status: 'RED',
+    review_frequency: 'Monthly',
+    review_date: daysFromNow(-45),
+    next_due_date: daysFromNow(-10),
+    risk_level: 'Medium',
+    organisation_id: MOCK_ORG.id,
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date(Date.now() - 220 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'fw-req-management-review',
+    title: 'Management Review',
+    description: 'Leadership review records must be maintained and checked at the defined interval.',
+    owner: 'Leadership',
+    category: 'Governance',
+    status: 'GREY',
+    review_frequency: 'Quarterly',
+    review_date: null,
+    next_due_date: null,
+    risk_level: 'Medium',
+    organisation_id: MOCK_ORG.id,
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'fw-req-vehicle-insurance',
+    title: 'Vehicle Insurance',
+    description: 'Insurance cover must be evidenced for active vehicle operations.',
+    owner: 'Fleet',
+    category: 'Assets',
+    status: 'GREEN',
+    review_frequency: 'Annually',
+    review_date: daysFromNow(-185),
+    next_due_date: daysFromNow(180),
+    risk_level: 'Critical',
+    organisation_id: MOCK_ORG.id,
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date(Date.now() - 185 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString()
+  }
+];
+
+const MOCK_REQUIREMENT_EVIDENCE_TYPES: RequirementEvidenceType[] = [
+  {
+    id: 'fw-ev-training-cert',
+    requirement_id: 'fw-req-forklift-training',
+    organisation_id: MOCK_ORG.id,
+    name: 'Training Certificate',
+    description: 'Certificate or training record showing current competency.',
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'fw-ev-meeting-minutes',
+    requirement_id: 'fw-req-management-review',
+    organisation_id: MOCK_ORG.id,
+    name: 'Meeting Minutes',
+    description: 'Minutes or notes showing the review took place.',
+    created_at: new Date().toISOString()
+  }
+];
+
+const MOCK_REQUIREMENT_DOCUMENTS: RequirementDocument[] = [
+  {
+    id: 'fw-link-forklift-doc',
+    requirement_id: 'fw-req-forklift-training',
+    document_id: 'doc-loler-flt3',
+    organisation_id: MOCK_ORG.id,
+    linked_by: MOCK_PROFILE.id,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'fw-link-insurance-doc',
+    requirement_id: 'fw-req-vehicle-insurance',
+    document_id: 'doc-insurance-2026',
+    organisation_id: MOCK_ORG.id,
+    linked_by: MOCK_PROFILE.id,
+    created_at: new Date().toISOString()
+  }
+];
+
+const MOCK_REVIEWS: Review[] = [
+  {
+    id: 'fw-review-fire',
+    requirement_id: 'fw-req-fire-training',
+    organisation_id: MOCK_ORG.id,
+    reviewed_by: MOCK_PROFILE.id,
+    review_date: daysFromNow(-320),
+    next_due_date: daysFromNow(20),
+    status: 'AMBER',
+    notes: 'Next check is due soon.',
+    created_at: new Date().toISOString()
+  }
+];
+
+const MOCK_ACTIONS: Action[] = [
+  {
+    id: 'fw-action-renew-fire',
+    organisation_id: MOCK_ORG.id,
+    title: 'Renew Training',
+    description: 'Schedule the next training session and attach the record when complete.',
+    owner: 'Facilities',
+    status: 'Open',
+    due_date: daysFromNow(14),
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+];
+
+const MOCK_REQUIREMENT_ACTIONS: RequirementAction[] = [
+  {
+    id: 'fw-req-action-fire',
+    requirement_id: 'fw-req-fire-training',
+    action_id: 'fw-action-renew-fire',
+    organisation_id: MOCK_ORG.id,
+    created_at: new Date().toISOString()
+  }
+];
+
 // Helper to check localStorage browser availability
 export const getStorageItem = (key: string, defaultVal: any) => {
   requireDemoMode();
@@ -355,6 +524,12 @@ export const initMockDb = () => {
     localStorage.setItem('vigilen_cells', JSON.stringify(MOCK_CELLS));
     localStorage.setItem('vigilen_audit_packs', JSON.stringify(MOCK_AUDIT_PACKS));
     localStorage.setItem('vigilen_logs', JSON.stringify(MOCK_LOGS));
+    localStorage.setItem('vigilen_framework_requirements', JSON.stringify(MOCK_FRAMEWORK_REQUIREMENTS));
+    localStorage.setItem('vigilen_requirement_evidence_types', JSON.stringify(MOCK_REQUIREMENT_EVIDENCE_TYPES));
+    localStorage.setItem('vigilen_requirement_documents', JSON.stringify(MOCK_REQUIREMENT_DOCUMENTS));
+    localStorage.setItem('vigilen_reviews', JSON.stringify(MOCK_REVIEWS));
+    localStorage.setItem('vigilen_actions', JSON.stringify(MOCK_ACTIONS));
+    localStorage.setItem('vigilen_requirement_actions', JSON.stringify(MOCK_REQUIREMENT_ACTIONS));
     localStorage.setItem('vigilen_initialized', 'true');
   }
 };
@@ -480,6 +655,205 @@ export const dbService = {
       await this.logActivity('Requirement Added', `Created new requirement "${newReq.title}"`);
       return newReq;
     }
+  },
+
+  // Standards-agnostic Requirements Framework
+  async getFrameworkRequirements(): Promise<Requirement[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('requirements')
+        .select('*')
+        .eq('organisation_id', orgId)
+        .order('next_due_date', { ascending: true, nullsFirst: false });
+      if (error) throwSupabaseError('requirements.select active organisation', error);
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_framework_requirements', MOCK_FRAMEWORK_REQUIREMENTS);
+  },
+
+  async addFrameworkRequirement(
+    requirement: Omit<Requirement, 'id' | 'organisation_id' | 'created_by' | 'created_at' | 'updated_at'>
+  ): Promise<Requirement> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('requirements')
+        .insert([{ ...requirement, organisation_id: orgId, created_by: userId }])
+        .select()
+        .single();
+      if (error) throwSupabaseError('requirements.insert active organisation', error);
+      return data;
+    }
+
+    const requirements = getStorageItem('vigilen_framework_requirements', MOCK_FRAMEWORK_REQUIREMENTS);
+    const newRequirement: Requirement = {
+      ...requirement,
+      id: `fw-req-${Math.random().toString(36).substr(2, 9)}`,
+      organisation_id: orgId,
+      created_by: userId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    requirements.unshift(newRequirement);
+    setStorageItem('vigilen_framework_requirements', requirements);
+    await this.logActivity('Requirement Added', `Created requirement "${newRequirement.title}"`);
+    return newRequirement;
+  },
+
+  async updateFrameworkRequirement(requirementId: string, updates: Partial<Requirement>): Promise<Requirement> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('requirements')
+        .update(updates)
+        .eq('id', requirementId)
+        .eq('organisation_id', orgId)
+        .select()
+        .single();
+      if (error) throwSupabaseError('requirements.update active organisation', error);
+      return data;
+    }
+
+    const requirements = getStorageItem('vigilen_framework_requirements', MOCK_FRAMEWORK_REQUIREMENTS);
+    const idx = requirements.findIndex((item: Requirement) => item.id === requirementId);
+    if (idx === -1) throw new Error('Requirement not found');
+    const updated = { ...requirements[idx], ...updates, updated_at: new Date().toISOString() };
+    requirements[idx] = updated;
+    setStorageItem('vigilen_framework_requirements', requirements);
+    return updated;
+  },
+
+  async getRequirementEvidenceTypes(): Promise<RequirementEvidenceType[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('requirement_evidence_types')
+        .select('*')
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('requirement_evidence_types.select active organisation', error);
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_requirement_evidence_types', MOCK_REQUIREMENT_EVIDENCE_TYPES);
+  },
+
+  async getRequirementDocuments(): Promise<RequirementDocument[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('requirement_documents')
+        .select('*')
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('requirement_documents.select active organisation', error);
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_requirement_documents', MOCK_REQUIREMENT_DOCUMENTS);
+  },
+
+  async linkDocumentToRequirement(requirementId: string, documentId: string): Promise<RequirementDocument> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('requirement_documents')
+        .insert([{ requirement_id: requirementId, document_id: documentId, organisation_id: orgId, linked_by: userId }])
+        .select()
+        .single();
+      if (error) throwSupabaseError('requirement_documents.insert active organisation', error);
+      return data;
+    }
+
+    const links = getStorageItem('vigilen_requirement_documents', MOCK_REQUIREMENT_DOCUMENTS);
+    const existing = links.find((link: RequirementDocument) => link.requirement_id === requirementId && link.document_id === documentId);
+    if (existing) return existing;
+    const newLink: RequirementDocument = {
+      id: `fw-link-${Math.random().toString(36).substr(2, 9)}`,
+      requirement_id: requirementId,
+      document_id: documentId,
+      organisation_id: orgId,
+      linked_by: userId,
+      created_at: new Date().toISOString()
+    };
+    links.push(newLink);
+    setStorageItem('vigilen_requirement_documents', links);
+    return newLink;
+  },
+
+  async unlinkDocumentFromRequirement(requirementId: string, documentId: string): Promise<void> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+
+    if (shouldUseSupabase()) {
+      const { error } = await supabase!
+        .from('requirement_documents')
+        .delete()
+        .eq('requirement_id', requirementId)
+        .eq('document_id', documentId)
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('requirement_documents.delete active organisation', error);
+      return;
+    }
+
+    const links = getStorageItem('vigilen_requirement_documents', MOCK_REQUIREMENT_DOCUMENTS);
+    setStorageItem(
+      'vigilen_requirement_documents',
+      links.filter((link: RequirementDocument) => !(link.requirement_id === requirementId && link.document_id === documentId))
+    );
+  },
+
+  async getReviews(): Promise<Review[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('reviews')
+        .select('*')
+        .eq('organisation_id', orgId)
+        .order('review_date', { ascending: false });
+      if (error) throwSupabaseError('reviews.select active organisation', error);
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_reviews', MOCK_REVIEWS);
+  },
+
+  async getActions(): Promise<Action[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('actions')
+        .select('*')
+        .eq('organisation_id', orgId)
+        .order('due_date', { ascending: true, nullsFirst: false });
+      if (error) throwSupabaseError('actions.select active organisation', error);
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_actions', MOCK_ACTIONS);
+  },
+
+  async getRequirementActions(): Promise<RequirementAction[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('requirement_actions')
+        .select('*')
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('requirement_actions.select active organisation', error);
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_requirement_actions', MOCK_REQUIREMENT_ACTIONS);
   },
 
   // Evidence Documents (Vault)

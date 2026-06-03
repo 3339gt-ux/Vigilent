@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import Link from 'next/link';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
+import { calculateRequirementStatus, getLinkedDocumentsForRequirement } from '@/lib/requirementsEngine';
 import { 
   Clock, 
   Plus, 
@@ -23,6 +24,9 @@ export default function DashboardPage() {
     matrixCells, 
     requirements, 
     documents, 
+    frameworkRequirements,
+    requirementDocuments,
+    actions,
     auditPacks, 
     auditLogs, 
     uploadDocument,
@@ -37,6 +41,24 @@ export default function DashboardPage() {
   const [uploadError, setUploadError] = useState('');
   const [uploadSuccess, setUploadSuccess] = useState('');
   const [expiryReferenceTime] = useState(() => Date.now());
+
+  const assessedRequirements = frameworkRequirements.map(requirement => ({
+    ...requirement,
+    status: calculateRequirementStatus(
+      requirement,
+      getLinkedDocumentsForRequirement(requirement.id, documents, requirementDocuments)
+    )
+  }));
+  const greenRequirements = assessedRequirements.filter(requirement => requirement.status === 'GREEN').length;
+  const amberRequirements = assessedRequirements.filter(requirement => requirement.status === 'AMBER').length;
+  const redRequirements = assessedRequirements.filter(requirement => requirement.status === 'RED').length;
+  const overdueReviews = assessedRequirements.filter(requirement => requirement.next_due_date && new Date(requirement.next_due_date).getTime() <= expiryReferenceTime).length;
+  const upcomingReviews = assessedRequirements.filter(requirement => {
+    if (!requirement.next_due_date) return false;
+    const dueAt = new Date(requirement.next_due_date).getTime();
+    return dueAt > expiryReferenceTime && dueAt - expiryReferenceTime <= 30 * 24 * 60 * 60 * 1000;
+  }).length;
+  const openActions = actions.filter(action => action.status !== 'Closed').length;
 
   // Expiring Documents (status is 'Expiring Soon' or 'Expired')
   const expiringSoonDocs = documents.filter(d => d.status === 'Expiring Soon' || d.status === 'Expired');
@@ -102,8 +124,8 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-card border border-border p-5 rounded-xl flex items-center justify-between">
           <div>
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Readiness Score</span>
-            <span className="text-3xl font-extrabold block mt-1">{readinessScore}%</span>
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Requirements Overview</span>
+            <span className="text-3xl font-extrabold block mt-1">{assessedRequirements.length}</span>
           </div>
           <div className={`p-3 rounded-lg ${readinessScore > 75 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
             <TrendingUp className="w-6 h-6" />
@@ -112,8 +134,8 @@ export default function DashboardPage() {
 
         <div className="bg-card border border-border p-5 rounded-xl flex items-center justify-between">
           <div>
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Missing Records</span>
-            <span className="text-3xl font-extrabold block mt-1 text-rose-500">{stats.missingCount}</span>
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Red Requirements</span>
+            <span className="text-3xl font-extrabold block mt-1 text-rose-500">{redRequirements}</span>
           </div>
           <div className="p-3 rounded-lg bg-rose-500/10 text-rose-500">
             <AlertCircle className="w-6 h-6" />
@@ -122,9 +144,9 @@ export default function DashboardPage() {
 
         <div className="bg-card border border-border p-5 rounded-xl flex items-center justify-between">
           <div>
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Expiring / Expired</span>
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Amber Requirements</span>
             <span className="text-3xl font-extrabold block mt-1 text-amber-500">
-              {stats.expiringSoonCount + stats.expiredCount}
+              {amberRequirements}
             </span>
           </div>
           <div className="p-3 rounded-lg bg-amber-500/10 text-amber-500">
@@ -134,13 +156,28 @@ export default function DashboardPage() {
 
         <div className="bg-card border border-border p-5 rounded-xl flex items-center justify-between">
           <div>
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Unclassified Files</span>
-            <span className="text-3xl font-extrabold block mt-1 text-indigo-500">{stats.unclassifiedCount}</span>
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Open Actions</span>
+            <span className="text-3xl font-extrabold block mt-1 text-indigo-500">{openActions}</span>
           </div>
           <div className="p-3 rounded-lg bg-indigo-500/10 text-indigo-500">
             <FileSpreadsheet className="w-6 h-6" />
           </div>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <Link href="/dashboard/requirements" className="bg-card border border-border p-4 rounded-xl hover:bg-muted/30 transition-colors">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Green Requirements</span>
+          <span className="text-2xl font-extrabold block mt-1 text-emerald-500">{greenRequirements}</span>
+        </Link>
+        <Link href="/dashboard/requirements" className="bg-card border border-border p-4 rounded-xl hover:bg-muted/30 transition-colors">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Overdue Reviews</span>
+          <span className="text-2xl font-extrabold block mt-1 text-rose-500">{overdueReviews}</span>
+        </Link>
+        <Link href="/dashboard/requirements" className="bg-card border border-border p-4 rounded-xl hover:bg-muted/30 transition-colors">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Upcoming Reviews</span>
+          <span className="text-2xl font-extrabold block mt-1 text-amber-500">{upcomingReviews}</span>
+        </Link>
       </div>
 
       {/* Grid Content */}

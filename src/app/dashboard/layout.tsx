@@ -9,6 +9,7 @@ import {
   LayoutDashboard, 
   FolderLock, 
   Grid, 
+  ClipboardList,
   FolderArchive, 
   Settings, 
   CreditCard,
@@ -56,6 +57,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const menuItems = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { name: 'Requirements', href: '/dashboard/requirements', icon: ClipboardList },
     { name: 'Evidence Vault', href: '/dashboard/vault', icon: FolderLock },
     { name: 'Evidence Matrix', href: '/dashboard/matrix', icon: Grid },
     { name: 'Audit Pack Builder', href: '/dashboard/audit-packs', icon: FolderArchive },

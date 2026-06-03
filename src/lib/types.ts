@@ -79,6 +79,79 @@ export interface EvidenceUploadInput {
   metadata?: Record<string, any>;
 }
 
+export type RequirementStatus = 'GREEN' | 'AMBER' | 'RED' | 'GREY';
+export type RequirementRiskLevel = 'Low' | 'Medium' | 'High' | 'Critical';
+export type ReviewFrequency = 'Monthly' | 'Quarterly' | 'Annually' | 'Custom';
+export type ActionStatus = 'Open' | 'In Progress' | 'Closed';
+
+export interface Requirement {
+  id: string;
+  title: string;
+  description: string | null;
+  owner: string | null;
+  category: string;
+  status: RequirementStatus;
+  review_frequency: ReviewFrequency;
+  review_date: string | null;
+  next_due_date: string | null;
+  risk_level: RequirementRiskLevel;
+  organisation_id: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RequirementEvidenceType {
+  id: string;
+  requirement_id: string;
+  organisation_id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+}
+
+export interface RequirementDocument {
+  id: string;
+  requirement_id: string;
+  document_id: string;
+  organisation_id: string;
+  linked_by: string | null;
+  created_at: string;
+}
+
+export interface Review {
+  id: string;
+  requirement_id: string;
+  organisation_id: string;
+  reviewed_by: string | null;
+  review_date: string;
+  next_due_date: string | null;
+  status: RequirementStatus;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface Action {
+  id: string;
+  organisation_id: string;
+  title: string;
+  description: string | null;
+  owner: string | null;
+  status: ActionStatus;
+  due_date: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RequirementAction {
+  id: string;
+  requirement_id: string;
+  action_id: string;
+  organisation_id: string;
+  created_at: string;
+}
+
 export type CellStatus = 'Compliant' | 'Expiring Soon' | 'Expired' | 'Missing' | 'N/A';
 
 export interface MatrixCell {

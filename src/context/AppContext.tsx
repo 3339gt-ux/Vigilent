@@ -26,7 +26,13 @@ import {
   AuditLog,
   CellStatus,
   DocumentStatus,
-  EvidenceUploadInput
+  EvidenceUploadInput,
+  Requirement,
+  RequirementAction,
+  RequirementDocument,
+  RequirementEvidenceType,
+  Review,
+  Action
 } from '@/lib/types';
 
 interface AppContextType {
@@ -50,6 +56,12 @@ interface AppContextType {
 
   requirements: ComplianceRequirement[];
   documents: EvidenceDocument[];
+  frameworkRequirements: Requirement[];
+  requirementEvidenceTypes: RequirementEvidenceType[];
+  requirementDocuments: RequirementDocument[];
+  reviews: Review[];
+  actions: Action[];
+  requirementActions: RequirementAction[];
   matrixCells: MatrixCell[];
   auditPacks: AuditPack[];
   auditLogs: AuditLog[];
@@ -58,6 +70,19 @@ interface AppContextType {
   updateDocumentMetadata: (docId: string, updates: Partial<EvidenceDocument>) => Promise<EvidenceDocument>;
   getDocumentSignedUrl: (docId: string) => Promise<string>;
   deleteDocument: (docId: string) => Promise<void>;
+  createFrameworkRequirement: (input: {
+    title: string;
+    description?: string | null;
+    owner?: string | null;
+    category: string;
+    review_frequency: Requirement['review_frequency'];
+    review_date?: string | null;
+    next_due_date?: string | null;
+    risk_level: Requirement['risk_level'];
+  }) => Promise<Requirement>;
+  updateFrameworkRequirement: (requirementId: string, updates: Partial<Requirement>) => Promise<Requirement>;
+  linkDocumentToRequirement: (requirementId: string, documentId: string) => Promise<void>;
+  unlinkDocumentFromRequirement: (requirementId: string, documentId: string) => Promise<void>;
   createRequirement: (title: string, description: string, category: 'Vehicle' | 'Driver' | 'Facility' | 'General', frequency_months?: number, is_mandatory?: boolean) => Promise<ComplianceRequirement>;
   createPack: (name: string, description: string, docIds: string[], pinCode: string | null) => Promise<AuditPack>;
   updatePackStatus: (packId: string, status: 'Draft' | 'Active' | 'Archived') => Promise<void>;
@@ -88,6 +113,12 @@ const emptyStats = {
 const emptyCollections = {
   requirements: [] as ComplianceRequirement[],
   documents: [] as EvidenceDocument[],
+  frameworkRequirements: [] as Requirement[],
+  requirementEvidenceTypes: [] as RequirementEvidenceType[],
+  requirementDocuments: [] as RequirementDocument[],
+  reviews: [] as Review[],
+  actions: [] as Action[],
+  requirementActions: [] as RequirementAction[],
   matrixCells: [] as MatrixCell[],
   auditPacks: [] as AuditPack[],
   auditLogs: [] as AuditLog[]
@@ -124,6 +155,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [requirements, setRequirements] = useState<ComplianceRequirement[]>([]);
   const [documents, setDocuments] = useState<EvidenceDocument[]>([]);
+  const [frameworkRequirements, setFrameworkRequirements] = useState<Requirement[]>([]);
+  const [requirementEvidenceTypes, setRequirementEvidenceTypes] = useState<RequirementEvidenceType[]>([]);
+  const [requirementDocuments, setRequirementDocuments] = useState<RequirementDocument[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [actions, setActions] = useState<Action[]>([]);
+  const [requirementActions, setRequirementActions] = useState<RequirementAction[]>([]);
   const [matrixCells, setMatrixCells] = useState<MatrixCell[]>([]);
   const [auditPacks, setAuditPacks] = useState<AuditPack[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -136,6 +173,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setOrganization(null);
     setRequirements([]);
     setDocuments([]);
+    setFrameworkRequirements([]);
+    setRequirementEvidenceTypes([]);
+    setRequirementDocuments([]);
+    setReviews([]);
+    setActions([]);
+    setRequirementActions([]);
     setMatrixCells([]);
     setAuditPacks([]);
     setAuditLogs([]);
@@ -155,9 +198,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [theme]);
 
   const loadWorkspaceCollections = async () => {
-    const [reqs, docs, cells, packs, logs] = await Promise.all([
+    const [reqs, docs, frameworkReqs, evidenceTypes, requirementDocLinks, reviewRows, actionRows, reqActionLinks, cells, packs, logs] = await Promise.all([
       dbService.getRequirements(),
       dbService.getDocuments(),
+      dbService.getFrameworkRequirements(),
+      dbService.getRequirementEvidenceTypes(),
+      dbService.getRequirementDocuments(),
+      dbService.getReviews(),
+      dbService.getActions(),
+      dbService.getRequirementActions(),
       dbService.getMatrixCells(),
       dbService.getAuditPacks(),
       dbService.getAuditLogs()
@@ -165,6 +214,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     setRequirements(reqs);
     setDocuments(docs);
+    setFrameworkRequirements(frameworkReqs);
+    setRequirementEvidenceTypes(evidenceTypes);
+    setRequirementDocuments(requirementDocLinks);
+    setReviews(reviewRows);
+    setActions(actionRows);
+    setRequirementActions(reqActionLinks);
     setMatrixCells(cells);
     setAuditPacks(packs);
     setAuditLogs(logs);
@@ -221,6 +276,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!org) {
       setRequirements(emptyCollections.requirements);
       setDocuments(emptyCollections.documents);
+      setFrameworkRequirements(emptyCollections.frameworkRequirements);
+      setRequirementEvidenceTypes(emptyCollections.requirementEvidenceTypes);
+      setRequirementDocuments(emptyCollections.requirementDocuments);
+      setReviews(emptyCollections.reviews);
+      setActions(emptyCollections.actions);
+      setRequirementActions(emptyCollections.requirementActions);
       setMatrixCells(emptyCollections.matrixCells);
       setAuditPacks(emptyCollections.auditPacks);
       setAuditLogs(emptyCollections.auditLogs);
@@ -506,6 +567,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await loadWorkspaceCollections();
   };
 
+  const createFrameworkRequirement: AppContextType['createFrameworkRequirement'] = async (input) => {
+    const created = await dbService.addFrameworkRequirement({
+      title: input.title.trim(),
+      description: input.description || null,
+      owner: input.owner || null,
+      category: input.category,
+      status: 'GREY',
+      review_frequency: input.review_frequency,
+      review_date: input.review_date || null,
+      next_due_date: input.next_due_date || null,
+      risk_level: input.risk_level
+    });
+    await loadWorkspaceCollections();
+    return created;
+  };
+
+  const updateFrameworkRequirement = async (requirementId: string, updates: Partial<Requirement>): Promise<Requirement> => {
+    const updated = await dbService.updateFrameworkRequirement(requirementId, updates);
+    await loadWorkspaceCollections();
+    return updated;
+  };
+
+  const linkDocumentToRequirement = async (requirementId: string, documentId: string): Promise<void> => {
+    await dbService.linkDocumentToRequirement(requirementId, documentId);
+    await loadWorkspaceCollections();
+  };
+
+  const unlinkDocumentFromRequirement = async (requirementId: string, documentId: string): Promise<void> => {
+    await dbService.unlinkDocumentFromRequirement(requirementId, documentId);
+    await loadWorkspaceCollections();
+  };
+
   const createRequirement = async (
     title: string,
     description: string,
@@ -611,6 +704,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         updateOrgProfile,
         requirements,
         documents,
+        frameworkRequirements,
+        requirementEvidenceTypes,
+        requirementDocuments,
+        reviews,
+        actions,
+        requirementActions,
         matrixCells,
         auditPacks,
         auditLogs,
@@ -618,6 +717,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         updateDocumentMetadata,
         getDocumentSignedUrl,
         deleteDocument,
+        createFrameworkRequirement,
+        updateFrameworkRequirement,
+        linkDocumentToRequirement,
+        unlinkDocumentFromRequirement,
         createRequirement,
         createPack,
         updatePackStatus,

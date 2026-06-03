@@ -22,10 +22,14 @@ import {
 export default function EvidenceVault() {
   const { 
     documents, 
+    frameworkRequirements,
+    requirementDocuments,
     uploadDocument, 
     updateDocumentMetadata, 
     getDocumentSignedUrl,
-    deleteDocument 
+    deleteDocument,
+    linkDocumentToRequirement,
+    unlinkDocumentFromRequirement
   } = useApp();
 
   // Search & Filter state
@@ -61,6 +65,7 @@ export default function EvidenceVault() {
   const [isSaving, setIsSaving] = useState(false);
   const [isOpeningFile, setIsOpeningFile] = useState(false);
   const [fileError, setFileError] = useState('');
+  const [selectedRequirementId, setSelectedRequirementId] = useState('');
 
   // Heuristic metadata auto-suggester based on filename
   const handleFileNameChange = (val: string) => {
@@ -152,6 +157,18 @@ export default function EvidenceVault() {
     setMetaKey('');
     setMetaVal('');
     setFileError('');
+    setSelectedRequirementId('');
+  };
+
+  const handleLinkRequirement = async () => {
+    if (!selectedDoc || !selectedRequirementId) return;
+    await linkDocumentToRequirement(selectedRequirementId, selectedDoc.id);
+    setSelectedRequirementId('');
+  };
+
+  const handleUnlinkRequirement = async (requirementId: string) => {
+    if (!selectedDoc) return;
+    await unlinkDocumentFromRequirement(requirementId, selectedDoc.id);
   };
 
   const handleSaveMetadata = async () => {
@@ -603,6 +620,51 @@ export default function EvidenceVault() {
               </div>
 
               {/* Custom Metadata Key-Value Items */}
+              <div className="border-t border-border/60 pt-4 space-y-4">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Linked Requirements</span>
+                {requirementDocuments.filter(link => link.document_id === selectedDoc.id).length === 0 ? (
+                  <p className="text-[10px] text-muted-foreground italic">This record is not linked to a requirement yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {requirementDocuments
+                      .filter(link => link.document_id === selectedDoc.id)
+                      .map(link => {
+                        const requirement = frameworkRequirements.find(item => item.id === link.requirement_id);
+                        return (
+                          <div key={link.id} className="flex justify-between items-center p-2 bg-muted/50 rounded-lg text-[11px]">
+                            <span className="font-bold truncate">{requirement?.title || 'Requirement'}</span>
+                            <button
+                              onClick={() => handleUnlinkRequirement(link.requirement_id)}
+                              className="text-rose-500 font-bold"
+                            >
+                              Unlink
+                            </button>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <select
+                    value={selectedRequirementId}
+                    onChange={e => setSelectedRequirementId(e.target.value)}
+                    className="min-w-0 flex-1 px-2.5 py-1.5 bg-muted border border-border/80 rounded-md outline-none text-[11px]"
+                  >
+                    <option value="">Select requirement</option>
+                    {frameworkRequirements.map(requirement => (
+                      <option key={requirement.id} value={requirement.id}>{requirement.title}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={handleLinkRequirement}
+                    disabled={!selectedRequirementId}
+                    className="px-2.5 py-1.5 bg-indigo-600 disabled:bg-indigo-600/40 text-white rounded-md text-[10px] font-bold"
+                  >
+                    Link
+                  </button>
+                </div>
+              </div>
+
               <div className="border-t border-border/60 pt-4 space-y-4">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Audit Attributes</span>
                 
