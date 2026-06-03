@@ -7,6 +7,7 @@ import {
   AuditPack,
   EvidenceDocument,
   Requirement,
+  RequirementEvidenceCoverage,
   RequirementStatus
 } from '@/lib/types';
 import {
@@ -34,6 +35,7 @@ type PackStatus = 'Draft' | 'Ready' | 'Sent' | 'Archived';
 interface AssessedRequirement {
   requirement: Requirement;
   status: RequirementStatus;
+  evidenceCoverage: RequirementEvidenceCoverage;
   linkedDocuments: EvidenceDocument[];
   openActions: Action[];
   warnings: string[];
@@ -114,6 +116,7 @@ export default function AuditPackBuilder() {
       const linkedDocuments = getLinkedDocumentsForRequirement(requirement.id, documents, requirementDocuments);
       const readiness = readinessByRequirementId.get(requirement.id);
       const status = readiness?.status || calculateRequirementStatus(requirement, linkedDocuments);
+      const evidenceCoverage = readiness?.evidenceCoverage;
       const linkedActionIds = new Set(
         requirementActions
           .filter(link => link.requirement_id === requirement.id)
@@ -124,6 +127,12 @@ export default function AuditPackBuilder() {
 
       if (linkedDocuments.length === 0) {
         warnings.push('Missing linked evidence');
+      }
+      if (evidenceCoverage) {
+        warnings.push(`Evidence coverage: ${evidenceCoverage.summary}`);
+        evidenceCoverage.criteria
+          .filter(result => result.criterion.is_required && result.status === 'Not Covered')
+          .forEach(result => warnings.push(`Missing criterion: ${result.criterion.title}`));
       }
 
       const dueDays = daysUntil(requirement.next_due_date);
@@ -153,6 +162,7 @@ export default function AuditPackBuilder() {
       return {
         requirement,
         status,
+        evidenceCoverage: evidenceCoverage!,
         linkedDocuments,
         openActions,
         warnings: Array.from(new Set(warnings))
@@ -245,6 +255,7 @@ export default function AuditPackBuilder() {
       'Category',
       'Owner',
       'Status',
+      'Evidence Coverage',
       'Next Due Date',
       'Linked Evidence',
       'Missing Evidence',
@@ -257,6 +268,7 @@ export default function AuditPackBuilder() {
       item.requirement.category,
       item.requirement.owner || 'Unassigned',
       getRequirementStatusLabel(item.status),
+      item.evidenceCoverage?.summary || 'Not assessed',
       item.requirement.next_due_date || '',
       item.linkedDocuments.map(document => document.title).join('; '),
       item.linkedDocuments.length === 0 ? 'Yes' : 'No',
@@ -282,6 +294,7 @@ export default function AuditPackBuilder() {
         <td>${escapeHtml(item.requirement.category)}</td>
         <td>${escapeHtml(item.requirement.owner || 'Unassigned')}</td>
         <td>${escapeHtml(getRequirementStatusLabel(item.status))}</td>
+        <td>${escapeHtml(item.evidenceCoverage?.summary || 'Not assessed')}</td>
         <td>${escapeHtml(item.requirement.next_due_date || 'Not set')}</td>
         <td>${escapeHtml(item.linkedDocuments.map(document => document.title).join(', ') || 'Missing')}</td>
         <td>${escapeHtml(item.openActions.map(action => action.title).join(', ') || 'None')}</td>
@@ -314,6 +327,7 @@ export default function AuditPackBuilder() {
                 <th>Category</th>
                 <th>Owner</th>
                 <th>Status</th>
+                <th>Evidence Coverage</th>
                 <th>Next Due</th>
                 <th>Linked Evidence</th>
                 <th>Open Actions</th>

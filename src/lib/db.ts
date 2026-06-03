@@ -16,6 +16,8 @@ import {
   RequirementAction,
   RequirementCompetencyType,
   RequirementDocument,
+  RequirementEvidenceCriterion,
+  RequirementEvidenceCriterionMatch,
   RequirementEvidenceType,
   Review,
   Action,
@@ -471,6 +473,105 @@ const MOCK_REQUIREMENT_DOCUMENTS: RequirementDocument[] = [
   }
 ];
 
+const MOCK_REQUIREMENT_EVIDENCE_CRITERIA: RequirementEvidenceCriterion[] = [
+  {
+    id: 'crit-forklift-cert',
+    organisation_id: MOCK_ORG.id,
+    requirement_id: 'fw-req-forklift-training',
+    title: 'Valid training certificate',
+    description: 'Current certificate or training evidence for the relevant person.',
+    evidence_type: 'Training Certificate',
+    is_required: true,
+    weight: 1,
+    minimum_count: 1,
+    frequency: 'Annually',
+    coverage_period: null,
+    validity_required: true,
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'crit-forklift-competency',
+    organisation_id: MOCK_ORG.id,
+    requirement_id: 'fw-req-forklift-training',
+    title: 'Person competency record',
+    description: 'Competency record showing person-level coverage.',
+    evidence_type: 'Competency Record',
+    is_required: true,
+    weight: 1,
+    minimum_count: 1,
+    frequency: 'Annually',
+    coverage_period: null,
+    validity_required: true,
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'crit-insurance-cert',
+    organisation_id: MOCK_ORG.id,
+    requirement_id: 'fw-req-vehicle-insurance',
+    title: 'Valid insurance certificate',
+    description: 'Current certificate or policy record for fleet coverage.',
+    evidence_type: 'Insurance Certificate',
+    is_required: true,
+    weight: 1,
+    minimum_count: 1,
+    frequency: 'Annually',
+    coverage_period: null,
+    validity_required: true,
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+];
+
+const MOCK_REQUIREMENT_EVIDENCE_CRITERION_MATCHES: RequirementEvidenceCriterionMatch[] = [
+  {
+    id: 'crit-match-forklift-cert',
+    organisation_id: MOCK_ORG.id,
+    criterion_id: 'crit-forklift-cert',
+    document_id: 'doc-loler-flt3',
+    competency_record_id: null,
+    action_id: null,
+    match_status: 'Matched',
+    matched_by: MOCK_PROFILE.id,
+    matched_at: new Date().toISOString(),
+    notes: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'crit-match-forklift-competency',
+    organisation_id: MOCK_ORG.id,
+    criterion_id: 'crit-forklift-competency',
+    document_id: null,
+    competency_record_id: 'comp-rec-john-forklift',
+    action_id: null,
+    match_status: 'Matched',
+    matched_by: MOCK_PROFILE.id,
+    matched_at: new Date().toISOString(),
+    notes: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'crit-match-insurance-cert',
+    organisation_id: MOCK_ORG.id,
+    criterion_id: 'crit-insurance-cert',
+    document_id: 'doc-insurance-2026',
+    competency_record_id: null,
+    action_id: null,
+    match_status: 'Matched',
+    matched_by: MOCK_PROFILE.id,
+    matched_at: new Date().toISOString(),
+    notes: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+];
+
 const MOCK_REVIEWS: Review[] = [
   {
     id: 'fw-review-fire',
@@ -855,6 +956,8 @@ export const initMockDb = () => {
     localStorage.setItem('vigilen_framework_requirements', JSON.stringify(MOCK_FRAMEWORK_REQUIREMENTS));
     localStorage.setItem('vigilen_requirement_evidence_types', JSON.stringify(MOCK_REQUIREMENT_EVIDENCE_TYPES));
     localStorage.setItem('vigilen_requirement_documents', JSON.stringify(MOCK_REQUIREMENT_DOCUMENTS));
+    localStorage.setItem('vigilen_requirement_evidence_criteria', JSON.stringify(MOCK_REQUIREMENT_EVIDENCE_CRITERIA));
+    localStorage.setItem('vigilen_requirement_evidence_criterion_matches', JSON.stringify(MOCK_REQUIREMENT_EVIDENCE_CRITERION_MATCHES));
     localStorage.setItem('vigilen_reviews', JSON.stringify(MOCK_REVIEWS));
     localStorage.setItem('vigilen_actions', JSON.stringify(MOCK_ACTIONS));
     localStorage.setItem('vigilen_requirement_actions', JSON.stringify(MOCK_REQUIREMENT_ACTIONS));
@@ -1283,6 +1386,207 @@ export const dbService = {
       'vigilen_requirement_documents',
       links.filter((link: RequirementDocument) => !(link.requirement_id === requirementId && link.document_id === documentId))
     );
+  },
+
+  async getRequirementEvidenceCriteria(): Promise<RequirementEvidenceCriterion[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('requirement_evidence_criteria')
+        .select('*')
+        .eq('organisation_id', orgId)
+        .order('created_at', { ascending: true });
+      if (error) throwSupabaseError('requirement_evidence_criteria.select active organisation', error);
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_requirement_evidence_criteria', MOCK_REQUIREMENT_EVIDENCE_CRITERIA);
+  },
+
+  async upsertRequirementEvidenceCriterion(
+    input: Partial<RequirementEvidenceCriterion> & Pick<RequirementEvidenceCriterion, 'requirement_id' | 'title'>
+  ): Promise<RequirementEvidenceCriterion> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+    const payload = {
+      ...input,
+      organisation_id: orgId,
+      description: input.description || null,
+      evidence_type: input.evidence_type || null,
+      is_required: input.is_required ?? true,
+      weight: input.weight ?? 1,
+      minimum_count: input.minimum_count ?? 1,
+      frequency: input.frequency || null,
+      coverage_period: input.coverage_period || null,
+      validity_required: input.validity_required ?? true,
+      created_by: input.created_by || userId,
+      updated_at: nowIso()
+    };
+
+    if (shouldUseSupabase()) {
+      const query = input.id
+        ? supabase!.from('requirement_evidence_criteria').update(payload).eq('id', input.id).eq('organisation_id', orgId)
+        : supabase!.from('requirement_evidence_criteria').insert([payload]);
+      const { data, error } = await query.select().single();
+      if (error) throwSupabaseError('requirement_evidence_criteria.upsert active organisation', error);
+      await this.logActivity('Evidence Criterion Saved', `Saved evidence criterion "${data.title}".`);
+      return data;
+    }
+
+    const criteria = getStorageItem('vigilen_requirement_evidence_criteria', MOCK_REQUIREMENT_EVIDENCE_CRITERIA);
+    if (input.id) {
+      const idx = criteria.findIndex((criterion: RequirementEvidenceCriterion) => criterion.id === input.id);
+      if (idx !== -1) {
+        const updated = { ...criteria[idx], ...payload };
+        criteria[idx] = updated;
+        setStorageItem('vigilen_requirement_evidence_criteria', criteria);
+        await this.logActivity('Evidence Criterion Saved', `Saved evidence criterion "${updated.title}".`);
+        return updated;
+      }
+    }
+    const created: RequirementEvidenceCriterion = {
+      id: `crit-${Math.random().toString(36).substr(2, 9)}`,
+      organisation_id: orgId,
+      requirement_id: input.requirement_id,
+      title: input.title,
+      description: input.description || null,
+      evidence_type: input.evidence_type || null,
+      is_required: input.is_required ?? true,
+      weight: input.weight ?? 1,
+      minimum_count: input.minimum_count ?? 1,
+      frequency: input.frequency || null,
+      coverage_period: input.coverage_period || null,
+      validity_required: input.validity_required ?? true,
+      created_by: userId,
+      created_at: nowIso(),
+      updated_at: nowIso()
+    };
+    criteria.push(created);
+    setStorageItem('vigilen_requirement_evidence_criteria', criteria);
+    await this.logActivity('Evidence Criterion Created', `Created evidence criterion "${created.title}".`);
+    return created;
+  },
+
+  async deleteRequirementEvidenceCriterion(criterionId: string): Promise<void> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    if (shouldUseSupabase()) {
+      const { error } = await supabase!
+        .from('requirement_evidence_criteria')
+        .delete()
+        .eq('id', criterionId)
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('requirement_evidence_criteria.delete active organisation', error);
+      await this.logActivity('Evidence Criterion Deleted', `Deleted evidence criterion ${criterionId}.`);
+      return;
+    }
+
+    setStorageItem(
+      'vigilen_requirement_evidence_criteria',
+      getStorageItem('vigilen_requirement_evidence_criteria', MOCK_REQUIREMENT_EVIDENCE_CRITERIA)
+        .filter((criterion: RequirementEvidenceCriterion) => criterion.id !== criterionId)
+    );
+    setStorageItem(
+      'vigilen_requirement_evidence_criterion_matches',
+      getStorageItem('vigilen_requirement_evidence_criterion_matches', MOCK_REQUIREMENT_EVIDENCE_CRITERION_MATCHES)
+        .filter((match: RequirementEvidenceCriterionMatch) => match.criterion_id !== criterionId)
+    );
+    await this.logActivity('Evidence Criterion Deleted', `Deleted evidence criterion ${criterionId}.`);
+  },
+
+  async getRequirementEvidenceCriterionMatches(): Promise<RequirementEvidenceCriterionMatch[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('requirement_evidence_criterion_matches')
+        .select('*')
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('requirement_evidence_criterion_matches.select active organisation', error);
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_requirement_evidence_criterion_matches', MOCK_REQUIREMENT_EVIDENCE_CRITERION_MATCHES);
+  },
+
+  async linkDocumentToEvidenceCriterion(criterionId: string, documentId: string, notes: string | null = null): Promise<RequirementEvidenceCriterionMatch> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+    const payload = {
+      organisation_id: orgId,
+      criterion_id: criterionId,
+      document_id: documentId,
+      competency_record_id: null,
+      action_id: null,
+      match_status: 'Matched',
+      matched_by: userId,
+      matched_at: nowIso(),
+      notes
+    };
+
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('requirement_evidence_criterion_matches')
+        .upsert([payload], { onConflict: 'criterion_id,document_id' })
+        .select()
+        .single();
+      if (error) throwSupabaseError('requirement_evidence_criterion_matches.upsert document', error);
+      await this.logActivity('Evidence Criterion Matched', `Linked document ${documentId} to evidence criterion ${criterionId}.`);
+      return data;
+    }
+
+    const matches = getStorageItem('vigilen_requirement_evidence_criterion_matches', MOCK_REQUIREMENT_EVIDENCE_CRITERION_MATCHES);
+    const existing = matches.find((match: RequirementEvidenceCriterionMatch) => match.criterion_id === criterionId && match.document_id === documentId);
+    if (existing) return existing;
+    const created: RequirementEvidenceCriterionMatch = {
+      id: `crit-match-${Math.random().toString(36).substr(2, 9)}`,
+      ...payload,
+      match_status: 'Matched',
+      created_at: nowIso(),
+      updated_at: nowIso()
+    };
+    matches.push(created);
+    setStorageItem('vigilen_requirement_evidence_criterion_matches', matches);
+    await this.logActivity('Evidence Criterion Matched', `Linked document ${documentId} to evidence criterion ${criterionId}.`);
+    return created;
+  },
+
+  async unlinkDocumentFromEvidenceCriterion(criterionId: string, documentId: string): Promise<void> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    if (shouldUseSupabase()) {
+      const { error } = await supabase!
+        .from('requirement_evidence_criterion_matches')
+        .delete()
+        .eq('criterion_id', criterionId)
+        .eq('document_id', documentId)
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('requirement_evidence_criterion_matches.delete document', error);
+      await this.logActivity('Evidence Criterion Unlinked', `Unlinked document ${documentId} from evidence criterion ${criterionId}.`);
+      return;
+    }
+
+    setStorageItem(
+      'vigilen_requirement_evidence_criterion_matches',
+      getStorageItem('vigilen_requirement_evidence_criterion_matches', MOCK_REQUIREMENT_EVIDENCE_CRITERION_MATCHES)
+        .filter((match: RequirementEvidenceCriterionMatch) => !(match.criterion_id === criterionId && match.document_id === documentId))
+    );
+    await this.logActivity('Evidence Criterion Unlinked', `Unlinked document ${documentId} from evidence criterion ${criterionId}.`);
+  },
+
+  async uploadEvidenceForCriterion(criterionId: string, file: File, category: string = 'Evidence'): Promise<EvidenceDocument> {
+    const title = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim() || file.name;
+    const document = await this.uploadDocumentFile({
+      file,
+      title,
+      category,
+      expiry_date: null,
+      issue_date: new Date().toISOString().split('T')[0],
+      metadata: { source: 'evidence_criterion', criterion_id: criterionId },
+      tags: ['evidence-criteria'],
+      status: 'Unclassified'
+    });
+    await this.linkDocumentToEvidenceCriterion(criterionId, document.id, `Uploaded for criterion: ${title}`);
+    return document;
   },
 
   async getReviews(): Promise<Review[]> {

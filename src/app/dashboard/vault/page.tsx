@@ -25,6 +25,8 @@ export default function EvidenceVault() {
     documents, 
     frameworkRequirements,
     requirementDocuments,
+    requirementEvidenceCriteria,
+    requirementEvidenceCriterionMatches,
     actions,
     requirementActions,
     actionUpdates,
@@ -311,6 +313,12 @@ export default function EvidenceVault() {
   const selectedDocumentActions = selectedDocumentActionLinks
     .map(link => actions.find(action => action.id === link.action_id))
     .filter((action): action is Action => Boolean(action));
+  const selectedDocumentCriterionMatches = selectedDoc
+    ? requirementEvidenceCriterionMatches.filter(match => match.document_id === selectedDoc.id && match.match_status !== 'Rejected')
+    : [];
+  const selectedDocumentCriteria = selectedDocumentCriterionMatches
+    .map(match => requirementEvidenceCriteria.find(criterion => criterion.id === match.criterion_id))
+    .filter((criterion): criterion is NonNullable<typeof criterion> => Boolean(criterion));
   const currentSelectedAction = selectedAction
     ? actions.find(action => action.id === selectedAction.id) || selectedAction
     : null;
@@ -735,6 +743,30 @@ export default function EvidenceVault() {
                     Link
                   </button>
                 </div>
+              </div>
+
+              <div className="border-t border-border/60 pt-4 space-y-4">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Linked Evidence Criteria</span>
+                {selectedDocumentCriteria.length === 0 ? (
+                  <p className="text-[10px] text-muted-foreground italic">This record is not matched to any evidence coverage criteria.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {selectedDocumentCriteria.map(criterion => {
+                      const requirement = frameworkRequirements.find(item => item.id === criterion.requirement_id);
+                      return (
+                        <div key={criterion.id} className="p-2 bg-muted/50 border border-border/60 rounded-lg text-[11px]">
+                          <div className="flex justify-between gap-2">
+                            <span className="font-bold truncate">{criterion.title}</span>
+                            <span className="text-[9px] uppercase font-bold text-muted-foreground">{criterion.is_required ? 'Required' : 'Optional'}</span>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground mt-1">
+                            {requirement?.title || 'Requirement'} | contributes to coverage when current
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div className="border-t border-border/60 pt-4 space-y-4">

@@ -3,8 +3,8 @@
 import React, { useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
+import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import type { Action, Requirement, RequirementStatus } from '@/lib/types';
-import { calculateRequirementStatus, getLinkedDocumentsForRequirement } from '@/lib/requirementsEngine';
 import { REQUIREMENT_TEMPLATE_PACKS } from '@/lib/requirementTemplatePacks';
 import {
   ClipboardList,
@@ -31,7 +31,6 @@ export default function RequirementsPage() {
     user,
     documents,
     frameworkRequirements,
-    requirementDocuments,
     reviews,
     actions,
     requirementActions,
@@ -44,6 +43,11 @@ export default function RequirementsPage() {
     updateFrameworkRequirement,
     linkDocumentToRequirement,
     unlinkDocumentFromRequirement,
+    upsertRequirementEvidenceCriterion,
+    deleteRequirementEvidenceCriterion,
+    linkDocumentToEvidenceCriterion,
+    unlinkDocumentFromEvidenceCriterion,
+    uploadEvidenceForCriterion,
     createActionForRequirement,
     updateAction,
     addActionUpdate,
@@ -74,6 +78,13 @@ export default function RequirementsPage() {
   const [newDescription, setNewDescription] = useState('');
   const [linkingDocumentId, setLinkingDocumentId] = useState('');
   const [linkingCompetencyTypeId, setLinkingCompetencyTypeId] = useState('');
+  const [criterionLinkingDocumentId, setCriterionLinkingDocumentId] = useState<Record<string, string>>({});
+  const [uploadingCriterionId, setUploadingCriterionId] = useState<string | null>(null);
+  const [criterionTitle, setCriterionTitle] = useState('');
+  const [criterionEvidenceType, setCriterionEvidenceType] = useState('');
+  const [criterionRequired, setCriterionRequired] = useState(true);
+  const [criterionValidityRequired, setCriterionValidityRequired] = useState(true);
+  const [criterionMinimumCount, setCriterionMinimumCount] = useState('1');
   const [showAddActionForm, setShowAddActionForm] = useState(false);
   const [actionTitle, setActionTitle] = useState('');
   const [actionDescription, setActionDescription] = useState('');
@@ -127,7 +138,8 @@ export default function RequirementsPage() {
     return readinessReport.requirements.map(item => ({
       ...item.requirement,
       status: item.status,
-      linkedDocuments: item.linkedDocuments
+      linkedDocuments: item.linkedDocuments,
+      evidenceCoverage: item.evidenceCoverage
     }));
   }, [readinessReport.requirements]);
 
@@ -276,20 +288,6 @@ export default function RequirementsPage() {
   const handleLinkDocument = async () => {
     if (!selectedRequirement || !linkingDocumentId) return;
     await linkDocumentToRequirement(selectedRequirement.id, linkingDocumentId);
-    const linkedDocuments = getLinkedDocumentsForRequirement(selectedRequirement.id, documents, [
-      ...requirementDocuments,
-      {
-        id: 'pending',
-        requirement_id: selectedRequirement.id,
-        document_id: linkingDocumentId,
-        organisation_id: selectedRequirement.organisation_id,
-        linked_by: user?.id || null,
-        created_at: new Date().toISOString()
-      }
-    ]);
-    await updateFrameworkRequirement(selectedRequirement.id, {
-      status: calculateRequirementStatus(selectedRequirement, linkedDocuments)
-    });
     setLinkingDocumentId('');
   };
 
@@ -307,6 +305,38 @@ export default function RequirementsPage() {
   const handleUnlinkCompetencyType = async (competencyTypeId: string) => {
     if (!selectedRequirement) return;
     await unlinkCompetencyTypeFromRequirement(selectedRequirement.id, competencyTypeId);
+  };
+
+  const handleCreateCriterion = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedRequirement || !criterionTitle.trim()) return;
+    await upsertRequirementEvidenceCriterion({
+      requirement_id: selectedRequirement.id,
+      title: criterionTitle.trim(),
+      description: null,
+      evidence_type: criterionEvidenceType.trim() || criterionTitle.trim(),
+      is_required: criterionRequired,
+      weight: 1,
+      minimum_count: Math.max(Number(criterionMinimumCount) || 1, 1),
+      frequency: selectedRequirement.review_frequency,
+      coverage_period: null,
+      validity_required: criterionValidityRequired
+    });
+    setCriterionTitle('');
+    setCriterionEvidenceType('');
+    setCriterionRequired(true);
+    setCriterionValidityRequired(true);
+    setCriterionMinimumCount('1');
+  };
+
+  const handleUploadCriterionEvidence = async (criterionId: string, file: File | null) => {
+    if (!file) return;
+    setUploadingCriterionId(criterionId);
+    try {
+      await uploadEvidenceForCriterion(criterionId, file, selectedRequirement?.category || 'Evidence');
+    } finally {
+      setUploadingCriterionId(null);
+    }
   };
 
   const handleCreateAction = async (e: React.FormEvent) => {
@@ -435,6 +465,7 @@ export default function RequirementsPage() {
                     <th className="p-4">Owner</th>
                     <th className="p-4 text-center">Status</th>
                     <th className="p-4">Next Due Date</th>
+                    <th className="p-4">Evidence Coverage</th>
                     <th className="p-4">Linked Evidence</th>
                     <th className="p-4">Actions</th>
                     <th className="p-4">Last Review</th>
@@ -443,7 +474,7 @@ export default function RequirementsPage() {
                 <tbody className="divide-y divide-border/60">
                   {filteredRequirements.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="p-8 text-center text-muted-foreground">
+                      <td colSpan={9} className="p-8 text-center text-muted-foreground">
                         {frameworkRequirements.length === 0
                           ? 'No requirements yet. Import a template pack to create a practical starter set for this organisation.'
                           : 'No requirements match the current filters.'}
@@ -474,6 +505,13 @@ export default function RequirementsPage() {
                             </span>
                           </td>
                           <td className="p-4 text-muted-foreground font-semibold">{requirement.next_due_date || 'Not set'}</td>
+                          <td className="p-4 text-muted-foreground font-semibold">
+                            <span className={`px-2 py-1 rounded border text-[10px] font-bold ${statusClass(requirement.status)}`}>
+                              {requirement.evidenceCoverage?.coveragePercent === null
+                                ? requirement.evidenceCoverage?.summary || 'Not assessed'
+                                : `${requirement.evidenceCoverage?.coveredRequired}/${requirement.evidenceCoverage?.totalRequired} covered`}
+                            </span>
+                          </td>
                           <td className="p-4 text-muted-foreground font-semibold">{requirement.linkedDocuments.length}</td>
                           <td className="p-4 text-muted-foreground font-semibold">{actionCount}</td>
                           <td className="p-4 text-muted-foreground font-semibold">{lastReview?.review_date || 'None'}</td>
@@ -640,6 +678,117 @@ export default function RequirementsPage() {
                   )}
                 </div>
               )}
+
+              <div className="border-t border-border/60 pt-4 space-y-3">
+                <div>
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Evidence Coverage</span>
+                  <p className="text-xs font-bold mt-1">{selectedReadiness?.evidenceCoverage.summary || 'Not assessed'}</p>
+                  {selectedReadiness?.evidenceCoverage.bestCoverageDate && (
+                    <p className="text-[10px] text-muted-foreground mt-1">Best coverage date: {selectedReadiness.evidenceCoverage.bestCoverageDate}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Evidence Criteria</span>
+                  {selectedReadiness?.evidenceCoverage.criteria.length === 0 ? (
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-[11px] text-muted-foreground">
+                      No criteria configured. Legacy requirement-document links are shown below but do not make this requirement fully covered.
+                    </div>
+                  ) : (
+                    selectedReadiness?.evidenceCoverage.criteria.map(result => (
+                      <div key={result.criterion.id} className="p-3 bg-muted/30 border border-border rounded-lg text-[11px] space-y-2">
+                        <div className="flex justify-between gap-3">
+                          <div className="min-w-0">
+                            <span className="font-extrabold block truncate">{result.criterion.title}</span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {result.criterion.is_required ? 'Required' : 'Optional'} | {result.criterion.evidence_type || 'Evidence'} | Min {result.criterion.minimum_count}
+                            </span>
+                          </div>
+                          <span className={`px-2 py-1 h-fit rounded border text-[9px] font-bold uppercase ${
+                            result.status === 'Fully Covered'
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                              : result.status === 'Partially Covered'
+                                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                                : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                          }`}>
+                            {result.status}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">{result.reasons[0]}</p>
+                        {result.matchedDocuments.length > 0 && (
+                          <div className="space-y-1">
+                            {result.matchedDocuments.map(document => (
+                              <div key={document.id} className="flex items-center justify-between gap-2 bg-background/60 border border-border/60 rounded px-2 py-1">
+                                <span className="truncate font-semibold">{document.title}</span>
+                                <button onClick={() => unlinkDocumentFromEvidenceCriterion(result.criterion.id, document.id)} className="text-rose-500 font-bold">Unlink</button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="flex gap-2">
+                            <select
+                              value={criterionLinkingDocumentId[result.criterion.id] || ''}
+                              onChange={event => setCriterionLinkingDocumentId(prev => ({ ...prev, [result.criterion.id]: event.target.value }))}
+                              className="min-w-0 flex-1 px-2 py-1.5 bg-muted border border-border rounded-md text-[11px]"
+                            >
+                              <option value="">Link document</option>
+                              {documents.map(document => (
+                                <option key={document.id} value={document.id}>{document.title}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => {
+                                const documentId = criterionLinkingDocumentId[result.criterion.id];
+                                if (documentId) void linkDocumentToEvidenceCriterion(result.criterion.id, documentId);
+                              }}
+                              disabled={!criterionLinkingDocumentId[result.criterion.id]}
+                              className="px-2 bg-indigo-600 disabled:bg-indigo-600/40 text-white rounded-md"
+                            >
+                              <LinkIcon className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <label className="px-2 py-1.5 bg-muted hover:bg-muted/80 border border-border rounded-md text-center font-bold cursor-pointer">
+                            {uploadingCriterionId === result.criterion.id ? 'Uploading...' : `Upload (${formatMaxEvidenceUploadSize()})`}
+                            <input type="file" accept={evidenceAcceptAttribute} className="hidden" onChange={event => handleUploadCriterionEvidence(result.criterion.id, event.target.files?.[0] || null)} />
+                          </label>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setActionTitle(`Provide evidence for: ${result.criterion.title}`);
+                              setActionDescription(`Evidence criterion "${result.criterion.title}" is not covered.`);
+                              setShowAddActionForm(true);
+                            }}
+                            className="text-[10px] text-indigo-500 font-bold hover:underline"
+                          >
+                            Create missing evidence action
+                          </button>
+                          <button onClick={() => deleteRequirementEvidenceCriterion(result.criterion.id)} className="text-[10px] text-rose-500 font-bold hover:underline">
+                            Delete criterion
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <form onSubmit={handleCreateCriterion} className="p-3 bg-muted/20 border border-border rounded-lg space-y-2 text-[11px]">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block">Add Criterion</span>
+                  <input value={criterionTitle} onChange={event => setCriterionTitle(event.target.value)} placeholder="Criterion title" className="w-full px-2 py-1.5 bg-muted border border-border rounded outline-none" />
+                  <input value={criterionEvidenceType} onChange={event => setCriterionEvidenceType(event.target.value)} placeholder="Evidence type" className="w-full px-2 py-1.5 bg-muted border border-border rounded outline-none" />
+                  <div className="grid grid-cols-3 gap-2">
+                    <input type="number" min="1" value={criterionMinimumCount} onChange={event => setCriterionMinimumCount(event.target.value)} className="px-2 py-1.5 bg-muted border border-border rounded outline-none" />
+                    <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <input type="checkbox" checked={criterionRequired} onChange={event => setCriterionRequired(event.target.checked)} /> Required
+                    </label>
+                    <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <input type="checkbox" checked={criterionValidityRequired} onChange={event => setCriterionValidityRequired(event.target.checked)} /> Dated
+                    </label>
+                  </div>
+                  <button disabled={!criterionTitle.trim()} className="w-full py-1.5 bg-indigo-600 disabled:bg-indigo-600/40 text-white rounded font-bold">Add Criterion</button>
+                </form>
+              </div>
 
               <div className="border-t border-border/60 pt-4 space-y-3">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Linked Documents</span>

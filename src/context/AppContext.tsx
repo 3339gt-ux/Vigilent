@@ -31,6 +31,8 @@ import {
   EvidenceUploadInput,
   Requirement,
   RequirementAction,
+  RequirementEvidenceCriterion,
+  RequirementEvidenceCriterionMatch,
   RequirementDocument,
   RequirementEvidenceType,
   Review,
@@ -74,6 +76,8 @@ interface AppContextType {
   frameworkRequirements: Requirement[];
   requirementEvidenceTypes: RequirementEvidenceType[];
   requirementDocuments: RequirementDocument[];
+  requirementEvidenceCriteria: RequirementEvidenceCriterion[];
+  requirementEvidenceCriterionMatches: RequirementEvidenceCriterionMatch[];
   reviews: Review[];
   actions: Action[];
   requirementActions: RequirementAction[];
@@ -107,6 +111,11 @@ interface AppContextType {
   importRequirementTemplateItems: (items: RequirementTemplateItem[]) => Promise<Requirement[]>;
   linkDocumentToRequirement: (requirementId: string, documentId: string) => Promise<void>;
   unlinkDocumentFromRequirement: (requirementId: string, documentId: string) => Promise<void>;
+  upsertRequirementEvidenceCriterion: (input: Partial<RequirementEvidenceCriterion> & Pick<RequirementEvidenceCriterion, 'requirement_id' | 'title'>) => Promise<RequirementEvidenceCriterion>;
+  deleteRequirementEvidenceCriterion: (criterionId: string) => Promise<void>;
+  linkDocumentToEvidenceCriterion: (criterionId: string, documentId: string, notes?: string | null) => Promise<void>;
+  unlinkDocumentFromEvidenceCriterion: (criterionId: string, documentId: string) => Promise<void>;
+  uploadEvidenceForCriterion: (criterionId: string, file: File, category?: string) => Promise<EvidenceDocument>;
   createActionForRequirement: (
     requirementId: string,
     actionInput: {
@@ -164,6 +173,8 @@ const emptyCollections = {
   frameworkRequirements: [] as Requirement[],
   requirementEvidenceTypes: [] as RequirementEvidenceType[],
   requirementDocuments: [] as RequirementDocument[],
+  requirementEvidenceCriteria: [] as RequirementEvidenceCriterion[],
+  requirementEvidenceCriterionMatches: [] as RequirementEvidenceCriterionMatch[],
   reviews: [] as Review[],
   actions: [] as Action[],
   requirementActions: [] as RequirementAction[],
@@ -223,6 +234,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [frameworkRequirements, setFrameworkRequirements] = useState<Requirement[]>([]);
   const [requirementEvidenceTypes, setRequirementEvidenceTypes] = useState<RequirementEvidenceType[]>([]);
   const [requirementDocuments, setRequirementDocuments] = useState<RequirementDocument[]>([]);
+  const [requirementEvidenceCriteria, setRequirementEvidenceCriteria] = useState<RequirementEvidenceCriterion[]>([]);
+  const [requirementEvidenceCriterionMatches, setRequirementEvidenceCriterionMatches] = useState<RequirementEvidenceCriterionMatch[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [actions, setActions] = useState<Action[]>([]);
   const [requirementActions, setRequirementActions] = useState<RequirementAction[]>([]);
@@ -247,11 +260,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     reviews,
     actions,
     requirementActions,
+    requirementEvidenceCriteria,
+    requirementEvidenceCriterionMatches,
     competencyTypes,
     competencyRecords,
     requirementCompetencyTypes,
     people
-  }), [actions, competencyRecords, competencyTypes, documents, frameworkRequirements, people, requirementActions, requirementCompetencyTypes, requirementDocuments, reviews]);
+  }), [actions, competencyRecords, competencyTypes, documents, frameworkRequirements, people, requirementActions, requirementCompetencyTypes, requirementDocuments, requirementEvidenceCriteria, requirementEvidenceCriterionMatches, reviews]);
 
   const competencySummary = useMemo(
     () => buildCompetencySummary(people, competencyTypes, competencyRecords),
@@ -275,6 +290,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setFrameworkRequirements([]);
     setRequirementEvidenceTypes([]);
     setRequirementDocuments([]);
+    setRequirementEvidenceCriteria([]);
+    setRequirementEvidenceCriterionMatches([]);
     setReviews([]);
     setActions([]);
     setRequirementActions([]);
@@ -309,6 +326,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       frameworkReqs,
       evidenceTypes,
       requirementDocLinks,
+      evidenceCriteriaRows,
+      criterionMatchRows,
       reviewRows,
       actionRows,
       reqActionLinks,
@@ -329,6 +348,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dbService.getFrameworkRequirements(),
       dbService.getRequirementEvidenceTypes(),
       dbService.getRequirementDocuments(),
+      dbService.getRequirementEvidenceCriteria(),
+      dbService.getRequirementEvidenceCriterionMatches(),
       dbService.getReviews(),
       dbService.getActions(),
       dbService.getRequirementActions(),
@@ -350,6 +371,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setFrameworkRequirements(frameworkReqs);
     setRequirementEvidenceTypes(evidenceTypes);
     setRequirementDocuments(requirementDocLinks);
+    setRequirementEvidenceCriteria(evidenceCriteriaRows);
+    setRequirementEvidenceCriterionMatches(criterionMatchRows);
     setReviews(reviewRows);
     setActions(actionRows);
     setRequirementActions(reqActionLinks);
@@ -420,6 +443,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setFrameworkRequirements(emptyCollections.frameworkRequirements);
       setRequirementEvidenceTypes(emptyCollections.requirementEvidenceTypes);
       setRequirementDocuments(emptyCollections.requirementDocuments);
+      setRequirementEvidenceCriteria(emptyCollections.requirementEvidenceCriteria);
+      setRequirementEvidenceCriterionMatches(emptyCollections.requirementEvidenceCriterionMatches);
       setReviews(emptyCollections.reviews);
       setActions(emptyCollections.actions);
       setRequirementActions(emptyCollections.requirementActions);
@@ -663,6 +688,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       'vigilen_framework_requirements',
       'vigilen_requirement_evidence_types',
       'vigilen_requirement_documents',
+      'vigilen_requirement_evidence_criteria',
+      'vigilen_requirement_evidence_criterion_matches',
       'vigilen_reviews',
       'vigilen_actions',
       'vigilen_requirement_actions',
@@ -768,6 +795,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
         risk_level: item.risk_level
       });
       await dbService.addRequirementEvidenceTypes(created.id, item.suggested_evidence_types);
+      const starterCriteria: NonNullable<RequirementTemplateItem['suggested_criteria']> = item.suggested_criteria?.length
+        ? item.suggested_criteria
+        : item.suggested_evidence_types.map(name => ({
+            title: name,
+            description: undefined,
+            evidence_type: name,
+            is_required: true,
+            weight: 1,
+            minimum_count: 1,
+            frequency: item.review_frequency,
+            validity_required: true
+          }));
+      for (const criterion of starterCriteria) {
+        await dbService.upsertRequirementEvidenceCriterion({
+          requirement_id: created.id,
+          title: criterion.title,
+          description: criterion.description || null,
+          evidence_type: criterion.evidence_type || criterion.title,
+          is_required: criterion.is_required ?? true,
+          weight: criterion.weight ?? 1,
+          minimum_count: criterion.minimum_count ?? 1,
+          frequency: criterion.frequency || item.review_frequency,
+          coverage_period: null,
+          validity_required: criterion.validity_required ?? true
+        });
+      }
       existingKeys.add(key);
       createdRequirements.push(created);
     }
@@ -784,6 +837,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const unlinkDocumentFromRequirement = async (requirementId: string, documentId: string): Promise<void> => {
     await dbService.unlinkDocumentFromRequirement(requirementId, documentId);
     await loadWorkspaceCollections();
+  };
+
+  const upsertRequirementEvidenceCriterion: AppContextType['upsertRequirementEvidenceCriterion'] = async (input) => {
+    const criterion = await dbService.upsertRequirementEvidenceCriterion(input);
+    await loadWorkspaceCollections();
+    return criterion;
+  };
+
+  const deleteRequirementEvidenceCriterion = async (criterionId: string): Promise<void> => {
+    await dbService.deleteRequirementEvidenceCriterion(criterionId);
+    await loadWorkspaceCollections();
+  };
+
+  const linkDocumentToEvidenceCriterion = async (criterionId: string, documentId: string, notes: string | null = null): Promise<void> => {
+    await dbService.linkDocumentToEvidenceCriterion(criterionId, documentId, notes);
+    await loadWorkspaceCollections();
+  };
+
+  const unlinkDocumentFromEvidenceCriterion = async (criterionId: string, documentId: string): Promise<void> => {
+    await dbService.unlinkDocumentFromEvidenceCriterion(criterionId, documentId);
+    await loadWorkspaceCollections();
+  };
+
+  const uploadEvidenceForCriterion = async (criterionId: string, file: File, category: string = 'Evidence'): Promise<EvidenceDocument> => {
+    const document = await dbService.uploadEvidenceForCriterion(criterionId, file, category);
+    await loadWorkspaceCollections();
+    return document;
   };
 
   const createActionForRequirement = async (
@@ -1020,6 +1100,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         frameworkRequirements,
         requirementEvidenceTypes,
         requirementDocuments,
+        requirementEvidenceCriteria,
+        requirementEvidenceCriterionMatches,
         reviews,
         actions,
         requirementActions,
@@ -1043,6 +1125,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         importRequirementTemplateItems,
         linkDocumentToRequirement,
         unlinkDocumentFromRequirement,
+        upsertRequirementEvidenceCriterion,
+        deleteRequirementEvidenceCriterion,
+        linkDocumentToEvidenceCriterion,
+        unlinkDocumentFromEvidenceCriterion,
+        uploadEvidenceForCriterion,
         createActionForRequirement,
         updateAction,
         addActionUpdate,

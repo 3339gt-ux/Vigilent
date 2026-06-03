@@ -141,6 +141,66 @@ export interface RequirementDocument {
   created_at: string;
 }
 
+export type EvidenceCriterionFrequency = 'One-off' | 'Monthly' | 'Quarterly' | 'Annually' | 'Custom';
+export type EvidenceCriterionMatchStatus = 'Matched' | 'Needs Review' | 'Rejected';
+export type EvidenceCoverageStatus = 'Fully Covered' | 'Partially Covered' | 'Not Covered' | 'Not Assessed';
+
+export interface RequirementEvidenceCriterion {
+  id: string;
+  organisation_id: string;
+  requirement_id: string;
+  title: string;
+  description: string | null;
+  evidence_type: string | null;
+  is_required: boolean;
+  weight: number;
+  minimum_count: number;
+  frequency: EvidenceCriterionFrequency | string | null;
+  coverage_period: string | null;
+  validity_required: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RequirementEvidenceCriterionMatch {
+  id: string;
+  organisation_id: string;
+  criterion_id: string;
+  document_id: string | null;
+  competency_record_id: string | null;
+  action_id: string | null;
+  match_status: EvidenceCriterionMatchStatus;
+  matched_by: string | null;
+  matched_at: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RequirementEvidenceCoverage {
+  requirement_id: string;
+  status: EvidenceCoverageStatus;
+  coveragePercent: number | null;
+  coveredRequired: number;
+  totalRequired: number;
+  weightedCovered: number;
+  weightedTotal: number;
+  bestCoverageDate: string | null;
+  summary: string;
+  reasons: string[];
+  criteria: Array<{
+    criterion: RequirementEvidenceCriterion;
+    status: EvidenceCoverageStatus;
+    matchedDocuments: EvidenceDocument[];
+    matchedCompetencyRecords: CompetencyRecord[];
+    matchedActions: Action[];
+    bestCoverageDate: string | null;
+    reasons: string[];
+  }>;
+  legacyLinkedDocuments: EvidenceDocument[];
+}
+
 export interface Review {
   id: string;
   requirement_id: string;
@@ -223,6 +283,16 @@ export interface RequirementTemplateItem {
   review_frequency: ReviewFrequency;
   risk_level: RequirementRiskLevel;
   suggested_evidence_types: string[];
+  suggested_criteria?: Array<{
+    title: string;
+    description?: string;
+    evidence_type?: string;
+    is_required?: boolean;
+    weight?: number;
+    minimum_count?: number;
+    frequency?: EvidenceCriterionFrequency | string | null;
+    validity_required?: boolean;
+  }>;
   description?: string;
 }
 

@@ -1,5 +1,16 @@
 # Readiness Scoring
 
+Evidence coverage now uses explicit evidence criteria first. Legacy linked documents do not make a requirement Green unless they are matched to required criteria.
+
+## Evidence Coverage
+
+- `Fully Covered`: all required criteria are satisfied and current.
+- `Partially Covered`: some required criteria are satisfied, or evidence expires soon.
+- `Not Covered`: no required criteria are satisfied, required criteria are missing, or evidence is expired.
+- `Not Assessed`: no criteria are configured.
+
+Coverage percentage is based on required criteria. Weighted scoring is supported through each criterion `weight`.
+
 Vygilence readiness scoring is intentionally simple and transparent.
 
 ## Point Values
