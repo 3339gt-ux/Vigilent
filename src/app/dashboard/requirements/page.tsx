@@ -22,6 +22,10 @@ const statusClass = (status: RequirementStatus) => {
   return 'bg-zinc-500/10 border-zinc-500/20 text-zinc-500';
 };
 
+const riskOptions: Requirement['risk_level'][] = ['Low', 'Medium', 'High', 'Critical'];
+const frequencyOptions: Requirement['review_frequency'][] = ['Weekly', 'Monthly', 'Quarterly', 'Annually', 'Custom'];
+const requirementStatusOptions: RequirementStatus[] = ['GREEN', 'AMBER', 'RED', 'GREY'];
+
 export default function RequirementsPage() {
   const {
     user,
@@ -71,6 +75,20 @@ export default function RequirementsPage() {
   const [actionOwner, setActionOwner] = useState('');
   const [actionDueDate, setActionDueDate] = useState('');
   const [selectedAction, setSelectedAction] = useState<Action | null>(null);
+  const [isEditingRequirement, setIsEditingRequirement] = useState(false);
+  const [isSavingRequirement, setIsSavingRequirement] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [editSuccess, setEditSuccess] = useState('');
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [editOwner, setEditOwner] = useState('');
+  const [editRisk, setEditRisk] = useState<Requirement['risk_level']>('Medium');
+  const [editStatus, setEditStatus] = useState<RequirementStatus>('GREY');
+  const [editFrequency, setEditFrequency] = useState<Requirement['review_frequency']>('Annually');
+  const [editReviewDate, setEditReviewDate] = useState('');
+  const [editNextDueDate, setEditNextDueDate] = useState('');
+  const [editNotes, setEditNotes] = useState('');
 
   const selectRequirement = (req: Requirement | null) => {
     setSelectedRequirement(req);
@@ -79,6 +97,25 @@ export default function RequirementsPage() {
     setActionDescription('');
     setActionOwner('');
     setActionDueDate('');
+    setIsEditingRequirement(false);
+    setEditError('');
+    setEditSuccess('');
+  };
+
+  const openEditRequirement = (requirement: Requirement) => {
+    setEditTitle(requirement.title);
+    setEditDescription(requirement.description || '');
+    setEditCategory(requirement.category);
+    setEditOwner(requirement.owner || '');
+    setEditRisk(requirement.risk_level);
+    setEditStatus(requirement.status);
+    setEditFrequency(requirement.review_frequency);
+    setEditReviewDate(requirement.review_date || '');
+    setEditNextDueDate(requirement.next_due_date || '');
+    setEditNotes(requirement.notes || '');
+    setEditError('');
+    setEditSuccess('');
+    setIsEditingRequirement(true);
   };
 
   const assessedRequirements = useMemo(() => {
@@ -175,6 +212,51 @@ export default function RequirementsPage() {
     setNewNextDue('');
     setNewDescription('');
     setShowCreateModal(false);
+  };
+
+  const handleSaveRequirementEdit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedRequirement) return;
+
+    if (!editTitle.trim()) {
+      setEditError('Requirement title is required.');
+      return;
+    }
+
+    if (!riskOptions.includes(editRisk)) {
+      setEditError('Risk level is not valid.');
+      return;
+    }
+
+    if (!frequencyOptions.includes(editFrequency)) {
+      setEditError('Review frequency is not valid.');
+      return;
+    }
+
+    setIsSavingRequirement(true);
+    setEditError('');
+    setEditSuccess('');
+    try {
+      const updated = await updateFrameworkRequirement(selectedRequirement.id, {
+        title: editTitle.trim(),
+        description: editDescription.trim() || null,
+        category: editCategory.trim() || 'Operations',
+        owner: editOwner.trim() || null,
+        risk_level: editRisk,
+        status: editStatus,
+        review_frequency: editFrequency,
+        review_date: editReviewDate || null,
+        next_due_date: editNextDueDate || null,
+        notes: editNotes.trim() || null
+      });
+      setSelectedRequirement(updated);
+      setIsEditingRequirement(false);
+      setEditSuccess('Requirement saved.');
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : 'Could not save requirement.');
+    } finally {
+      setIsSavingRequirement(false);
+    }
   };
 
   const handleLinkDocument = async () => {
@@ -384,18 +466,151 @@ export default function RequirementsPage() {
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Requirement Detail</span>
                   <h2 className="text-base font-extrabold">{selectedAssessed.title}</h2>
                 </div>
-                <button onClick={() => selectRequirement(null)} className="p-1 hover:bg-muted rounded">
-                  <X className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => openEditRequirement(selectedAssessed)}
+                    className="px-2.5 py-1.5 bg-muted hover:bg-muted/80 border border-border rounded-md text-[10px] font-bold"
+                  >
+                    Edit Requirement
+                  </button>
+                  <button onClick={() => selectRequirement(null)} className="p-1 hover:bg-muted rounded">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between"><span className="text-muted-foreground">Category</span><span className="font-bold">{selectedAssessed.category}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Owner</span><span className="font-bold">{selectedAssessed.owner || 'Unassigned'}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Risk</span><span className="font-bold">{selectedAssessed.risk_level}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Review Frequency</span><span className="font-bold">{selectedAssessed.review_frequency}</span></div>
-                <p className="text-muted-foreground leading-relaxed pt-2">{selectedAssessed.description || 'No description added.'}</p>
-              </div>
+              {(editError || editSuccess) && (
+                <div className={`p-2.5 rounded-lg border text-[11px] ${
+                  editError
+                    ? 'bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-300'
+                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-300'
+                }`}>
+                  {editError || editSuccess}
+                </div>
+              )}
+
+              {isEditingRequirement ? (
+                <form onSubmit={handleSaveRequirementEdit} className="p-3 bg-muted/30 border border-border/70 rounded-lg space-y-3 text-[11px]">
+                  <div>
+                    <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Title</label>
+                    <input
+                      required
+                      value={editTitle}
+                      onChange={event => setEditTitle(event.target.value)}
+                      className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Description</label>
+                    <textarea
+                      value={editDescription}
+                      onChange={event => setEditDescription(event.target.value)}
+                      rows={3}
+                      className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none resize-none"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Category</label>
+                      <input
+                        value={editCategory}
+                        onChange={event => setEditCategory(event.target.value)}
+                        className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Owner</label>
+                      <input
+                        value={editOwner}
+                        onChange={event => setEditOwner(event.target.value)}
+                        className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Risk</label>
+                      <select value={editRisk} onChange={event => setEditRisk(event.target.value as Requirement['risk_level'])} className="w-full px-2 py-2 bg-muted border border-border rounded-lg outline-none">
+                        {riskOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Status</label>
+                      <select value={editStatus} onChange={event => setEditStatus(event.target.value as RequirementStatus)} className="w-full px-2 py-2 bg-muted border border-border rounded-lg outline-none">
+                        {requirementStatusOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Frequency</label>
+                      <select value={editFrequency} onChange={event => setEditFrequency(event.target.value as Requirement['review_frequency'])} className="w-full px-2 py-2 bg-muted border border-border rounded-lg outline-none">
+                        {frequencyOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Last Review Date</label>
+                      <input
+                        type="date"
+                        value={editReviewDate}
+                        onChange={event => setEditReviewDate(event.target.value)}
+                        className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Next / Target Due Date</label>
+                      <input
+                        type="date"
+                        value={editNextDueDate}
+                        onChange={event => setEditNextDueDate(event.target.value)}
+                        className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Notes</label>
+                    <textarea
+                      value={editNotes}
+                      onChange={event => setEditNotes(event.target.value)}
+                      rows={3}
+                      className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none resize-none"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setIsEditingRequirement(false); setEditError(''); }}
+                      disabled={isSavingRequirement}
+                      className="w-1/2 py-2 bg-muted hover:bg-muted/80 border border-border rounded-lg font-bold"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      disabled={isSavingRequirement || !editTitle.trim()}
+                      className="w-1/2 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/40 text-white rounded-lg font-bold"
+                    >
+                      {isSavingRequirement ? 'Saving...' : 'Save Requirement'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Category</span><span className="font-bold">{selectedAssessed.category}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Owner</span><span className="font-bold">{selectedAssessed.owner || 'Unassigned'}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Risk</span><span className="font-bold">{selectedAssessed.risk_level}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Stored Status</span><span className="font-bold">{selectedAssessed.status}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Review Frequency</span><span className="font-bold">{selectedAssessed.review_frequency}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Last Review</span><span className="font-bold">{selectedAssessed.review_date || 'Not set'}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Next / Target Due</span><span className="font-bold">{selectedAssessed.next_due_date || 'Not set'}</span></div>
+                  <p className="text-muted-foreground leading-relaxed pt-2">{selectedAssessed.description || 'No description added.'}</p>
+                  {selectedAssessed.notes && (
+                    <div className="pt-2">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block">Notes</span>
+                      <p className="text-muted-foreground leading-relaxed mt-1">{selectedAssessed.notes}</p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="border-t border-border/60 pt-4 space-y-3">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Linked Documents</span>

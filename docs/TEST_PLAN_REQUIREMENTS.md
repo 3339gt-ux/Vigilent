@@ -40,6 +40,13 @@
 
 - Open a requirement.
 - Confirm details, linked documents, open actions, review history, status history, and notes sections render.
+- Click `Edit Requirement`.
+- Confirm title, description, category, owner, risk, status, review frequency, last review date, next due date, and notes can be edited.
+- Save with an empty title and confirm validation blocks the save.
+- Save valid changes and confirm the detail panel refreshes with the new values.
+- Cancel an edit and confirm unsaved changes are discarded.
+- Confirm readiness widgets/table status recalculate after due date or review date changes.
+- Confirm a `Requirement Updated` activity log entry is created with changed fields.
 - Link an existing document.
 - Confirm linked evidence count increases.
 - Unlink the document.
