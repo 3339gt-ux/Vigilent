@@ -17,6 +17,7 @@ import { isDemoMode, requireProductionEnv } from '@/lib/env';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { formatSupabaseError, logSupabaseError } from '@/lib/supabaseDiagnostics';
 import { buildReadinessReport, ReadinessReport } from '@/lib/readinessEngine';
+import { buildCompetencySummary, CompetencySummary } from '@/lib/competencyEngine';
 import {
   Profile,
   Organization,
@@ -39,6 +40,12 @@ import {
   ActionUpdate,
   ActionUpdateType,
   ActionStatus,
+  CompetencyRecord,
+  CompetencyRecordDocument,
+  CompetencyTemplateItem,
+  CompetencyType,
+  Person,
+  RequirementCompetencyType,
   RequirementTemplateItem
 } from '@/lib/types';
 
@@ -73,6 +80,11 @@ interface AppContextType {
   actionUpdates: ActionUpdate[];
   actionDocuments: ActionDocument[];
   actionObjectLinks: ActionObjectLink[];
+  people: Person[];
+  competencyTypes: CompetencyType[];
+  competencyRecords: CompetencyRecord[];
+  competencyRecordDocuments: CompetencyRecordDocument[];
+  requirementCompetencyTypes: RequirementCompetencyType[];
   matrixCells: MatrixCell[];
   auditPacks: AuditPack[];
   auditLogs: AuditLog[];
@@ -110,12 +122,29 @@ interface AppContextType {
   linkDocumentToAction: (actionId: string, documentId: string) => Promise<void>;
   unlinkDocumentFromAction: (actionId: string, documentId: string) => Promise<void>;
   uploadActionAttachment: (actionId: string, file: File) => Promise<EvidenceDocument>;
+  upsertPerson: (input: Partial<Person> & Pick<Person, 'first_name' | 'last_name' | 'person_type'>) => Promise<Person>;
+  upsertCompetencyType: (input: Partial<CompetencyType> & Pick<CompetencyType, 'title' | 'category'>) => Promise<CompetencyType>;
+  importCompetencyTemplateItems: (items: CompetencyTemplateItem[]) => Promise<CompetencyType[]>;
+  upsertCompetencyRecord: (input: Partial<CompetencyRecord> & Pick<CompetencyRecord, 'person_id' | 'competency_type_id'>) => Promise<CompetencyRecord>;
+  linkDocumentToCompetencyRecord: (recordId: string, documentId: string) => Promise<void>;
+  unlinkDocumentFromCompetencyRecord: (recordId: string, documentId: string) => Promise<void>;
+  uploadCompetencyEvidence: (recordId: string, file: File) => Promise<EvidenceDocument>;
+  linkCompetencyTypeToRequirement: (requirementId: string, competencyTypeId: string) => Promise<void>;
+  unlinkCompetencyTypeFromRequirement: (requirementId: string, competencyTypeId: string) => Promise<void>;
+  createActionForCompetencyGap: (input: {
+    personId: string;
+    competencyTypeId: string;
+    competencyRecordId?: string | null;
+    title: string;
+    dueDate?: string | null;
+  }) => Promise<Action>;
   createRequirement: (title: string, description: string, category: 'Vehicle' | 'Driver' | 'Facility' | 'General', frequency_months?: number, is_mandatory?: boolean) => Promise<ComplianceRequirement>;
   createPack: (name: string, description: string, requirementIds: string[], docIds: string[]) => Promise<AuditPack>;
   updatePackStatus: (packId: string, status: 'Draft' | 'Ready' | 'Sent' | 'Archived') => Promise<void>;
   updateCellMapping: (cellId: string, docId: string | null, status: CellStatus) => Promise<void>;
 
   readinessReport: ReadinessReport;
+  competencySummary: CompetencySummary;
   readinessScore: number;
   stats: {
     totalRequirements: number;
@@ -141,6 +170,11 @@ const emptyCollections = {
   actionUpdates: [] as ActionUpdate[],
   actionDocuments: [] as ActionDocument[],
   actionObjectLinks: [] as ActionObjectLink[],
+  people: [] as Person[],
+  competencyTypes: [] as CompetencyType[],
+  competencyRecords: [] as CompetencyRecord[],
+  competencyRecordDocuments: [] as CompetencyRecordDocument[],
+  requirementCompetencyTypes: [] as RequirementCompetencyType[],
   matrixCells: [] as MatrixCell[],
   auditPacks: [] as AuditPack[],
   auditLogs: [] as AuditLog[]
@@ -195,6 +229,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [actionUpdates, setActionUpdates] = useState<ActionUpdate[]>([]);
   const [actionDocuments, setActionDocuments] = useState<ActionDocument[]>([]);
   const [actionObjectLinks, setActionObjectLinks] = useState<ActionObjectLink[]>([]);
+  const [people, setPeople] = useState<Person[]>([]);
+  const [competencyTypes, setCompetencyTypes] = useState<CompetencyType[]>([]);
+  const [competencyRecords, setCompetencyRecords] = useState<CompetencyRecord[]>([]);
+  const [competencyRecordDocuments, setCompetencyRecordDocuments] = useState<CompetencyRecordDocument[]>([]);
+  const [requirementCompetencyTypes, setRequirementCompetencyTypes] = useState<RequirementCompetencyType[]>([]);
   const [matrixCells, setMatrixCells] = useState<MatrixCell[]>([]);
   const [auditPacks, setAuditPacks] = useState<AuditPack[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -207,8 +246,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     requirementDocuments,
     reviews,
     actions,
-    requirementActions
-  }), [actions, documents, frameworkRequirements, requirementActions, requirementDocuments, reviews]);
+    requirementActions,
+    competencyTypes,
+    competencyRecords,
+    requirementCompetencyTypes,
+    people
+  }), [actions, competencyRecords, competencyTypes, documents, frameworkRequirements, people, requirementActions, requirementCompetencyTypes, requirementDocuments, reviews]);
+
+  const competencySummary = useMemo(
+    () => buildCompetencySummary(people, competencyTypes, competencyRecords),
+    [competencyRecords, competencyTypes, people]
+  );
 
   const readinessScore = readinessReport.overallScore || 0;
   const stats = useMemo(() => ({
@@ -233,6 +281,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setActionUpdates([]);
     setActionDocuments([]);
     setActionObjectLinks([]);
+    setPeople([]);
+    setCompetencyTypes([]);
+    setCompetencyRecords([]);
+    setCompetencyRecordDocuments([]);
+    setRequirementCompetencyTypes([]);
     setMatrixCells([]);
     setAuditPacks([]);
     setAuditLogs([]);
@@ -250,7 +303,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [theme]);
 
   const loadWorkspaceCollections = async () => {
-    const [reqs, docs, frameworkReqs, evidenceTypes, requirementDocLinks, reviewRows, actionRows, reqActionLinks, actionUpdateRows, actionDocumentRows, actionObjectRows, cells, packs, logs] = await Promise.all([
+    const [
+      reqs,
+      docs,
+      frameworkReqs,
+      evidenceTypes,
+      requirementDocLinks,
+      reviewRows,
+      actionRows,
+      reqActionLinks,
+      actionUpdateRows,
+      actionDocumentRows,
+      actionObjectRows,
+      peopleRows,
+      competencyTypeRows,
+      competencyRecordRows,
+      competencyRecordDocumentRows,
+      requirementCompetencyTypeRows,
+      cells,
+      packs,
+      logs
+    ] = await Promise.all([
       dbService.getRequirements(),
       dbService.getDocuments(),
       dbService.getFrameworkRequirements(),
@@ -262,6 +335,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dbService.getActionUpdates(),
       dbService.getActionDocuments(),
       dbService.getActionObjectLinks(),
+      dbService.getPeople(),
+      dbService.getCompetencyTypes(),
+      dbService.getCompetencyRecords(),
+      dbService.getCompetencyRecordDocuments(),
+      dbService.getRequirementCompetencyTypes(),
       dbService.getMatrixCells(),
       dbService.getAuditPacks(),
       dbService.getAuditLogs()
@@ -278,6 +356,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setActionUpdates(actionUpdateRows);
     setActionDocuments(actionDocumentRows);
     setActionObjectLinks(actionObjectRows);
+    setPeople(peopleRows);
+    setCompetencyTypes(competencyTypeRows);
+    setCompetencyRecords(competencyRecordRows);
+    setCompetencyRecordDocuments(competencyRecordDocumentRows);
+    setRequirementCompetencyTypes(requirementCompetencyTypeRows);
     setMatrixCells(cells);
     setAuditPacks(packs);
     setAuditLogs(logs);
@@ -343,6 +426,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setActionUpdates(emptyCollections.actionUpdates);
       setActionDocuments(emptyCollections.actionDocuments);
       setActionObjectLinks(emptyCollections.actionObjectLinks);
+      setPeople(emptyCollections.people);
+      setCompetencyTypes(emptyCollections.competencyTypes);
+      setCompetencyRecords(emptyCollections.competencyRecords);
+      setCompetencyRecordDocuments(emptyCollections.competencyRecordDocuments);
+      setRequirementCompetencyTypes(emptyCollections.requirementCompetencyTypes);
       setMatrixCells(emptyCollections.matrixCells);
       setAuditPacks(emptyCollections.auditPacks);
       setAuditLogs(emptyCollections.auditLogs);
@@ -580,7 +668,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       'vigilen_requirement_actions',
       'vigilen_action_updates',
       'vigilen_action_documents',
-      'vigilen_action_object_links'
+      'vigilen_action_object_links',
+      'vigilen_people',
+      'vigilen_competency_types',
+      'vigilen_competency_records',
+      'vigilen_competency_record_documents',
+      'vigilen_requirement_competency_types'
     ].forEach(key => localStorage.removeItem(key));
 
     initMockDb();
@@ -756,6 +849,67 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return doc;
   };
 
+  const upsertPerson: AppContextType['upsertPerson'] = async (input) => {
+    const person = await dbService.upsertPerson(input);
+    await loadWorkspaceCollections();
+    return person;
+  };
+
+  const upsertCompetencyType: AppContextType['upsertCompetencyType'] = async (input) => {
+    const competencyType = await dbService.upsertCompetencyType(input);
+    await loadWorkspaceCollections();
+    return competencyType;
+  };
+
+  const importCompetencyTemplateItems: AppContextType['importCompetencyTemplateItems'] = async (items) => {
+    const existingKeys = new Set(
+      competencyTypes.map(type => `${type.title.trim().toLowerCase()}::${type.category.trim().toLowerCase()}`)
+    );
+    const imported = await dbService.importCompetencyTemplateItems(
+      items.filter(item => !existingKeys.has(`${item.title.trim().toLowerCase()}::${item.category.trim().toLowerCase()}`))
+    );
+    await loadWorkspaceCollections();
+    return imported;
+  };
+
+  const upsertCompetencyRecord: AppContextType['upsertCompetencyRecord'] = async (input) => {
+    const record = await dbService.upsertCompetencyRecord(input);
+    await loadWorkspaceCollections();
+    return record;
+  };
+
+  const linkDocumentToCompetencyRecord = async (recordId: string, documentId: string): Promise<void> => {
+    await dbService.linkDocumentToCompetencyRecord(recordId, documentId);
+    await loadWorkspaceCollections();
+  };
+
+  const unlinkDocumentFromCompetencyRecord = async (recordId: string, documentId: string): Promise<void> => {
+    await dbService.unlinkDocumentFromCompetencyRecord(recordId, documentId);
+    await loadWorkspaceCollections();
+  };
+
+  const uploadCompetencyEvidence = async (recordId: string, file: File): Promise<EvidenceDocument> => {
+    const document = await dbService.uploadCompetencyEvidence(recordId, file);
+    await loadWorkspaceCollections();
+    return document;
+  };
+
+  const linkCompetencyTypeToRequirement = async (requirementId: string, competencyTypeId: string): Promise<void> => {
+    await dbService.linkCompetencyTypeToRequirement(requirementId, competencyTypeId);
+    await loadWorkspaceCollections();
+  };
+
+  const unlinkCompetencyTypeFromRequirement = async (requirementId: string, competencyTypeId: string): Promise<void> => {
+    await dbService.unlinkCompetencyTypeFromRequirement(requirementId, competencyTypeId);
+    await loadWorkspaceCollections();
+  };
+
+  const createActionForCompetencyGap: AppContextType['createActionForCompetencyGap'] = async (input) => {
+    const action = await dbService.createActionForCompetencyGap(input);
+    await loadWorkspaceCollections();
+    return action;
+  };
+
   const createRequirement = async (
     title: string,
     description: string,
@@ -872,6 +1026,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         actionUpdates,
         actionDocuments,
         actionObjectLinks,
+        people,
+        competencyTypes,
+        competencyRecords,
+        competencyRecordDocuments,
+        requirementCompetencyTypes,
         matrixCells,
         auditPacks,
         auditLogs,
@@ -890,11 +1049,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
         linkDocumentToAction,
         unlinkDocumentFromAction,
         uploadActionAttachment,
+        upsertPerson,
+        upsertCompetencyType,
+        importCompetencyTemplateItems,
+        upsertCompetencyRecord,
+        linkDocumentToCompetencyRecord,
+        unlinkDocumentFromCompetencyRecord,
+        uploadCompetencyEvidence,
+        linkCompetencyTypeToRequirement,
+        unlinkCompetencyTypeFromRequirement,
+        createActionForCompetencyGap,
         createRequirement,
         createPack,
         updatePackStatus,
         updateCellMapping,
         readinessReport: readinessReport || emptyReadinessReport,
+        competencySummary,
         readinessScore,
         stats
       }}

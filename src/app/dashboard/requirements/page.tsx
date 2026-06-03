@@ -37,6 +37,8 @@ export default function RequirementsPage() {
     requirementActions,
     actionUpdates,
     actionDocuments,
+    competencyTypes,
+    requirementCompetencyTypes,
     createFrameworkRequirement,
     importRequirementTemplateItems,
     updateFrameworkRequirement,
@@ -49,6 +51,8 @@ export default function RequirementsPage() {
     unlinkDocumentFromAction,
     uploadActionAttachment,
     getDocumentSignedUrl,
+    linkCompetencyTypeToRequirement,
+    unlinkCompetencyTypeFromRequirement,
     readinessReport
   } = useApp();
 
@@ -69,6 +73,7 @@ export default function RequirementsPage() {
   const [newNextDue, setNewNextDue] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [linkingDocumentId, setLinkingDocumentId] = useState('');
+  const [linkingCompetencyTypeId, setLinkingCompetencyTypeId] = useState('');
   const [showAddActionForm, setShowAddActionForm] = useState(false);
   const [actionTitle, setActionTitle] = useState('');
   const [actionDescription, setActionDescription] = useState('');
@@ -138,6 +143,15 @@ export default function RequirementsPage() {
   const selectedAssessed = selectedRequirement
     ? assessedRequirements.find(requirement => requirement.id === selectedRequirement.id) || null
     : null;
+  const selectedReadiness = selectedRequirement
+    ? readinessReport.requirements.find(item => item.requirement.id === selectedRequirement.id) || null
+    : null;
+  const selectedCompetencyTypeLinks = selectedRequirement
+    ? requirementCompetencyTypes.filter(link => link.requirement_id === selectedRequirement.id)
+    : [];
+  const selectedCompetencyTypes = selectedCompetencyTypeLinks
+    .map(link => competencyTypes.find(type => type.id === link.competency_type_id))
+    .filter((type): type is NonNullable<typeof type> => Boolean(type));
 
   const selectedReviews = selectedRequirement
     ? reviews.filter(review => review.requirement_id === selectedRequirement.id)
@@ -282,6 +296,17 @@ export default function RequirementsPage() {
   const handleUnlinkDocument = async (documentId: string) => {
     if (!selectedRequirement) return;
     await unlinkDocumentFromRequirement(selectedRequirement.id, documentId);
+  };
+
+  const handleLinkCompetencyType = async () => {
+    if (!selectedRequirement || !linkingCompetencyTypeId) return;
+    await linkCompetencyTypeToRequirement(selectedRequirement.id, linkingCompetencyTypeId);
+    setLinkingCompetencyTypeId('');
+  };
+
+  const handleUnlinkCompetencyType = async (competencyTypeId: string) => {
+    if (!selectedRequirement) return;
+    await unlinkCompetencyTypeFromRequirement(selectedRequirement.id, competencyTypeId);
   };
 
   const handleCreateAction = async (e: React.FormEvent) => {
@@ -644,6 +669,50 @@ export default function RequirementsPage() {
                     disabled={!linkingDocumentId}
                     className="px-2.5 py-1.5 bg-indigo-600 disabled:bg-indigo-600/40 text-white rounded-md"
                     title="Link document"
+                  >
+                    <LinkIcon className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="border-t border-border/60 pt-4 space-y-3">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Linked Competency Types</span>
+                {selectedCompetencyTypes.length === 0 ? (
+                  <p className="text-[10px] text-muted-foreground italic">No competency types linked to this requirement.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {selectedCompetencyTypes.map(type => {
+                      const signal = selectedReadiness?.competencySignals.find(item => item.competencyType.id === type.id);
+                      return (
+                        <div key={type.id} className="p-2 bg-muted/40 rounded-lg text-[11px] space-y-1">
+                          <div className="flex justify-between gap-2">
+                            <span className="font-bold truncate">{type.title}</span>
+                            <button onClick={() => handleUnlinkCompetencyType(type.id)} className="text-rose-500 font-bold">Unlink</button>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground">{signal?.message || `${type.category} competency linked.`}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <select
+                    value={linkingCompetencyTypeId}
+                    onChange={event => setLinkingCompetencyTypeId(event.target.value)}
+                    className="min-w-0 flex-1 px-2 py-1.5 bg-muted border border-border rounded-md text-[11px]"
+                  >
+                    <option value="">Select competency type</option>
+                    {competencyTypes
+                      .filter(type => !selectedCompetencyTypeLinks.some(link => link.competency_type_id === type.id))
+                      .map(type => (
+                        <option key={type.id} value={type.id}>{type.title}</option>
+                      ))}
+                  </select>
+                  <button
+                    onClick={handleLinkCompetencyType}
+                    disabled={!linkingCompetencyTypeId}
+                    className="px-2.5 py-1.5 bg-indigo-600 disabled:bg-indigo-600/40 text-white rounded-md"
+                    title="Link competency type"
                   >
                     <LinkIcon className="w-3.5 h-3.5" />
                   </button>

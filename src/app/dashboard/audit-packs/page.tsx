@@ -89,6 +89,7 @@ export default function AuditPackBuilder() {
     actions,
     requirementActions,
     auditPacks,
+    readinessReport,
     createPack,
     updatePackStatus,
     getDocumentSignedUrl
@@ -106,9 +107,13 @@ export default function AuditPackBuilder() {
   const [error, setError] = useState<string | null>(null);
 
   const assessedRequirements = useMemo<AssessedRequirement[]>(() => {
+    const readinessByRequirementId = new Map(
+      readinessReport.requirements.map(item => [item.requirement.id, item])
+    );
     return frameworkRequirements.map(requirement => {
       const linkedDocuments = getLinkedDocumentsForRequirement(requirement.id, documents, requirementDocuments);
-      const status = calculateRequirementStatus(requirement, linkedDocuments);
+      const readiness = readinessByRequirementId.get(requirement.id);
+      const status = readiness?.status || calculateRequirementStatus(requirement, linkedDocuments);
       const linkedActionIds = new Set(
         requirementActions
           .filter(link => link.requirement_id === requirement.id)
@@ -141,6 +146,10 @@ export default function AuditPackBuilder() {
         warnings.push(`${openActions.length} open action${openActions.length === 1 ? '' : 's'}`);
       }
 
+      readiness?.competencySignals
+        .filter(signal => signal.status === 'RED' || signal.status === 'AMBER')
+        .forEach(signal => warnings.push(signal.message));
+
       return {
         requirement,
         status,
@@ -149,7 +158,7 @@ export default function AuditPackBuilder() {
         warnings: Array.from(new Set(warnings))
       };
     });
-  }, [actions, documents, frameworkRequirements, requirementActions, requirementDocuments]);
+  }, [actions, documents, frameworkRequirements, readinessReport.requirements, requirementActions, requirementDocuments]);
 
   const filteredRequirements = assessedRequirements.filter(item => {
     const term = search.toLowerCase();
@@ -240,6 +249,7 @@ export default function AuditPackBuilder() {
       'Linked Evidence',
       'Missing Evidence',
       'Open Actions',
+      'Competency Warnings',
       'Warnings'
     ];
     const csvRows = rows.map(item => [
@@ -251,6 +261,7 @@ export default function AuditPackBuilder() {
       item.linkedDocuments.map(document => document.title).join('; '),
       item.linkedDocuments.length === 0 ? 'Yes' : 'No',
       item.openActions.map(action => action.title).join('; '),
+      item.warnings.filter(warning => warning.toLowerCase().includes('competency')).join('; '),
       item.warnings.join('; ')
     ]);
     const content = [headers, ...csvRows].map(row => row.map(csvEscape).join(',')).join('\r\n');
@@ -274,6 +285,7 @@ export default function AuditPackBuilder() {
         <td>${escapeHtml(item.requirement.next_due_date || 'Not set')}</td>
         <td>${escapeHtml(item.linkedDocuments.map(document => document.title).join(', ') || 'Missing')}</td>
         <td>${escapeHtml(item.openActions.map(action => action.title).join(', ') || 'None')}</td>
+        <td>${escapeHtml(item.warnings.filter(warning => warning.toLowerCase().includes('competency')).join(', ') || 'None')}</td>
         <td>${escapeHtml(item.warnings.join(', ') || 'None')}</td>
       </tr>
     `).join('');
@@ -305,6 +317,7 @@ export default function AuditPackBuilder() {
                 <th>Next Due</th>
                 <th>Linked Evidence</th>
                 <th>Open Actions</th>
+                <th>Competency Warnings</th>
                 <th>Warnings</th>
               </tr>
             </thead>

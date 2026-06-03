@@ -31,6 +31,7 @@ export default function DashboardPage() {
     readinessReport,
     readinessScore,
     stats,
+    competencySummary,
     documents,
     actions,
     frameworkRequirements,
@@ -221,6 +222,31 @@ export default function DashboardPage() {
         <Link href="/dashboard/requirements" className="bg-card border border-border p-4 rounded-xl hover:bg-muted/30 transition-colors">
           <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Red Requirements</span>
           <span className="text-2xl font-extrabold block mt-1 text-rose-500">{redRequirements}</span>
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <Link href="/dashboard/competencies" className="bg-card border border-border p-4 rounded-xl hover:bg-muted/30 transition-colors">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Competency Compliance</span>
+          <span className={`text-2xl font-extrabold block mt-1 ${scoreTone(competencySummary.compliancePercent)}`}>
+            {competencySummary.compliancePercent}%
+          </span>
+        </Link>
+        <Link href="/dashboard/competencies" className="bg-card border border-border p-4 rounded-xl hover:bg-muted/30 transition-colors">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Expiring</span>
+          <span className="text-2xl font-extrabold block mt-1 text-amber-500">{competencySummary.expiringSoon}</span>
+        </Link>
+        <Link href="/dashboard/competencies" className="bg-card border border-border p-4 rounded-xl hover:bg-muted/30 transition-colors">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Expired</span>
+          <span className="text-2xl font-extrabold block mt-1 text-rose-500">{competencySummary.expired}</span>
+        </Link>
+        <Link href="/dashboard/competencies" className="bg-card border border-border p-4 rounded-xl hover:bg-muted/30 transition-colors">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Missing</span>
+          <span className="text-2xl font-extrabold block mt-1 text-rose-500">{competencySummary.missing}</span>
+        </Link>
+        <Link href="/dashboard/competencies" className="bg-card border border-border p-4 rounded-xl hover:bg-muted/30 transition-colors">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Renewals</span>
+          <span className="text-2xl font-extrabold block mt-1 text-indigo-500">{competencySummary.upcomingRenewals.length}</span>
         </Link>
       </div>
 

@@ -221,6 +221,79 @@ create table if not exists public.action_object_links (
     unique (organisation_id, action_id, object_type, object_id)
 );
 
+-- 4c. Generic Competency & Training Management
+create table if not exists public.people (
+    id uuid primary key default uuid_generate_v4(),
+    organisation_id uuid not null references public.organizations(id) on delete cascade,
+    employee_number text,
+    first_name text not null,
+    last_name text not null,
+    display_name text not null,
+    email text,
+    department text,
+    role text,
+    person_type text not null default 'Employee',
+    start_date date,
+    end_date date,
+    active boolean not null default true,
+    notes text,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create table if not exists public.competency_types (
+    id uuid primary key default uuid_generate_v4(),
+    organisation_id uuid not null references public.organizations(id) on delete cascade,
+    title text not null,
+    category text not null default 'Other',
+    description text,
+    validity_period_months integer,
+    refresher_period_months integer,
+    evidence_required boolean not null default true,
+    default_risk_level text not null default 'Medium',
+    active boolean not null default true,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    unique (organisation_id, title, category)
+);
+
+create table if not exists public.competency_records (
+    id uuid primary key default uuid_generate_v4(),
+    organisation_id uuid not null references public.organizations(id) on delete cascade,
+    person_id uuid not null references public.people(id) on delete cascade,
+    competency_type_id uuid not null references public.competency_types(id) on delete cascade,
+    completed_date date,
+    expiry_date date,
+    trainer text,
+    provider text,
+    certificate_number text,
+    status text not null default 'Missing',
+    notes text,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    unique (organisation_id, person_id, competency_type_id)
+);
+
+create table if not exists public.competency_record_documents (
+    id uuid primary key default uuid_generate_v4(),
+    organisation_id uuid not null references public.organizations(id) on delete cascade,
+    competency_record_id uuid not null references public.competency_records(id) on delete cascade,
+    document_id uuid not null references public.evidence_documents(id) on delete cascade,
+    linked_by uuid references public.profiles(id) on delete set null,
+    linked_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    unique (competency_record_id, document_id)
+);
+
+create table if not exists public.requirement_competency_types (
+    id uuid primary key default uuid_generate_v4(),
+    organisation_id uuid not null references public.organizations(id) on delete cascade,
+    requirement_id uuid not null references public.requirements(id) on delete cascade,
+    competency_type_id uuid not null references public.competency_types(id) on delete cascade,
+    linked_by uuid references public.profiles(id) on delete set null,
+    linked_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    unique (requirement_id, competency_type_id)
+);
+
 create index if not exists requirements_organisation_status_idx on public.requirements (organisation_id, status);
 create index if not exists requirement_documents_organisation_idx on public.requirement_documents (organisation_id, requirement_id, document_id);
 create index if not exists reviews_organisation_requirement_idx on public.reviews (organisation_id, requirement_id, review_date desc);
@@ -229,6 +302,11 @@ create index if not exists actions_organisation_target_due_idx on public.actions
 create index if not exists action_updates_organisation_action_idx on public.action_updates (organisation_id, action_id, created_at desc);
 create index if not exists action_documents_organisation_action_idx on public.action_documents (organisation_id, action_id, document_id);
 create index if not exists action_object_links_organisation_action_idx on public.action_object_links (organisation_id, action_id, object_type, object_id);
+create index if not exists people_organisation_active_idx on public.people (organisation_id, active, department, person_type);
+create index if not exists competency_types_organisation_active_idx on public.competency_types (organisation_id, active, category);
+create index if not exists competency_records_organisation_status_idx on public.competency_records (organisation_id, status, expiry_date);
+create index if not exists competency_record_documents_organisation_idx on public.competency_record_documents (organisation_id, competency_record_id, document_id);
+create index if not exists requirement_competency_types_organisation_idx on public.requirement_competency_types (organisation_id, requirement_id, competency_type_id);
 
 -- Storage bucket and storage.objects policies are managed separately in
 -- supabase/storage_setup.sql because hosted Supabase projects may reject
@@ -295,6 +373,11 @@ alter table public.requirement_actions enable row level security;
 alter table public.action_updates enable row level security;
 alter table public.action_documents enable row level security;
 alter table public.action_object_links enable row level security;
+alter table public.people enable row level security;
+alter table public.competency_types enable row level security;
+alter table public.competency_records enable row level security;
+alter table public.competency_record_documents enable row level security;
+alter table public.requirement_competency_types enable row level security;
 
 -- Row Level Security (RLS) Policies
 -- auth.uid() links to profiles.id. The helper avoids recursive profile policy checks.
@@ -477,6 +560,16 @@ drop policy if exists "Users can read actions in own organisation" on public.act
 drop policy if exists "Members can write actions in own organisation" on public.actions;
 drop policy if exists "Users can read requirement actions in own organisation" on public.requirement_actions;
 drop policy if exists "Members can write requirement actions in own organisation" on public.requirement_actions;
+drop policy if exists "Users can read people in own organisation" on public.people;
+drop policy if exists "Members can write people in own organisation" on public.people;
+drop policy if exists "Users can read competency types in own organisation" on public.competency_types;
+drop policy if exists "Members can write competency types in own organisation" on public.competency_types;
+drop policy if exists "Users can read competency records in own organisation" on public.competency_records;
+drop policy if exists "Members can write competency records in own organisation" on public.competency_records;
+drop policy if exists "Users can read competency record documents in own organisation" on public.competency_record_documents;
+drop policy if exists "Members can write competency record documents in own organisation" on public.competency_record_documents;
+drop policy if exists "Users can read requirement competency types in own organisation" on public.requirement_competency_types;
+drop policy if exists "Members can write requirement competency types in own organisation" on public.requirement_competency_types;
 
 -- Organizations
 drop policy if exists "Users can read own organization" on public.organizations;
@@ -766,6 +859,136 @@ create policy "Members can write action object links in own organisation" on pub
               and actions.organisation_id = action_object_links.organisation_id
         )
 );
+
+drop policy if exists "Users can read people in own organisation" on public.people;
+create policy "Users can read people in own organisation" on public.people
+    for select using (
+        public.is_organization_member(organisation_id)
+    );
+
+drop policy if exists "Members can write people in own organisation" on public.people;
+create policy "Members can write people in own organisation" on public.people
+    for all using (
+        public.can_write_organization(organisation_id)
+    ) with check (
+        public.can_write_organization(organisation_id)
+    );
+
+drop policy if exists "Users can read competency types in own organisation" on public.competency_types;
+create policy "Users can read competency types in own organisation" on public.competency_types
+    for select using (
+        public.is_organization_member(organisation_id)
+    );
+
+drop policy if exists "Members can write competency types in own organisation" on public.competency_types;
+create policy "Members can write competency types in own organisation" on public.competency_types
+    for all using (
+        public.can_write_organization(organisation_id)
+    ) with check (
+        public.can_write_organization(organisation_id)
+    );
+
+drop policy if exists "Users can read competency records in own organisation" on public.competency_records;
+create policy "Users can read competency records in own organisation" on public.competency_records
+    for select using (
+        public.is_organization_member(organisation_id)
+    );
+
+drop policy if exists "Members can write competency records in own organisation" on public.competency_records;
+create policy "Members can write competency records in own organisation" on public.competency_records
+    for all using (
+        public.can_write_organization(organisation_id)
+        and exists (
+            select 1 from public.people
+            where people.id = competency_records.person_id
+              and people.organisation_id = competency_records.organisation_id
+        )
+        and exists (
+            select 1 from public.competency_types
+            where competency_types.id = competency_records.competency_type_id
+              and competency_types.organisation_id = competency_records.organisation_id
+        )
+    ) with check (
+        public.can_write_organization(organisation_id)
+        and exists (
+            select 1 from public.people
+            where people.id = competency_records.person_id
+              and people.organisation_id = competency_records.organisation_id
+        )
+        and exists (
+            select 1 from public.competency_types
+            where competency_types.id = competency_records.competency_type_id
+              and competency_types.organisation_id = competency_records.organisation_id
+        )
+    );
+
+drop policy if exists "Users can read competency record documents in own organisation" on public.competency_record_documents;
+create policy "Users can read competency record documents in own organisation" on public.competency_record_documents
+    for select using (
+        public.is_organization_member(organisation_id)
+    );
+
+drop policy if exists "Members can write competency record documents in own organisation" on public.competency_record_documents;
+create policy "Members can write competency record documents in own organisation" on public.competency_record_documents
+    for all using (
+        public.can_write_organization(organisation_id)
+        and exists (
+            select 1 from public.competency_records
+            where competency_records.id = competency_record_documents.competency_record_id
+              and competency_records.organisation_id = competency_record_documents.organisation_id
+        )
+        and exists (
+            select 1 from public.evidence_documents
+            where evidence_documents.id = competency_record_documents.document_id
+              and evidence_documents.organization_id = competency_record_documents.organisation_id
+        )
+    ) with check (
+        public.can_write_organization(organisation_id)
+        and exists (
+            select 1 from public.competency_records
+            where competency_records.id = competency_record_documents.competency_record_id
+              and competency_records.organisation_id = competency_record_documents.organisation_id
+        )
+        and exists (
+            select 1 from public.evidence_documents
+            where evidence_documents.id = competency_record_documents.document_id
+              and evidence_documents.organization_id = competency_record_documents.organisation_id
+        )
+    );
+
+drop policy if exists "Users can read requirement competency types in own organisation" on public.requirement_competency_types;
+create policy "Users can read requirement competency types in own organisation" on public.requirement_competency_types
+    for select using (
+        public.is_organization_member(organisation_id)
+    );
+
+drop policy if exists "Members can write requirement competency types in own organisation" on public.requirement_competency_types;
+create policy "Members can write requirement competency types in own organisation" on public.requirement_competency_types
+    for all using (
+        public.can_write_organization(organisation_id)
+        and exists (
+            select 1 from public.requirements
+            where requirements.id = requirement_competency_types.requirement_id
+              and requirements.organisation_id = requirement_competency_types.organisation_id
+        )
+        and exists (
+            select 1 from public.competency_types
+            where competency_types.id = requirement_competency_types.competency_type_id
+              and competency_types.organisation_id = requirement_competency_types.organisation_id
+        )
+    ) with check (
+        public.can_write_organization(organisation_id)
+        and exists (
+            select 1 from public.requirements
+            where requirements.id = requirement_competency_types.requirement_id
+              and requirements.organisation_id = requirement_competency_types.organisation_id
+        )
+        and exists (
+            select 1 from public.competency_types
+            where competency_types.id = requirement_competency_types.competency_type_id
+              and competency_types.organisation_id = requirement_competency_types.organisation_id
+        )
+    );
 
 -- Backfill action record fields for existing rows after all RLS policies are in place.
 

@@ -83,6 +83,19 @@ export type RequirementStatus = 'GREEN' | 'AMBER' | 'RED' | 'GREY';
 export type RequirementRiskLevel = 'Low' | 'Medium' | 'High' | 'Critical';
 export type ReviewFrequency = 'Weekly' | 'Monthly' | 'Quarterly' | 'Annually' | 'Custom';
 export type ActionStatus = 'Open' | 'In Progress' | 'Complete' | 'Cancelled';
+export type PersonType = 'Employee' | 'Contractor' | 'Agency' | 'Driver' | 'Visitor' | 'Consultant' | 'Other';
+export type CompetencyCategory =
+  | 'Safety'
+  | 'Equipment & Vehicle'
+  | 'Transport'
+  | 'Security'
+  | 'Quality & Compliance'
+  | 'Environmental'
+  | 'Operational'
+  | 'Professional'
+  | 'Industry Certification'
+  | 'Other';
+export type CompetencyStatus = 'Valid' | 'Expiring Soon' | 'Expired' | 'Missing' | 'Not Required';
 export type ActionUpdateType =
   | 'Note'
   | 'Progress Update'
@@ -218,6 +231,92 @@ export interface RequirementTemplatePack {
   name: string;
   description: string;
   requirements: RequirementTemplateItem[];
+}
+
+export interface Person {
+  id: string;
+  organisation_id: string;
+  employee_number: string | null;
+  first_name: string;
+  last_name: string;
+  display_name: string;
+  email: string | null;
+  department: string | null;
+  role: string | null;
+  person_type: PersonType;
+  start_date: string | null;
+  end_date: string | null;
+  active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompetencyType {
+  id: string;
+  organisation_id: string;
+  title: string;
+  category: CompetencyCategory;
+  description: string | null;
+  validity_period_months: number | null;
+  refresher_period_months: number | null;
+  evidence_required: boolean;
+  default_risk_level: RequirementRiskLevel;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompetencyRecord {
+  id: string;
+  organisation_id: string;
+  person_id: string;
+  competency_type_id: string;
+  completed_date: string | null;
+  expiry_date: string | null;
+  trainer: string | null;
+  provider: string | null;
+  certificate_number: string | null;
+  status: CompetencyStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompetencyRecordDocument {
+  id: string;
+  organisation_id: string;
+  competency_record_id: string;
+  document_id: string;
+  linked_by: string | null;
+  linked_at: string;
+}
+
+export interface RequirementCompetencyType {
+  id: string;
+  organisation_id: string;
+  requirement_id: string;
+  competency_type_id: string;
+  linked_by: string | null;
+  linked_at: string;
+}
+
+export interface CompetencyTemplateItem {
+  title: string;
+  category: CompetencyCategory;
+  description?: string;
+  validity_period_months?: number | null;
+  refresher_period_months?: number | null;
+  evidence_required?: boolean;
+  default_risk_level?: RequirementRiskLevel;
+}
+
+export interface CompetencyTemplatePack {
+  id: string;
+  name: string;
+  description: string;
+  category: CompetencyCategory;
+  competencies: CompetencyTemplateItem[];
 }
 
 export type CellStatus = 'Compliant' | 'Expiring Soon' | 'Expired' | 'Missing' | 'N/A';
