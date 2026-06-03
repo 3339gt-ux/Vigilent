@@ -83,6 +83,14 @@ export type RequirementStatus = 'GREEN' | 'AMBER' | 'RED' | 'GREY';
 export type RequirementRiskLevel = 'Low' | 'Medium' | 'High' | 'Critical';
 export type ReviewFrequency = 'Weekly' | 'Monthly' | 'Quarterly' | 'Annually' | 'Custom';
 export type ActionStatus = 'Open' | 'In Progress' | 'Complete' | 'Cancelled';
+export type ActionUpdateType =
+  | 'Note'
+  | 'Progress Update'
+  | 'Evidence Added'
+  | 'Status Change'
+  | 'Completion Note'
+  | 'Cancellation Note'
+  | 'Reopen Note';
 
 export interface Requirement {
   id: string;
@@ -139,6 +147,13 @@ export interface Action {
   owner: string | null;
   status: ActionStatus;
   due_date: string | null;
+  target_due_date?: string | null;
+  opened_at?: string | null;
+  opened_by?: string | null;
+  closed_at?: string | null;
+  closed_by?: string | null;
+  status_changed_at?: string | null;
+  status_changed_by?: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -156,6 +171,35 @@ export interface RequirementAction {
   action_id: string;
   organisation_id: string;
   created_at: string;
+}
+
+export interface ActionUpdate {
+  id: string;
+  organisation_id: string;
+  action_id: string;
+  user_id: string | null;
+  update_type: ActionUpdateType;
+  note: string;
+  created_at: string;
+}
+
+export interface ActionDocument {
+  id: string;
+  organisation_id: string;
+  action_id: string;
+  document_id: string;
+  linked_by: string | null;
+  linked_at: string;
+}
+
+export interface ActionObjectLink {
+  id: string;
+  organisation_id: string;
+  action_id: string;
+  object_type: string;
+  object_id: string;
+  linked_by: string | null;
+  linked_at: string;
 }
 
 export interface RequirementTemplateItem {

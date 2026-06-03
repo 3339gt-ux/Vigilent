@@ -3,8 +3,10 @@
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import Link from 'next/link';
+import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import { isDemoMode } from '@/lib/env';
+import type { Action } from '@/lib/types';
 import {
   ArrowRight,
   CheckCircle2,
@@ -30,10 +32,20 @@ export default function DashboardPage() {
     readinessScore,
     stats,
     documents,
+    actions,
+    frameworkRequirements,
+    requirementActions,
+    actionUpdates,
+    actionDocuments,
     auditPacks,
     auditLogs,
     resetDemoData,
-    uploadDocument
+    uploadDocument,
+    updateAction,
+    addActionUpdate,
+    linkDocumentToAction,
+    unlinkDocumentFromAction,
+    getDocumentSignedUrl
   } = useApp();
 
   const [uploadTitle, setUploadTitle] = useState('');
@@ -47,12 +59,21 @@ export default function DashboardPage() {
   const [resetMessage, setResetMessage] = useState('');
   const [resetError, setResetError] = useState('');
   const [isResettingDemo, setIsResettingDemo] = useState(false);
+  const [selectedAction, setSelectedAction] = useState<Action | null>(null);
 
   const greenRequirements = readinessReport.requirements.filter(requirement => requirement.status === 'GREEN').length;
   const amberRequirements = readinessReport.requirements.filter(requirement => requirement.status === 'AMBER').length;
   const redRequirements = readinessReport.requirements.filter(requirement => requirement.status === 'RED').length;
   const openActions = readinessReport.openActionItems.length;
   const unclassifiedDocs = documents.filter(document => document.status === 'Unclassified');
+  const selectedActionRequirements = selectedAction
+    ? frameworkRequirements.filter(requirement =>
+        requirementActions.some(link => link.action_id === selectedAction.id && link.requirement_id === requirement.id)
+      )
+    : [];
+  const currentSelectedAction = selectedAction
+    ? actions.find(action => action.id === selectedAction.id) || selectedAction
+    : null;
 
   const handleQuickUpload = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -314,6 +335,14 @@ export default function DashboardPage() {
                       <span className="text-[10px] text-muted-foreground block mt-1">
                         {item.reasons.find(reason => reason.level === 'RED' || reason.level === 'AMBER')?.message || 'Readiness warning detected.'}
                       </span>
+                      {item.openActions[0] && (
+                        <button
+                          onClick={() => setSelectedAction(item.openActions[0])}
+                          className="mt-2 text-[10px] font-bold text-indigo-500 hover:underline"
+                        >
+                          Open related action
+                        </button>
+                      )}
                     </div>
                     <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full shrink-0 border ${
                       item.status === 'RED'
@@ -387,12 +416,16 @@ export default function DashboardPage() {
             ) : (
               <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
                 {readinessReport.openActionItems.slice(0, 8).map(item => (
-                  <div key={item.action.id} className="p-3 bg-muted/40 border border-border/80 rounded-lg text-xs">
+                  <button
+                    key={item.action.id}
+                    onClick={() => setSelectedAction(item.action)}
+                    className="w-full text-left p-3 bg-muted/40 border border-border/80 rounded-lg text-xs hover:bg-muted/60 transition-colors"
+                  >
                     <span className="font-semibold block">{item.action.title}</span>
                     <span className="text-[10px] text-muted-foreground block mt-0.5">
-                      {item.requirements.map(requirement => requirement.title).join(', ') || 'No linked requirement'}{item.action.due_date ? ` | Due ${item.action.due_date}` : ''}
+                      {item.requirements.map(requirement => requirement.title).join(', ') || 'No linked requirement'}{item.action.target_due_date || item.action.due_date ? ` | Due ${item.action.target_due_date || item.action.due_date}` : ''}
                     </span>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
@@ -596,6 +629,19 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+      <ActionDetailDrawer
+        action={currentSelectedAction}
+        requirements={selectedActionRequirements}
+        documents={documents}
+        actionUpdates={actionUpdates}
+        actionDocuments={actionDocuments}
+        onClose={() => setSelectedAction(null)}
+        onUpdateAction={updateAction}
+        onAddUpdate={addActionUpdate}
+        onLinkDocument={linkDocumentToAction}
+        onUnlinkDocument={unlinkDocumentFromAction}
+        onOpenDocument={getDocumentSignedUrl}
+      />
     </div>
   );
 }

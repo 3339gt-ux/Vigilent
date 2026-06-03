@@ -2,7 +2,8 @@
 
 import React, { useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import type { Requirement, RequirementStatus } from '@/lib/types';
+import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
+import type { Action, Requirement, RequirementStatus } from '@/lib/types';
 import { calculateRequirementStatus, getLinkedDocumentsForRequirement } from '@/lib/requirementsEngine';
 import { REQUIREMENT_TEMPLATE_PACKS } from '@/lib/requirementTemplatePacks';
 import {
@@ -30,6 +31,8 @@ export default function RequirementsPage() {
     reviews,
     actions,
     requirementActions,
+    actionUpdates,
+    actionDocuments,
     createFrameworkRequirement,
     importRequirementTemplateItems,
     updateFrameworkRequirement,
@@ -37,6 +40,10 @@ export default function RequirementsPage() {
     unlinkDocumentFromRequirement,
     createActionForRequirement,
     updateAction,
+    addActionUpdate,
+    linkDocumentToAction,
+    unlinkDocumentFromAction,
+    getDocumentSignedUrl,
     readinessReport
   } = useApp();
 
@@ -62,11 +69,7 @@ export default function RequirementsPage() {
   const [actionDescription, setActionDescription] = useState('');
   const [actionOwner, setActionOwner] = useState('');
   const [actionDueDate, setActionDueDate] = useState('');
-  const [completingActionId, setCompletingActionId] = useState<string | null>(null);
-  const [cancellingActionId, setCancellingActionId] = useState<string | null>(null);
-  const [completionNote, setCompletionNote] = useState('');
-  const [completedDate, setCompletedDate] = useState('');
-  const [cancellationNote, setCancellationNote] = useState('');
+  const [selectedAction, setSelectedAction] = useState<Action | null>(null);
 
   const selectRequirement = (req: Requirement | null) => {
     setSelectedRequirement(req);
@@ -75,11 +78,6 @@ export default function RequirementsPage() {
     setActionDescription('');
     setActionOwner('');
     setActionDueDate('');
-    setCompletingActionId(null);
-    setCancellingActionId(null);
-    setCompletionNote('');
-    setCompletedDate('');
-    setCancellationNote('');
   };
 
   const assessedRequirements = useMemo(() => {
@@ -114,6 +112,14 @@ export default function RequirementsPage() {
   const selectedActions = actions.filter(action => selectedActionIds.has(action.id));
   const activeActions = selectedActions.filter(action => action.status === 'Open' || action.status === 'In Progress');
   const completedOrCancelledActions = selectedActions.filter(action => action.status === 'Complete' || action.status === 'Cancelled');
+  const selectedActionRequirements = selectedAction
+    ? frameworkRequirements.filter(requirement =>
+        requirementActions.some(link => link.action_id === selectedAction.id && link.requirement_id === requirement.id)
+      )
+    : [];
+  const currentSelectedAction = selectedAction
+    ? actions.find(action => action.id === selectedAction.id) || selectedAction
+    : null;
   const selectedPack = REQUIREMENT_TEMPLATE_PACKS.find(pack => pack.id === selectedPackId) || REQUIREMENT_TEMPLATE_PACKS[0];
   const existingRequirementKeys = new Set(
     frameworkRequirements.map(requirement => `${requirement.title.trim().toLowerCase()}::${requirement.category.trim().toLowerCase()}`)
@@ -212,55 +218,6 @@ export default function RequirementsPage() {
     setActionDescription('');
     setActionOwner('');
     setActionDueDate('');
-  };
-
-  const handleStartWork = async (actionId: string) => {
-    await updateAction(actionId, {
-      status: 'In Progress'
-    });
-  };
-
-  const handleCompleteActionSubmit = async (e: React.FormEvent, actionId: string) => {
-    e.preventDefault();
-    if (!completionNote.trim()) return;
-
-    const todayStr = new Date().toISOString().split('T')[0];
-    await updateAction(actionId, {
-      status: 'Complete',
-      completed_at: new Date(completedDate || todayStr).toISOString(),
-      completed_by: user?.id || null,
-      completion_note: completionNote.trim()
-    });
-
-    setCompletingActionId(null);
-    setCompletionNote('');
-    setCompletedDate('');
-  };
-
-  const handleCancelActionSubmit = async (e: React.FormEvent, actionId: string) => {
-    e.preventDefault();
-
-    await updateAction(actionId, {
-      status: 'Cancelled',
-      cancelled_at: new Date().toISOString(),
-      cancelled_by: user?.id || null,
-      cancellation_note: cancellationNote.trim() || null
-    });
-
-    setCancellingActionId(null);
-    setCancellationNote('');
-  };
-
-  const handleReopenAction = async (actionId: string) => {
-    await updateAction(actionId, {
-      status: 'Open',
-      completed_at: null,
-      completed_by: null,
-      completion_note: null,
-      cancelled_at: null,
-      cancelled_by: null,
-      cancellation_note: null
-    });
   };
 
   const toggleTemplateItem = (key: string) => {
@@ -535,160 +492,55 @@ export default function RequirementsPage() {
                   </form>
                 )}
 
-                {/* Active Actions */}
                 <div className="space-y-2">
                   <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">Active Actions</span>
                   {activeActions.length === 0 ? (
                     <p className="text-[10px] text-muted-foreground italic pl-1">No active actions.</p>
                   ) : (
                     activeActions.map(action => (
-                      <div key={action.id} className="p-3 bg-muted/40 border border-border/40 rounded-lg text-[11px] space-y-2">
-                        <div>
-                          <span className="font-bold block text-foreground">{action.title}</span>
-                          {action.description && <p className="text-muted-foreground text-[10px] mt-0.5 leading-normal">{action.description}</p>}
-                        </div>
-                        <div className="flex flex-wrap justify-between items-center gap-2 text-[10px] text-muted-foreground font-medium pt-1">
+                      <button
+                        key={action.id}
+                        onClick={() => setSelectedAction(action)}
+                        className="w-full text-left p-3 bg-muted/40 border border-border/40 rounded-lg text-[11px] space-y-2 hover:bg-muted/60 transition-colors"
+                      >
+                        <span className="font-bold block text-foreground">{action.title}</span>
+                        {action.description && <span className="text-muted-foreground text-[10px] block mt-0.5 leading-normal">{action.description}</span>}
+                        <span className="flex flex-wrap justify-between items-center gap-2 text-[10px] text-muted-foreground font-medium pt-1">
                           <span>Owner: <strong className="text-foreground">{action.owner || 'Unassigned'}</strong></span>
-                          <span>Due: <strong className="text-foreground">{action.due_date || 'No date'}</strong></span>
+                          <span>Due: <strong className="text-foreground">{action.target_due_date || action.due_date || 'No date'}</strong></span>
                           <span className={`px-1.5 py-0.5 text-[9px] rounded font-bold uppercase ${
                             action.status === 'In Progress' ? 'bg-amber-500/10 text-amber-500' : 'bg-indigo-500/10 text-indigo-500'
                           }`}>
                             {action.status}
                           </span>
-                        </div>
-
-                        {completingActionId === action.id ? (
-                          <form onSubmit={(e) => handleCompleteActionSubmit(e, action.id)} className="mt-3 p-2.5 bg-muted/65 border border-border/80 rounded space-y-2 text-[11px]">
-                            <div>
-                              <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">Completion Notes</label>
-                              <textarea
-                                required
-                                value={completionNote}
-                                onChange={e => setCompletionNote(e.target.value)}
-                                placeholder="What was verified? (Required)"
-                                rows={2}
-                                className="w-full px-2 py-1 bg-muted border border-border rounded text-[11px] outline-none resize-none"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">Completed Date</label>
-                              <input
-                                type="date"
-                                value={completedDate}
-                                onChange={e => setCompletedDate(e.target.value)}
-                                className="w-full px-2 py-1 bg-muted border border-border rounded text-[11px] outline-none"
-                              />
-                            </div>
-                            <div className="flex gap-2 pt-1">
-                              <button
-                                type="submit"
-                                className="flex-1 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[10px]"
-                              >
-                                Save Complete
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => { setCompletingActionId(null); setCompletionNote(''); setCompletedDate(''); }}
-                                className="px-2 py-1 bg-muted border border-border rounded hover:bg-muted/80 text-[10px]"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </form>
-                        ) : cancellingActionId === action.id ? (
-                          <form onSubmit={(e) => handleCancelActionSubmit(e, action.id)} className="mt-3 p-2.5 bg-muted/65 border border-border/80 rounded space-y-2 text-[11px]">
-                            <div>
-                              <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">Reason for Cancellation</label>
-                              <textarea
-                                value={cancellationNote}
-                                onChange={e => setCancellationNote(e.target.value)}
-                                placeholder="Why is this action cancelled?"
-                                rows={2}
-                                className="w-full px-2 py-1 bg-muted border border-border rounded text-[11px] outline-none resize-none"
-                              />
-                            </div>
-                            <div className="flex gap-2 pt-1">
-                              <button
-                                type="submit"
-                                className="flex-1 py-1 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded text-[10px]"
-                              >
-                                Save Cancel
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => { setCancellingActionId(null); setCancellationNote(''); }}
-                                className="px-2 py-1 bg-muted border border-border rounded hover:bg-muted/80 text-[10px]"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </form>
-                        ) : (
-                          <div className="flex gap-1.5 pt-1.5 border-t border-border/40">
-                            {action.status === 'Open' && (
-                              <button
-                                onClick={() => handleStartWork(action.id)}
-                                className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold rounded text-[10px]"
-                              >
-                                Start Work
-                              </button>
-                            )}
-                            <button
-                              onClick={() => { setCompletingActionId(action.id); setCancellingActionId(null); setCompletionNote(''); setCompletedDate(new Date().toISOString().split('T')[0]); }}
-                              className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold rounded text-[10px]"
-                            >
-                              Complete
-                            </button>
-                            <button
-                              onClick={() => { setCancellingActionId(action.id); setCompletingActionId(null); setCancellationNote(''); }}
-                              className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 font-bold rounded text-[10px] ml-auto"
-                            >
-                              Cancel Action
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                        </span>
+                      </button>
                     ))
                   )}
                 </div>
 
-                {/* Completed / Cancelled Actions */}
                 <div className="space-y-2 pt-2">
                   <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">Completed / Cancelled Actions</span>
                   {completedOrCancelledActions.length === 0 ? (
                     <p className="text-[10px] text-muted-foreground italic pl-1">No completed or cancelled actions.</p>
                   ) : (
                     completedOrCancelledActions.map(action => (
-                      <div key={action.id} className="p-3 bg-muted/20 border border-border/30 rounded-lg text-[11px] space-y-2">
-                        <div>
-                          <span className="font-bold block text-muted-foreground line-through">{action.title}</span>
-                          {action.description && <p className="text-muted-foreground/80 text-[10px] mt-0.5 line-through leading-normal">{action.description}</p>}
-                        </div>
-                        
-                        {action.status === 'Complete' && (
-                          <div className="p-2 bg-emerald-500/5 border border-emerald-500/10 rounded text-[10px] text-emerald-700 dark:text-emerald-400">
-                            <span className="font-bold">Completed:</span> {action.completed_at ? new Date(action.completed_at).toLocaleDateString() : 'N/A'}
-                            {action.completion_note && <p className="mt-1 italic leading-normal">&quot;{action.completion_note}&quot;</p>}
-                          </div>
-                        )}
-
-                        {action.status === 'Cancelled' && (
-                          <div className="p-2 bg-rose-500/5 border border-rose-500/10 rounded text-[10px] text-rose-700 dark:text-rose-400">
-                            <span className="font-bold">Cancelled:</span> {action.cancelled_at ? new Date(action.cancelled_at).toLocaleDateString() : 'N/A'}
-                            {action.cancellation_note && <p className="mt-1 italic leading-normal">&quot;{action.cancellation_note}&quot;</p>}
-                          </div>
-                        )}
-
-                        <div className="flex flex-wrap justify-between items-center gap-2 text-[10px] text-muted-foreground font-medium pt-1">
+                      <button
+                        key={action.id}
+                        onClick={() => setSelectedAction(action)}
+                        className="w-full text-left p-3 bg-muted/20 border border-border/30 rounded-lg text-[11px] space-y-2 hover:bg-muted/40 transition-colors"
+                      >
+                        <span className="font-bold block text-muted-foreground">{action.title}</span>
+                        <span className="flex flex-wrap justify-between items-center gap-2 text-[10px] text-muted-foreground font-medium pt-1">
                           <span>Owner: <strong className="text-foreground">{action.owner || 'Unassigned'}</strong></span>
-                          <button
-                            onClick={() => handleReopenAction(action.id)}
-                            className="px-2 py-0.5 bg-muted hover:bg-muted/80 border border-border rounded font-bold text-[9px]"
-                          >
-                            Reopen
-                          </button>
-                        </div>
-                      </div>
+                          <span>Closed: <strong className="text-foreground">{action.closed_at || action.completed_at || action.cancelled_at ? new Date(action.closed_at || action.completed_at || action.cancelled_at || '').toLocaleDateString() : 'Not recorded'}</strong></span>
+                          <span className={`px-1.5 py-0.5 text-[9px] rounded font-bold uppercase ${
+                            action.status === 'Complete' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'
+                          }`}>
+                            {action.status}
+                          </span>
+                        </span>
+                      </button>
                     ))
                   )}
                 </div>
@@ -919,6 +771,19 @@ export default function RequirementsPage() {
           </div>
         </div>
       )}
+      <ActionDetailDrawer
+        action={currentSelectedAction}
+        requirements={selectedActionRequirements}
+        documents={documents}
+        actionUpdates={actionUpdates}
+        actionDocuments={actionDocuments}
+        onClose={() => setSelectedAction(null)}
+        onUpdateAction={updateAction}
+        onAddUpdate={addActionUpdate}
+        onLinkDocument={linkDocumentToAction}
+        onUnlinkDocument={unlinkDocumentFromAction}
+        onOpenDocument={getDocumentSignedUrl}
+      />
     </div>
   );
 }
