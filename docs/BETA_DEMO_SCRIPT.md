@@ -1,6 +1,6 @@
 # Beta Demo Script
 
-Use this script for the first Vigilen beta walkthrough. Keep the demo framed as operational audit readiness, not certification or advice.
+Use this script for the first Vygilence beta walkthrough. Keep the demo framed as operational audit readiness, not certification or advice.
 
 ## Setup
 
@@ -45,10 +45,10 @@ Use this script for the first Vigilen beta walkthrough. Keep the demo framed as 
 
 ## Boundaries to Say Out Loud
 
-- Vigilen organises evidence and highlights operational gaps.
-- Vigilen does not provide legal advice.
-- Vigilen does not provide safety advice.
-- Vigilen does not certify compliance or guarantee audit outcomes.
+- Vygilence organises evidence and highlights operational gaps.
+- Vygilence does not provide legal advice.
+- Vygilence does not provide safety advice.
+- Vygilence does not certify compliance or guarantee audit outcomes.
 - Private evidence files are not public links.
 
 ## Close

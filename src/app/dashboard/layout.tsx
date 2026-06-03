@@ -5,7 +5,6 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useApp } from '@/context/AppContext';
 import { 
-  ShieldCheck, 
   LayoutDashboard, 
   FolderLock, 
   Grid, 
@@ -43,8 +42,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
-        <div className="w-12 h-12 rounded-xl bg-indigo-600 flex items-center justify-center animate-pulse">
-          <ShieldCheck className="w-6 h-6 text-white" />
+        <div className="w-12 h-12 flex items-center justify-center animate-pulse">
+          <img src="/brand/vygilence-mark.png" alt="Vygilence Logo" className="w-8 h-8 object-contain" />
         </div>
         <p className="text-xs text-muted-foreground font-medium animate-pulse">Checking credentials & workspace config...</p>
       </div>
@@ -73,7 +72,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="w-full bg-amber-500/10 dark:bg-amber-950/20 border-b border-amber-500/25 py-2 px-4 flex items-center justify-center gap-2">
         <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
         <span className="text-[11px] md:text-xs text-muted-foreground text-center leading-normal">
-          <strong>Notice:</strong> Vigilen is an evidence repository. It <strong>does not</strong> generate legal advice, build safety templates, or certify regulatory compliance.
+          <strong>Notice:</strong> Vygilence is an evidence repository. It <strong>does not</strong> generate legal advice, build safety templates, or certify regulatory compliance.
         </span>
       </div>
 
@@ -83,11 +82,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="space-y-8">
             {/* Logo */}
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center shadow-md shadow-indigo-600/20">
-                <ShieldCheck className="w-5 h-5 text-white" />
+              <div className="w-9 h-9 flex items-center justify-center">
+                <img 
+                  src={theme === 'dark' ? '/brand/vygilence-mark.png' : '/brand/vygilence-mark-light.png'} 
+                  alt="Vygilence Logo" 
+                  className="w-9 h-9 object-contain" 
+                />
               </div>
               <div>
-                <span className="font-extrabold tracking-tight text-sm block">Vigilen</span>
+                <span className="font-extrabold tracking-tight text-sm block">Vygilence</span>
                 <span className="text-[10px] text-muted-foreground block">{organization.name}</span>
               </div>
             </div>
@@ -157,8 +160,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex-1 flex flex-col min-w-0">
           <header className="lg:hidden h-14 bg-card border-b border-border/80 px-4 flex items-center justify-between z-40">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center">
-                <ShieldCheck className="w-4 h-4 text-white" />
+              <div className="w-8 h-8 flex items-center justify-center">
+                <img 
+                  src={theme === 'dark' ? '/brand/vygilence-mark.png' : '/brand/vygilence-mark-light.png'} 
+                  alt="Vygilence Logo" 
+                  className="w-8 h-8 object-contain" 
+                />
               </div>
               <span className="font-extrabold text-xs">{organization.name}</span>
             </div>

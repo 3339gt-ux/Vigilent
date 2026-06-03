@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useApp } from '@/context/AppContext';
-import { AlertCircle, ArrowLeft, Building2, Loader2, ShieldCheck } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Building2, Loader2 } from 'lucide-react';
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -56,8 +56,8 @@ export default function OnboardingPage() {
   if (isLoading || hasOrganization) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
-        <div className="w-12 h-12 rounded-xl bg-indigo-600 flex items-center justify-center animate-pulse">
-          <ShieldCheck className="w-6 h-6 text-white" />
+        <div className="w-12 h-12 flex items-center justify-center animate-pulse">
+          <img src="/brand/vygilence-mark.png" alt="Vygilence Logo" className="w-8 h-8 object-contain" />
         </div>
         <p className="text-xs text-muted-foreground font-medium animate-pulse">Checking workspace status...</p>
       </div>
@@ -175,8 +175,8 @@ export default function OnboardingPage() {
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[80px] pointer-events-none"></div>
         <div className="flex items-center gap-2 z-10">
-          <ShieldCheck className="w-6 h-6 text-indigo-500" />
-          <span className="font-bold tracking-wider">Vigilen</span>
+          <img src="/brand/vygilence-mark.png" alt="Vygilence Logo" className="w-6 h-6 object-contain" />
+          <span className="font-bold tracking-wider">Vygilence</span>
         </div>
         <div className="z-10 space-y-6 max-w-lg">
           <h2 className="text-4xl font-extrabold leading-tight">
@@ -187,7 +187,7 @@ export default function OnboardingPage() {
           </p>
         </div>
         <div className="z-10 text-[10px] text-zinc-500">
-          Vigilen uses Supabase Auth and organisation membership checks for production workspace access.
+          Vygilence uses Supabase Auth and organisation membership checks for production workspace access.
         </div>
       </div>
     </div>

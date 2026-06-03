@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useApp } from '@/context/AppContext';
-import { ShieldCheck, ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -86,8 +86,8 @@ export default function LoginPage() {
       <div className="flex flex-col justify-center px-8 sm:px-16 lg:px-24 py-12 relative">
         <div className="max-w-md w-full mx-auto space-y-8">
           <div className="flex flex-col gap-2">
-            <div className="w-12 h-12 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-600/25">
-              <ShieldCheck className="w-7 h-7 text-white" />
+            <div className="w-12 h-12 flex items-center justify-center">
+              <img src="/brand/vygilence-mark.png" alt="Vygilence Logo" className="w-12 h-12 object-contain" />
             </div>
             <h1 className="text-3xl font-extrabold tracking-tight mt-4" id="login-heading">
               Access your workspace
@@ -151,7 +151,7 @@ export default function LoginPage() {
                   className="mt-1 accent-indigo-600 rounded border-border"
                 />
                 <label htmlFor="login-disclaimer-checkbox" className="text-[11px] leading-relaxed text-muted-foreground">
-                  I acknowledge that Vigilen is an audit readiness repository and <strong>does not</strong> generate legal advice, safety statements, or formal claims of compliance.
+                  I acknowledge that Vygilence is an audit readiness repository and <strong>does not</strong> generate legal advice, safety statements, or formal claims of compliance.
                 </label>
               </div>
             </div>
@@ -198,22 +198,22 @@ export default function LoginPage() {
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[80px] pointer-events-none"></div>
 
         <div className="flex items-center gap-2 z-10">
-          <ShieldCheck className="w-6 h-6 text-indigo-500" />
-          <span className="font-bold tracking-wider">Vigilen</span>
+          <img src="/brand/vygilence-mark.png" alt="Vygilence Logo" className="w-6 h-6 object-contain" />
+          <span className="font-bold tracking-wider">Vygilence</span>
         </div>
 
         <div className="z-10 space-y-6 max-w-lg">
           <h2 className="text-4xl font-extrabold leading-tight">
-            See it. Solve it.<br />Stay Ready.
+            See it. Manage it.<br />Prove it.
           </h2>
           <blockquote className="border-l-2 border-indigo-500 pl-4 py-1 text-zinc-400 text-sm italic">
-            "Vigilen enabled our depot managers to track CPC cards and fork lift inspections in one simple view. We entered our last DVSA audit with total confidence."
+            "Vygilence enabled our depot managers to track CPC cards and fork lift inspections in one simple view. We entered our last DVSA audit with total confidence."
             <cite className="block text-xs text-zinc-500 font-semibold mt-2 not-italic">— Head of Logistics, Apex Freight Group</cite>
           </blockquote>
         </div>
 
         <div className="z-10 text-[10px] text-zinc-500">
-          Vigilen is a continuous evidence monitoring platform. Production security depends on completed Supabase Auth, RLS, and storage configuration.
+          Vygilence is a continuous evidence monitoring platform. Production security depends on completed Supabase Auth, RLS, and storage configuration.
         </div>
       </div>
     </div>

@@ -161,7 +161,7 @@ const profileFromAuthUser = (authUser: User): Profile => ({
   full_name:
     typeof authUser.user_metadata?.full_name === 'string' && authUser.user_metadata.full_name
       ? authUser.user_metadata.full_name
-      : authUser.email || 'Vigilen User',
+      : authUser.email || 'Vygilence User',
   role: 'Viewer',
   created_at: authUser.created_at || new Date().toISOString(),
   updated_at: new Date().toISOString()

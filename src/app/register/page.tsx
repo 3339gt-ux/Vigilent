@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useApp } from '@/context/AppContext';
-import { ShieldCheck, ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -69,8 +69,8 @@ export default function RegisterPage() {
       <div className="flex flex-col justify-center px-8 sm:px-16 lg:px-24 py-12 relative overflow-y-auto">
         <div className="max-w-md w-full mx-auto space-y-6 py-8">
           <div className="flex flex-col gap-2">
-            <div className="w-12 h-12 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-600/25">
-              <ShieldCheck className="w-7 h-7 text-white" />
+            <div className="w-12 h-12 flex items-center justify-center">
+              <img src="/brand/vygilence-mark.png" alt="Vygilence Logo" className="w-12 h-12 object-contain" />
             </div>
             <h1 className="text-3xl font-extrabold tracking-tight mt-4" id="register-heading">
               Initialize your workspace
@@ -143,7 +143,7 @@ export default function RegisterPage() {
                   className="mt-1 accent-indigo-600 rounded border-border"
                 />
                 <label htmlFor="register-disclaimer-checkbox" className="text-[11px] leading-relaxed text-muted-foreground">
-                  I acknowledge and agree that Vigilen functions purely as a tracking database. It <strong>does not</strong> generate legal advice, build regulatory safety statements, or claim compliance status on behalf of my business.
+                  I acknowledge and agree that Vygilence functions purely as a tracking database. It <strong>does not</strong> generate legal advice, build regulatory safety statements, or claim compliance status on behalf of my business.
                 </label>
               </div>
             </div>
@@ -181,8 +181,8 @@ export default function RegisterPage() {
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[80px] pointer-events-none"></div>
 
         <div className="flex items-center gap-2 z-10">
-          <ShieldCheck className="w-6 h-6 text-indigo-500" />
-          <span className="font-bold tracking-wider">Vigilen</span>
+          <img src="/brand/vygilence-mark.png" alt="Vygilence Logo" className="w-6 h-6 object-contain" />
+          <span className="font-bold tracking-wider">Vygilence</span>
         </div>
 
         <div className="z-10 space-y-6 max-w-lg">
@@ -201,7 +201,7 @@ export default function RegisterPage() {
         </div>
 
         <div className="z-10 text-[10px] text-zinc-500">
-          Vigilen is currently a prototype and requires production security hardening before live use.
+          Vygilence is currently a prototype and requires production security hardening before live use.
         </div>
       </div>
     </div>

@@ -4,11 +4,11 @@
 This version has breaking changes. APIs, conventions, and file structure may differ from older Next.js versions. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
-# Vigilen Repository Rules
+# Vygilence Repository Rules
 
-Vigilen is an audit readiness and evidence intelligence platform. It organizes audit evidence, tracks expiries, builds audit packs, and highlights missing records.
+Vygilence is an audit readiness and evidence intelligence platform. It organizes audit evidence, tracks expiries, builds audit packs, and highlights missing records.
 
-Vigilen must not:
+Vygilence must not:
 
 - provide legal advice
 - provide safety advice

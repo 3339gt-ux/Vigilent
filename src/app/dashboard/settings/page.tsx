@@ -223,7 +223,7 @@ export default function SettingsPage() {
 
           <div className="space-y-4 text-xs">
             <p className="text-muted-foreground text-[11px] leading-relaxed">
-              Integrate Vigilen tracking metrics directly into fleet logistics management systems, or import records programmatically.
+              Integrate Vygilence tracking metrics directly into fleet logistics management systems, or import records programmatically.
             </p>
 
             <div className="space-y-2">
