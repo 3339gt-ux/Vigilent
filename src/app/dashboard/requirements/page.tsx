@@ -4,8 +4,10 @@ import React, { useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import type { Requirement, RequirementStatus } from '@/lib/types';
 import { calculateRequirementStatus, getLinkedDocumentsForRequirement } from '@/lib/requirementsEngine';
+import { REQUIREMENT_TEMPLATE_PACKS } from '@/lib/requirementTemplatePacks';
 import {
   ClipboardList,
+  Download,
   Link as LinkIcon,
   Plus,
   Search,
@@ -29,6 +31,7 @@ export default function RequirementsPage() {
     actions,
     requirementActions,
     createFrameworkRequirement,
+    importRequirementTemplateItems,
     updateFrameworkRequirement,
     linkDocumentToRequirement,
     unlinkDocumentFromRequirement
@@ -38,6 +41,11 @@ export default function RequirementsPage() {
   const [selectedStatus, setSelectedStatus] = useState<'All' | RequirementStatus>('All');
   const [selectedRequirement, setSelectedRequirement] = useState<Requirement | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [selectedPackId, setSelectedPackId] = useState(REQUIREMENT_TEMPLATE_PACKS[0]?.id || '');
+  const [selectedTemplateKeys, setSelectedTemplateKeys] = useState<Set<string>>(new Set());
+  const [isImporting, setIsImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState('');
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('Operations');
   const [newOwner, setNewOwner] = useState('');
@@ -80,6 +88,37 @@ export default function RequirementsPage() {
     : new Set<string>();
 
   const selectedActions = actions.filter(action => selectedActionIds.has(action.id));
+  const selectedPack = REQUIREMENT_TEMPLATE_PACKS.find(pack => pack.id === selectedPackId) || REQUIREMENT_TEMPLATE_PACKS[0];
+  const existingRequirementKeys = new Set(
+    frameworkRequirements.map(requirement => `${requirement.title.trim().toLowerCase()}::${requirement.category.trim().toLowerCase()}`)
+  );
+  const templateKey = (title: string, category: string) => `${title.trim().toLowerCase()}::${category.trim().toLowerCase()}`;
+
+  const openImportModal = () => {
+    const pack = REQUIREMENT_TEMPLATE_PACKS.find(item => item.id === selectedPackId) || REQUIREMENT_TEMPLATE_PACKS[0];
+    setSelectedTemplateKeys(
+      new Set(
+        pack.requirements
+          .filter(item => !existingRequirementKeys.has(templateKey(item.title, item.category)))
+          .map(item => templateKey(item.title, item.category))
+      )
+    );
+    setImportMessage('');
+    setShowImportModal(true);
+  };
+
+  const handlePackChange = (packId: string) => {
+    const pack = REQUIREMENT_TEMPLATE_PACKS.find(item => item.id === packId);
+    setSelectedPackId(packId);
+    setSelectedTemplateKeys(
+      new Set(
+        (pack?.requirements || [])
+          .filter(item => !existingRequirementKeys.has(templateKey(item.title, item.category)))
+          .map(item => templateKey(item.title, item.category))
+      )
+    );
+    setImportMessage('');
+  };
 
   const handleCreateRequirement = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -130,6 +169,31 @@ export default function RequirementsPage() {
     await unlinkDocumentFromRequirement(selectedRequirement.id, documentId);
   };
 
+  const toggleTemplateItem = (key: string) => {
+    const next = new Set(selectedTemplateKeys);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setSelectedTemplateKeys(next);
+  };
+
+  const handleImportPack = async () => {
+    if (!selectedPack) return;
+    const selectedItems = selectedPack.requirements.filter(item => selectedTemplateKeys.has(templateKey(item.title, item.category)));
+    if (selectedItems.length === 0) return;
+
+    setIsImporting(true);
+    setImportMessage('');
+    try {
+      const created = await importRequirementTemplateItems(selectedItems);
+      setImportMessage(`Imported ${created.length} requirement${created.length === 1 ? '' : 's'}.`);
+      setSelectedTemplateKeys(new Set());
+    } catch (error) {
+      setImportMessage(error instanceof Error ? error.message : 'Template import failed.');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -139,12 +203,20 @@ export default function RequirementsPage() {
             Standards-agnostic operating requirements, evidence links, reviews, and actions.
           </p>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-md shadow-indigo-600/15"
-        >
-          <Plus className="w-4 h-4" /> Add Requirement
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={openImportModal}
+            className="flex items-center gap-2 px-4 py-2.5 bg-muted hover:bg-muted/80 text-foreground border border-border text-xs font-semibold rounded-lg"
+          >
+            <Download className="w-4 h-4" /> Import Template Pack
+          </button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-md shadow-indigo-600/15"
+          >
+            <Plus className="w-4 h-4" /> Add Requirement
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -377,6 +449,7 @@ export default function RequirementsPage() {
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Frequency</label>
                   <select value={newFrequency} onChange={event => setNewFrequency(event.target.value as Requirement['review_frequency'])} className="w-full px-3 py-2 bg-muted border border-border/80 rounded-lg outline-none">
+                    <option value="Weekly">Weekly</option>
                     <option value="Monthly">Monthly</option>
                     <option value="Quarterly">Quarterly</option>
                     <option value="Annually">Annually</option>
@@ -405,6 +478,131 @@ export default function RequirementsPage() {
                 Create Requirement
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showImportModal && selectedPack && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border w-full max-w-5xl rounded-2xl p-6 relative shadow-2xl max-h-[88vh] overflow-hidden flex flex-col">
+            <button onClick={() => setShowImportModal(false)} className="absolute top-4 right-4 p-1 hover:bg-muted rounded">
+              <X className="w-4 h-4" />
+            </button>
+            <div className="flex items-center gap-3 border-b border-border/60 pb-3 mb-5">
+              <div className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg">
+                <Download className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-foreground">Import Template Pack</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Preview and choose generic starter requirements before importing.</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0">
+              <div className="space-y-2 overflow-y-auto pr-1">
+                {REQUIREMENT_TEMPLATE_PACKS.map(pack => (
+                  <button
+                    key={pack.id}
+                    onClick={() => handlePackChange(pack.id)}
+                    className={`w-full text-left p-3 rounded-lg border text-xs transition-colors ${
+                      selectedPackId === pack.id ? 'border-indigo-500 bg-indigo-500/10' : 'border-border bg-muted/20 hover:bg-muted/40'
+                    }`}
+                  >
+                    <span className="font-extrabold block">{pack.name}</span>
+                    <span className="text-[10px] text-muted-foreground leading-relaxed block mt-1">{pack.description}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="lg:col-span-2 min-h-0 flex flex-col">
+                <div className="flex justify-between items-center gap-3 mb-3">
+                  <div>
+                    <h4 className="text-sm font-extrabold">{selectedPack.name}</h4>
+                    <p className="text-[11px] text-muted-foreground">{selectedPack.requirements.length} starter requirements</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setSelectedTemplateKeys(new Set(
+                        selectedPack.requirements
+                          .filter(item => !existingRequirementKeys.has(templateKey(item.title, item.category)))
+                          .map(item => templateKey(item.title, item.category))
+                      ))}
+                      className="px-2.5 py-1.5 bg-muted hover:bg-muted/80 border border-border rounded text-[10px] font-bold"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      onClick={() => setSelectedTemplateKeys(new Set())}
+                      className="px-2.5 py-1.5 bg-muted hover:bg-muted/80 border border-border rounded text-[10px] font-bold"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                <div className="border border-border rounded-xl overflow-y-auto divide-y divide-border/60 min-h-0">
+                  {selectedPack.requirements.map(item => {
+                    const key = templateKey(item.title, item.category);
+                    const isDuplicate = existingRequirementKeys.has(key);
+                    const isSelected = selectedTemplateKeys.has(key);
+                    return (
+                      <label key={key} className={`block p-3 text-xs ${isDuplicate ? 'opacity-55' : 'hover:bg-muted/30'}`}>
+                        <div className="flex gap-3 items-start">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            disabled={isDuplicate}
+                            onChange={() => toggleTemplateItem(key)}
+                            className="mt-1"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-extrabold">{item.title}</span>
+                              {isDuplicate && (
+                                <span className="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-[9px] font-bold uppercase">
+                                  Already present
+                                </span>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2 text-[10px] text-muted-foreground">
+                              <span>Category: <strong className="text-foreground">{item.category}</strong></span>
+                              <span>Owner: <strong className="text-foreground">{item.suggested_owner}</strong></span>
+                              <span>Review: <strong className="text-foreground">{item.review_frequency}</strong></span>
+                              <span>Risk: <strong className="text-foreground">{item.risk_level}</strong></span>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground mt-2">
+                              Evidence: {item.suggested_evidence_types.join(', ')}
+                            </p>
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+
+                {importMessage && (
+                  <div className="mt-3 p-2.5 rounded-lg border border-border bg-muted/30 text-[11px] text-muted-foreground">
+                    {importMessage}
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3 pt-4">
+                  <button
+                    onClick={() => setShowImportModal(false)}
+                    className="px-4 py-2 bg-muted hover:bg-muted/80 border border-border rounded-lg text-xs font-bold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleImportPack}
+                    disabled={isImporting || selectedTemplateKeys.size === 0}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/40 text-white rounded-lg text-xs font-bold"
+                  >
+                    {isImporting ? 'Importing...' : `Import ${selectedTemplateKeys.size} Selected`}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

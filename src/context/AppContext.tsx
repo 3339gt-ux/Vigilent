@@ -32,7 +32,8 @@ import {
   RequirementDocument,
   RequirementEvidenceType,
   Review,
-  Action
+  Action,
+  RequirementTemplateItem
 } from '@/lib/types';
 
 interface AppContextType {
@@ -81,6 +82,7 @@ interface AppContextType {
     risk_level: Requirement['risk_level'];
   }) => Promise<Requirement>;
   updateFrameworkRequirement: (requirementId: string, updates: Partial<Requirement>) => Promise<Requirement>;
+  importRequirementTemplateItems: (items: RequirementTemplateItem[]) => Promise<Requirement[]>;
   linkDocumentToRequirement: (requirementId: string, documentId: string) => Promise<void>;
   unlinkDocumentFromRequirement: (requirementId: string, documentId: string) => Promise<void>;
   createRequirement: (title: string, description: string, category: 'Vehicle' | 'Driver' | 'Facility' | 'General', frequency_months?: number, is_mandatory?: boolean) => Promise<ComplianceRequirement>;
@@ -589,6 +591,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return updated;
   };
 
+  const importRequirementTemplateItems = async (items: RequirementTemplateItem[]): Promise<Requirement[]> => {
+    const existingKeys = new Set(
+      frameworkRequirements.map(requirement => `${requirement.title.trim().toLowerCase()}::${requirement.category.trim().toLowerCase()}`)
+    );
+    const createdRequirements: Requirement[] = [];
+
+    for (const item of items) {
+      const key = `${item.title.trim().toLowerCase()}::${item.category.trim().toLowerCase()}`;
+      if (existingKeys.has(key)) continue;
+
+      const created = await dbService.addFrameworkRequirement({
+        title: item.title.trim(),
+        description: item.description || null,
+        owner: item.suggested_owner || null,
+        category: item.category,
+        status: 'GREY',
+        review_frequency: item.review_frequency,
+        review_date: null,
+        next_due_date: null,
+        risk_level: item.risk_level
+      });
+      await dbService.addRequirementEvidenceTypes(created.id, item.suggested_evidence_types);
+      existingKeys.add(key);
+      createdRequirements.push(created);
+    }
+
+    await loadWorkspaceCollections();
+    return createdRequirements;
+  };
+
   const linkDocumentToRequirement = async (requirementId: string, documentId: string): Promise<void> => {
     await dbService.linkDocumentToRequirement(requirementId, documentId);
     await loadWorkspaceCollections();
@@ -719,6 +751,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         deleteDocument,
         createFrameworkRequirement,
         updateFrameworkRequirement,
+        importRequirementTemplateItems,
         linkDocumentToRequirement,
         unlinkDocumentFromRequirement,
         createRequirement,

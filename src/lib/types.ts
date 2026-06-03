@@ -81,7 +81,7 @@ export interface EvidenceUploadInput {
 
 export type RequirementStatus = 'GREEN' | 'AMBER' | 'RED' | 'GREY';
 export type RequirementRiskLevel = 'Low' | 'Medium' | 'High' | 'Critical';
-export type ReviewFrequency = 'Monthly' | 'Quarterly' | 'Annually' | 'Custom';
+export type ReviewFrequency = 'Weekly' | 'Monthly' | 'Quarterly' | 'Annually' | 'Custom';
 export type ActionStatus = 'Open' | 'In Progress' | 'Closed';
 
 export interface Requirement {
@@ -150,6 +150,23 @@ export interface RequirementAction {
   action_id: string;
   organisation_id: string;
   created_at: string;
+}
+
+export interface RequirementTemplateItem {
+  title: string;
+  category: string;
+  suggested_owner: string;
+  review_frequency: ReviewFrequency;
+  risk_level: RequirementRiskLevel;
+  suggested_evidence_types: string[];
+  description?: string;
+}
+
+export interface RequirementTemplatePack {
+  id: string;
+  name: string;
+  description: string;
+  requirements: RequirementTemplateItem[];
 }
 
 export type CellStatus = 'Compliant' | 'Expiring Soon' | 'Expired' | 'Missing' | 'N/A';

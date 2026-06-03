@@ -743,6 +743,41 @@ export const dbService = {
     return getStorageItem('vigilen_requirement_evidence_types', MOCK_REQUIREMENT_EVIDENCE_TYPES);
   },
 
+  async addRequirementEvidenceTypes(
+    requirementId: string,
+    evidenceTypeNames: string[]
+  ): Promise<RequirementEvidenceType[]> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const uniqueNames = Array.from(new Set(evidenceTypeNames.map(name => name.trim()).filter(Boolean)));
+    if (uniqueNames.length === 0) return [];
+
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('requirement_evidence_types')
+        .insert(uniqueNames.map(name => ({
+          requirement_id: requirementId,
+          organisation_id: orgId,
+          name,
+          description: null
+        })))
+        .select();
+      if (error) throwSupabaseError('requirement_evidence_types.insert template import', error);
+      return data || [];
+    }
+
+    const evidenceTypes = getStorageItem('vigilen_requirement_evidence_types', MOCK_REQUIREMENT_EVIDENCE_TYPES);
+    const newEvidenceTypes: RequirementEvidenceType[] = uniqueNames.map(name => ({
+      id: `fw-ev-${Math.random().toString(36).substr(2, 9)}`,
+      requirement_id: requirementId,
+      organisation_id: orgId,
+      name,
+      description: null,
+      created_at: new Date().toISOString()
+    }));
+    setStorageItem('vigilen_requirement_evidence_types', [...evidenceTypes, ...newEvidenceTypes]);
+    return newEvidenceTypes;
+  },
+
   async getRequirementDocuments(): Promise<RequirementDocument[]> {
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
