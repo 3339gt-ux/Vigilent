@@ -62,6 +62,12 @@ Reviews record status, notes, review date, and next due date.
 
 Actions are standalone follow-up items that can be linked to requirements through `requirement_actions`.
 
+## Requirement Editing
+
+Requirements can be edited after creation or template import from the Requirements detail panel. Editable fields include title, description, category, owner, risk level, stored status, review frequency, last review date, next due date, and notes.
+
+Saving a requirement edit updates the organisation-scoped `requirements` row through the existing Supabase/demo data service, refreshes the workspace collections, and recalculates readiness. Requirement edits also write a `Requirement Updated` activity log entry with the user id and changed field names.
+
 ## Design Boundary
 
 Core logic must remain generic. Do not hard-code named external standards, clauses, copied requirement text, legal advice, safety advice, certification claims, or audit success guarantees into the requirements engine.

@@ -97,11 +97,14 @@ create table if not exists public.requirements (
     review_date date,
     next_due_date date,
     risk_level text not null default 'Medium',
+    notes text,
     organisation_id uuid not null references public.organizations(id) on delete cascade,
     created_by uuid references public.profiles(id) on delete set null,
     created_at timestamp with time zone default timezone('utc'::text, now()) not null,
     updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+alter table public.requirements add column if not exists notes text;
 
 create table if not exists public.requirement_evidence_types (
     id uuid primary key default uuid_generate_v4(),

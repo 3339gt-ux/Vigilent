@@ -665,6 +665,15 @@ const prepareActionLifecycleUpdate = (
   return { patch };
 };
 
+const describeChangedFields = (before: Partial<Requirement>, after: Partial<Requirement>) => {
+  const changed = Object.keys(after)
+    .filter(key => before[key as keyof Requirement] !== after[key as keyof Requirement])
+    .filter(key => !['updated_at'].includes(key));
+
+  if (changed.length === 0) return 'No field changes detected.';
+  return `Changed fields: ${changed.join(', ')}.`;
+};
+
 export const getCurrentSupabaseUserId = async (): Promise<string> => {
   if (!supabase) throw new Error('Supabase client is not configured.');
 
@@ -834,23 +843,35 @@ export const dbService = {
   async updateFrameworkRequirement(requirementId: string, updates: Partial<Requirement>): Promise<Requirement> {
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
+      const userId = await getCurrentSupabaseUserId();
+      const { data: existing, error: existingError } = await supabase!
+        .from('requirements')
+        .select('*')
+        .eq('id', requirementId)
+        .eq('organisation_id', orgId)
+        .single();
+      if (existingError) throwSupabaseError('requirements.select before update', existingError);
+
       const { data, error } = await supabase!
         .from('requirements')
-        .update(updates)
+        .update({ ...updates, updated_at: new Date().toISOString() })
         .eq('id', requirementId)
         .eq('organisation_id', orgId)
         .select()
         .single();
       if (error) throwSupabaseError('requirements.update active organisation', error);
+      await this.logActivity('Requirement Updated', `Updated requirement "${data.title}" by user ${userId}. ${describeChangedFields(existing, data)}`);
       return data;
     }
 
     const requirements = getStorageItem('vigilen_framework_requirements', MOCK_FRAMEWORK_REQUIREMENTS);
     const idx = requirements.findIndex((item: Requirement) => item.id === requirementId);
     if (idx === -1) throw new Error('Requirement not found');
+    const previous = requirements[idx];
     const updated = { ...requirements[idx], ...updates, updated_at: new Date().toISOString() };
     requirements[idx] = updated;
     setStorageItem('vigilen_framework_requirements', requirements);
+    await this.logActivity('Requirement Updated', `Updated requirement "${updated.title}" by user ${MOCK_PROFILE.id}. ${describeChangedFields(previous, updated)}`);
     return updated;
   },
 

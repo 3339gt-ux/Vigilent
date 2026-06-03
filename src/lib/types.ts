@@ -103,6 +103,7 @@ export interface Requirement {
   review_date: string | null;
   next_due_date: string | null;
   risk_level: RequirementRiskLevel;
+  notes?: string | null;
   organisation_id: string;
   created_by: string | null;
   created_at: string;
