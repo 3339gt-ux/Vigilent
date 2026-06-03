@@ -160,6 +160,23 @@ create table if not exists public.actions (
     cancellation_note text
 );
 
+-- Existing projects may already have public.actions. CREATE TABLE IF NOT EXISTS
+-- does not add newly introduced columns, so keep this migration block before
+-- any indexes, policies, or data backfills reference action record columns.
+alter table public.actions add column if not exists opened_at timestamp with time zone;
+alter table public.actions add column if not exists opened_by uuid references public.profiles(id) on delete set null;
+alter table public.actions add column if not exists target_due_date date;
+alter table public.actions add column if not exists closed_at timestamp with time zone;
+alter table public.actions add column if not exists closed_by uuid references public.profiles(id) on delete set null;
+alter table public.actions add column if not exists status_changed_at timestamp with time zone;
+alter table public.actions add column if not exists status_changed_by uuid references public.profiles(id) on delete set null;
+alter table public.actions add column if not exists completed_at timestamp with time zone;
+alter table public.actions add column if not exists completed_by uuid references public.profiles(id) on delete set null;
+alter table public.actions add column if not exists completion_note text;
+alter table public.actions add column if not exists cancelled_at timestamp with time zone;
+alter table public.actions add column if not exists cancelled_by uuid references public.profiles(id) on delete set null;
+alter table public.actions add column if not exists cancellation_note text;
+
 create table if not exists public.requirement_actions (
     id uuid primary key default uuid_generate_v4(),
     requirement_id uuid not null references public.requirements(id) on delete cascade,
@@ -744,22 +761,9 @@ create policy "Members can write action object links in own organisation" on pub
             where actions.id = action_object_links.action_id
               and actions.organisation_id = action_object_links.organisation_id
         )
-    );
+);
 
--- Ensure existing actions table is migrated
-alter table public.actions add column if not exists target_due_date date;
-alter table public.actions add column if not exists opened_at timestamp with time zone;
-alter table public.actions add column if not exists opened_by uuid references public.profiles(id) on delete set null;
-alter table public.actions add column if not exists closed_at timestamp with time zone;
-alter table public.actions add column if not exists closed_by uuid references public.profiles(id) on delete set null;
-alter table public.actions add column if not exists status_changed_at timestamp with time zone;
-alter table public.actions add column if not exists status_changed_by uuid references public.profiles(id) on delete set null;
-alter table public.actions add column if not exists completed_at timestamp with time zone;
-alter table public.actions add column if not exists completed_by uuid references public.profiles(id) on delete set null;
-alter table public.actions add column if not exists completion_note text;
-alter table public.actions add column if not exists cancelled_at timestamp with time zone;
-alter table public.actions add column if not exists cancelled_by uuid references public.profiles(id) on delete set null;
-alter table public.actions add column if not exists cancellation_note text;
+-- Backfill action record fields for existing rows after all RLS policies are in place.
 
 update public.actions
 set opened_at = coalesce(opened_at, created_at),
