@@ -1,4 +1,8 @@
 -- Vigilen Database Schema (PostgreSQL for Supabase)
+-- This script is idempotent and safe to re-run in Supabase SQL Editor.
+-- It uses create-if-not-exists, alter-add-if-not-exists, create-or-replace functions,
+-- repeatable grants, and drop-policy-if-exists before every create-policy statement.
+-- It does not drop tables or destroy user data.
 
 -- Enable UUID extension
 create extension if not exists "uuid-ossp";
@@ -242,11 +246,13 @@ drop policy if exists "Users can read logs in own organization" on public.audit_
 drop policy if exists "Users can insert logs in own organization" on public.audit_logs;
 
 -- Organizations
+drop policy if exists "Users can read own organization" on public.organizations;
 create policy "Users can read own organization" on public.organizations
     for select using (
         public.is_organization_member(id)
     );
 
+drop policy if exists "Users can update own organization" on public.organizations;
 create policy "Users can update own organization" on public.organizations
     for update using (
         public.is_organization_owner(id)
@@ -255,12 +261,14 @@ create policy "Users can update own organization" on public.organizations
     );
 
 -- Profiles
+drop policy if exists "Users can read own profile" on public.profiles;
 create policy "Users can read own profile" on public.profiles
     for select using (
         id = auth.uid()
         or public.is_organization_member(organization_id)
     );
 
+drop policy if exists "Users can update own profile" on public.profiles;
 create policy "Users can update own profile" on public.profiles
     for update using (
         id = auth.uid()
@@ -273,11 +281,13 @@ create policy "Users can update own profile" on public.profiles
     );
 
 -- Organization Members
+drop policy if exists "Users can read members in own organization" on public.organization_members;
 create policy "Users can read members in own organization" on public.organization_members
     for select using (
         public.is_organization_member(organization_id)
     );
 
+drop policy if exists "Owners can manage members in own organization" on public.organization_members;
 create policy "Owners can manage members in own organization" on public.organization_members
     for all using (
         public.is_organization_owner(organization_id)
@@ -286,6 +296,7 @@ create policy "Owners can manage members in own organization" on public.organiza
     );
 
 -- Compliance Requirements
+drop policy if exists "Users can read/write requirements in own organization" on public.compliance_requirements;
 create policy "Users can read/write requirements in own organization" on public.compliance_requirements
     for all using (
         organization_id = public.current_organization_id()
@@ -294,6 +305,7 @@ create policy "Users can read/write requirements in own organization" on public.
     );
 
 -- Evidence Documents
+drop policy if exists "Users can read/write documents in own organization" on public.evidence_documents;
 create policy "Users can read/write documents in own organization" on public.evidence_documents
     for all using (
         organization_id = public.current_organization_id()
@@ -302,6 +314,7 @@ create policy "Users can read/write documents in own organization" on public.evi
     );
 
 -- Matrix Cells
+drop policy if exists "Users can read/write matrix cells in own organization" on public.matrix_cells;
 create policy "Users can read/write matrix cells in own organization" on public.matrix_cells
     for all using (
         organization_id = public.current_organization_id()
@@ -310,6 +323,7 @@ create policy "Users can read/write matrix cells in own organization" on public.
     );
 
 -- Audit Packs
+drop policy if exists "Users can read/write audit packs in own organization" on public.audit_packs;
 create policy "Users can read/write audit packs in own organization" on public.audit_packs
     for all using (
         organization_id = public.current_organization_id()
@@ -318,11 +332,13 @@ create policy "Users can read/write audit packs in own organization" on public.a
     );
 
 -- Audit Logs
+drop policy if exists "Users can read logs in own organization" on public.audit_logs;
 create policy "Users can read logs in own organization" on public.audit_logs
     for select using (
         organization_id = public.current_organization_id()
     );
 
+drop policy if exists "Users can insert logs in own organization" on public.audit_logs;
 create policy "Users can insert logs in own organization" on public.audit_logs
     for insert with check (
         organization_id = public.current_organization_id()
