@@ -9,7 +9,8 @@ import {
   EvidenceDocument,
   Requirement
 } from '@/lib/types';
-import { CheckCircle2, FileText, Link as LinkIcon, Play, RotateCcw, X } from 'lucide-react';
+import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
+import { CheckCircle2, FileText, Link as LinkIcon, Loader2, Play, RotateCcw, Upload, X } from 'lucide-react';
 
 type ActionDetailDrawerProps = {
   action: Action | null;
@@ -22,6 +23,7 @@ type ActionDetailDrawerProps = {
   onAddUpdate: (actionId: string, updateType: ActionUpdateType, note: string) => Promise<ActionUpdate>;
   onLinkDocument: (actionId: string, documentId: string) => Promise<void>;
   onUnlinkDocument: (actionId: string, documentId: string) => Promise<void>;
+  onUploadAttachment: (actionId: string, file: File) => Promise<EvidenceDocument>;
   onOpenDocument: (documentId: string) => Promise<string>;
 };
 
@@ -47,6 +49,7 @@ export function ActionDetailDrawer({
   onAddUpdate,
   onLinkDocument,
   onUnlinkDocument,
+  onUploadAttachment,
   onOpenDocument
 }: ActionDetailDrawerProps) {
   const [updateType, setUpdateType] = useState<ActionUpdateType>('Note');
@@ -55,8 +58,12 @@ export function ActionDetailDrawer({
   const [completionNote, setCompletionNote] = useState('');
   const [cancellationNote, setCancellationNote] = useState('');
   const [reopenNote, setReopenNote] = useState('');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFileName, setUploadFileName] = useState('');
+  const [uploadMessage, setUploadMessage] = useState('');
   const [error, setError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   const linkedDocumentIds = useMemo(
     () => new Set(actionDocuments.filter(link => link.action_id === action?.id).map(link => link.document_id)),
@@ -99,6 +106,24 @@ export function ActionDetailDrawer({
       await onLinkDocument(action.id, selectedDocumentId);
       setSelectedDocumentId('');
     });
+  };
+
+  const handleUploadAttachment = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!uploadFile) return;
+    setIsUploading(true);
+    setError('');
+    setUploadMessage('');
+    try {
+      const doc = await onUploadAttachment(action.id, uploadFile);
+      setUploadFile(null);
+      setUploadFileName('');
+      setUploadMessage(`Uploaded "${doc.original_file_name || doc.file_name}" to private Evidence Vault category Actions and linked it to this action.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Attachment upload failed.');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleOpenDocument = async (documentId: string) => {
@@ -195,6 +220,9 @@ export function ActionDetailDrawer({
 
           <section className="space-y-3 text-xs">
             <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Attachments</h3>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              Attachments are normal private Evidence Vault records. New uploads are saved in the Actions category and opened through temporary signed URLs only.
+            </p>
             {linkedDocuments.length === 0 ? (
               <p className="text-muted-foreground italic">No evidence documents attached to this action.</p>
             ) : (
@@ -231,6 +259,38 @@ export function ActionDetailDrawer({
                 <LinkIcon className="w-4 h-4" />
               </button>
             </div>
+            <form onSubmit={handleUploadAttachment} className="p-3 bg-muted/30 border border-border/60 rounded-lg space-y-2">
+              <div className="flex items-center gap-2">
+                <Upload className="w-4 h-4 text-indigo-500" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Upload New Attachment</span>
+              </div>
+              <input
+                type="file"
+                accept={evidenceAcceptAttribute}
+                onChange={event => {
+                  const file = event.target.files?.[0] || null;
+                  setUploadFile(file);
+                  setUploadFileName(file?.name || '');
+                  setUploadMessage('');
+                }}
+                className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-[11px]"
+              />
+              <p className="text-[9px] text-muted-foreground">
+                {uploadFileName || `PDF, DOCX, XLSX, PNG, JPG, or JPEG. Max ${formatMaxEvidenceUploadSize()}.`}
+              </p>
+              {uploadMessage && (
+                <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded text-[10px] text-emerald-600 dark:text-emerald-300">
+                  {uploadMessage}
+                </div>
+              )}
+              <button
+                disabled={!uploadFile || isUploading}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/40 text-white font-bold rounded-lg"
+              >
+                {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                {isUploading ? 'Uploading...' : 'Upload Attachment'}
+              </button>
+            </form>
           </section>
 
           <section className="space-y-3 text-xs">

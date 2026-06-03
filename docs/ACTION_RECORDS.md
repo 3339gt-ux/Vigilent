@@ -38,6 +38,15 @@ Manual updates support `Note` and `Progress Update`. System lifecycle events use
 
 Action attachments use existing private Evidence Vault records only. Files are not uploaded to a separate action storage system. Opening an attachment uses the existing signed URL flow after the document record is confirmed inside the active organisation.
 
+Users can attach evidence in two ways:
+
+- Link an existing Evidence Vault document.
+- Upload a new file directly inside the Action Record drawer.
+
+Direct action uploads create a normal private Evidence Vault document with category `Actions`, then create an `action_documents` link to the action. The action timeline records `Evidence Added` with `Uploaded attachment: {filename}`. The uploaded document remains visible in Evidence Vault and can be filtered by the `Actions` category.
+
+When a user opens a document in Evidence Vault, any linked actions are shown with title, status, due date, owner, related requirement, and an `Open linked action` button.
+
 ## Security
 
 RLS keeps action records, timeline updates, attachments, and generic links organisation-scoped. Viewers can read records for their organisation. Write access uses the existing organisation write helper so viewer roles remain read-only.
@@ -47,4 +56,3 @@ RLS keeps action records, timeline updates, attachments, and generic links organ
 - Requirement detail action rows open the Action Record drawer.
 - Dashboard Open Actions opens the same drawer.
 - Dashboard Top Risks links to the related open action when one exists.
-

@@ -43,6 +43,7 @@ export default function RequirementsPage() {
     addActionUpdate,
     linkDocumentToAction,
     unlinkDocumentFromAction,
+    uploadActionAttachment,
     getDocumentSignedUrl,
     readinessReport
   } = useApp();
@@ -782,6 +783,7 @@ export default function RequirementsPage() {
         onAddUpdate={addActionUpdate}
         onLinkDocument={linkDocumentToAction}
         onUnlinkDocument={unlinkDocumentFromAction}
+        onUploadAttachment={uploadActionAttachment}
         onOpenDocument={getDocumentSignedUrl}
       />
     </div>

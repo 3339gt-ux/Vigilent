@@ -39,6 +39,19 @@ Run in demo mode and production mode where Supabase is configured.
 - Confirm the attachment appears in the drawer.
 - Open the attachment and confirm it uses a temporary signed URL.
 - Unlink the attachment and confirm it disappears from the action.
+- Open an action and use `Upload Attachment` to select a PDF, DOCX, XLSX, PNG, JPG, or JPEG.
+- Confirm unsupported type and oversized file validation uses the existing Evidence Vault rules.
+- Confirm the upload creates a private Evidence Vault document with category `Actions`.
+- Confirm the new document is automatically linked through `action_documents`.
+- Confirm the action timeline contains `Evidence Added` with `Uploaded attachment: {filename}`.
+- Open Evidence Vault, filter category `Actions`, and confirm the uploaded document appears.
+
+## Evidence Vault Action Links
+
+- Select a document that is linked to one action.
+- Confirm the detail panel shows linked action title, status, due date, owner, and related requirement.
+- Click `Open linked action` and confirm the Action Record drawer opens.
+- Link the same document to a second action and confirm both linked actions are shown.
 
 ## Dashboard
 
@@ -56,4 +69,3 @@ Run in demo mode and production mode where Supabase is configured.
 
 - Run `npm run lint`.
 - Run `npm run build`.
-

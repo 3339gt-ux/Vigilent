@@ -109,6 +109,7 @@ interface AppContextType {
   addActionUpdate: (actionId: string, updateType: ActionUpdateType, note: string) => Promise<ActionUpdate>;
   linkDocumentToAction: (actionId: string, documentId: string) => Promise<void>;
   unlinkDocumentFromAction: (actionId: string, documentId: string) => Promise<void>;
+  uploadActionAttachment: (actionId: string, file: File) => Promise<EvidenceDocument>;
   createRequirement: (title: string, description: string, category: 'Vehicle' | 'Driver' | 'Facility' | 'General', frequency_months?: number, is_mandatory?: boolean) => Promise<ComplianceRequirement>;
   createPack: (name: string, description: string, requirementIds: string[], docIds: string[]) => Promise<AuditPack>;
   updatePackStatus: (packId: string, status: 'Draft' | 'Ready' | 'Sent' | 'Archived') => Promise<void>;
@@ -735,6 +736,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await loadWorkspaceCollections();
   };
 
+  const uploadActionAttachment = async (actionId: string, file: File): Promise<EvidenceDocument> => {
+    const title = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim() || file.name;
+    const doc = await dbService.uploadDocumentFile({
+      file,
+      title,
+      category: 'Actions',
+      expiry_date: null,
+      issue_date: new Date().toISOString().split('T')[0],
+      metadata: {
+        source: 'action_attachment',
+        action_id: actionId
+      },
+      tags: ['action-attachment'],
+      status: 'Unclassified'
+    });
+    await dbService.linkDocumentToAction(actionId, doc.id, `Uploaded attachment: ${doc.original_file_name || file.name}`);
+    await loadWorkspaceCollections();
+    return doc;
+  };
+
   const createRequirement = async (
     title: string,
     description: string,
@@ -868,6 +889,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addActionUpdate,
         linkDocumentToAction,
         unlinkDocumentFromAction,
+        uploadActionAttachment,
         createRequirement,
         createPack,
         updatePackStatus,

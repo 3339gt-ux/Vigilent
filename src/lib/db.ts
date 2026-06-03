@@ -1173,9 +1173,10 @@ export const dbService = {
     return newUpdate;
   },
 
-  async linkDocumentToAction(actionId: string, documentId: string): Promise<ActionDocument> {
+  async linkDocumentToAction(actionId: string, documentId: string, timelineNote?: string): Promise<ActionDocument> {
     const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
     const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+    const note = timelineNote?.trim() || `Evidence document ${documentId} linked to action.`;
 
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
@@ -1184,7 +1185,7 @@ export const dbService = {
         .select()
         .single();
       if (error) throwSupabaseError('action_documents.insert active organisation', error);
-      await this.addActionUpdate(actionId, 'Evidence Added', `Evidence document ${documentId} linked to action.`);
+      await this.addActionUpdate(actionId, 'Evidence Added', note);
       await this.logActivity('Action Evidence Linked', `Linked evidence document ${documentId} to action ${actionId}.`);
       return data;
     }
@@ -1202,7 +1203,7 @@ export const dbService = {
     };
     links.push(newLink);
     setStorageItem('vigilen_action_documents', links);
-    await this.addActionUpdate(actionId, 'Evidence Added', `Evidence document ${documentId} linked to action.`);
+    await this.addActionUpdate(actionId, 'Evidence Added', note);
     await this.logActivity('Action Evidence Linked', `Linked evidence document ${documentId} to action ${actionId}.`);
     return newLink;
   },

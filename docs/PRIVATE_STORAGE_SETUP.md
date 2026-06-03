@@ -26,6 +26,8 @@ organisations/{organisation_id}/documents/{document_id}/{safe_filename}
 
 The application generates `document_id`, sanitises the filename, uploads the private object, and then creates the `evidence_documents` row.
 
+Action Record uploads use the same path and bucket. A file uploaded inside an Action Detail drawer is still a normal `evidence_documents` record with category `Actions`; the app then links it to the action via `action_documents`.
+
 ## Required Environment
 
 ```env
@@ -62,3 +64,4 @@ Apply the SQL files in this order:
 - Owners/Admins can soft-delete document rows without deleting storage objects.
 - No evidence file public URLs are produced or stored.
 - Signed URLs expire after `NEXT_PUBLIC_VIGILEN_SIGNED_URL_TTL_SECONDS`.
+- Files uploaded from Action Records appear in Evidence Vault under category `Actions`.

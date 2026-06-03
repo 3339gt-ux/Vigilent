@@ -45,6 +45,7 @@ export default function DashboardPage() {
     addActionUpdate,
     linkDocumentToAction,
     unlinkDocumentFromAction,
+    uploadActionAttachment,
     getDocumentSignedUrl
   } = useApp();
 
@@ -640,6 +641,7 @@ export default function DashboardPage() {
         onAddUpdate={addActionUpdate}
         onLinkDocument={linkDocumentToAction}
         onUnlinkDocument={unlinkDocumentFromAction}
+        onUploadAttachment={uploadActionAttachment}
         onOpenDocument={getDocumentSignedUrl}
       />
     </div>
