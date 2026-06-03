@@ -22,7 +22,7 @@ The core schema intentionally does not create or drop `storage.objects` policies
 
 ## Object Path
 
-Vigilen writes files only under:
+Vygilence writes files only under:
 
 ```text
 organisations/{organisation_id}/documents/{document_id}/{safe_filename}
@@ -33,6 +33,8 @@ The application creates `document_id`, sanitises the filename, uploads the file,
 ## Required Storage Policies
 
 `supabase/storage_setup.sql` creates these policies on `storage.objects` only when they are missing:
+
+The policy names still use the original `Vigilen` prefix for compatibility with existing Supabase projects. Do not rename them unless you plan a deliberate policy migration.
 
 - `Vigilen evidence read by organization members`
   - Command: `SELECT`
@@ -49,7 +51,7 @@ The application creates `document_id`, sanitises the filename, uploads the file,
   - Role: `authenticated`
   - Allows object updates only inside the user's writable organisation path.
 
-No storage delete policy is required for MVP. Vigilen soft-deletes document records and leaves files in the private bucket.
+No storage delete policy is required for MVP. Vygilence soft-deletes document records and leaves files in the private bucket.
 
 ## Supabase UI Checks
 

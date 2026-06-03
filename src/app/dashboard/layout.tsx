@@ -3,6 +3,7 @@
 import React, { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useApp } from '@/context/AppContext';
 import { 
   LayoutDashboard, 
@@ -43,7 +44,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
         <div className="w-12 h-12 flex items-center justify-center animate-pulse">
-          <img src="/brand/vygilence-mark.png" alt="Vygilence Logo" className="w-8 h-8 object-contain" />
+          <Image src="/brand/vygilence-mark.png" alt="Vygilence Logo" width={32} height={32} className="object-contain" />
         </div>
         <p className="text-xs text-muted-foreground font-medium animate-pulse">Checking credentials & workspace config...</p>
       </div>
@@ -83,10 +84,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {/* Logo */}
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 flex items-center justify-center">
-                <img 
-                  src={theme === 'dark' ? '/brand/vygilence-mark.png' : '/brand/vygilence-mark-light.png'} 
-                  alt="Vygilence Logo" 
-                  className="w-9 h-9 object-contain" 
+                <Image
+                  src={theme === 'dark' ? '/brand/vygilence-mark.png' : '/brand/vygilence-mark-light.png'}
+                  alt="Vygilence Logo"
+                  width={36}
+                  height={36}
+                  className="object-contain"
                 />
               </div>
               <div>
@@ -161,10 +164,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <header className="lg:hidden h-14 bg-card border-b border-border/80 px-4 flex items-center justify-between z-40">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 flex items-center justify-center">
-                <img 
-                  src={theme === 'dark' ? '/brand/vygilence-mark.png' : '/brand/vygilence-mark-light.png'} 
-                  alt="Vygilence Logo" 
-                  className="w-8 h-8 object-contain" 
+                <Image
+                  src={theme === 'dark' ? '/brand/vygilence-mark.png' : '/brand/vygilence-mark-light.png'}
+                  alt="Vygilence Logo"
+                  width={32}
+                  height={32}
+                  className="object-contain"
                 />
               </div>
               <span className="font-extrabold text-xs">{organization.name}</span>

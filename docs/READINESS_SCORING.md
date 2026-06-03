@@ -1,6 +1,6 @@
 # Readiness Scoring
 
-Vigilen readiness scoring is intentionally simple and transparent.
+Vygilence readiness scoring is intentionally simple and transparent.
 
 ## Point Values
 

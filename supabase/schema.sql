@@ -1,4 +1,5 @@
--- Vigilen Database Schema (PostgreSQL for Supabase)
+-- Vygilence Database Schema (PostgreSQL for Supabase)
+-- Some legacy Vigilen object names may remain where renaming would affect existing deployments.
 -- This script is idempotent and safe to re-run in Supabase SQL Editor.
 -- It uses create-if-not-exists, alter-add-if-not-exists, create-or-replace functions,
 -- repeatable grants, and drop-policy-if-exists before every create-policy statement.

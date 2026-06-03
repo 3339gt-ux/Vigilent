@@ -11,7 +11,7 @@ Status: partially implemented.
 - Demo login and registration remain available only with `NEXT_PUBLIC_VIGILEN_APP_MODE=demo`.
 - Production login, signup, logout, session loading, and password reset now use Supabase Auth.
 - Authenticated users without an organization are routed to onboarding.
-- Required next step: test Supabase email-confirmation settings and add an update-password callback page if password recovery should complete inside Vigilen.
+- Required next step: test Supabase email-confirmation settings and add an update-password callback page if password recovery should complete inside Vygilence.
 
 ## Tenant Isolation
 

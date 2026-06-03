@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useApp } from '@/context/AppContext';
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 
@@ -87,7 +88,7 @@ export default function LoginPage() {
         <div className="max-w-md w-full mx-auto space-y-8">
           <div className="flex flex-col gap-2">
             <div className="w-12 h-12 flex items-center justify-center">
-              <img src="/brand/vygilence-mark.png" alt="Vygilence Logo" className="w-12 h-12 object-contain" />
+              <Image src="/brand/vygilence-mark.png" alt="Vygilence Logo" width={48} height={48} className="object-contain" />
             </div>
             <h1 className="text-3xl font-extrabold tracking-tight mt-4" id="login-heading">
               Access your workspace
@@ -198,7 +199,7 @@ export default function LoginPage() {
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[80px] pointer-events-none"></div>
 
         <div className="flex items-center gap-2 z-10">
-          <img src="/brand/vygilence-mark.png" alt="Vygilence Logo" className="w-6 h-6 object-contain" />
+          <Image src="/brand/vygilence-mark.png" alt="Vygilence Logo" width={24} height={24} className="object-contain" />
           <span className="font-bold tracking-wider">Vygilence</span>
         </div>
 

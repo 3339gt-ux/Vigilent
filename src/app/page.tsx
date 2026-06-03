@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useApp } from '@/context/AppContext';
 import { 
   FileCheck, 
@@ -45,10 +46,12 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 flex items-center justify-center">
-              <img 
-                src={theme === 'dark' ? '/brand/vygilence-mark.png' : '/brand/vygilence-mark-light.png'} 
-                alt="Vygilence Logo" 
-                className="w-10 h-10 object-contain" 
+              <Image
+                src={theme === 'dark' ? '/brand/vygilence-mark.png' : '/brand/vygilence-mark-light.png'}
+                alt="Vygilence Logo"
+                width={40}
+                height={40}
+                className="object-contain"
               />
             </div>
             <div>
@@ -110,7 +113,7 @@ export default function LandingPage() {
             </h1>
             
             <p className="max-w-2xl mx-auto text-lg sm:text-xl text-muted-foreground mb-10 leading-relaxed">
-              Vygilence is the Audit Readiness and Evidence Intelligence Platform for transport, warehousing, logistics and compliance-driven businesses. 
+              Vygilence is the Audit Readiness and Evidence Intelligence Platform for transport, warehousing, logistics and compliance-driven businesses.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
@@ -499,7 +502,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-foreground font-bold">
-                <img src="/brand/vygilence-mark.png" alt="Vygilence Logo" className="w-5 h-5 object-contain" />
+                <Image src="/brand/vygilence-mark.png" alt="Vygilence Logo" width={20} height={20} className="object-contain" />
                 <span>Vygilence</span>
               </div>
               <p className="max-w-[200px] leading-relaxed">

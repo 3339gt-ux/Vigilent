@@ -1,4 +1,4 @@
-# Vigilen Repository Audit Report
+# Vygilence Repository Audit Report
 
 Date: 2026-06-02
 

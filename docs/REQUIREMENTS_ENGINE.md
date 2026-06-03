@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The Requirements Framework is the standards-agnostic foundation for Vigilen. It models operational things that must exist, be maintained, checked, or demonstrated without making any external framework the primary object.
+The Requirements Framework is the standards-agnostic foundation for Vygilence. It models operational things that must exist, be maintained, checked, or demonstrated without making any external framework the primary object.
 
 Future framework mapping can add tables such as:
 

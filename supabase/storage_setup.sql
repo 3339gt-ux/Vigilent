@@ -1,4 +1,5 @@
--- Vigilen private evidence storage setup for hosted Supabase projects.
+-- Vygilence private evidence storage setup for hosted Supabase projects.
+-- Legacy Vigilen policy names are retained so existing Supabase projects do not need policy renames.
 -- Run this after supabase/schema.sql.
 -- This script is safe to re-run: it upserts the bucket and only creates
 -- missing storage policies. It does not drop policies, recreate storage.objects,
