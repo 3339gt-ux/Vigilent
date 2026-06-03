@@ -114,7 +114,7 @@ export default function AuditPackBuilder() {
           .filter(link => link.requirement_id === requirement.id)
           .map(link => link.action_id)
       );
-      const openActions = actions.filter(action => linkedActionIds.has(action.id) && action.status !== 'Closed');
+      const openActions = actions.filter(action => linkedActionIds.has(action.id) && (action.status === 'Open' || action.status === 'In Progress'));
       const warnings: string[] = [];
 
       if (linkedDocuments.length === 0) {

@@ -123,7 +123,7 @@ const getOpenActions = (
       .filter(link => link.requirement_id === requirementId)
       .map(link => link.action_id)
   );
-  return actions.filter(action => actionIds.has(action.id) && action.status !== 'Closed');
+  return actions.filter(action => actionIds.has(action.id) && (action.status === 'Open' || action.status === 'In Progress'));
 };
 
 export const assessRequirementReadiness = (
@@ -261,7 +261,7 @@ export const buildReadinessReport = (input: {
 
   const requirementById = new Map(input.requirements.map(requirement => [requirement.id, requirement]));
   const openActionItems = input.actions
-    .filter(action => action.status !== 'Closed')
+    .filter(action => action.status === 'Open' || action.status === 'In Progress')
     .map(action => {
       const linkedRequirements = input.requirementActions
         .filter(link => link.action_id === action.id)

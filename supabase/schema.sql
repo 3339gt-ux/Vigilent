@@ -144,7 +144,13 @@ create table if not exists public.actions (
     due_date date,
     created_by uuid references public.profiles(id) on delete set null,
     created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-    updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+    updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    completed_at timestamp with time zone,
+    completed_by uuid references public.profiles(id) on delete set null,
+    completion_note text,
+    cancelled_at timestamp with time zone,
+    cancelled_by uuid references public.profiles(id) on delete set null,
+    cancellation_note text
 );
 
 create table if not exists public.requirement_actions (
@@ -612,3 +618,11 @@ create policy "Members can write requirement actions in own organisation" on pub
     ) with check (
         public.can_write_organization(organisation_id)
     );
+
+-- Ensure existing actions table is migrated
+alter table public.actions add column if not exists completed_at timestamp with time zone;
+alter table public.actions add column if not exists completed_by uuid references public.profiles(id) on delete set null;
+alter table public.actions add column if not exists completion_note text;
+alter table public.actions add column if not exists cancelled_at timestamp with time zone;
+alter table public.actions add column if not exists cancelled_by uuid references public.profiles(id) on delete set null;
+alter table public.actions add column if not exists cancellation_note text;

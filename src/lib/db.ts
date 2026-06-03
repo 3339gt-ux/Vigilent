@@ -923,6 +923,30 @@ export const dbService = {
     return newAction;
   },
 
+  async updateAction(actionId: string, updates: Partial<Action>): Promise<Action> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('actions')
+        .update(updates)
+        .eq('id', actionId)
+        .eq('organisation_id', orgId)
+        .select()
+        .single();
+      if (error) throwSupabaseError('actions.update active organisation', error);
+      return data;
+    }
+
+    const actions = getStorageItem('vigilen_actions', MOCK_ACTIONS);
+    const idx = actions.findIndex((item: Action) => item.id === actionId);
+    if (idx === -1) throw new Error('Action not found');
+    const updated = { ...actions[idx], ...updates, updated_at: new Date().toISOString() };
+    actions[idx] = updated;
+    setStorageItem('vigilen_actions', actions);
+    return updated;
+  },
+
+
   async linkActionToRequirement(requirementId: string, actionId: string): Promise<RequirementAction> {
     const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
 

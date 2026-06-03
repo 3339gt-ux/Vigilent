@@ -98,6 +98,7 @@ interface AppContextType {
       status: ActionStatus;
     }
   ) => Promise<void>;
+  updateAction: (actionId: string, updates: Partial<Action>) => Promise<Action>;
   createRequirement: (title: string, description: string, category: 'Vehicle' | 'Driver' | 'Facility' | 'General', frequency_months?: number, is_mandatory?: boolean) => Promise<ComplianceRequirement>;
   createPack: (name: string, description: string, requirementIds: string[], docIds: string[]) => Promise<AuditPack>;
   updatePackStatus: (packId: string, status: 'Draft' | 'Ready' | 'Sent' | 'Archived') => Promise<void>;
@@ -681,6 +682,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await loadWorkspaceCollections();
   };
 
+  const updateAction = async (actionId: string, updates: Partial<Action>): Promise<Action> => {
+    const updated = await dbService.updateAction(actionId, updates);
+    await loadWorkspaceCollections();
+    return updated;
+  };
+
   const createRequirement = async (
     title: string,
     description: string,
@@ -807,6 +814,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         linkDocumentToRequirement,
         unlinkDocumentFromRequirement,
         createActionForRequirement,
+        updateAction,
         createRequirement,
         createPack,
         updatePackStatus,

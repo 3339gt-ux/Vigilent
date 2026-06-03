@@ -82,7 +82,7 @@ export interface EvidenceUploadInput {
 export type RequirementStatus = 'GREEN' | 'AMBER' | 'RED' | 'GREY';
 export type RequirementRiskLevel = 'Low' | 'Medium' | 'High' | 'Critical';
 export type ReviewFrequency = 'Weekly' | 'Monthly' | 'Quarterly' | 'Annually' | 'Custom';
-export type ActionStatus = 'Open' | 'In Progress' | 'Closed';
+export type ActionStatus = 'Open' | 'In Progress' | 'Complete' | 'Cancelled';
 
 export interface Requirement {
   id: string;
@@ -142,6 +142,12 @@ export interface Action {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  completed_at?: string | null;
+  completed_by?: string | null;
+  completion_note?: string | null;
+  cancelled_at?: string | null;
+  cancelled_by?: string | null;
+  cancellation_note?: string | null;
 }
 
 export interface RequirementAction {
