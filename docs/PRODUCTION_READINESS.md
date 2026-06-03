@@ -35,6 +35,7 @@ Future production variables:
 - Organization creation is handled by the `create_organization_for_current_user` Supabase RPC, which creates the organization, owner membership, and profile atomically for the authenticated user.
 - Tenant-sensitive mutations still need deeper role enforcement and test coverage beyond baseline RLS and client scoping.
 - Evidence files are stored in the private `evidence-documents` Supabase Storage bucket when production mode is configured.
+- Storage bucket and `storage.objects` policies are applied from `supabase/storage_setup.sql`, after `supabase/schema.sql`.
 - Signed URLs are not implemented.
 - Billing is simulated and must be replaced with Stripe-hosted flows.
 - Audit-pack sharing is simulated and exposes prototype PIN behavior.

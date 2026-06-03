@@ -3,6 +3,7 @@
 ## Setup
 
 - Apply `supabase/schema.sql` in the Supabase SQL Editor.
+- Apply `supabase/storage_setup.sql` in the Supabase SQL Editor.
 - Confirm the `evidence-documents` bucket exists, is private, and has the allowed MIME types from the schema.
 - Set `NEXT_PUBLIC_VIGILEN_APP_MODE=production`.
 - Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET=evidence-documents`, `NEXT_PUBLIC_VIGILEN_MAX_UPLOAD_BYTES`, and `NEXT_PUBLIC_VIGILEN_SIGNED_URL_TTL_SECONDS`.
@@ -48,4 +49,5 @@
 
 - Run `npm run build`.
 - Run `npm run lint`.
-- Re-run `supabase/schema.sql` and confirm it does not fail on existing policies, bucket, functions, columns, or indexes.
+- Re-run `supabase/schema.sql` and confirm it does not touch `storage.objects` policies.
+- Re-run `supabase/storage_setup.sql` and confirm it does not fail on existing buckets or policies.

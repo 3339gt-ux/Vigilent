@@ -27,7 +27,7 @@ Date: 2026-06-02
 
 - Production authentication is not implemented. The app cannot safely onboard or authenticate real users yet.
 - Production organization onboarding is not implemented. Creating organizations and profiles must be server-side and transactional.
-- Secure file storage has an MVP implementation using a private bucket, organisation-scoped paths, and short-lived signed URLs.
+- Secure file storage has an MVP implementation using a private bucket, organisation-scoped paths, and short-lived signed URLs. Storage setup is separated into `supabase/storage_setup.sql` for hosted Supabase compatibility.
 - Audit pack sharing is not production-ready. Tokens and PINs need cryptographic generation, hashing, expiry enforcement, revocation, authorization, and audit logs.
 - Stripe billing is placeholder-only and must not collect or process card data in-app.
 - Current client-side Supabase writes are too broad for production workflows; server-side validation and role checks are needed.

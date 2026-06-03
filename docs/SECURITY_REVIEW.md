@@ -40,6 +40,7 @@ Status: implemented for MVP private evidence storage, pending production verific
 - Uploads validate extension, MIME type, and `NEXT_PUBLIC_VIGILEN_MAX_UPLOAD_BYTES`.
 - Evidence rows store original filename, safe filename, storage path, MIME type, file size, uploader, organisation id, metadata dates, tags, and timestamps.
 - Files are not physically deleted in the MVP. Deleting a document sets `status='deleted'`.
+- Storage bucket and storage object policies are managed in `supabase/storage_setup.sql`, separate from core table schema, to avoid hosted Supabase ownership errors on `storage.objects`.
 - Remaining next step: add malware scanning/retention controls before accepting high-risk customer files.
 
 ## Signed URLs

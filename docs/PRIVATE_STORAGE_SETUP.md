@@ -14,7 +14,7 @@ Create or verify a private Supabase Storage bucket:
   - `image/png`
   - `image/jpeg`
 
-`supabase/schema.sql` upserts this bucket when run in Supabase SQL Editor.
+`supabase/storage_setup.sql` upserts this bucket when run in Supabase SQL Editor.
 
 ## Storage Path
 
@@ -39,12 +39,21 @@ NEXT_PUBLIC_VIGILEN_SIGNED_URL_TTL_SECONDS=300
 
 ## Required SQL
 
-Apply the full `supabase/schema.sql` file. It is idempotent and includes:
+Apply the SQL files in this order:
+
+1. `supabase/schema.sql`
+2. `supabase/storage_setup.sql`
+
+`supabase/schema.sql` is idempotent and includes:
 
 - `evidence_documents` private storage metadata columns
 - role-aware document RLS policies
+
+`supabase/storage_setup.sql` is idempotent and includes:
+
 - `evidence-documents` private bucket upsert
 - storage object RLS policies for organisation-scoped paths
+- no `DROP POLICY` statements against `storage.objects`
 
 ## Verification
 

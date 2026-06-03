@@ -85,25 +85,9 @@ create unique index if not exists evidence_documents_storage_path_idx
     on public.evidence_documents (storage_path)
     where storage_path is not null;
 
--- Private Supabase Storage bucket for evidence files. The bucket must never be public.
-insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values (
-    'evidence-documents',
-    'evidence-documents',
-    false,
-    10485760,
-    array[
-        'application/pdf',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'image/png',
-        'image/jpeg'
-    ]
-)
-on conflict (id) do update set
-    public = false,
-    file_size_limit = excluded.file_size_limit,
-    allowed_mime_types = excluded.allowed_mime_types;
+-- Storage bucket and storage.objects policies are managed separately in
+-- supabase/storage_setup.sql because hosted Supabase projects may reject
+-- repeated storage.objects policy drops from the core schema runner.
 
 -- 5. Evidence Matrix Cells
 -- Maps compliance requirements to specific targets (e.g. HGV-101, Facility-B, Driver-Jane)
@@ -444,37 +428,4 @@ drop policy if exists "Users can insert logs in own organization" on public.audi
 create policy "Users can insert logs in own organization" on public.audit_logs
     for insert with check (
         organization_id = public.current_organization_id()
-    );
-
--- Private Evidence Storage
-alter table storage.objects enable row level security;
-
-drop policy if exists "Users can read evidence objects in own organization" on storage.objects;
-create policy "Users can read evidence objects in own organization" on storage.objects
-    for select to authenticated using (
-        bucket_id = 'evidence-documents'
-        and (storage.foldername(name))[1] = 'organisations'
-        and public.is_organization_member(((storage.foldername(name))[2])::uuid)
-    );
-
-drop policy if exists "Members can upload evidence objects in own organization" on storage.objects;
-create policy "Members can upload evidence objects in own organization" on storage.objects
-    for insert to authenticated with check (
-        bucket_id = 'evidence-documents'
-        and (storage.foldername(name))[1] = 'organisations'
-        and (storage.foldername(name))[3] = 'documents'
-        and public.can_write_organization(((storage.foldername(name))[2])::uuid)
-    );
-
-drop policy if exists "Members can update evidence objects in own organization" on storage.objects;
-create policy "Members can update evidence objects in own organization" on storage.objects
-    for update to authenticated using (
-        bucket_id = 'evidence-documents'
-        and (storage.foldername(name))[1] = 'organisations'
-        and public.can_write_organization(((storage.foldername(name))[2])::uuid)
-    ) with check (
-        bucket_id = 'evidence-documents'
-        and (storage.foldername(name))[1] = 'organisations'
-        and (storage.foldername(name))[3] = 'documents'
-        and public.can_write_organization(((storage.foldername(name))[2])::uuid)
     );
