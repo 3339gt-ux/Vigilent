@@ -450,7 +450,7 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Active Shareable Audit Packs */}
+          {/* Audit Packs */}
           <div className="bg-card border border-border rounded-xl p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Open Audit Packs</h2>
@@ -461,7 +461,7 @@ export default function DashboardPage() {
 
             {auditPacks.length === 0 ? (
               <div className="text-center py-6 text-xs text-muted-foreground">
-                No active audit share links generated.
+                No audit packs created yet.
               </div>
             ) : (
               <div className="space-y-3">
@@ -470,14 +470,14 @@ export default function DashboardPage() {
                     <div className="flex justify-between items-center font-bold">
                       <span className="truncate">{pack.name}</span>
                       <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase ${
-                        pack.status === 'Active' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-zinc-500/10 text-zinc-500'
+                        (pack.status === 'Ready' || pack.status === 'Active') ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-zinc-500/10 text-zinc-500'
                       }`}>
-                        {pack.status}
+                        {pack.status === 'Active' ? 'Ready' : pack.status}
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-[10px] text-muted-foreground">
+                      <span>{(pack.requirements || []).length} Requirements</span>
                       <span>{pack.documents.length} Evidence Docs</span>
-                      <span>PIN: {pack.pin_code || 'None'}</span>
                     </div>
                   </div>
                 ))}

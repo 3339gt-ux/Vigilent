@@ -86,8 +86,8 @@ interface AppContextType {
   linkDocumentToRequirement: (requirementId: string, documentId: string) => Promise<void>;
   unlinkDocumentFromRequirement: (requirementId: string, documentId: string) => Promise<void>;
   createRequirement: (title: string, description: string, category: 'Vehicle' | 'Driver' | 'Facility' | 'General', frequency_months?: number, is_mandatory?: boolean) => Promise<ComplianceRequirement>;
-  createPack: (name: string, description: string, docIds: string[], pinCode: string | null) => Promise<AuditPack>;
-  updatePackStatus: (packId: string, status: 'Draft' | 'Active' | 'Archived') => Promise<void>;
+  createPack: (name: string, description: string, requirementIds: string[], docIds: string[]) => Promise<AuditPack>;
+  updatePackStatus: (packId: string, status: 'Draft' | 'Ready' | 'Sent' | 'Archived') => Promise<void>;
   updateCellMapping: (cellId: string, docId: string | null, status: CellStatus) => Promise<void>;
 
   readinessScore: number;
@@ -675,14 +675,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return newReq;
   };
 
-  const createPack = async (name: string, description: string, docIds: string[], pinCode: string | null): Promise<AuditPack> => {
+  const createPack = async (name: string, description: string, requirementIds: string[], docIds: string[]): Promise<AuditPack> => {
     const newPack = await dbService.addAuditPack({
       name,
       description,
       status: 'Draft',
       share_token: null,
       share_expires_at: null,
-      pin_code: pinCode,
+      pin_code: null,
+      requirements: requirementIds,
       documents: docIds,
       created_by: user?.id || null
     });
@@ -691,7 +692,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return newPack;
   };
 
-  const updatePackStatus = async (packId: string, status: 'Draft' | 'Active' | 'Archived') => {
+  const updatePackStatus = async (packId: string, status: 'Draft' | 'Ready' | 'Sent' | 'Archived') => {
     await dbService.updateAuditPack(packId, { status });
     const packs = await dbService.getAuditPacks();
     setAuditPacks(packs);

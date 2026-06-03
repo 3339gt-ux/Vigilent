@@ -185,14 +185,18 @@ create table if not exists public.audit_packs (
     created_by uuid references public.profiles(id) on delete set null,
     name text not null,
     description text,
-    status text not null default 'Draft', -- 'Draft', 'Active', 'Archived'
+    status text not null default 'Draft', -- 'Draft', 'Ready', 'Sent', 'Archived'
     share_token text unique,
     share_expires_at timestamp with time zone,
-    pin_code text, -- Mock security PIN
+    pin_code text, -- Legacy demo-only PIN field; production packs do not use public links.
+    requirements jsonb default '[]'::jsonb, -- Array of requirement IDs in the pack
     documents jsonb default '[]'::jsonb, -- Array of document IDs in the pack
     created_at timestamp with time zone default timezone('utc'::text, now()) not null,
     updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+alter table public.audit_packs
+    add column if not exists requirements jsonb default '[]'::jsonb;
 
 -- 7. Audit Activity Logs
 create table if not exists public.audit_logs (
