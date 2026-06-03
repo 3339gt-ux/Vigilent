@@ -188,10 +188,11 @@ export interface AuditPack {
   created_by: string | null;
   name: string;
   description: string | null;
-  status: 'Draft' | 'Active' | 'Archived';
+  status: 'Draft' | 'Ready' | 'Sent' | 'Archived' | 'Active';
   share_token: string | null;
   share_expires_at: string | null;
   pin_code: string | null;
+  requirements: string[]; // Requirement IDs
   documents: string[]; // Document IDs
   created_at: string;
   updated_at: string;

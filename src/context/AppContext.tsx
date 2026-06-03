@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import type { User } from '@supabase/supabase-js';
 import {
   dbService,
@@ -16,6 +16,7 @@ import {
 import { isDemoMode, requireProductionEnv } from '@/lib/env';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { formatSupabaseError, logSupabaseError } from '@/lib/supabaseDiagnostics';
+import { buildReadinessReport, ReadinessReport } from '@/lib/readinessEngine';
 import {
   Profile,
   Organization,
@@ -86,10 +87,11 @@ interface AppContextType {
   linkDocumentToRequirement: (requirementId: string, documentId: string) => Promise<void>;
   unlinkDocumentFromRequirement: (requirementId: string, documentId: string) => Promise<void>;
   createRequirement: (title: string, description: string, category: 'Vehicle' | 'Driver' | 'Facility' | 'General', frequency_months?: number, is_mandatory?: boolean) => Promise<ComplianceRequirement>;
-  createPack: (name: string, description: string, docIds: string[], pinCode: string | null) => Promise<AuditPack>;
-  updatePackStatus: (packId: string, status: 'Draft' | 'Active' | 'Archived') => Promise<void>;
+  createPack: (name: string, description: string, requirementIds: string[], docIds: string[]) => Promise<AuditPack>;
+  updatePackStatus: (packId: string, status: 'Draft' | 'Ready' | 'Sent' | 'Archived') => Promise<void>;
   updateCellMapping: (cellId: string, docId: string | null, status: CellStatus) => Promise<void>;
 
+  readinessReport: ReadinessReport;
   readinessScore: number;
   stats: {
     totalRequirements: number;
@@ -102,15 +104,6 @@ interface AppContextType {
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
-
-const emptyStats = {
-  totalRequirements: 0,
-  compliantCount: 0,
-  expiringSoonCount: 0,
-  expiredCount: 0,
-  missingCount: 0,
-  unclassifiedCount: 0
-};
 
 const emptyCollections = {
   requirements: [] as ComplianceRequirement[],
@@ -125,6 +118,15 @@ const emptyCollections = {
   auditPacks: [] as AuditPack[],
   auditLogs: [] as AuditLog[]
 };
+
+const emptyReadinessReport = buildReadinessReport({
+  requirements: [],
+  documents: [],
+  requirementDocuments: [],
+  reviews: [],
+  actions: [],
+  requirementActions: []
+});
 
 const profileFromAuthUser = (authUser: User): Profile => ({
   id: authUser.id,
@@ -168,8 +170,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [readinessScore, setReadinessScore] = useState<number>(0);
-  const [stats, setStats] = useState(emptyStats);
+
+  const readinessReport = useMemo(() => buildReadinessReport({
+    requirements: frameworkRequirements,
+    documents,
+    requirementDocuments,
+    reviews,
+    actions,
+    requirementActions
+  }), [actions, documents, frameworkRequirements, requirementActions, requirementDocuments, reviews]);
+
+  const readinessScore = readinessReport.overallScore || 0;
+  const stats = useMemo(() => ({
+    totalRequirements: readinessReport.requirements.length,
+    compliantCount: readinessReport.requirements.filter(item => item.status === 'GREEN').length,
+    expiringSoonCount: readinessReport.requirements.filter(item => item.status === 'AMBER').length,
+    expiredCount: readinessReport.requirements.filter(item => item.status === 'RED').length,
+    missingCount: readinessReport.missingEvidence.length,
+    unclassifiedCount: documents.filter(d => d.status === 'Unclassified').length
+  }), [documents, readinessReport]);
 
   const clearWorkspaceState = () => {
     setOrganization(null);
@@ -184,8 +203,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setMatrixCells([]);
     setAuditPacks([]);
     setAuditLogs([]);
-    setReadinessScore(0);
-    setStats(emptyStats);
   };
 
   useEffect(() => {
@@ -337,32 +354,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     return () => subscription.unsubscribe();
   }, []);
-
-  useEffect(() => {
-    if (matrixCells.length === 0) {
-      setReadinessScore(0);
-      setStats(emptyStats);
-      return;
-    }
-
-    const totalCells = matrixCells.length;
-    const compliant = matrixCells.filter(c => c.status === 'Compliant').length;
-    const expiringSoon = matrixCells.filter(c => c.status === 'Expiring Soon').length;
-    const expired = matrixCells.filter(c => c.status === 'Expired').length;
-    const missing = matrixCells.filter(c => c.status === 'Missing').length;
-    const unclassified = documents.filter(d => d.status === 'Unclassified').length;
-    const calculatedScore = Math.round(((compliant + expiringSoon * 0.5) / totalCells) * 100);
-
-    setReadinessScore(calculatedScore);
-    setStats({
-      totalRequirements: totalCells,
-      compliantCount: compliant,
-      expiringSoonCount: expiringSoon,
-      expiredCount: expired,
-      missingCount: missing,
-      unclassifiedCount: unclassified
-    });
-  }, [matrixCells, documents]);
 
   const toggleTheme = () => {
     const nextTheme = theme === 'light' ? 'dark' : 'light';
@@ -675,14 +666,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return newReq;
   };
 
-  const createPack = async (name: string, description: string, docIds: string[], pinCode: string | null): Promise<AuditPack> => {
+  const createPack = async (name: string, description: string, requirementIds: string[], docIds: string[]): Promise<AuditPack> => {
     const newPack = await dbService.addAuditPack({
       name,
       description,
       status: 'Draft',
       share_token: null,
       share_expires_at: null,
-      pin_code: pinCode,
+      pin_code: null,
+      requirements: requirementIds,
       documents: docIds,
       created_by: user?.id || null
     });
@@ -691,7 +683,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return newPack;
   };
 
-  const updatePackStatus = async (packId: string, status: 'Draft' | 'Active' | 'Archived') => {
+  const updatePackStatus = async (packId: string, status: 'Draft' | 'Ready' | 'Sent' | 'Archived') => {
     await dbService.updateAuditPack(packId, { status });
     const packs = await dbService.getAuditPacks();
     setAuditPacks(packs);
@@ -758,6 +750,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createPack,
         updatePackStatus,
         updateCellMapping,
+        readinessReport: readinessReport || emptyReadinessReport,
         readinessScore,
         stats
       }}

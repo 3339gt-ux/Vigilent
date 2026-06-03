@@ -297,10 +297,11 @@ const MOCK_AUDIT_PACKS: AuditPack[] = [
     created_by: 'usr-jane-doe',
     name: 'Q2 DVSA Safety Audit Pack',
     description: 'Compiled documentation bundle for driver certifications, core operator license compliance, and vehicle testing policies.',
-    status: 'Active',
-    share_token: 'vig-share-q2-audit-887162',
-    share_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    pin_code: '4821',
+    status: 'Ready',
+    share_token: null,
+    share_expires_at: null,
+    pin_code: null,
+    requirements: ['fw-req-forklift-training', 'fw-req-vehicle-insurance'],
     documents: ['doc-mot-998', 'doc-cpc-jane', 'doc-insurance-2026'],
     created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
     updated_at: new Date().toISOString()
@@ -1191,10 +1192,18 @@ export const dbService = {
       const orgId = await getCurrentSupabaseOrganizationId();
       const { data, error } = await supabase!.from('audit_packs').select('*').eq('organization_id', orgId);
       if (error) throwSupabaseError('audit_packs.select active organization', error);
-      return data || [];
+      return (data || []).map(pack => ({
+        ...pack,
+        requirements: Array.isArray(pack.requirements) ? pack.requirements : [],
+        documents: Array.isArray(pack.documents) ? pack.documents : []
+      }));
     } else {
       initMockDb();
-      return getStorageItem('vigilen_audit_packs', MOCK_AUDIT_PACKS);
+      return getStorageItem('vigilen_audit_packs', MOCK_AUDIT_PACKS).map((pack: AuditPack) => ({
+        ...pack,
+        requirements: Array.isArray(pack.requirements) ? pack.requirements : [],
+        documents: Array.isArray(pack.documents) ? pack.documents : []
+      }));
     }
   },
 
@@ -1206,19 +1215,18 @@ export const dbService = {
       return data;
     } else {
       const packs = getStorageItem('vigilen_audit_packs', MOCK_AUDIT_PACKS);
-      const shareToken = `vig-share-${Math.random().toString(36).substr(2, 9)}`;
       const newPack: AuditPack = {
         ...pack,
         id: `pack-${Math.random().toString(36).substr(2, 9)}`,
         organization_id: orgId,
-        share_token: shareToken,
-        share_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        share_token: null,
+        share_expires_at: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
       packs.push(newPack);
       setStorageItem('vigilen_audit_packs', packs);
-      await this.logActivity('Audit Pack Created', `Assembled and shared audit pack "${newPack.name}"`);
+      await this.logActivity('Audit Pack Created', `Created audit pack "${newPack.name}"`);
       return newPack;
     }
   },
