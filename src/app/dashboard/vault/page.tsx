@@ -2,23 +2,21 @@
 
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { EvidenceDocument, DocumentStatus } from '@/lib/types';
+import { EvidenceDocument } from '@/lib/types';
+import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import { 
   FolderLock, 
   Search, 
   Filter, 
   Upload, 
   Eye, 
-  Edit3, 
   Trash2, 
   Calendar, 
-  Tag, 
   X, 
   FileText, 
   Loader2,
   FileCheck,
   Plus,
-  ArrowUpDown
 } from 'lucide-react';
 
 export default function EvidenceVault() {
@@ -26,6 +24,7 @@ export default function EvidenceVault() {
     documents, 
     uploadDocument, 
     updateDocumentMetadata, 
+    getDocumentSignedUrl,
     deleteDocument 
   } = useApp();
 
@@ -40,18 +39,28 @@ export default function EvidenceVault() {
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('Vehicle');
   const [newFileName, setNewFileName] = useState('');
+  const [newFile, setNewFile] = useState<File | null>(null);
   const [newExpiry, setNewExpiry] = useState('');
   const [newIssue, setNewIssue] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [uploadSuccess, setUploadSuccess] = useState('');
   
   // Side-drawer / Editing state
   const [selectedDoc, setSelectedDoc] = useState<EvidenceDocument | null>(null);
   const [editTitle, setEditTitle] = useState('');
+  const [editCategory, setEditCategory] = useState('');
   const [editExpiry, setEditExpiry] = useState('');
   const [editIssue, setEditIssue] = useState('');
+  const [editReview, setEditReview] = useState('');
+  const [editTraining, setEditTraining] = useState('');
+  const [editCalibration, setEditCalibration] = useState('');
+  const [editTags, setEditTags] = useState('');
   const [metaKey, setMetaKey] = useState('');
   const [metaVal, setMetaVal] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isOpeningFile, setIsOpeningFile] = useState(false);
+  const [fileError, setFileError] = useState('');
 
   // Heuristic metadata auto-suggester based on filename
   const handleFileNameChange = (val: string) => {
@@ -90,32 +99,41 @@ export default function EvidenceVault() {
     }
   };
 
+  const handleFileSelect = (file: File | null) => {
+    setNewFile(file);
+    setUploadError('');
+    setUploadSuccess('');
+    if (file) handleFileNameChange(file.name);
+  };
+
   const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle || !newFileName) return;
+    if (!newTitle || !newFile) return;
     
     setIsUploading(true);
+    setUploadError('');
+    setUploadSuccess('');
     try {
-      await new Promise(resolve => setTimeout(resolve, 900));
-      await uploadDocument(
-        newTitle,
-        newFileName.toLowerCase().endsWith('.pdf') ? newFileName : `${newFileName}.pdf`,
-        newCategory,
-        Math.floor(Math.random() * 4000000) + 200000,
-        newExpiry || null,
-        newIssue || null,
-        {}
-      );
+      await uploadDocument({
+        file: newFile,
+        title: newTitle,
+        category: newCategory,
+        expiry_date: newExpiry || null,
+        issue_date: newIssue || null,
+        metadata: {}
+      });
       
       // Reset
       setNewTitle('');
       setNewCategory('Vehicle');
       setNewFileName('');
+      setNewFile(null);
       setNewExpiry('');
       setNewIssue('');
+      setUploadSuccess('Document uploaded to private storage.');
       setShowUploadModal(false);
     } catch (err) {
-      console.error(err);
+      setUploadError(err instanceof Error ? err.message : 'Upload failed.');
     } finally {
       setIsUploading(false);
     }
@@ -124,27 +142,55 @@ export default function EvidenceVault() {
   const handleSelectDoc = (doc: EvidenceDocument) => {
     setSelectedDoc(doc);
     setEditTitle(doc.title);
+    setEditCategory(doc.category);
     setEditExpiry(doc.expiry_date || '');
     setEditIssue(doc.issue_date || '');
+    setEditReview(doc.review_date || '');
+    setEditTraining(doc.training_date || '');
+    setEditCalibration(doc.calibration_date || '');
+    setEditTags((doc.tags || []).join(', '));
     setMetaKey('');
     setMetaVal('');
+    setFileError('');
   };
 
   const handleSaveMetadata = async () => {
     if (!selectedDoc) return;
     setIsSaving(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const tags = editTags
+        .split(',')
+        .map(tag => tag.trim())
+        .filter(Boolean);
       const updated = await updateDocumentMetadata(selectedDoc.id, {
         title: editTitle,
+        category: editCategory,
         expiry_date: editExpiry || null,
-        issue_date: editIssue || null
+        issue_date: editIssue || null,
+        review_date: editReview || null,
+        training_date: editTraining || null,
+        calibration_date: editCalibration || null,
+        tags
       });
       setSelectedDoc(updated);
     } catch (err) {
       console.error(err);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleOpenPrivateFile = async () => {
+    if (!selectedDoc) return;
+    setIsOpeningFile(true);
+    setFileError('');
+    try {
+      const signedUrl = await getDocumentSignedUrl(selectedDoc.id);
+      window.open(signedUrl, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      setFileError(err instanceof Error ? err.message : 'Could not open this file.');
+    } finally {
+      setIsOpeningFile(false);
     }
   };
 
@@ -184,7 +230,7 @@ export default function EvidenceVault() {
   };
 
   const handleDeleteDoc = async (id: string) => {
-    if (confirm('Are you sure you want to permanently delete this evidence document? This will remove all matrix connections.')) {
+    if (confirm('Archive this evidence document? The private file remains stored, but the record will be hidden from normal views.')) {
       await deleteDocument(id);
       setSelectedDoc(null);
     }
@@ -287,7 +333,7 @@ export default function EvidenceVault() {
               <select
                 id="vault-sort-by"
                 value={sortBy}
-                onChange={e => setSortBy(e.target.value as any)}
+                onChange={e => setSortBy(e.target.value as 'title' | 'expiry' | 'uploaded')}
                 className="bg-muted border border-border/80 rounded px-2 py-1 outline-none text-xs text-foreground font-semibold"
               >
                 <option value="uploaded">Sort: Upload Date</option>
@@ -421,6 +467,20 @@ export default function EvidenceVault() {
 
               {/* Editing Form */}
               <div className="space-y-4 text-xs">
+                <button
+                  onClick={handleOpenPrivateFile}
+                  disabled={isOpeningFile}
+                  className="w-full py-2 bg-muted hover:bg-muted/80 text-foreground border border-border font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  {isOpeningFile ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
+                  Open Private File
+                </button>
+                {fileError && (
+                  <div className="p-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-300 text-[11px]">
+                    {fileError}
+                  </div>
+                )}
+
                 <div>
                   <label htmlFor="edit-title" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
                     Document Title
@@ -432,6 +492,23 @@ export default function EvidenceVault() {
                     onChange={e => setEditTitle(e.target.value)}
                     className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
                   />
+                </div>
+
+                <div>
+                  <label htmlFor="edit-category" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Category
+                  </label>
+                  <select
+                    id="edit-category"
+                    value={editCategory}
+                    onChange={e => setEditCategory(e.target.value)}
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                  >
+                    <option value="Vehicle">Vehicle</option>
+                    <option value="Driver">Driver</option>
+                    <option value="Facility">Facility</option>
+                    <option value="General">General</option>
+                  </select>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -462,9 +539,62 @@ export default function EvidenceVault() {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label htmlFor="edit-review" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                      Review
+                    </label>
+                    <input
+                      id="edit-review"
+                      type="date"
+                      value={editReview}
+                      onChange={e => setEditReview(e.target.value)}
+                      className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="edit-training" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                      Training
+                    </label>
+                    <input
+                      id="edit-training"
+                      type="date"
+                      value={editTraining}
+                      onChange={e => setEditTraining(e.target.value)}
+                      className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="edit-calibration" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                      Calibration
+                    </label>
+                    <input
+                      id="edit-calibration"
+                      type="date"
+                      value={editCalibration}
+                      onChange={e => setEditCalibration(e.target.value)}
+                      className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="edit-tags" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Tags
+                  </label>
+                  <input
+                    id="edit-tags"
+                    type="text"
+                    value={editTags}
+                    onChange={e => setEditTags(e.target.value)}
+                    placeholder="fleet, driver, annual"
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                  />
+                </div>
+
                 <button
                   onClick={handleSaveMetadata}
-                  disabled={isSaving || (editTitle === selectedDoc.title && editExpiry === (selectedDoc.expiry_date || '') && editIssue === (selectedDoc.issue_date || ''))}
+                  disabled={isSaving}
                   className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/40 text-white font-semibold rounded-lg flex items-center justify-center gap-1.5 shadow-sm transition-colors"
                 >
                   {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileCheck className="w-3.5 h-3.5" />}
@@ -575,31 +705,42 @@ export default function EvidenceVault() {
               </div>
               <div>
                 <h3 className="text-base font-extrabold text-foreground">Upload Evidence Document</h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Drag-and-drop or select mock inputs below.</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Private files are stored inside your active organisation.</p>
               </div>
             </div>
 
             <form onSubmit={handleUploadSubmit} className="space-y-4 text-xs">
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-                  File Attachment Simulation
+                  File Attachment
                 </label>
                 <div className="border-2 border-dashed border-border/80 hover:border-indigo-500/50 rounded-xl p-6 text-center cursor-pointer transition-all bg-muted/20">
                   <Upload className="w-8 h-8 text-muted/30 mx-auto mb-2" />
-                  <span className="font-semibold block text-[11px]">Select a file or type a filename</span>
+                  <span className="font-semibold block text-[11px]">{newFileName || 'Select an evidence file'}</span>
                   <input
-                    type="text"
+                    type="file"
                     required
-                    value={newFileName}
-                    onChange={e => handleFileNameChange(e.target.value)}
-                    placeholder="e.g. MOT_HGV_998_2026.pdf"
+                    accept={evidenceAcceptAttribute}
+                    onChange={e => handleFileSelect(e.target.files?.[0] || null)}
                     className="mt-3 w-full text-center px-3 py-1.5 bg-card border border-border rounded-lg outline-none font-mono text-[10px]"
                   />
                   <p className="text-[9px] text-muted-foreground mt-2 leading-relaxed">
-                    Tip: Name files with standard terms like 'MOT', 'CPC', or dates '2027-06-30' for auto-suggesters.
+                    PDF, DOCX, XLSX, PNG, JPG, or JPEG. Max {formatMaxEvidenceUploadSize()}.
                   </p>
                 </div>
               </div>
+
+              {uploadError && (
+                <div className="p-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-300 text-[11px]">
+                  {uploadError}
+                </div>
+              )}
+
+              {uploadSuccess && (
+                <div className="p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 text-[11px]">
+                  {uploadSuccess}
+                </div>
+              )}
 
               <div>
                 <label htmlFor="modal-title" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
@@ -672,7 +813,7 @@ export default function EvidenceVault() {
                 <button
                   id="modal-upload-submit"
                   type="submit"
-                  disabled={isUploading || !newTitle || !newFileName}
+                  disabled={isUploading || !newTitle || !newFile}
                   className="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/50 text-white font-bold rounded-lg shadow-md flex items-center justify-center gap-1.5"
                 >
                   {isUploading ? (

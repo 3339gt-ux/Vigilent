@@ -3,20 +3,16 @@
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import Link from 'next/link';
+import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import { 
-  ShieldCheck, 
-  AlertTriangle, 
   Clock, 
-  FileCheck, 
   Plus, 
   Upload, 
-  FolderLock, 
   ArrowRight,
   TrendingUp,
   AlertCircle,
   FileSpreadsheet,
   CheckCircle2,
-  Trash2
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -30,14 +26,17 @@ export default function DashboardPage() {
     auditPacks, 
     auditLogs, 
     uploadDocument,
-    deleteDocument
   } = useApp();
 
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadCategory, setUploadCategory] = useState('Vehicle');
   const [uploadFileName, setUploadFileName] = useState('');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadExpiry, setUploadExpiry] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [uploadSuccess, setUploadSuccess] = useState('');
+  const [expiryReferenceTime] = useState(() => Date.now());
 
   // Expiring Documents (status is 'Expiring Soon' or 'Expired')
   const expiringSoonDocs = documents.filter(d => d.status === 'Expiring Soon' || d.status === 'Expired');
@@ -48,32 +47,31 @@ export default function DashboardPage() {
   // Unclassified Documents (no category set or status is Unclassified)
   const unclassifiedDocs = documents.filter(d => d.status === 'Unclassified');
 
-  // Action to mock file uploading
   const handleQuickUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!uploadTitle || !uploadFileName) return;
+    if (!uploadTitle || !uploadFile) return;
     
     setIsUploading(true);
+    setUploadError('');
+    setUploadSuccess('');
     try {
-      await new Promise(resolve => setTimeout(resolve, 800)); // Simulating lag
-      
-      // Call Context upload document
-      await uploadDocument(
-        uploadTitle,
-        uploadFileName.toLowerCase().endsWith('.pdf') ? uploadFileName : `${uploadFileName}.pdf`,
-        uploadCategory,
-        Math.floor(Math.random() * 3000000) + 500000, // mock size
-        uploadExpiry || null,
-        new Date().toISOString().split('T')[0],
-        {}
-      );
+      await uploadDocument({
+        file: uploadFile,
+        title: uploadTitle,
+        category: uploadCategory,
+        expiry_date: uploadExpiry || null,
+        issue_date: new Date().toISOString().split('T')[0],
+        metadata: {}
+      });
 
       // Reset
       setUploadTitle('');
       setUploadFileName('');
+      setUploadFile(null);
       setUploadExpiry('');
+      setUploadSuccess('Document uploaded to private storage.');
     } catch (err) {
-      console.error(err);
+      setUploadError(err instanceof Error ? err.message : 'Upload failed.');
     } finally {
       setIsUploading(false);
     }
@@ -246,7 +244,7 @@ export default function DashboardPage() {
               <div className="space-y-3">
                 {expiringSoonDocs.map(doc => {
                   const daysLeft = doc.expiry_date 
-                    ? Math.ceil((new Date(doc.expiry_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+                    ? Math.ceil((new Date(doc.expiry_date).getTime() - expiryReferenceTime) / (1000 * 60 * 60 * 24))
                     : 0;
                   const isExpired = doc.status === 'Expired' || daysLeft <= 0;
 
@@ -307,18 +305,24 @@ export default function DashboardPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label htmlFor="quick-filename" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-                    File Name
+                  <label htmlFor="quick-file" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    File
                   </label>
                   <input
-                    id="quick-filename"
-                    type="text"
+                    id="quick-file"
+                    type="file"
                     required
-                    value={uploadFileName}
-                    onChange={e => setUploadFileName(e.target.value)}
-                    placeholder="cpc_card.pdf"
+                    accept={evidenceAcceptAttribute}
+                    onChange={e => {
+                      const file = e.target.files?.[0] || null;
+                      setUploadFile(file);
+                      setUploadFileName(file?.name || '');
+                    }}
                     className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
                   />
+                  <span className="text-[9px] text-muted-foreground block mt-1 truncate">
+                    {uploadFileName || `Max ${formatMaxEvidenceUploadSize()}`}
+                  </span>
                 </div>
 
                 <div>
@@ -352,16 +356,28 @@ export default function DashboardPage() {
                 />
               </div>
 
+              {uploadError && (
+                <div className="p-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-300 text-[11px]">
+                  {uploadError}
+                </div>
+              )}
+
+              {uploadSuccess && (
+                <div className="p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 text-[11px]">
+                  {uploadSuccess}
+                </div>
+              )}
+
               <button
                 id="quick-upload-submit-btn"
                 type="submit"
-                disabled={isUploading || !uploadTitle || !uploadFileName}
+                disabled={isUploading || !uploadTitle || !uploadFile}
                 className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/50 text-white font-semibold rounded-lg flex items-center justify-center gap-2 shadow-md shadow-indigo-600/10 transition-all duration-200"
               >
-                {isUploading ? 'Uploading & Seeding...' : (
+                {isUploading ? 'Uploading...' : (
                   <>
                     <Upload className="w-4 h-4" />
-                    Process & Seed File
+                    Upload File
                   </>
                 )}
               </button>

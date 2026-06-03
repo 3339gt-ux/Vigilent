@@ -22,7 +22,8 @@ Future production variables:
 - Supabase service role key, server-side only
 - Stripe secret key, server-side only
 - Stripe webhook secret
-- Storage bucket names
+- Storage bucket name: `evidence-documents`
+- Evidence upload limits and signed URL TTLs
 - Signed URL TTL configuration
 - App base URL
 - Email provider keys
@@ -33,7 +34,7 @@ Future production variables:
 - Supabase Auth is wired into login/register/logout/password-reset from the browser anon client.
 - Organization creation is handled by the `create_organization_for_current_user` Supabase RPC, which creates the organization, owner membership, and profile atomically for the authenticated user.
 - Tenant-sensitive mutations still need deeper role enforcement and test coverage beyond baseline RLS and client scoping.
-- Evidence files are not stored in private Supabase Storage.
+- Evidence files are stored in the private `evidence-documents` Supabase Storage bucket when production mode is configured.
 - Signed URLs are not implemented.
 - Billing is simulated and must be replaced with Stripe-hosted flows.
 - Audit-pack sharing is simulated and exposes prototype PIN behavior.
@@ -46,8 +47,8 @@ Future production variables:
 - Use server-side routes/actions for organization onboarding, storage, audit logs, billing, and share links.
 - Keep service-role keys off the browser.
 - Enable and test RLS for every tenant-owned table.
-- Use private storage buckets only.
-- Generate signed URLs server-side with short TTLs.
+- Use the private `evidence-documents` bucket only.
+- Generate short-lived signed URLs after verifying organisation membership.
 - Add rate limits to auth, share links, uploads, and invite flows.
 - Add malware/content scanning policy for uploaded files before public or auditor access.
 - Add backup, restore, retention, and deletion policies.

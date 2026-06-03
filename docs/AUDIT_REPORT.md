@@ -15,7 +15,7 @@ Date: 2026-06-02
 ## Demo Or Mock Only
 
 - Login and registration are mock React-context flows, not Supabase Auth.
-- Evidence upload records filenames and metadata only; it does not upload files to Supabase Storage.
+- Evidence upload now uses private Supabase Storage in production mode.
 - localStorage is the main data store in demo mode.
 - Audit pack share links, PIN protection, and external viewer behavior are simulated.
 - Billing and invoices are simulated; no Stripe checkout, customer, subscription, invoice, webhook, or payment state exists.
@@ -27,7 +27,7 @@ Date: 2026-06-02
 
 - Production authentication is not implemented. The app cannot safely onboard or authenticate real users yet.
 - Production organization onboarding is not implemented. Creating organizations and profiles must be server-side and transactional.
-- Secure file storage is not implemented. Evidence files are not uploaded to private buckets and cannot use signed URLs.
+- Secure file storage has an MVP implementation using a private bucket, organisation-scoped paths, and short-lived signed URLs.
 - Audit pack sharing is not production-ready. Tokens and PINs need cryptographic generation, hashing, expiry enforcement, revocation, authorization, and audit logs.
 - Stripe billing is placeholder-only and must not collect or process card data in-app.
 - Current client-side Supabase writes are too broad for production workflows; server-side validation and role checks are needed.
@@ -56,7 +56,7 @@ Date: 2026-06-02
 2. Build server-side organization onboarding that creates organization, owner profile, roles, and starter records transactionally.
 3. Generate Supabase database types and replace loose client types where possible.
 4. Finalize and test RLS with real users across at least two organizations.
-5. Implement private Supabase Storage buckets with per-organization object paths and short-lived signed URL APIs.
+5. Verify private Supabase Storage RLS with multiple real organizations and roles.
 6. Replace localStorage demo writes with production server actions or API routes.
 7. Implement audit logging as append-only, server-authored events.
 8. Build secure audit-pack sharing with hashed PINs, token rotation, expiry, revocation, and access logs.

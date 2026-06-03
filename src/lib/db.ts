@@ -1,11 +1,17 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient';
-import { isDemoMode, requireDemoMode, requireProductionEnv } from './env';
+import { evidenceStorageBucket, isDemoMode, requireDemoMode, requireProductionEnv, signedUrlTtlSeconds } from './env';
 import { throwSupabaseError } from './supabaseDiagnostics';
+import {
+  buildEvidenceStoragePath,
+  sanitizeEvidenceFilename,
+  validateEvidenceFile
+} from './evidenceStorage';
 import {
   Profile,
   Organization,
   ComplianceRequirement,
   EvidenceDocument,
+  EvidenceUploadInput,
   MatrixCell,
   AuditPack,
   AuditLog,
@@ -480,21 +486,24 @@ export const dbService = {
   async getDocuments(): Promise<EvidenceDocument[]> {
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
-      const { data, error } = await supabase!.from('evidence_documents').select('*').eq('organization_id', orgId);
+      const { data, error } = await supabase!
+        .from('evidence_documents')
+        .select('*')
+        .eq('organization_id', orgId)
+        .neq('status', 'deleted')
+        .order('created_at', { ascending: false });
       if (error) throwSupabaseError('evidence_documents.select active organization', error);
       return data || [];
     } else {
       initMockDb();
-      return getStorageItem('vigilen_documents', MOCK_DOCUMENTS);
+      return getStorageItem('vigilen_documents', MOCK_DOCUMENTS).filter((doc: EvidenceDocument) => doc.status !== 'deleted');
     }
   },
 
   async addDocument(doc: Omit<EvidenceDocument, 'id' | 'created_at' | 'updated_at' | 'organization_id'>): Promise<EvidenceDocument> {
     const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
     if (shouldUseSupabase()) {
-      const { data, error } = await supabase!.from('evidence_documents').insert([{ ...doc, organization_id: orgId }]).select().single();
-      if (error) throwSupabaseError('evidence_documents.insert active organization', error);
-      return data;
+      throw new Error('Production uploads must use private Supabase Storage.');
     } else {
       const docs = getStorageItem('vigilen_documents', MOCK_DOCUMENTS);
       const newDoc: EvidenceDocument = {
@@ -517,10 +526,128 @@ export const dbService = {
     }
   },
 
+  async uploadDocumentFile(input: EvidenceUploadInput & { status: DocumentStatus }): Promise<EvidenceDocument> {
+    if (!shouldUseSupabase()) {
+      return this.addDocument({
+        title: input.title,
+        file_url: null,
+        file_name: input.file.name,
+        original_file_name: input.file.name,
+        safe_file_name: sanitizeEvidenceFilename(input.file.name),
+        storage_path: null,
+        mime_type: input.file.type,
+        file_size_bytes: input.file.size,
+        category: input.category,
+        status: input.status,
+        expiry_date: input.expiry_date,
+        issue_date: input.issue_date,
+        review_date: input.review_date || null,
+        training_date: input.training_date || null,
+        calibration_date: input.calibration_date || null,
+        tags: input.tags || [],
+        metadata: input.metadata || {},
+        uploaded_by: MOCK_PROFILE.id
+      });
+    }
+
+    if (!supabase) throw new Error('Supabase client is not configured.');
+
+    validateEvidenceFile(input.file);
+
+    const orgId = await getCurrentSupabaseOrganizationId();
+    const userId = await getCurrentSupabaseUserId();
+    const documentId = crypto.randomUUID();
+    const originalFilename = input.file.name;
+    const safeFilename = sanitizeEvidenceFilename(originalFilename);
+    const storagePath = buildEvidenceStoragePath(orgId, documentId, safeFilename);
+
+    const { error: uploadError } = await supabase.storage
+      .from(evidenceStorageBucket)
+      .upload(storagePath, input.file, {
+        contentType: input.file.type,
+        upsert: false
+      });
+
+    if (uploadError) throwSupabaseError('storage.objects.upload evidence document', uploadError);
+
+    const insertPayload = {
+      id: documentId,
+      organization_id: orgId,
+      uploaded_by: userId,
+      title: input.title.trim(),
+      file_url: null,
+      file_name: safeFilename,
+      original_file_name: originalFilename,
+      safe_file_name: safeFilename,
+      storage_path: storagePath,
+      mime_type: input.file.type,
+      file_size_bytes: input.file.size,
+      category: input.category,
+      status: input.status,
+      expiry_date: input.expiry_date,
+      issue_date: input.issue_date,
+      review_date: input.review_date || null,
+      training_date: input.training_date || null,
+      calibration_date: input.calibration_date || null,
+      tags: input.tags || [],
+      metadata: input.metadata || {}
+    };
+
+    const { data, error } = await supabase
+      .from('evidence_documents')
+      .insert([insertPayload])
+      .select()
+      .single();
+
+    if (error) throwSupabaseError('evidence_documents.insert private storage record', error);
+
+    await this.logActivity('Document Uploaded', `Uploaded document "${data.title}" (${data.original_file_name || data.file_name})`);
+    return data;
+  },
+
+  async getDocumentSignedUrl(docId: string): Promise<string> {
+    if (!shouldUseSupabase()) {
+      const doc = getStorageItem('vigilen_documents', MOCK_DOCUMENTS).find((item: EvidenceDocument) => item.id === docId);
+      if (!doc) throw new Error('Document not found.');
+      if (doc.file_url) return doc.file_url;
+      throw new Error('Demo document has no private file attached.');
+    }
+
+    if (!supabase) throw new Error('Supabase client is not configured.');
+
+    const orgId = await getCurrentSupabaseOrganizationId();
+    const { data: doc, error: docError } = await supabase
+      .from('evidence_documents')
+      .select('id, organization_id, status, storage_path')
+      .eq('id', docId)
+      .eq('organization_id', orgId)
+      .neq('status', 'deleted')
+      .maybeSingle();
+
+    if (docError) throwSupabaseError('evidence_documents.select signed url target', docError);
+    if (!doc) throw new Error('Document not found or no longer available.');
+    if (!doc.storage_path) throw new Error('Document record has no private storage path.');
+
+    const { data, error } = await supabase.storage
+      .from(evidenceStorageBucket)
+      .createSignedUrl(doc.storage_path, signedUrlTtlSeconds);
+
+    if (error) throwSupabaseError('storage.objects.createSignedUrl evidence document', error);
+    if (!data?.signedUrl) throw new Error('Supabase did not return a signed URL.');
+    return data.signedUrl;
+  },
+
   async updateDocument(docId: string, updates: Partial<EvidenceDocument>): Promise<EvidenceDocument> {
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
-      const { data, error } = await supabase!.from('evidence_documents').update(updates).eq('id', docId).eq('organization_id', orgId).select().single();
+      const { data, error } = await supabase!
+        .from('evidence_documents')
+        .update(updates)
+        .eq('id', docId)
+        .eq('organization_id', orgId)
+        .neq('status', 'deleted')
+        .select()
+        .single();
       if (error) throwSupabaseError('evidence_documents.update active organization', error);
       return data;
     } else {
@@ -556,12 +683,55 @@ export const dbService = {
   async deleteDocument(docId: string): Promise<void> {
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
-      const { error } = await supabase!.from('evidence_documents').delete().eq('id', docId).eq('organization_id', orgId);
-      if (error) throwSupabaseError('evidence_documents.delete active organization', error);
+      const { error } = await supabase!
+        .from('evidence_documents')
+        .update({ status: 'deleted', updated_at: new Date().toISOString() })
+        .eq('id', docId)
+        .eq('organization_id', orgId)
+        .select('id')
+        .single();
+      if (error) throwSupabaseError('evidence_documents.soft-delete active organization', error);
+
+      const { error: matrixError } = await supabase!
+        .from('matrix_cells')
+        .update({
+          document_id: null,
+          status: 'Missing',
+          last_checked_at: new Date().toISOString()
+        })
+        .eq('organization_id', orgId)
+        .eq('document_id', docId);
+      if (matrixError) throwSupabaseError('matrix_cells.unlink soft-deleted document', matrixError);
+
+      const { data: packs, error: packsError } = await supabase!
+        .from('audit_packs')
+        .select('id, documents')
+        .eq('organization_id', orgId);
+      if (packsError) throwSupabaseError('audit_packs.select for soft-deleted document cleanup', packsError);
+
+      await Promise.all(
+        (packs || [])
+          .filter((pack: Pick<AuditPack, 'id' | 'documents'>) => pack.documents.includes(docId))
+          .map((pack: Pick<AuditPack, 'id' | 'documents'>) =>
+            supabase!
+              .from('audit_packs')
+              .update({
+                documents: pack.documents.filter(id => id !== docId),
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', pack.id)
+              .eq('organization_id', orgId)
+              .then(({ error: packError }) => {
+                if (packError) throwSupabaseError('audit_packs.unlink soft-deleted document', packError);
+              })
+          )
+      );
     } else {
       const docs = getStorageItem('vigilen_documents', MOCK_DOCUMENTS);
-      const filtered = docs.filter((d: any) => d.id !== docId);
-      setStorageItem('vigilen_documents', filtered);
+      const updatedDocs = docs.map((d: EvidenceDocument) =>
+        d.id === docId ? { ...d, status: 'deleted' as DocumentStatus, updated_at: new Date().toISOString() } : d
+      );
+      setStorageItem('vigilen_documents', updatedDocs);
 
       // Unlink cells
       const cells = getStorageItem('vigilen_cells', MOCK_CELLS);

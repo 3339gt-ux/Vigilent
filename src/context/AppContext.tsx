@@ -25,7 +25,8 @@ import {
   AuditPack,
   AuditLog,
   CellStatus,
-  DocumentStatus
+  DocumentStatus,
+  EvidenceUploadInput
 } from '@/lib/types';
 
 interface AppContextType {
@@ -53,8 +54,9 @@ interface AppContextType {
   auditPacks: AuditPack[];
   auditLogs: AuditLog[];
 
-  uploadDocument: (title: string, file_name: string, category: string, file_size_bytes: number, expiry_date: string | null, issue_date: string | null, metadata: Record<string, any>) => Promise<EvidenceDocument>;
+  uploadDocument: (input: EvidenceUploadInput) => Promise<EvidenceDocument>;
   updateDocumentMetadata: (docId: string, updates: Partial<EvidenceDocument>) => Promise<EvidenceDocument>;
+  getDocumentSignedUrl: (docId: string) => Promise<string>;
   deleteDocument: (docId: string) => Promise<void>;
   createRequirement: (title: string, description: string, category: 'Vehicle' | 'Driver' | 'Facility' | 'General', frequency_months?: number, is_mandatory?: boolean) => Promise<ComplianceRequirement>;
   createPack: (name: string, description: string, docIds: string[], pinCode: string | null) => Promise<AuditPack>;
@@ -102,6 +104,18 @@ const profileFromAuthUser = (authUser: User): Profile => ({
   created_at: authUser.created_at || new Date().toISOString(),
   updated_at: new Date().toISOString()
 });
+
+const calculateDocumentStatus = (expiryDate: string | null): DocumentStatus => {
+  if (!expiryDate) return 'Unclassified';
+
+  const expiry = new Date(expiryDate).getTime();
+  const now = Date.now();
+  const warningLimit = 30 * 24 * 60 * 60 * 1000;
+
+  if (expiry <= now) return 'Expired';
+  if (expiry - now <= warningLimit) return 'Expiring Soon';
+  return 'Active';
+};
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
@@ -459,37 +473,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setAuditLogs(logs);
   };
 
-  const uploadDocument = async (
-    title: string,
-    file_name: string,
-    category: string,
-    file_size_bytes: number,
-    expiry_date: string | null,
-    issue_date: string | null,
-    metadata: Record<string, any>
-  ): Promise<EvidenceDocument> => {
-    let initialStatus: DocumentStatus = 'Active';
-    if (expiry_date) {
-      const exp = new Date(expiry_date).getTime();
-      const now = Date.now();
-      const warningLimit = 30 * 24 * 60 * 60 * 1000;
-      if (exp <= now) initialStatus = 'Expired';
-      else if (exp - now <= warningLimit) initialStatus = 'Expiring Soon';
-    } else {
-      initialStatus = 'Unclassified';
-    }
-
-    const doc = await dbService.addDocument({
-      title,
-      file_name,
-      file_size_bytes,
-      category,
-      uploaded_by: user?.id || null,
-      file_url: null,
-      status: initialStatus,
-      expiry_date,
-      issue_date,
-      metadata
+  const uploadDocument = async (input: EvidenceUploadInput): Promise<EvidenceDocument> => {
+    const status = calculateDocumentStatus(input.expiry_date);
+    const doc = await dbService.uploadDocumentFile({
+      ...input,
+      title: input.title.trim(),
+      metadata: input.metadata || {},
+      tags: input.tags || [],
+      status
     });
 
     await loadWorkspaceCollections();
@@ -498,21 +489,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateDocumentMetadata = async (docId: string, updates: Partial<EvidenceDocument>): Promise<EvidenceDocument> => {
     if (updates.expiry_date !== undefined) {
-      if (updates.expiry_date === null) {
-        updates.status = 'Unclassified';
-      } else {
-        const exp = new Date(updates.expiry_date).getTime();
-        const now = Date.now();
-        const warningLimit = 30 * 24 * 60 * 60 * 1000;
-        if (exp <= now) updates.status = 'Expired';
-        else if (exp - now <= warningLimit) updates.status = 'Expiring Soon';
-        else updates.status = 'Active';
-      }
+      updates.status = calculateDocumentStatus(updates.expiry_date);
     }
 
     const updated = await dbService.updateDocument(docId, updates);
     await loadWorkspaceCollections();
     return updated;
+  };
+
+  const getDocumentSignedUrl = async (docId: string): Promise<string> => {
+    return dbService.getDocumentSignedUrl(docId);
   };
 
   const deleteDocument = async (docId: string) => {
@@ -630,6 +616,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         auditLogs,
         uploadDocument,
         updateDocumentMetadata,
+        getDocumentSignedUrl,
         deleteDocument,
         createRequirement,
         createPack,

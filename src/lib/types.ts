@@ -39,7 +39,7 @@ export interface ComplianceRequirement {
   created_at: string;
 }
 
-export type DocumentStatus = 'Active' | 'Expiring Soon' | 'Expired' | 'Unclassified';
+export type DocumentStatus = 'Active' | 'Expiring Soon' | 'Expired' | 'Unclassified' | 'deleted';
 
 export interface EvidenceDocument {
   id: string;
@@ -48,14 +48,35 @@ export interface EvidenceDocument {
   title: string;
   file_url: string | null;
   file_name: string;
+  original_file_name?: string | null;
+  safe_file_name?: string | null;
+  storage_path?: string | null;
+  mime_type?: string | null;
   file_size_bytes: number;
   category: string;
   status: DocumentStatus;
   expiry_date: string | null;
   issue_date: string | null;
+  review_date?: string | null;
+  training_date?: string | null;
+  calibration_date?: string | null;
+  tags?: string[];
   metadata: Record<string, any>;
   created_at: string;
   updated_at: string;
+}
+
+export interface EvidenceUploadInput {
+  file: File;
+  title: string;
+  category: string;
+  expiry_date: string | null;
+  issue_date: string | null;
+  review_date?: string | null;
+  training_date?: string | null;
+  calibration_date?: string | null;
+  tags?: string[];
+  metadata?: Record<string, any>;
 }
 
 export type CellStatus = 'Compliant' | 'Expiring Soon' | 'Expired' | 'Missing' | 'N/A';

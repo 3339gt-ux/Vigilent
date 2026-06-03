@@ -33,19 +33,23 @@ Status: improved, pending test.
 
 ## File Storage
 
-Status: not implemented.
+Status: implemented for MVP private evidence storage, pending production verification.
 
-- Evidence uploads store filenames and metadata only.
-- No private bucket, object path convention, MIME validation, file size limit, virus scan, retention policy, or signed URL flow exists.
-- Required next step: use private Supabase Storage with paths like `{organization_id}/{document_id}/{filename}` and generate short-lived signed URLs server-side.
+- Evidence uploads now use the private Supabase Storage bucket `evidence-documents`.
+- Production file paths are organisation scoped: `organisations/{organisation_id}/documents/{document_id}/{safe_filename}`.
+- Uploads validate extension, MIME type, and `NEXT_PUBLIC_VIGILEN_MAX_UPLOAD_BYTES`.
+- Evidence rows store original filename, safe filename, storage path, MIME type, file size, uploader, organisation id, metadata dates, tags, and timestamps.
+- Files are not physically deleted in the MVP. Deleting a document sets `status='deleted'`.
+- Remaining next step: add malware scanning/retention controls before accepting high-risk customer files.
 
 ## Signed URLs
 
-Status: not implemented.
+Status: implemented for authenticated evidence viewing.
 
-- Audit pack links are prototype URLs only.
-- Signed URLs must have short TTLs, be server-generated, and be logged.
-- Share tokens must be random, revocable, and scoped to a pack and organization.
+- Evidence files never use public URLs.
+- The client requests a temporary signed URL only after the document row is scoped to the active organisation.
+- Signed URL TTL is controlled by `NEXT_PUBLIC_VIGILEN_SIGNED_URL_TTL_SECONDS`.
+- Audit pack share links remain prototype-only and must not be used for public sharing.
 
 ## localStorage And Demo Risk
 
