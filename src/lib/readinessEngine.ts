@@ -1,0 +1,311 @@
+import type {
+  Action,
+  EvidenceDocument,
+  Requirement,
+  RequirementAction,
+  RequirementDocument,
+  RequirementRiskLevel,
+  RequirementStatus,
+  Review
+} from './types';
+import { getLinkedDocumentsForRequirement } from './requirementsEngine';
+
+export const READINESS_STATUS_POINTS: Record<RequirementStatus, number | null> = {
+  GREEN: 100,
+  AMBER: 50,
+  RED: 0,
+  GREY: null
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const WARNING_DAYS = 30;
+
+export interface ReadinessReason {
+  level: RequirementStatus;
+  message: string;
+}
+
+export interface RequirementReadiness {
+  requirement: Requirement;
+  status: RequirementStatus;
+  score: number | null;
+  linkedDocuments: EvidenceDocument[];
+  latestReview: Review | null;
+  openActions: Action[];
+  reasons: ReadinessReason[];
+}
+
+export interface ReadinessScoreGroup {
+  name: string;
+  score: number | null;
+  total: number;
+  scored: number;
+  green: number;
+  amber: number;
+  red: number;
+  grey: number;
+}
+
+export interface ReadinessTrendPoint {
+  label: string;
+  score: number | null;
+}
+
+export interface ReadinessReport {
+  overallScore: number | null;
+  requirements: RequirementReadiness[];
+  categoryScores: ReadinessScoreGroup[];
+  riskScores: ReadinessScoreGroup[];
+  missingEvidence: RequirementReadiness[];
+  upcomingDue: RequirementReadiness[];
+  overdue: RequirementReadiness[];
+  openActionItems: Array<{ action: Action; requirements: Requirement[] }>;
+  topRisks: RequirementReadiness[];
+  readinessTrend: ReadinessTrendPoint[];
+  explanation: string;
+}
+
+const daysUntil = (dateValue: string | null | undefined, today: Date): number | null => {
+  if (!dateValue) return null;
+  return Math.ceil((new Date(dateValue).getTime() - today.getTime()) / DAY_MS);
+};
+
+const scoreFromStatus = (status: RequirementStatus): number | null => READINESS_STATUS_POINTS[status];
+
+const worstStatus = (statuses: RequirementStatus[]): RequirementStatus => {
+  if (statuses.includes('RED')) return 'RED';
+  if (statuses.includes('AMBER')) return 'AMBER';
+  if (statuses.includes('GREEN')) return 'GREEN';
+  return 'GREY';
+};
+
+const calculateAverageScore = (items: RequirementReadiness[]): number | null => {
+  const scoredItems = items.filter(item => item.score !== null);
+  if (scoredItems.length === 0) return null;
+  const total = scoredItems.reduce((sum, item) => sum + (item.score || 0), 0);
+  return Math.round(total / scoredItems.length);
+};
+
+const buildScoreGroup = (name: string, items: RequirementReadiness[]): ReadinessScoreGroup => ({
+  name,
+  score: calculateAverageScore(items),
+  total: items.length,
+  scored: items.filter(item => item.score !== null).length,
+  green: items.filter(item => item.status === 'GREEN').length,
+  amber: items.filter(item => item.status === 'AMBER').length,
+  red: items.filter(item => item.status === 'RED').length,
+  grey: items.filter(item => item.status === 'GREY').length
+});
+
+const groupBy = <T>(items: T[], getKey: (item: T) => string): Map<string, T[]> => {
+  const groups = new Map<string, T[]>();
+  items.forEach(item => {
+    const key = getKey(item);
+    groups.set(key, [...(groups.get(key) || []), item]);
+  });
+  return groups;
+};
+
+const getLatestReview = (requirementId: string, reviews: Review[]): Review | null => {
+  const matchingReviews = reviews
+    .filter(review => review.requirement_id === requirementId)
+    .sort((a, b) => new Date(b.review_date).getTime() - new Date(a.review_date).getTime());
+  return matchingReviews[0] || null;
+};
+
+const getOpenActions = (
+  requirementId: string,
+  actions: Action[],
+  requirementActions: RequirementAction[]
+): Action[] => {
+  const actionIds = new Set(
+    requirementActions
+      .filter(link => link.requirement_id === requirementId)
+      .map(link => link.action_id)
+  );
+  return actions.filter(action => actionIds.has(action.id) && action.status !== 'Closed');
+};
+
+export const assessRequirementReadiness = (
+  requirement: Requirement,
+  documents: EvidenceDocument[],
+  requirementDocuments: RequirementDocument[],
+  reviews: Review[],
+  actions: Action[],
+  requirementActions: RequirementAction[],
+  today: Date = new Date()
+): RequirementReadiness => {
+  const linkedDocuments = getLinkedDocumentsForRequirement(requirement.id, documents, requirementDocuments);
+  const latestReview = getLatestReview(requirement.id, reviews);
+  const openActions = getOpenActions(requirement.id, actions, requirementActions);
+  const reasons: ReadinessReason[] = [];
+  const statusSignals: RequirementStatus[] = [];
+
+  if (
+    requirement.status === 'GREY' &&
+    !requirement.review_date &&
+    !requirement.next_due_date &&
+    linkedDocuments.length === 0 &&
+    openActions.length === 0
+  ) {
+    reasons.push({ level: 'GREY', message: 'Requirement has not been assessed yet and is excluded from scoring.' });
+    return {
+      requirement,
+      status: 'GREY',
+      score: null,
+      linkedDocuments,
+      latestReview,
+      openActions,
+      reasons
+    };
+  }
+
+  if (linkedDocuments.length === 0) {
+    statusSignals.push('RED');
+    reasons.push({ level: 'RED', message: 'No evidence documents are linked to this requirement.' });
+  } else {
+    reasons.push({ level: 'GREEN', message: `${linkedDocuments.length} evidence document${linkedDocuments.length === 1 ? ' is' : 's are'} linked.` });
+  }
+
+  linkedDocuments.forEach(document => {
+    const expiryDays = daysUntil(document.expiry_date, today);
+    if (document.status === 'Expired' || (expiryDays !== null && expiryDays < 0)) {
+      statusSignals.push('RED');
+      reasons.push({ level: 'RED', message: `${document.title} is expired.` });
+    } else if (document.status === 'Expiring Soon' || (expiryDays !== null && expiryDays <= WARNING_DAYS)) {
+      statusSignals.push('AMBER');
+      reasons.push({ level: 'AMBER', message: `${document.title} expires within ${WARNING_DAYS} days.` });
+    }
+  });
+
+  const dueDays = daysUntil(requirement.next_due_date, today);
+  if (dueDays !== null && dueDays < 0) {
+    statusSignals.push('RED');
+    reasons.push({ level: 'RED', message: 'Requirement review is overdue.' });
+  } else if (dueDays !== null && dueDays <= WARNING_DAYS) {
+    statusSignals.push('AMBER');
+    reasons.push({ level: 'AMBER', message: `Requirement review is due within ${WARNING_DAYS} days.` });
+  } else if (dueDays !== null) {
+    reasons.push({ level: 'GREEN', message: 'Requirement review date is not due soon.' });
+  }
+
+  openActions.forEach(action => {
+    const actionDueDays = daysUntil(action.due_date, today);
+    if (actionDueDays !== null && actionDueDays < 0) {
+      statusSignals.push('RED');
+      reasons.push({ level: 'RED', message: `Open action "${action.title}" is overdue.` });
+    } else {
+      statusSignals.push('AMBER');
+      reasons.push({ level: 'AMBER', message: `Open action "${action.title}" remains unresolved.` });
+    }
+  });
+
+  if (statusSignals.length === 0) {
+    statusSignals.push('GREEN');
+    reasons.push({ level: 'GREEN', message: 'Evidence, review timing and linked actions currently have no warnings.' });
+  }
+
+  const status = worstStatus(statusSignals);
+
+  return {
+    requirement,
+    status,
+    score: scoreFromStatus(status),
+    linkedDocuments,
+    latestReview,
+    openActions,
+    reasons
+  };
+};
+
+export const buildReadinessReport = (input: {
+  requirements: Requirement[];
+  documents: EvidenceDocument[];
+  requirementDocuments: RequirementDocument[];
+  reviews: Review[];
+  actions: Action[];
+  requirementActions: RequirementAction[];
+  today?: Date;
+}): ReadinessReport => {
+  const today = input.today || new Date();
+  const requirementReadiness = input.requirements.map(requirement =>
+    assessRequirementReadiness(
+      requirement,
+      input.documents,
+      input.requirementDocuments,
+      input.reviews,
+      input.actions,
+      input.requirementActions,
+      today
+    )
+  );
+
+  const categoryScores = Array.from(groupBy(requirementReadiness, item => item.requirement.category))
+    .map(([category, items]) => buildScoreGroup(category, items))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const riskOrder: RequirementRiskLevel[] = ['Critical', 'High', 'Medium', 'Low'];
+  const riskScores = riskOrder
+    .filter(risk => requirementReadiness.some(item => item.requirement.risk_level === risk))
+    .map(risk => buildScoreGroup(risk, requirementReadiness.filter(item => item.requirement.risk_level === risk)));
+
+  const missingEvidence = requirementReadiness.filter(item => item.linkedDocuments.length === 0 && item.status !== 'GREY');
+  const upcomingDue = requirementReadiness.filter(item => {
+    const dueDays = daysUntil(item.requirement.next_due_date, today);
+    return dueDays !== null && dueDays >= 0 && dueDays <= WARNING_DAYS;
+  });
+  const overdue = requirementReadiness.filter(item => {
+    const dueDays = daysUntil(item.requirement.next_due_date, today);
+    return dueDays !== null && dueDays < 0;
+  });
+
+  const requirementById = new Map(input.requirements.map(requirement => [requirement.id, requirement]));
+  const openActionItems = input.actions
+    .filter(action => action.status !== 'Closed')
+    .map(action => {
+      const linkedRequirements = input.requirementActions
+        .filter(link => link.action_id === action.id)
+        .map(link => requirementById.get(link.requirement_id))
+        .filter((requirement): requirement is Requirement => Boolean(requirement));
+      return { action, requirements: linkedRequirements };
+    });
+
+  const topRisks = [...requirementReadiness]
+    .filter(item => item.status === 'RED' || item.status === 'AMBER')
+    .sort((a, b) => {
+      const riskWeight: Record<RequirementRiskLevel, number> = { Critical: 4, High: 3, Medium: 2, Low: 1 };
+      const statusWeight: Record<RequirementStatus, number> = { RED: 3, AMBER: 2, GREEN: 1, GREY: 0 };
+      return (
+        statusWeight[b.status] - statusWeight[a.status] ||
+        riskWeight[b.requirement.risk_level] - riskWeight[a.requirement.risk_level] ||
+        (b.reasons.length - a.reasons.length)
+      );
+    })
+    .slice(0, 10);
+
+  const scoredRequirements = requirementReadiness.filter(item => item.score !== null);
+  const overallScore = calculateAverageScore(requirementReadiness);
+
+  const readinessTrend: ReadinessTrendPoint[] = [
+    { label: 'Previous', score: null },
+    { label: 'Current', score: overallScore }
+  ];
+
+  const explanation = scoredRequirements.length === 0
+    ? 'No assessed requirements are currently included in the readiness score.'
+    : `Score uses ${scoredRequirements.length} assessed requirement${scoredRequirements.length === 1 ? '' : 's'}: Green=100, Amber=50, Red=0, Grey excluded.`;
+
+  return {
+    overallScore,
+    requirements: requirementReadiness,
+    categoryScores,
+    riskScores,
+    missingEvidence,
+    upcomingDue,
+    overdue,
+    openActionItems,
+    topRisks,
+    readinessTrend,
+    explanation
+  };
+};
