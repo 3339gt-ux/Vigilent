@@ -15,6 +15,7 @@ import {
 } from '@/lib/db';
 import { isDemoMode, requireProductionEnv } from '@/lib/env';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { formatSupabaseError, logSupabaseError } from '@/lib/supabaseDiagnostics';
 import {
   Profile,
   Organization,
@@ -180,7 +181,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!supabase) throw new Error('Supabase client is not configured.');
 
     const { data: { session }, error } = await supabase.auth.getSession();
-    if (error) throw error;
+    if (error) {
+      const diagnostics = logSupabaseError('auth.getSession', error);
+      throw new Error(formatSupabaseError(diagnostics));
+    }
 
     const currentAuthUser = session?.user || null;
     setAuthUser(currentAuthUser);
@@ -191,12 +195,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const [profile, org] = await Promise.all([
-      getCurrentSupabaseProfile(),
-      getCurrentSupabaseOrganization()
-    ]);
+    const fallbackProfile = profileFromAuthUser(currentAuthUser);
+    setUser(fallbackProfile);
 
-    setUser(profile || profileFromAuthUser(currentAuthUser));
+    const profile = await getCurrentSupabaseProfile();
+    setUser(profile || fallbackProfile);
+
+    const org = await getCurrentSupabaseOrganization();
     setOrganization(org);
 
     if (!org) {
@@ -221,10 +226,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await loadProductionData();
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load application data.';
-      console.error('Failed to load application data:', err);
+      const diagnostics = logSupabaseError('AppContext.loadData', err);
+      const message = formatSupabaseError(diagnostics);
       setAuthError(message);
-      setUser(null);
+      const currentSessionUser = !isDemoMode && supabase
+        ? (await supabase.auth.getSession()).data.session?.user || null
+        : null;
+      if (currentSessionUser) {
+        setAuthUser(currentSessionUser);
+        setUser(profileFromAuthUser(currentSessionUser));
+      } else if (!authUser) {
+        setUser(null);
+      }
       clearWorkspaceState();
     } finally {
       setIsLoading(false);
@@ -346,8 +359,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
 
     if (error) {
-      setAuthError(error.message);
-      throw new Error(error.message);
+      const diagnostics = logSupabaseError('rpc.create_organization_for_current_user', error);
+      const message = formatSupabaseError(diagnostics);
+      setAuthError(message);
+      throw new Error(message);
     }
 
     await loadData();

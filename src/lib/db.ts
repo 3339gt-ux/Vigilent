@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { isDemoMode, requireDemoMode, requireProductionEnv } from './env';
+import { throwSupabaseError } from './supabaseDiagnostics';
 import {
   Profile,
   Organization,
@@ -370,7 +371,7 @@ export const getCurrentSupabaseProfile = async (): Promise<Profile | null> => {
 
   const userId = await getCurrentSupabaseUserId();
   const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-  if (error) throw error;
+  if (error) throwSupabaseError('profiles.select current user profile', error);
   return data;
 };
 
@@ -386,7 +387,7 @@ export const getCurrentSupabaseOrganization = async (): Promise<Organization | n
     .limit(1)
     .maybeSingle();
 
-  if (memberError) throw memberError;
+  if (memberError) throwSupabaseError('organization_members.select current user membership', memberError);
   if (!membership?.organization_id) return null;
 
   const { data, error } = await supabase
@@ -394,7 +395,7 @@ export const getCurrentSupabaseOrganization = async (): Promise<Organization | n
     .select('*')
     .eq('id', membership.organization_id)
     .single();
-  if (error) throw error;
+  if (error) throwSupabaseError('organizations.select current membership organization', error);
   return data;
 };
 
@@ -421,7 +422,7 @@ export const dbService = {
   async getOrganization(orgId: string): Promise<Organization> {
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('organizations').select('*').eq('id', orgId).single();
-      if (error) throw error;
+      if (error) throwSupabaseError('organizations.select by id', error);
       return data;
     } else {
       initMockDb();
@@ -432,7 +433,7 @@ export const dbService = {
   async updateOrganization(orgId: string, updates: Partial<Organization>): Promise<Organization> {
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('organizations').update(updates).eq('id', orgId).select().single();
-      if (error) throw error;
+      if (error) throwSupabaseError('organizations.update by id', error);
       return data;
     } else {
       const org = getStorageItem('vigilen_org', MOCK_ORG);
@@ -447,7 +448,7 @@ export const dbService = {
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
       const { data, error } = await supabase!.from('compliance_requirements').select('*').eq('organization_id', orgId);
-      if (error) throw error;
+      if (error) throwSupabaseError('compliance_requirements.select active organization', error);
       return data || [];
     } else {
       initMockDb();
@@ -459,7 +460,7 @@ export const dbService = {
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
       const { data, error } = await supabase!.from('compliance_requirements').insert([{ ...req, organization_id: orgId }]).select().single();
-      if (error) throw error;
+      if (error) throwSupabaseError('compliance_requirements.insert active organization', error);
       return data;
     } else {
       const reqs = getStorageItem('vigilen_requirements', MOCK_REQUIREMENTS);
@@ -480,7 +481,7 @@ export const dbService = {
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
       const { data, error } = await supabase!.from('evidence_documents').select('*').eq('organization_id', orgId);
-      if (error) throw error;
+      if (error) throwSupabaseError('evidence_documents.select active organization', error);
       return data || [];
     } else {
       initMockDb();
@@ -492,7 +493,7 @@ export const dbService = {
     const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('evidence_documents').insert([{ ...doc, organization_id: orgId }]).select().single();
-      if (error) throw error;
+      if (error) throwSupabaseError('evidence_documents.insert active organization', error);
       return data;
     } else {
       const docs = getStorageItem('vigilen_documents', MOCK_DOCUMENTS);
@@ -520,7 +521,7 @@ export const dbService = {
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
       const { data, error } = await supabase!.from('evidence_documents').update(updates).eq('id', docId).eq('organization_id', orgId).select().single();
-      if (error) throw error;
+      if (error) throwSupabaseError('evidence_documents.update active organization', error);
       return data;
     } else {
       const docs = getStorageItem('vigilen_documents', MOCK_DOCUMENTS);
@@ -556,7 +557,7 @@ export const dbService = {
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
       const { error } = await supabase!.from('evidence_documents').delete().eq('id', docId).eq('organization_id', orgId);
-      if (error) throw error;
+      if (error) throwSupabaseError('evidence_documents.delete active organization', error);
     } else {
       const docs = getStorageItem('vigilen_documents', MOCK_DOCUMENTS);
       const filtered = docs.filter((d: any) => d.id !== docId);
@@ -580,7 +581,7 @@ export const dbService = {
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
       const { data, error } = await supabase!.from('matrix_cells').select('*').eq('organization_id', orgId);
-      if (error) throw error;
+      if (error) throwSupabaseError('matrix_cells.select active organization', error);
       return data || [];
     } else {
       initMockDb();
@@ -592,7 +593,7 @@ export const dbService = {
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
       const { data, error } = await supabase!.from('matrix_cells').update(updates).eq('id', cellId).eq('organization_id', orgId).select().single();
-      if (error) throw error;
+      if (error) throwSupabaseError('matrix_cells.update active organization', error);
       return data;
     } else {
       const cells = getStorageItem('vigilen_cells', MOCK_CELLS);
@@ -610,7 +611,7 @@ export const dbService = {
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
       const { data, error } = await supabase!.from('audit_packs').select('*').eq('organization_id', orgId);
-      if (error) throw error;
+      if (error) throwSupabaseError('audit_packs.select active organization', error);
       return data || [];
     } else {
       initMockDb();
@@ -622,7 +623,7 @@ export const dbService = {
     const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('audit_packs').insert([{ ...pack, organization_id: orgId }]).select().single();
-      if (error) throw error;
+      if (error) throwSupabaseError('audit_packs.insert active organization', error);
       return data;
     } else {
       const packs = getStorageItem('vigilen_audit_packs', MOCK_AUDIT_PACKS);
@@ -647,7 +648,7 @@ export const dbService = {
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
       const { data, error } = await supabase!.from('audit_packs').update(updates).eq('id', packId).eq('organization_id', orgId).select().single();
-      if (error) throw error;
+      if (error) throwSupabaseError('audit_packs.update active organization', error);
       return data;
     } else {
       const packs = getStorageItem('vigilen_audit_packs', MOCK_AUDIT_PACKS);
@@ -665,7 +666,7 @@ export const dbService = {
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
       const { data, error } = await supabase!.from('audit_logs').select('*').eq('organization_id', orgId).order('created_at', { ascending: false });
-      if (error) throw error;
+      if (error) throwSupabaseError('audit_logs.select active organization', error);
       return data || [];
     } else {
       initMockDb();
@@ -684,7 +685,7 @@ export const dbService = {
         action,
         details
       }]).select().single();
-      if (error) throw error;
+      if (error) throwSupabaseError('audit_logs.insert active organization', error);
       return data;
     } else {
       const logs = getStorageItem('vigilen_logs', MOCK_LOGS);

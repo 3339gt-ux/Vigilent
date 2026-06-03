@@ -225,6 +225,8 @@ begin
 end;
 $$;
 
+grant execute on function public.create_organization_for_current_user(text, text, text, text) to authenticated;
+
 drop policy if exists "Users can read own organization" on public.organizations;
 drop policy if exists "Users can update own organization" on public.organizations;
 drop policy if exists "Users can read/write profiles in own organization" on public.profiles;
