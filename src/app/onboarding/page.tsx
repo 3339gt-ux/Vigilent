@@ -46,8 +46,8 @@ export default function OnboardingPage() {
     try {
       await createOrganization(organizationName, industry || null, country || 'Ireland');
       router.push('/dashboard');
-    } catch (err: any) {
-      setError(err.message || 'Unable to create organisation.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to create organisation. Check your connection and try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -85,7 +85,7 @@ export default function OnboardingPage() {
               Create your organisation
             </h1>
             <p className="text-sm text-muted-foreground">
-              Set the active organisation for this account. You will be added as the owner.
+              Set up the workspace that will hold requirements, private evidence records, actions, reviews and audit packs. You will be added as the owner.
             </p>
           </div>
 
@@ -97,6 +97,9 @@ export default function OnboardingPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="p-3 bg-muted/40 border border-border rounded-lg text-[11px] text-muted-foreground leading-relaxed">
+              After this step, use the dashboard checklist to import starter requirements, upload evidence, link records, and create a first audit pack.
+            </div>
             <div>
               <label htmlFor="onboarding-org-name" className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
                 Organisation Name

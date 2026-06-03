@@ -63,6 +63,8 @@ export default function EvidenceVault() {
   const [metaKey, setMetaKey] = useState('');
   const [metaVal, setMetaVal] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [saveSuccess, setSaveSuccess] = useState('');
   const [isOpeningFile, setIsOpeningFile] = useState(false);
   const [fileError, setFileError] = useState('');
   const [selectedRequirementId, setSelectedRequirementId] = useState('');
@@ -157,23 +159,41 @@ export default function EvidenceVault() {
     setMetaKey('');
     setMetaVal('');
     setFileError('');
+    setSaveError('');
+    setSaveSuccess('');
     setSelectedRequirementId('');
   };
 
   const handleLinkRequirement = async () => {
     if (!selectedDoc || !selectedRequirementId) return;
-    await linkDocumentToRequirement(selectedRequirementId, selectedDoc.id);
-    setSelectedRequirementId('');
+    setSaveError('');
+    setSaveSuccess('');
+    try {
+      await linkDocumentToRequirement(selectedRequirementId, selectedDoc.id);
+      setSelectedRequirementId('');
+      setSaveSuccess('Evidence linked to requirement.');
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not link this evidence record.');
+    }
   };
 
   const handleUnlinkRequirement = async (requirementId: string) => {
     if (!selectedDoc) return;
-    await unlinkDocumentFromRequirement(requirementId, selectedDoc.id);
+    setSaveError('');
+    setSaveSuccess('');
+    try {
+      await unlinkDocumentFromRequirement(requirementId, selectedDoc.id);
+      setSaveSuccess('Evidence link removed.');
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not remove this evidence link.');
+    }
   };
 
   const handleSaveMetadata = async () => {
     if (!selectedDoc) return;
     setIsSaving(true);
+    setSaveError('');
+    setSaveSuccess('');
     try {
       const tags = editTags
         .split(',')
@@ -190,8 +210,9 @@ export default function EvidenceVault() {
         tags
       });
       setSelectedDoc(updated);
+      setSaveSuccess('Document metadata saved.');
     } catch (err) {
-      console.error(err);
+      setSaveError(err instanceof Error ? err.message : 'Could not save document metadata.');
     } finally {
       setIsSaving(false);
     }
@@ -293,6 +314,13 @@ export default function EvidenceVault() {
         </button>
       </div>
 
+      <div className="bg-card border border-border rounded-xl p-4 text-xs">
+        <h2 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Upload and Link Evidence</h2>
+        <p className="text-muted-foreground mt-1 leading-relaxed">
+          Upload a private evidence file, select it from the table, then use <strong className="text-foreground">Linked Requirements</strong> in the detail panel to connect the record to one or more requirements. Files open through temporary signed URLs only.
+        </p>
+      </div>
+
       {/* Grid: Search, Filters, and Table */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start">
         
@@ -378,7 +406,9 @@ export default function EvidenceVault() {
                   {filteredDocs.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="p-8 text-center text-muted-foreground">
-                        No evidence files match your search parameters.
+                        {documents.length === 0
+                          ? 'No evidence records yet. Upload a PDF, DOCX, XLSX, PNG, JPG, or JPEG to start building readiness evidence.'
+                          : 'No evidence files match your search parameters.'}
                       </td>
                     </tr>
                   ) : (
@@ -492,11 +522,23 @@ export default function EvidenceVault() {
                   {isOpeningFile ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
                   Open Private File
                 </button>
-                {fileError && (
-                  <div className="p-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-300 text-[11px]">
-                    {fileError}
-                  </div>
-                )}
+              {fileError && (
+                <div className="p-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-300 text-[11px]">
+                  {fileError}
+                </div>
+              )}
+
+              {saveError && (
+                <div className="p-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-300 text-[11px]">
+                  {saveError}
+                </div>
+              )}
+
+              {saveSuccess && (
+                <div className="p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 text-[11px]">
+                  {saveSuccess}
+                </div>
+              )}
 
                 <div>
                   <label htmlFor="edit-title" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">

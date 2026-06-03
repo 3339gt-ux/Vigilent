@@ -219,6 +219,13 @@ export default function RequirementsPage() {
         </div>
       </div>
 
+      <div className="bg-card border border-border rounded-xl p-4 text-xs">
+        <h2 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Getting Started</h2>
+        <p className="text-muted-foreground mt-1 leading-relaxed">
+          Use <strong className="text-foreground">Import Template Pack</strong> to preview practical starter requirements, select only the items you want, and skip duplicates automatically. After import, open a requirement to link existing evidence records and review its calculated status.
+        </p>
+      </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {(['GREEN', 'AMBER', 'RED', 'GREY'] as RequirementStatus[]).map(status => (
           <button
@@ -278,7 +285,9 @@ export default function RequirementsPage() {
                   {filteredRequirements.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="p-8 text-center text-muted-foreground">
-                        No requirements match the current filters.
+                        {frameworkRequirements.length === 0
+                          ? 'No requirements yet. Import a template pack to create a practical starter set for this organisation.'
+                          : 'No requirements match the current filters.'}
                       </td>
                     </tr>
                   ) : (
@@ -408,7 +417,10 @@ export default function RequirementsPage() {
           ) : (
             <div className="h-64 flex flex-col items-center justify-center text-center text-muted-foreground gap-3">
               <ClipboardList className="w-10 h-10 text-muted/30" />
-              <span className="text-xs font-bold block">No Requirement Selected</span>
+              <span className="text-xs font-bold block">Select a Requirement</span>
+              <p className="text-[10px] max-w-[220px] leading-normal">
+                Choose a row to inspect linked evidence, add document links, and see review or action history.
+              </p>
             </div>
           )}
         </div>

@@ -329,6 +329,13 @@ export default function AuditPackBuilder() {
         </p>
       </div>
 
+      <div className="bg-card border border-border rounded-xl p-4 text-xs">
+        <h2 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">How to Create a Pack</h2>
+        <p className="text-muted-foreground mt-1 leading-relaxed">
+          Name the pack, select requirements, review linked documents and warnings, then save it as a draft. The pack stores requirement and document references only; evidence files remain private and open through signed URLs.
+        </p>
+      </div>
+
       {(error || message) && (
         <div className={`border rounded-xl p-3 text-xs font-semibold flex items-start gap-2 ${
           error ? 'bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-400' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
@@ -420,7 +427,11 @@ export default function AuditPackBuilder() {
 
               <div className="border border-border/85 rounded-xl divide-y divide-border/60 max-h-[420px] overflow-y-auto bg-muted/10">
                 {filteredRequirements.length === 0 ? (
-                  <p className="p-6 text-center text-xs text-muted-foreground">No requirements found.</p>
+                  <p className="p-6 text-center text-xs text-muted-foreground">
+                    {frameworkRequirements.length === 0
+                      ? 'No requirements are available yet. Import a template pack on the Requirements page before building an audit pack.'
+                      : 'No requirements match this search.'}
+                  </p>
                 ) : (
                   filteredRequirements.map(item => {
                     const isChecked = selectedRequirementIds.includes(item.requirement.id);

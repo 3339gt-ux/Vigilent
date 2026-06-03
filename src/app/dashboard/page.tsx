@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import Link from 'next/link';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
+import { isDemoMode } from '@/lib/env';
 import {
   ArrowRight,
   CheckCircle2,
@@ -31,6 +32,7 @@ export default function DashboardPage() {
     documents,
     auditPacks,
     auditLogs,
+    resetDemoData,
     uploadDocument
   } = useApp();
 
@@ -42,6 +44,9 @@ export default function DashboardPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [uploadSuccess, setUploadSuccess] = useState('');
+  const [resetMessage, setResetMessage] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [isResettingDemo, setIsResettingDemo] = useState(false);
 
   const greenRequirements = readinessReport.requirements.filter(requirement => requirement.status === 'GREEN').length;
   const amberRequirements = readinessReport.requirements.filter(requirement => requirement.status === 'AMBER').length;
@@ -78,6 +83,20 @@ export default function DashboardPage() {
     }
   };
 
+  const handleResetDemoData = async () => {
+    setIsResettingDemo(true);
+    setResetMessage('');
+    setResetError('');
+    try {
+      await resetDemoData();
+      setResetMessage('Demo sample data has been reset.');
+    } catch (err) {
+      setResetError(err instanceof Error ? err.message : 'Unable to reset demo data.');
+    } finally {
+      setIsResettingDemo(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -94,6 +113,36 @@ export default function DashboardPage() {
         >
           <Plus className="w-4 h-4" /> Upload Evidence
         </Link>
+      </div>
+
+      <div className="bg-card border border-border rounded-xl p-5">
+        <div className="flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">First-Run Checklist</h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Start with a template pack, upload evidence, link records to requirements, then create an audit pack from the selected requirements.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <Link href="/dashboard/requirements" className="px-3 py-2 bg-muted hover:bg-muted/80 border border-border rounded-lg font-bold">1. Import Requirements</Link>
+            <Link href="/dashboard/vault" className="px-3 py-2 bg-muted hover:bg-muted/80 border border-border rounded-lg font-bold">2. Upload Evidence</Link>
+            <Link href="/dashboard/audit-packs" className="px-3 py-2 bg-muted hover:bg-muted/80 border border-border rounded-lg font-bold">3. Build Pack</Link>
+            {isDemoMode && (
+              <button
+                onClick={handleResetDemoData}
+                disabled={isResettingDemo}
+                className="px-3 py-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-700 dark:text-amber-300 rounded-lg font-bold"
+              >
+                {isResettingDemo ? 'Resetting...' : 'Reset Demo Data'}
+              </button>
+            )}
+          </div>
+        </div>
+        {(resetMessage || resetError) && (
+          <p className={`text-[11px] mt-3 font-semibold ${resetError ? 'text-rose-500' : 'text-emerald-500'}`}>
+            {resetError || resetMessage}
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

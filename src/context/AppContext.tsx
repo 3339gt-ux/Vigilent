@@ -54,6 +54,7 @@ interface AppContextType {
   logout: () => Promise<void>;
   createOrganization: (name: string, industry?: string | null, country?: string) => Promise<Organization>;
   refreshSession: () => Promise<void>;
+  resetDemoData: () => Promise<void>;
   updateOrgProfile: (updates: Partial<Organization>) => Promise<void>;
 
   requirements: ComplianceRequirement[];
@@ -516,6 +517,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const resetDemoData = async () => {
+    if (!isDemoMode) {
+      throw new Error('Sample data reset is only available when NEXT_PUBLIC_VIGILEN_APP_MODE=demo.');
+    }
+
+    [
+      'vigilen_initialized',
+      'vigilen_org',
+      'vigilen_profile',
+      'vigilen_requirements',
+      'vigilen_documents',
+      'vigilen_cells',
+      'vigilen_audit_packs',
+      'vigilen_logs',
+      'vigilen_framework_requirements',
+      'vigilen_requirement_evidence_types',
+      'vigilen_requirement_documents',
+      'vigilen_reviews',
+      'vigilen_actions',
+      'vigilen_requirement_actions'
+    ].forEach(key => localStorage.removeItem(key));
+
+    initMockDb();
+    await loadDemoData();
+  };
+
   const updateOrgProfile = async (updates: Partial<Organization>) => {
     if (!organization) return;
     const updated = await dbService.updateOrganization(organization.id, updates);
@@ -725,6 +752,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         logout,
         createOrganization,
         refreshSession: loadData,
+        resetDemoData,
         updateOrgProfile,
         requirements,
         documents,
