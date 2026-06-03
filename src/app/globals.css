@@ -102,6 +102,18 @@
   --color-expired: hsl(var(--expired));
   --color-missing: hsl(var(--missing));
   
+  --color-indigo-50: #f0f7ff;
+  --color-indigo-100: #e0effe;
+  --color-indigo-200: #bae0fd;
+  --color-indigo-300: #7cc5fc;
+  --color-indigo-400: #38a5f8;
+  --color-indigo-500: #0ea5e9;
+  --color-indigo-600: #2563eb;
+  --color-indigo-700: #1d4ed8;
+  --color-indigo-800: #1e40af;
+  --color-indigo-900: #1e3a8a;
+  --color-indigo-950: #0B192C;
+
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
@@ -129,13 +141,13 @@ body {
 }
 
 .gradient-text {
-  background: linear-gradient(135deg, #a78bfa 0%, #6366f1 50%, #3b82f6 100%);
+  background: linear-gradient(135deg, #38a5f8 0%, #2563eb 50%, #0B192C 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .light .gradient-text {
-  background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%);
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }

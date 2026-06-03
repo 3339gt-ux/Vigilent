@@ -444,8 +444,10 @@ export default function EvidenceVault() {
                       return (
                         <tr 
                           key={doc.id}
-                          className={`hover:bg-muted/30 transition-colors cursor-pointer ${
-                            isSelected ? 'bg-indigo-500/5' : ''
+                          className={`hover:bg-muted/50 transition-colors cursor-pointer border-l-2 ${
+                            isSelected 
+                              ? 'bg-indigo-500/5 border-l-indigo-600' 
+                              : 'border-l-transparent'
                           }`}
                           onClick={() => handleSelectDoc(doc)}
                         >
@@ -853,12 +855,12 @@ export default function EvidenceVault() {
 
             </div>
           ) : (
-            <div className="h-64 flex flex-col items-center justify-center text-center text-muted-foreground gap-3">
-              <FolderLock className="w-10 h-10 text-muted/30" />
+            <div className="h-96 flex flex-col items-center justify-center text-center text-muted-foreground gap-3 border border-dashed border-border rounded-xl bg-muted/10 p-6">
+              <FolderLock className="w-10 h-10 text-muted-foreground/30" />
               <div className="space-y-1">
-                <span className="text-xs font-bold block">No Document Selected</span>
-                <p className="text-[10px] max-w-[200px] leading-normal mx-auto">
-                  Click a row in the registry to inspect file properties, modify expiries, or write custom metadata attributes.
+                <span className="text-xs font-bold text-foreground block">No Document Selected</span>
+                <p className="text-[10px] max-w-[180px] leading-normal mx-auto">
+                  Select a document from the registry list to view properties, manage linked requirements, or edit tags.
                 </p>
               </div>
             </div>

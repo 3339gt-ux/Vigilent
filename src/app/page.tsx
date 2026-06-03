@@ -10,12 +10,9 @@ import {
   Layers, 
   AlertTriangle, 
   Clock, 
-  ChevronRight, 
   Sun, 
   Moon, 
   Info,
-  DollarSign,
-  Building,
   CheckCircle2,
   AlertCircle
 } from 'lucide-react';

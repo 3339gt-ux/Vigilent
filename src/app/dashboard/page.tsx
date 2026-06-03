@@ -320,9 +320,10 @@ export default function DashboardPage() {
             </div>
 
             {readinessReport.topRisks.length === 0 ? (
-              <div className="text-center py-8 text-xs text-muted-foreground flex flex-col items-center justify-center gap-2">
+              <div className="text-center py-12 text-xs text-muted-foreground flex flex-col items-center justify-center gap-3 bg-muted/10 border border-dashed border-border rounded-xl">
                 <CheckCircle2 className="w-8 h-8 text-emerald-500" />
-                No amber or red requirement risks currently detected.
+                <span className="font-semibold text-foreground">All Clear</span>
+                <span>No amber or red requirement risks currently detected.</span>
               </div>
             ) : (
               <div className="divide-y divide-border/60">
@@ -362,7 +363,10 @@ export default function DashboardPage() {
             <div className="bg-card border border-border rounded-xl p-6">
               <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-4">Missing Evidence ({readinessReport.missingEvidence.length})</h2>
               {readinessReport.missingEvidence.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No missing evidence detected in assessed requirements.</p>
+                <div className="text-center py-8 text-xs text-muted-foreground flex flex-col items-center justify-center gap-2 bg-muted/10 border border-dashed border-border rounded-xl">
+                  <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                  <span>No missing evidence detected.</span>
+                </div>
               ) : (
                 <div className="space-y-3">
                   {readinessReport.missingEvidence.slice(0, 8).map(item => (
@@ -378,7 +382,10 @@ export default function DashboardPage() {
             <div className="bg-card border border-border rounded-xl p-6">
               <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-4">Overdue Reviews ({readinessReport.overdue.length})</h2>
               {readinessReport.overdue.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No overdue reviews detected.</p>
+                <div className="text-center py-8 text-xs text-muted-foreground flex flex-col items-center justify-center gap-2 bg-muted/10 border border-dashed border-border rounded-xl">
+                  <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                  <span>No overdue reviews detected.</span>
+                </div>
               ) : (
                 <div className="space-y-3">
                   {readinessReport.overdue.slice(0, 8).map(item => (
@@ -389,6 +396,91 @@ export default function DashboardPage() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Rebalanced: Unclassified Documents and Open Audit Packs side-by-side */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-card border border-border rounded-xl p-6">
+              <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-1">Unclassified Documents ({unclassifiedDocs.length})</h2>
+              <p className="text-[11px] text-muted-foreground mb-4">Files missing expiry metadata required for continuous tracking.</p>
+
+              {unclassifiedDocs.length === 0 ? (
+                <div className="text-center py-8 text-xs text-muted-foreground bg-muted/10 border border-dashed border-border rounded-xl">
+                  No unclassified documents.
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
+                  {unclassifiedDocs.map(doc => (
+                    <div key={doc.id} className="p-3 bg-muted/40 border border-border/80 rounded-lg flex justify-between items-center text-xs">
+                      <div className="overflow-hidden mr-2">
+                        <span className="font-semibold block truncate">{doc.title}</span>
+                        <span className="text-[10px] text-muted-foreground block truncate mt-0.5">{doc.file_name}</span>
+                      </div>
+                      <Link
+                        href="/dashboard/vault"
+                        className="px-2 py-1 bg-indigo-500/10 text-indigo-500 font-bold text-[10px] rounded hover:bg-indigo-500/20 shrink-0"
+                      >
+                        Classify
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-card border border-border rounded-xl p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Open Audit Packs</h2>
+                <Link href="/dashboard/audit-packs" className="text-xs text-indigo-500 hover:underline">
+                  Create Pack
+                </Link>
+              </div>
+
+              {auditPacks.length === 0 ? (
+                <div className="text-center py-8 text-xs text-muted-foreground bg-muted/10 border border-dashed border-border rounded-xl">
+                  No audit packs created yet.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {auditPacks.map(pack => (
+                    <div key={pack.id} className="p-3 bg-card border border-border rounded-lg text-xs space-y-2">
+                      <div className="flex justify-between items-center font-bold">
+                        <span className="truncate">{pack.name}</span>
+                        <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase ${
+                          (pack.status === 'Ready' || pack.status === 'Active') ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-zinc-500/10 text-zinc-500'
+                        }`}>
+                          {pack.status === 'Active' ? 'Ready' : pack.status}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] text-muted-foreground">
+                        <span>{(pack.requirements || []).length} Requirements</span>
+                        <span>{pack.documents.length} Evidence Docs</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Rebalanced: Recent Audit Activity (Full Width for Left Column) */}
+          <div className="bg-card border border-border rounded-xl p-6">
+            <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-4">Recent Audit Activity</h2>
+
+            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
+              {auditLogs.slice(0, 5).map(log => (
+                <div key={log.id} className="text-xs flex gap-3">
+                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0 mt-1.5"></div>
+                  <div>
+                    <span className="font-semibold block text-foreground">{log.action}</span>
+                    <p className="text-muted-foreground text-[10px] leading-relaxed mt-0.5">{log.details}</p>
+                    <span className="text-[9px] text-muted-foreground block mt-1">
+                      {new Date(log.created_at).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -413,7 +505,10 @@ export default function DashboardPage() {
           <div className="bg-card border border-border rounded-xl p-6">
             <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-4">Open Actions ({openActions})</h2>
             {readinessReport.openActionItems.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No open actions linked to assessed requirements.</p>
+              <div className="text-center py-8 text-xs text-muted-foreground flex flex-col items-center justify-center gap-2 bg-muted/10 border border-dashed border-border rounded-xl">
+                <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                <span>No open action items.</span>
+              </div>
             ) : (
               <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
                 {readinessReport.openActionItems.slice(0, 8).map(item => (
@@ -435,7 +530,10 @@ export default function DashboardPage() {
           <div className="bg-card border border-border rounded-xl p-6">
             <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-4">Upcoming Due ({readinessReport.upcomingDue.length})</h2>
             {readinessReport.upcomingDue.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No requirement reviews due in the warning window.</p>
+              <div className="text-center py-8 text-xs text-muted-foreground flex flex-col items-center justify-center gap-2 bg-muted/10 border border-dashed border-border rounded-xl">
+                <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                <span>No reviews due soon.</span>
+              </div>
             ) : (
               <div className="space-y-3 max-h-52 overflow-y-auto pr-1">
                 {readinessReport.upcomingDue.slice(0, 8).map(item => (
@@ -546,87 +644,6 @@ export default function DashboardPage() {
                 )}
               </button>
             </form>
-          </div>
-
-          <div className="bg-card border border-border rounded-xl p-6">
-            <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-1">Unclassified Documents ({unclassifiedDocs.length})</h2>
-            <p className="text-[11px] text-muted-foreground mb-4">Files missing expiry metadata required for continuous tracking.</p>
-
-            {unclassifiedDocs.length === 0 ? (
-              <div className="text-center py-6 text-[11px] text-muted-foreground bg-muted/20 border border-dashed border-border rounded-lg">
-                No unclassified documents.
-              </div>
-            ) : (
-              <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
-                {unclassifiedDocs.map(doc => (
-                  <div key={doc.id} className="p-3 bg-muted/40 border border-border/80 rounded-lg flex justify-between items-center text-xs">
-                    <div className="overflow-hidden mr-2">
-                      <span className="font-semibold block truncate">{doc.title}</span>
-                      <span className="text-[10px] text-muted-foreground block truncate mt-0.5">{doc.file_name}</span>
-                    </div>
-                    <Link
-                      href="/dashboard/vault"
-                      className="px-2 py-1 bg-indigo-500/10 text-indigo-500 font-bold text-[10px] rounded hover:bg-indigo-500/20 shrink-0"
-                    >
-                      Classify
-                    </Link>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="bg-card border border-border rounded-xl p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Open Audit Packs</h2>
-              <Link href="/dashboard/audit-packs" className="text-xs text-indigo-500 hover:underline">
-                Create Pack
-              </Link>
-            </div>
-
-            {auditPacks.length === 0 ? (
-              <div className="text-center py-6 text-xs text-muted-foreground">
-                No audit packs created yet.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {auditPacks.map(pack => (
-                  <div key={pack.id} className="p-3 bg-card border border-border rounded-lg text-xs space-y-2">
-                    <div className="flex justify-between items-center font-bold">
-                      <span className="truncate">{pack.name}</span>
-                      <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase ${
-                        (pack.status === 'Ready' || pack.status === 'Active') ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-zinc-500/10 text-zinc-500'
-                      }`}>
-                        {pack.status === 'Active' ? 'Ready' : pack.status}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center text-[10px] text-muted-foreground">
-                      <span>{(pack.requirements || []).length} Requirements</span>
-                      <span>{pack.documents.length} Evidence Docs</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="bg-card border border-border rounded-xl p-6">
-            <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-4">Recent Audit Activity</h2>
-
-            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
-              {auditLogs.slice(0, 5).map(log => (
-                <div key={log.id} className="text-xs flex gap-3">
-                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0 mt-1.5"></div>
-                  <div>
-                    <span className="font-semibold block text-foreground">{log.action}</span>
-                    <p className="text-muted-foreground text-[10px] leading-relaxed mt-0.5">{log.details}</p>
-                    <span className="text-[9px] text-muted-foreground block mt-1">
-                      {new Date(log.created_at).toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
       </div>

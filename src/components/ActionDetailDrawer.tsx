@@ -199,12 +199,12 @@ export function ActionDetailDrawer({
             <div className="p-3 bg-muted/30 border border-border/60 rounded-lg"><span className="text-muted-foreground block">Closed By</span><strong className="break-all">{actorLabel(action.closed_by || action.completed_by || action.cancelled_by)}</strong></div>
           </section>
 
-          <section className="space-y-2 text-xs">
+          <section className="border-t border-border/50 pt-5 space-y-2 text-xs">
             <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Description</h3>
             <p className="text-muted-foreground leading-relaxed">{action.description || 'No action description recorded.'}</p>
           </section>
 
-          <section className="space-y-2 text-xs">
+          <section className="border-t border-border/50 pt-5 space-y-2 text-xs">
             <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Related Requirements</h3>
             {requirements.length === 0 ? (
               <p className="text-muted-foreground italic">No related requirement found.</p>
@@ -218,7 +218,7 @@ export function ActionDetailDrawer({
             )}
           </section>
 
-          <section className="space-y-3 text-xs">
+          <section className="border-t border-border/50 pt-5 space-y-3 text-xs">
             <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Attachments</h3>
             <p className="text-[10px] text-muted-foreground leading-relaxed">
               Attachments are normal private Evidence Vault records. New uploads are saved in the Actions category and opened through temporary signed URLs only.
@@ -293,7 +293,7 @@ export function ActionDetailDrawer({
             </form>
           </section>
 
-          <section className="space-y-3 text-xs">
+          <section className="border-t border-border/50 pt-5 space-y-3 text-xs">
             <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Lifecycle Controls</h3>
             {(action.status === 'Open' || action.status === 'In Progress') ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -332,7 +332,7 @@ export function ActionDetailDrawer({
             )}
           </section>
 
-          <section className="space-y-3 text-xs">
+          <section className="border-t border-border/50 pt-5 space-y-3 text-xs">
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-indigo-500" />
               <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Action History Timeline</h3>
@@ -349,22 +349,21 @@ export function ActionDetailDrawer({
                 Add Update
               </button>
             </form>
-            {updates.length === 0 ? (
-              <p className="text-muted-foreground italic">No action history yet.</p>
-            ) : (
               <div className="space-y-3">
                 {updates.map(update => (
-                  <div key={update.id} className="p-3 border-l-2 border-indigo-500 bg-muted/25 rounded-r-lg">
-                    <div className="flex flex-wrap justify-between gap-2">
-                      <span className="font-bold">{update.update_type}</span>
+                  <div key={update.id} className="p-3 border-l-2 border-indigo-600 bg-muted/40 rounded-r-lg text-xs">
+                    <div className="flex flex-wrap justify-between items-center gap-2">
+                      <span className="font-bold text-foreground">{update.update_type}</span>
                       <span className="text-[10px] text-muted-foreground">{formatDateTime(update.created_at)}</span>
                     </div>
                     <p className="text-muted-foreground mt-1 leading-relaxed">{update.note}</p>
-                    <span className="text-[10px] text-muted-foreground block mt-1 break-all">User: {actorLabel(update.user_id)}</span>
+                    <div className="text-[9px] text-muted-foreground mt-1.5 flex items-center gap-1">
+                      <span>Logged by:</span>
+                      <span className="font-bold text-foreground truncate max-w-[200px]">{actorLabel(update.user_id)}</span>
+                    </div>
                   </div>
                 ))}
               </div>
-            )}
           </section>
         </div>
       </div>

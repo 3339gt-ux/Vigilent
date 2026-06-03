@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { isDemoMode } from '@/lib/env';
-import { Settings, Save, ShieldAlert, Key, Bell, User, CheckCircle2, Copy, Check } from 'lucide-react';
+import { Save, ShieldAlert, Key, Bell, User, CheckCircle2, Copy, Check } from 'lucide-react';
 
 export default function SettingsPage() {
   const { user } = useApp();

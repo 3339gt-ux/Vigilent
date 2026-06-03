@@ -434,7 +434,11 @@ export default function RequirementsPage() {
                         <tr
                           key={requirement.id}
                           onClick={() => selectRequirement(requirement)}
-                          className="hover:bg-muted/30 cursor-pointer transition-colors"
+                          className={`hover:bg-muted/50 cursor-pointer transition-colors border-l-2 ${
+                            selectedRequirement?.id === requirement.id
+                              ? 'bg-indigo-500/5 border-l-indigo-600'
+                              : 'border-l-transparent'
+                          }`}
                         >
                           <td className="p-4 font-bold">{requirement.title}</td>
                           <td className="p-4 text-muted-foreground font-semibold">{requirement.category}</td>
@@ -784,11 +788,11 @@ export default function RequirementsPage() {
               </div>
             </div>
           ) : (
-            <div className="h-64 flex flex-col items-center justify-center text-center text-muted-foreground gap-3">
-              <ClipboardList className="w-10 h-10 text-muted/30" />
-              <span className="text-xs font-bold block">Select a Requirement</span>
-              <p className="text-[10px] max-w-[220px] leading-normal">
-                Choose a row to inspect linked evidence, add document links, and see review or action history.
+            <div className="h-96 flex flex-col items-center justify-center text-center text-muted-foreground gap-3 border border-dashed border-border rounded-xl bg-muted/10 p-6">
+              <ClipboardList className="w-10 h-10 text-muted-foreground/30" />
+              <span className="text-xs font-bold text-foreground block">Select a Requirement</span>
+              <p className="text-[10px] max-w-[200px] leading-normal">
+                Choose a row from the list to inspect linked evidence, add action items, and view review logs.
               </p>
             </div>
           )}

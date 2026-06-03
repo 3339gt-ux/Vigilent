@@ -351,14 +351,22 @@ export default function AuditPackBuilder() {
             <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
               Requirement Pack Workflow
             </span>
-            <div className="flex flex-wrap gap-2 text-[10px] font-bold text-muted-foreground">
+            <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs font-bold text-muted-foreground">
               {['Details', 'Requirements', 'Review', 'Saved'].map((label, index) => (
-                <span
-                  key={label}
-                  className={`px-2 py-0.5 rounded ${step === index + 1 ? 'bg-indigo-500/10 text-indigo-500' : ''}`}
-                >
-                  {index + 1}. {label}
-                </span>
+                <React.Fragment key={label}>
+                  {index > 0 && <span className="text-muted-foreground/40 font-normal">/</span>}
+                  <span
+                    className={`px-2.5 py-1 rounded-lg transition-all duration-200 ${
+                      step === index + 1
+                        ? 'bg-indigo-600 text-white font-extrabold shadow-sm'
+                        : step > index + 1
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold'
+                        : 'bg-muted text-muted-foreground/60 font-semibold'
+                    }`}
+                  >
+                    {label}
+                  </span>
+                </React.Fragment>
               ))}
             </div>
           </div>
@@ -398,7 +406,7 @@ export default function AuditPackBuilder() {
                 <button
                   onClick={() => setStep(2)}
                   disabled={!packName.trim()}
-                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/40 text-white font-bold rounded-lg text-xs"
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/40 text-white font-bold rounded-lg text-xs shadow-md shadow-indigo-600/10 transition-all duration-200 cursor-pointer"
                 >
                   Continue
                 </button>
@@ -427,11 +435,14 @@ export default function AuditPackBuilder() {
 
               <div className="border border-border/85 rounded-xl divide-y divide-border/60 max-h-[420px] overflow-y-auto bg-muted/10">
                 {filteredRequirements.length === 0 ? (
-                  <p className="p-6 text-center text-xs text-muted-foreground">
-                    {frameworkRequirements.length === 0
-                      ? 'No requirements are available yet. Import a template pack on the Requirements page before building an audit pack.'
-                      : 'No requirements match this search.'}
-                  </p>
+                  <div className="text-center py-10 px-6 text-xs text-muted-foreground flex flex-col items-center justify-center gap-2 bg-muted/5 border border-dashed border-border/65 rounded-lg m-3">
+                    <ShieldAlert className="w-8 h-8 text-amber-500/70" />
+                    <p className="max-w-xs leading-relaxed">
+                      {frameworkRequirements.length === 0
+                        ? 'No requirements are available yet. Import a template pack on the Requirements page before building an audit pack.'
+                        : 'No requirements match this search.'}
+                    </p>
+                  </div>
                 ) : (
                   filteredRequirements.map(item => {
                     const isChecked = selectedRequirementIds.includes(item.requirement.id);
@@ -440,7 +451,7 @@ export default function AuditPackBuilder() {
                         type="button"
                         key={item.requirement.id}
                         onClick={() => toggleRequirementSelection(item.requirement.id)}
-                        className={`w-full text-left p-3 flex items-start justify-between gap-3 hover:bg-muted/30 transition-colors ${
+                        className={`w-full text-left p-3 flex items-start justify-between gap-3 hover:bg-muted/30 transition-colors cursor-pointer ${
                           isChecked ? 'bg-indigo-500/5' : ''
                         }`}
                       >
@@ -475,14 +486,14 @@ export default function AuditPackBuilder() {
               <div className="pt-4 border-t border-border flex justify-between text-xs">
                 <button
                   onClick={() => setStep(1)}
-                  className="px-4 py-2 bg-muted hover:bg-muted/80 text-foreground font-bold rounded-lg border border-border"
+                  className="px-4 py-2 bg-muted hover:bg-muted/80 text-foreground font-bold rounded-lg border border-border transition-colors duration-200 cursor-pointer"
                 >
                   Back
                 </button>
                 <button
                   onClick={() => setStep(3)}
                   disabled={selectedRequirementIds.length === 0}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/40 text-white font-bold rounded-lg"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/40 text-white font-bold rounded-lg transition-all duration-200 shadow-md shadow-indigo-600/10 cursor-pointer"
                 >
                   Review Pack
                 </button>
@@ -581,21 +592,21 @@ export default function AuditPackBuilder() {
               <div className="pt-4 border-t border-border flex flex-col gap-3 sm:flex-row sm:justify-between">
                 <button
                   onClick={() => setStep(2)}
-                  className="px-4 py-2 bg-muted hover:bg-muted/80 text-foreground font-bold rounded-lg border border-border"
+                  className="px-4 py-2 bg-muted hover:bg-muted/80 text-foreground font-bold rounded-lg border border-border transition-colors duration-200 cursor-pointer"
                 >
                   Back
                 </button>
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => exportCsv(packName, selectedRows)}
-                    className="px-4 py-2 bg-muted hover:bg-muted/80 text-foreground font-bold border border-border rounded-lg flex items-center gap-1.5"
+                    className="px-4 py-2 bg-muted hover:bg-muted/80 text-foreground font-bold border border-border rounded-lg flex items-center gap-1.5 transition-colors duration-200 cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />
                     CSV
                   </button>
                   <button
                     onClick={() => exportPrintPdf(packName, selectedRows)}
-                    className="px-4 py-2 bg-muted hover:bg-muted/80 text-foreground font-bold border border-border rounded-lg flex items-center gap-1.5"
+                    className="px-4 py-2 bg-muted hover:bg-muted/80 text-foreground font-bold border border-border rounded-lg flex items-center gap-1.5 transition-colors duration-200 cursor-pointer"
                   >
                     <Printer className="w-3.5 h-3.5" />
                     Print / PDF
@@ -603,7 +614,7 @@ export default function AuditPackBuilder() {
                   <button
                     onClick={handleCreatePack}
                     disabled={isCreating}
-                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/40 text-white font-bold rounded-lg flex items-center gap-1.5"
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/40 text-white font-bold rounded-lg flex items-center gap-1.5 transition-all duration-200 shadow-md shadow-indigo-600/10 cursor-pointer"
                   >
                     {isCreating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <FileArchive className="w-4 h-4" />}
                     Save Draft Pack
@@ -645,21 +656,21 @@ export default function AuditPackBuilder() {
               <div className="flex gap-2">
                 <button
                   onClick={() => exportCsv(newlyCreatedPack.name, selectedPackRows)}
-                  className="w-1/3 py-2.5 bg-muted hover:bg-muted/80 text-foreground font-bold border border-border rounded-lg flex items-center justify-center gap-1.5"
+                  className="w-1/3 py-2.5 bg-muted hover:bg-muted/80 text-foreground font-bold border border-border rounded-lg flex items-center justify-center gap-1.5 transition-colors duration-200 cursor-pointer"
                 >
                   <Download className="w-4 h-4" />
                   CSV
                 </button>
                 <button
                   onClick={() => exportPrintPdf(newlyCreatedPack.name, selectedPackRows)}
-                  className="w-1/3 py-2.5 bg-muted hover:bg-muted/80 text-foreground font-bold border border-border rounded-lg flex items-center justify-center gap-1.5"
+                  className="w-1/3 py-2.5 bg-muted hover:bg-muted/80 text-foreground font-bold border border-border rounded-lg flex items-center justify-center gap-1.5 transition-colors duration-200 cursor-pointer"
                 >
                   <Printer className="w-4 h-4" />
                   PDF
                 </button>
                 <button
                   onClick={resetBuilder}
-                  className="w-1/3 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg"
+                  className="w-1/3 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-all duration-200 shadow-md shadow-indigo-600/10 cursor-pointer"
                 >
                   New Pack
                 </button>
@@ -674,8 +685,9 @@ export default function AuditPackBuilder() {
           </span>
 
           {auditPacks.length === 0 ? (
-            <div className="bg-card border border-border p-6 rounded-xl text-center text-xs text-muted-foreground">
-              No audit packs created yet. Select requirements to build the first pack.
+            <div className="bg-card border border-dashed border-border p-8 rounded-xl text-center text-xs text-muted-foreground flex flex-col items-center justify-center gap-2 bg-muted/5">
+              <FileArchive className="w-8 h-8 text-muted-foreground/45" />
+              <span>No audit packs created yet. Select requirements to build the first pack.</span>
             </div>
           ) : (
             <div className="space-y-4">

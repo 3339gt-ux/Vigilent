@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useApp } from '@/context/AppContext';
-import { AlertCircle, ArrowLeft, Building2, Loader2 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -79,8 +79,8 @@ export default function OnboardingPage() {
       <div className="flex flex-col justify-center px-8 sm:px-16 lg:px-24 py-12 relative">
         <div className="max-w-md w-full mx-auto space-y-8">
           <div className="flex flex-col gap-2">
-            <div className="w-12 h-12 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-600/25">
-              <Building2 className="w-7 h-7 text-white" />
+            <div className="w-14 h-14 rounded-2xl bg-zinc-950 dark:bg-muted/30 border border-border flex items-center justify-center shadow-sm">
+              <Image src="/brand/vygilence-mark.png" alt="Vygilence Brand Mark" width={32} height={32} className="object-contain" />
             </div>
             <h1 className="text-3xl font-extrabold tracking-tight mt-4">
               Create your organisation
