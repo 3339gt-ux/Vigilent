@@ -4,8 +4,10 @@ import React, { useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { buildCompetencyMatrix } from '@/lib/competencyEngine';
 import { COMPETENCY_TEMPLATE_PACKS } from '@/lib/competencyTemplates';
+import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import type {
+  Action,
   CompetencyCategory,
   CompetencyRecord,
   CompetencyStatus,
@@ -15,7 +17,7 @@ import type {
   PersonType,
   RequirementRiskLevel
 } from '@/lib/types';
-import { Link as LinkIcon, Plus, Search, Upload, UserCheck, X } from 'lucide-react';
+import { Link as LinkIcon, Plus, Search, Trash2, Upload, UserCheck, X } from 'lucide-react';
 
 const categories: CompetencyCategory[] = [
   'Safety',
@@ -127,6 +129,16 @@ type TypeForm = {
   active: boolean;
 };
 
+type CompetencyRecordForm = {
+  completed_date: string;
+  expiry_date: string;
+  trainer: string;
+  provider: string;
+  certificate_number: string;
+  status: CompetencyStatus;
+  notes: string;
+};
+
 const blankPersonForm = (): PersonForm => ({
   first_name: '',
   last_name: '',
@@ -177,6 +189,16 @@ const typeToForm = (type: CompetencyType): TypeForm => ({
   active: type.active
 });
 
+const recordToForm = (record: CompetencyRecord | null, status: CompetencyStatus = 'Valid'): CompetencyRecordForm => ({
+  completed_date: record?.completed_date || '',
+  expiry_date: record?.expiry_date || '',
+  trainer: record?.trainer || '',
+  provider: record?.provider || '',
+  certificate_number: record?.certificate_number || '',
+  status: record?.status || status,
+  notes: record?.notes || ''
+});
+
 const templateKey = (item: Pick<CompetencyTemplateItem, 'title' | 'category'>) =>
   `${item.title.trim().toLowerCase()}::${item.category.trim().toLowerCase()}`;
 
@@ -187,13 +209,23 @@ export default function CompetencyMatrixPage() {
     competencyRecords,
     competencyRecordDocuments,
     documents,
+    frameworkRequirements,
+    requirementActions,
+    actionUpdates,
+    actionDocuments,
     actionObjectLinks,
     actions,
     competencySummary,
+    updateAction,
+    addActionUpdate,
+    linkDocumentToAction,
+    unlinkDocumentFromAction,
+    uploadActionAttachment,
     upsertPerson,
     upsertCompetencyType,
     importCompetencyTemplateItems,
     upsertCompetencyRecord,
+    deleteCompetencyRecord,
     linkDocumentToCompetencyRecord,
     unlinkDocumentFromCompetencyRecord,
     uploadCompetencyEvidence,
@@ -209,6 +241,7 @@ export default function CompetencyMatrixPage() {
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [selectedType, setSelectedType] = useState<CompetencyType | null>(null);
+  const [selectedAction, setSelectedAction] = useState<Action | null>(null);
   const [selectedPackId, setSelectedPackId] = useState(COMPETENCY_TEMPLATE_PACKS[0]?.id || '');
   const [showImportPreview, setShowImportPreview] = useState(false);
   const [selectedTemplateKeys, setSelectedTemplateKeys] = useState<Set<string>>(new Set());
@@ -226,6 +259,10 @@ export default function CompetencyMatrixPage() {
     notes: ''
   });
   const [linkDocumentId, setLinkDocumentId] = useState('');
+  const [personRecordEditId, setPersonRecordEditId] = useState<string | null>(null);
+  const [personRecordForm, setPersonRecordForm] = useState<CompetencyRecordForm>(recordToForm(null));
+  const [personRecordLinkIds, setPersonRecordLinkIds] = useState<Record<string, string>>({});
+  const [personRecordUploadingId, setPersonRecordUploadingId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [newPerson, setNewPerson] = useState<PersonForm>(blankPersonForm());
   const [newType, setNewType] = useState<TypeForm>(blankTypeForm());
@@ -327,6 +364,39 @@ export default function CompetencyMatrixPage() {
     }).length;
     return acc;
   }, {} as Record<CompetencyStatus, number>);
+  const selectedPersonRows = selectedPerson
+    ? competencyTypes
+        .filter(type => type.active || selectedPersonRecords.some(record => record.competency_type_id === type.id))
+        .map(type => {
+          const cell = matrix.find(item => item.person.id === selectedPerson.id && item.competencyType.id === type.id);
+          const record = cell?.record || selectedPersonRecords.find(item => item.competency_type_id === type.id) || null;
+          const evidenceLinks = record ? competencyRecordDocuments.filter(link => link.competency_record_id === record.id) : [];
+          const evidenceDocuments = evidenceLinks
+            .map(link => documents.find(document => document.id === link.document_id))
+            .filter((document): document is NonNullable<typeof document> => Boolean(document));
+          const rowActions = actions.filter(action =>
+            actionObjectLinks.some(link =>
+              link.action_id === action.id &&
+              ((link.object_type === 'person' && link.object_id === selectedPerson.id) ||
+                (link.object_type === 'competency_type' && link.object_id === type.id) ||
+                (record && link.object_type === 'competency_record' && link.object_id === record.id))
+            )
+          );
+          return {
+            type,
+            record,
+            status: (cell?.status || record?.status || 'Missing') as CompetencyStatus,
+            evidenceDocuments,
+            actions: rowActions
+          };
+        })
+    : [];
+  const currentSelectedAction = selectedAction ? actions.find(action => action.id === selectedAction.id) || selectedAction : null;
+  const selectedActionRequirements = currentSelectedAction
+    ? frameworkRequirements.filter(requirement =>
+        requirementActions.some(link => link.action_id === currentSelectedAction.id && link.requirement_id === requirement.id)
+      )
+    : [];
 
   const resetNewPerson = () => setNewPerson(blankPersonForm());
   const resetNewType = () => setNewType(blankTypeForm());
@@ -482,6 +552,106 @@ export default function CompetencyMatrixPage() {
       dueDate: activeCell.record?.expiry_date || null
     });
     setFormMessage('Action created from competency gap.');
+  };
+
+  const startPersonRecordEdit = (key: string, record: CompetencyRecord | null, status: CompetencyStatus) => {
+    setPersonRecordEditId(key);
+    setPersonRecordForm(recordToForm(record, status === 'Missing' ? 'Valid' : status));
+    setPersonMessage('');
+  };
+
+  const savePersonRecord = async (person: Person, competencyType: CompetencyType, record: CompetencyRecord | null) => {
+    const saved = await upsertCompetencyRecord({
+      id: record?.id,
+      person_id: person.id,
+      competency_type_id: competencyType.id,
+      completed_date: personRecordForm.completed_date || null,
+      expiry_date: personRecordForm.expiry_date || null,
+      trainer: personRecordForm.trainer || null,
+      provider: personRecordForm.provider || null,
+      certificate_number: personRecordForm.certificate_number || null,
+      status: personRecordForm.status,
+      notes: personRecordForm.notes || null
+    });
+    setPersonRecordEditId(null);
+    setPersonMessage(`Saved ${competencyType.title} for ${person.display_name}.`);
+    return saved;
+  };
+
+  const markPersonRecordNotRequired = async (person: Person, competencyType: CompetencyType, record: CompetencyRecord | null) => {
+    await upsertCompetencyRecord({
+      id: record?.id,
+      person_id: person.id,
+      competency_type_id: competencyType.id,
+      completed_date: null,
+      expiry_date: null,
+      trainer: record?.trainer || null,
+      provider: record?.provider || null,
+      certificate_number: record?.certificate_number || null,
+      status: 'Not Required',
+      notes: record?.notes || 'Marked not required from person detail.'
+    });
+    setPersonMessage(`${competencyType.title} marked not required.`);
+  };
+
+  const removePersonRecord = async (person: Person, competencyType: CompetencyType, record: CompetencyRecord | null, hasEvidence: boolean, hasActions: boolean) => {
+    if (!record) {
+      await markPersonRecordNotRequired(person, competencyType, null);
+      return;
+    }
+
+    if (hasEvidence || hasActions) {
+      await upsertCompetencyRecord({
+        ...record,
+        status: 'Not Required',
+        notes: record.notes || 'Archived from active matrix because evidence, actions or history exists.'
+      });
+      setPersonMessage(`${competencyType.title} archived as Not Required; evidence and action history were preserved.`);
+      return;
+    }
+
+    if (!window.confirm(`Delete the ${competencyType.title} record for ${person.display_name}? This is only allowed because no evidence or actions are linked.`)) return;
+    await deleteCompetencyRecord(record.id);
+    setPersonMessage(`${competencyType.title} removed from this person.`);
+  };
+
+  const linkEvidenceFromPerson = async (record: CompetencyRecord | null, rowKey: string) => {
+    const documentId = personRecordLinkIds[rowKey];
+    if (!record || !documentId) {
+      setPersonMessage('Save the competency record before linking evidence.');
+      return;
+    }
+    await linkDocumentToCompetencyRecord(record.id, documentId);
+    setPersonRecordLinkIds({ ...personRecordLinkIds, [rowKey]: '' });
+    setPersonMessage('Evidence linked to competency record.');
+  };
+
+  const uploadEvidenceFromPerson = async (record: CompetencyRecord | null, file: File | null) => {
+    if (!record || !file) {
+      setPersonMessage('Save the competency record before uploading evidence.');
+      return;
+    }
+    setPersonRecordUploadingId(record.id);
+    try {
+      await uploadCompetencyEvidence(record.id, file);
+      setPersonMessage('Evidence uploaded to private Evidence Vault and linked to this competency record.');
+    } catch (error) {
+      setPersonMessage(error instanceof Error ? error.message : 'Evidence upload failed.');
+    } finally {
+      setPersonRecordUploadingId(null);
+    }
+  };
+
+  const createGapActionFromPerson = async (person: Person, competencyType: CompetencyType, record: CompetencyRecord | null) => {
+    const action = await createActionForCompetencyGap({
+      personId: person.id,
+      competencyTypeId: competencyType.id,
+      competencyRecordId: record?.id || null,
+      title: `Resolve ${competencyType.title} gap for ${person.display_name}`,
+      dueDate: record?.expiry_date || null
+    });
+    setSelectedAction(action);
+    setPersonMessage('Gap action created.');
   };
 
   const renderPersonFields = (form: PersonForm, setForm: (value: PersonForm) => void, includeActive = false) => (
@@ -775,7 +945,7 @@ export default function CompetencyMatrixPage() {
 
       {selectedPerson && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex justify-end">
-          <div className="w-full max-w-xl bg-card border-l border-border h-full overflow-y-auto p-6 space-y-5">
+          <div className="w-full max-w-3xl bg-card border-l border-border h-full overflow-y-auto p-6 space-y-5">
             <div className="flex justify-between gap-3">
               <div>
                 <h2 className="text-xl font-extrabold">{selectedPerson.display_name}</h2>
@@ -834,24 +1004,132 @@ export default function CompetencyMatrixPage() {
             </div>
             <div className="border-t border-border pt-4 space-y-2 text-xs">
               <h3 className="text-sm font-extrabold">Competency Records</h3>
-              {selectedPersonRecords.length === 0 ? <p className="text-muted-foreground">No saved competency records.</p> : selectedPersonRecords.map(record => {
-                const type = competencyTypes.find(item => item.id === record.competency_type_id);
-                const evidenceCount = competencyRecordDocuments.filter(link => link.competency_record_id === record.id).length;
+              {selectedPersonRows.length === 0 ? <p className="text-muted-foreground">No competency types are available yet.</p> : selectedPersonRows.map(row => {
+                const rowKey = row.record?.id || row.type.id;
+                const isEditing = personRecordEditId === rowKey;
+                const openActions = row.actions.filter(action => action.status === 'Open' || action.status === 'In Progress');
                 return (
-                  <button key={record.id} onClick={() => type && openCell(selectedPerson, type)} className="w-full text-left p-3 bg-muted/30 border border-border rounded-lg hover:bg-muted/60">
-                    <span className="font-bold block">{type?.title || 'Competency'}</span>
-                    <span className="text-[10px] text-muted-foreground">{record.status} | Expiry {record.expiry_date || 'Not dated'} | Evidence {evidenceCount}</span>
-                  </button>
+                  <div key={rowKey} className="p-3 bg-muted/30 border border-border rounded-lg space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                      <button onClick={() => openCell(selectedPerson, row.type)} className="text-left min-w-0">
+                        <span className="font-bold block truncate">{row.type.title}</span>
+                        <span className="text-[10px] text-muted-foreground block">
+                          {row.type.category} | Completed {row.record?.completed_date || 'Not dated'} | Expiry {row.record?.expiry_date || 'Not dated'}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground block">
+                          Trainer {row.record?.trainer || 'Not set'} | Provider {row.record?.provider || 'Not set'} | Cert {row.record?.certificate_number || 'Not set'}
+                        </span>
+                      </button>
+                      <div className="flex flex-wrap gap-2 shrink-0">
+                        <span className={`px-2 py-1 rounded border ${statusClass(row.status)}`}>{row.status}</span>
+                        <span className="px-2 py-1 rounded border border-border bg-card">Evidence {row.evidenceDocuments.length}</span>
+                        <span className="px-2 py-1 rounded border border-border bg-card">Open actions {openActions.length}</span>
+                      </div>
+                    </div>
+
+                    {isEditing ? (
+                      <form onSubmit={async event => {
+                        event.preventDefault();
+                        await savePersonRecord(selectedPerson, row.type, row.record);
+                      }} className="space-y-3 border-t border-border pt-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <label className="space-y-1">
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground">Completed</span>
+                            <input type="date" value={personRecordForm.completed_date} onChange={event => setPersonRecordForm({ ...personRecordForm, completed_date: event.target.value })} className="w-full px-3 py-2 bg-card border border-border rounded-lg outline-none" />
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground">Expiry</span>
+                            <input type="date" value={personRecordForm.expiry_date} onChange={event => setPersonRecordForm({ ...personRecordForm, expiry_date: event.target.value })} className="w-full px-3 py-2 bg-card border border-border rounded-lg outline-none" />
+                          </label>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <input placeholder="Trainer" value={personRecordForm.trainer} onChange={event => setPersonRecordForm({ ...personRecordForm, trainer: event.target.value })} className="px-3 py-2 bg-card border border-border rounded-lg outline-none" />
+                          <input placeholder="Provider" value={personRecordForm.provider} onChange={event => setPersonRecordForm({ ...personRecordForm, provider: event.target.value })} className="px-3 py-2 bg-card border border-border rounded-lg outline-none" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <input placeholder="Certificate number" value={personRecordForm.certificate_number} onChange={event => setPersonRecordForm({ ...personRecordForm, certificate_number: event.target.value })} className="px-3 py-2 bg-card border border-border rounded-lg outline-none" />
+                          <select value={personRecordForm.status} onChange={event => setPersonRecordForm({ ...personRecordForm, status: event.target.value as CompetencyStatus })} className="px-3 py-2 bg-card border border-border rounded-lg outline-none">
+                            {statusOptions.map(status => <option key={status} value={status}>{status}</option>)}
+                          </select>
+                        </div>
+                        <textarea placeholder="Notes" value={personRecordForm.notes} onChange={event => setPersonRecordForm({ ...personRecordForm, notes: event.target.value })} rows={2} className="w-full px-3 py-2 bg-card border border-border rounded-lg outline-none resize-none" />
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => setPersonRecordEditId(null)} className="flex-1 py-2 bg-card border border-border rounded-lg font-bold">Cancel</button>
+                          <button type="submit" className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold">Save Competency</button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        <button onClick={() => startPersonRecordEdit(rowKey, row.record, row.status)} className="px-3 py-1.5 bg-card border border-border rounded-lg font-bold">Edit Competency</button>
+                        <button onClick={() => markPersonRecordNotRequired(selectedPerson, row.type, row.record)} className="px-3 py-1.5 bg-card border border-border rounded-lg font-bold">Mark Not Required</button>
+                        <button onClick={() => removePersonRecord(selectedPerson, row.type, row.record, row.evidenceDocuments.length > 0, row.actions.length > 0)} className="px-3 py-1.5 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 rounded-lg font-bold flex items-center gap-1">
+                          <Trash2 className="w-3.5 h-3.5" /> Remove from person
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 border-t border-border pt-3">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="font-extrabold">Evidence</h4>
+                          <span className="text-[10px] text-muted-foreground">Private Evidence Vault</span>
+                        </div>
+                        {row.evidenceDocuments.length === 0 ? (
+                          <p className="text-[11px] text-muted-foreground">No evidence linked.</p>
+                        ) : row.evidenceDocuments.map(document => (
+                          <div key={document.id} className="flex items-center justify-between gap-2 p-2 bg-card border border-border rounded-lg">
+                            <span className="font-semibold truncate">{document.title}</span>
+                            <div className="flex gap-1 shrink-0">
+                              <button onClick={async () => window.open(await getDocumentSignedUrl(document.id), '_blank')} className="px-2 py-1 bg-indigo-500/10 text-indigo-500 rounded font-bold">Open</button>
+                              {row.record && <button onClick={() => unlinkDocumentFromCompetencyRecord(row.record!.id, document.id)} className="px-2 py-1 bg-muted border border-border rounded font-bold">Unlink</button>}
+                            </div>
+                          </div>
+                        ))}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="space-y-2">
+                            <select value={personRecordLinkIds[rowKey] || ''} onChange={event => setPersonRecordLinkIds({ ...personRecordLinkIds, [rowKey]: event.target.value })} className="w-full px-3 py-2 bg-card border border-border rounded-lg outline-none">
+                              <option value="">Link existing evidence</option>
+                              {documents.map(document => <option key={document.id} value={document.id}>{document.title}</option>)}
+                            </select>
+                            <button disabled={!row.record || !personRecordLinkIds[rowKey]} onClick={() => linkEvidenceFromPerson(row.record, rowKey)} className="w-full py-2 bg-card border border-border disabled:opacity-50 rounded-lg font-bold flex items-center justify-center gap-2">
+                              <LinkIcon className="w-4 h-4" /> Link
+                            </button>
+                          </div>
+                          <label className={`w-full py-2 bg-card border border-border rounded-lg font-bold flex items-center justify-center gap-2 text-center ${row.record ? 'cursor-pointer' : 'opacity-50'}`}>
+                            <Upload className="w-4 h-4" /> {personRecordUploadingId === row.record?.id ? 'Uploading...' : 'Upload'}
+                            <input disabled={!row.record} type="file" accept={evidenceAcceptAttribute} className="hidden" onChange={event => uploadEvidenceFromPerson(row.record, event.target.files?.[0] || null)} />
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="font-extrabold">Actions</h4>
+                          <button onClick={() => createGapActionFromPerson(selectedPerson, row.type, row.record)} className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold flex items-center gap-1">
+                            <Plus className="w-3 h-3" /> Create gap action
+                          </button>
+                        </div>
+                        {row.actions.length === 0 ? (
+                          <p className="text-[11px] text-muted-foreground">No linked actions.</p>
+                        ) : row.actions.map(action => (
+                          <button key={action.id} onClick={() => setSelectedAction(action)} className="w-full text-left p-2 bg-card border border-border rounded-lg hover:bg-muted/60">
+                            <span className="font-bold block truncate">{action.title}</span>
+                            <span className="text-[10px] text-muted-foreground">{action.status}{action.target_due_date || action.due_date ? ` | Due ${action.target_due_date || action.due_date}` : ''}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 );
               })}
             </div>
             <div className="border-t border-border pt-4 space-y-2 text-xs">
               <h3 className="text-sm font-extrabold">Open Related Actions</h3>
               {selectedPersonActions.filter(action => action.status === 'Open' || action.status === 'In Progress').length === 0 ? <p className="text-muted-foreground">No open actions related to this person.</p> : selectedPersonActions.filter(action => action.status === 'Open' || action.status === 'In Progress').map(action => (
-                <div key={action.id} className="p-3 bg-muted/30 border border-border rounded-lg">
+                <button key={action.id} onClick={() => setSelectedAction(action)} className="w-full text-left p-3 bg-muted/30 border border-border rounded-lg hover:bg-muted/60">
                   <span className="font-bold block">{action.title}</span>
                   <span className="text-[10px] text-muted-foreground">{action.status}{action.target_due_date || action.due_date ? ` | Due ${action.target_due_date || action.due_date}` : ''}</span>
-                </div>
+                </button>
               ))}
             </div>
           </div>
@@ -1012,15 +1290,30 @@ export default function CompetencyMatrixPage() {
               {relatedActions.length === 0 ? (
                 <p className="text-[11px] text-muted-foreground">No actions linked to this person or competency.</p>
               ) : relatedActions.map(action => (
-                <div key={action.id} className="p-3 bg-muted/30 border border-border rounded-lg">
+                <button key={action.id} onClick={() => setSelectedAction(action)} className="w-full text-left p-3 bg-muted/30 border border-border rounded-lg hover:bg-muted/60">
                   <span className="font-bold block">{action.title}</span>
                   <span className="text-[10px] text-muted-foreground">{action.status}{action.target_due_date || action.due_date ? ` | Due ${action.target_due_date || action.due_date}` : ''}</span>
-                </div>
+                </button>
               ))}
             </div>
           </div>
         </div>
       )}
+
+      <ActionDetailDrawer
+        action={currentSelectedAction}
+        requirements={selectedActionRequirements}
+        documents={documents}
+        actionUpdates={actionUpdates}
+        actionDocuments={actionDocuments}
+        onClose={() => setSelectedAction(null)}
+        onUpdateAction={updateAction}
+        onAddUpdate={addActionUpdate}
+        onLinkDocument={linkDocumentToAction}
+        onUnlinkDocument={unlinkDocumentFromAction}
+        onUploadAttachment={uploadActionAttachment}
+        onOpenDocument={getDocumentSignedUrl}
+      />
     </div>
   );
 }

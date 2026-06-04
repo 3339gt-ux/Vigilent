@@ -135,6 +135,7 @@ interface AppContextType {
   upsertCompetencyType: (input: Partial<CompetencyType> & Pick<CompetencyType, 'title' | 'category'>) => Promise<CompetencyType>;
   importCompetencyTemplateItems: (items: CompetencyTemplateItem[]) => Promise<CompetencyType[]>;
   upsertCompetencyRecord: (input: Partial<CompetencyRecord> & Pick<CompetencyRecord, 'person_id' | 'competency_type_id'>) => Promise<CompetencyRecord>;
+  deleteCompetencyRecord: (recordId: string) => Promise<void>;
   linkDocumentToCompetencyRecord: (recordId: string, documentId: string) => Promise<void>;
   unlinkDocumentFromCompetencyRecord: (recordId: string, documentId: string) => Promise<void>;
   uploadCompetencyEvidence: (recordId: string, file: File) => Promise<EvidenceDocument>;
@@ -958,6 +959,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return record;
   };
 
+  const deleteCompetencyRecord = async (recordId: string): Promise<void> => {
+    await dbService.deleteCompetencyRecord(recordId);
+    await loadWorkspaceCollections();
+  };
+
   const linkDocumentToCompetencyRecord = async (recordId: string, documentId: string): Promise<void> => {
     await dbService.linkDocumentToCompetencyRecord(recordId, documentId);
     await loadWorkspaceCollections();
@@ -1140,6 +1146,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         upsertCompetencyType,
         importCompetencyTemplateItems,
         upsertCompetencyRecord,
+        deleteCompetencyRecord,
         linkDocumentToCompetencyRecord,
         unlinkDocumentFromCompetencyRecord,
         uploadCompetencyEvidence,

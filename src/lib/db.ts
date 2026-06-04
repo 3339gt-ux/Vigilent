@@ -2163,6 +2163,28 @@ export const dbService = {
     return created;
   },
 
+  async deleteCompetencyRecord(recordId: string): Promise<void> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+
+    if (shouldUseSupabase()) {
+      const { error } = await supabase!
+        .from('competency_records')
+        .delete()
+        .eq('id', recordId)
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('competency_records.delete active organisation', error);
+      await this.logActivity('Competency Record Deleted', `Deleted competency record ${recordId}.`);
+      return;
+    }
+
+    const records = getStorageItem('vigilen_competency_records', MOCK_COMPETENCY_RECORDS);
+    setStorageItem(
+      'vigilen_competency_records',
+      records.filter((record: CompetencyRecord) => record.id !== recordId)
+    );
+    await this.logActivity('Competency Record Deleted', `Deleted competency record ${recordId}.`);
+  },
+
   async getCompetencyRecordDocuments(): Promise<CompetencyRecordDocument[]> {
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();

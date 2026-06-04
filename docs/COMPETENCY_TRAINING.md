@@ -41,6 +41,9 @@ The `Dashboard -> Competency Matrix` page includes:
 - add person with suggested department and role values while still allowing custom text
 - edit person details from a person drawer
 - deactivate/reactivate people instead of deleting history
+- review all active competency types for one person from the person drawer
+- edit a person's competency record directly from the person drawer
+- remove a competency from a person with history-safe controls
 - add competency type with labelled validity/refresher/risk fields
 - edit or deactivate/reactivate competency types
 - preview template packs before import
@@ -53,6 +56,29 @@ The `Dashboard -> Competency Matrix` page includes:
 - create action from competency gap
 
 Inactive people and inactive competency types are hidden from the matrix by default. Use the Active/Inactive/All filters to inspect retired people or inactive type definitions.
+
+## Person Detail Management
+
+Clicking a person name opens a person detail drawer. The drawer shows the person profile, active/inactive state, saved competency records, missing competency rows, linked evidence, and related actions.
+
+Profile edits are saved through `people` and remain organisation-scoped. Deactivation uses `active = false` and an end date rather than deleting the person.
+
+Each competency row can be edited in place. Editable fields are status, completed date, expiry date, trainer, provider, certificate number, and notes. Saving uses the existing `competency_records` upsert flow in production and demo modes.
+
+Removal is intentionally conservative:
+
+- If the record has linked evidence or related actions, the UI archives it by marking it `Not Required` and keeps history intact.
+- If the record has no linked evidence and no related actions, the UI can delete the record after confirmation.
+- Missing competencies can be marked `Not Required` without first opening a matrix cell.
+
+Evidence operations in the person drawer reuse the private Evidence Vault:
+
+- link existing Evidence Vault documents
+- upload a new private Evidence Vault document in category `Training & Competency`
+- open evidence through a signed URL
+- unlink evidence from the competency record
+
+Action operations reuse Action Records. A user can create a gap action from a person competency row or open an existing linked action in the shared action detail drawer, including the action timeline and attachments.
 
 ## Security
 
