@@ -82,6 +82,7 @@ interface AppContextType {
 
   requirements: ComplianceRequirement[];
   documents: EvidenceDocument[];
+  archivedDocuments: EvidenceDocument[];
   frameworkRequirements: Requirement[];
   requirementEvidenceTypes: RequirementEvidenceType[];
   requirementDocuments: RequirementDocument[];
@@ -106,6 +107,9 @@ interface AppContextType {
   updateDocumentMetadata: (docId: string, updates: Partial<EvidenceDocument>) => Promise<EvidenceDocument>;
   getDocumentSignedUrl: (docId: string) => Promise<string>;
   deleteDocument: (docId: string) => Promise<void>;
+  restoreDocument: (docId: string) => Promise<EvidenceDocument>;
+  permanentlyDeleteDocument: (docId: string) => Promise<void>;
+  findPossibleDuplicateDocuments: (file: File, fileHash?: string | null) => Promise<EvidenceDocument[]>;
   createFrameworkRequirement: (input: {
     title: string;
     description?: string | null;
@@ -117,6 +121,10 @@ interface AppContextType {
     risk_level: Requirement['risk_level'];
   }) => Promise<Requirement>;
   updateFrameworkRequirement: (requirementId: string, updates: Partial<Requirement>) => Promise<Requirement>;
+  archiveFrameworkRequirement: (requirementId: string) => Promise<Requirement>;
+  restoreFrameworkRequirement: (requirementId: string) => Promise<Requirement>;
+  deactivateFrameworkRequirement: (requirementId: string) => Promise<Requirement>;
+  deleteFrameworkRequirement: (requirementId: string) => Promise<void>;
   importRequirementTemplateItems: (items: RequirementTemplateItem[]) => Promise<Requirement[]>;
   linkDocumentToRequirement: (requirementId: string, documentId: string) => Promise<void>;
   unlinkDocumentFromRequirement: (requirementId: string, documentId: string) => Promise<void>;
@@ -171,6 +179,8 @@ interface AppContextType {
     expiredCount: number;
     missingCount: number;
     unclassifiedCount: number;
+    activeRequirements: number;
+    archivedRequirements: number;
   };
 }
 
@@ -179,6 +189,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const emptyCollections = {
   requirements: [] as ComplianceRequirement[],
   documents: [] as EvidenceDocument[],
+  archivedDocuments: [] as EvidenceDocument[],
   frameworkRequirements: [] as Requirement[],
   requirementEvidenceTypes: [] as RequirementEvidenceType[],
   requirementDocuments: [] as RequirementDocument[],
@@ -243,6 +254,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [requirements, setRequirements] = useState<ComplianceRequirement[]>([]);
   const [documents, setDocuments] = useState<EvidenceDocument[]>([]);
+  const [archivedDocuments, setArchivedDocuments] = useState<EvidenceDocument[]>([]);
   const [frameworkRequirements, setFrameworkRequirements] = useState<Requirement[]>([]);
   const [requirementEvidenceTypes, setRequirementEvidenceTypes] = useState<RequirementEvidenceType[]>([]);
   const [requirementDocuments, setRequirementDocuments] = useState<RequirementDocument[]>([]);
@@ -292,13 +304,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     expiringSoonCount: readinessReport.requirements.filter(item => item.status === 'AMBER').length,
     expiredCount: readinessReport.requirements.filter(item => item.status === 'RED').length,
     missingCount: readinessReport.missingEvidence.length,
-    unclassifiedCount: documents.filter(d => d.status === 'Unclassified').length
-  }), [documents, readinessReport]);
+    unclassifiedCount: documents.filter(d => d.status === 'Unclassified').length,
+    activeRequirements: frameworkRequirements.filter(requirement => (requirement.lifecycle_status || 'ACTIVE') === 'ACTIVE').length,
+    archivedRequirements: frameworkRequirements.filter(requirement => requirement.lifecycle_status === 'ARCHIVED').length
+  }), [documents, frameworkRequirements, readinessReport]);
 
   const clearWorkspaceState = () => {
     setOrganization(null);
     setRequirements([]);
     setDocuments([]);
+    setArchivedDocuments([]);
     setFrameworkRequirements([]);
     setRequirementEvidenceTypes([]);
     setRequirementDocuments([]);
@@ -377,6 +392,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const [
       reqs,
       docs,
+      archivedDocs,
       frameworkReqs,
       evidenceTypes,
       requirementDocLinks,
@@ -399,6 +415,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ] = await Promise.all([
       dbService.getRequirements(),
       dbService.getDocuments(),
+      dbService.getArchivedDocuments(),
       dbService.getFrameworkRequirements(),
       dbService.getRequirementEvidenceTypes(),
       dbService.getRequirementDocuments(),
@@ -422,6 +439,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     setRequirements(reqs);
     setDocuments(docs);
+    setArchivedDocuments(archivedDocs);
     setFrameworkRequirements(frameworkReqs);
     setRequirementEvidenceTypes(evidenceTypes);
     setRequirementDocuments(requirementDocLinks);
@@ -494,6 +512,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!org) {
       setRequirements(emptyCollections.requirements);
       setDocuments(emptyCollections.documents);
+      setArchivedDocuments(emptyCollections.archivedDocuments);
       setFrameworkRequirements(emptyCollections.frameworkRequirements);
       setRequirementEvidenceTypes(emptyCollections.requirementEvidenceTypes);
       setRequirementDocuments(emptyCollections.requirementDocuments);
@@ -821,6 +840,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await loadWorkspaceCollections();
   };
 
+  const restoreDocument = async (docId: string): Promise<EvidenceDocument> => {
+    const restored = await dbService.restoreDocument(docId);
+    await loadWorkspaceCollections();
+    return restored;
+  };
+
+  const permanentlyDeleteDocument = async (docId: string): Promise<void> => {
+    await dbService.permanentlyDeleteDocument(docId);
+    await loadWorkspaceCollections();
+  };
+
+  const findPossibleDuplicateDocuments = async (file: File, fileHash?: string | null): Promise<EvidenceDocument[]> => {
+    return dbService.findPossibleDuplicateDocuments(file, fileHash);
+  };
+
   const createFrameworkRequirement: AppContextType['createFrameworkRequirement'] = async (input) => {
     const created = await dbService.addFrameworkRequirement({
       title: input.title.trim(),
@@ -841,6 +875,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const updated = await dbService.updateFrameworkRequirement(requirementId, updates);
     await loadWorkspaceCollections();
     return updated;
+  };
+
+  const archiveFrameworkRequirement = async (requirementId: string): Promise<Requirement> => {
+    const updated = await dbService.archiveFrameworkRequirement(requirementId);
+    await loadWorkspaceCollections();
+    return updated;
+  };
+
+  const restoreFrameworkRequirement = async (requirementId: string): Promise<Requirement> => {
+    const updated = await dbService.restoreFrameworkRequirement(requirementId);
+    await loadWorkspaceCollections();
+    return updated;
+  };
+
+  const deactivateFrameworkRequirement = async (requirementId: string): Promise<Requirement> => {
+    const updated = await dbService.deactivateFrameworkRequirement(requirementId);
+    await loadWorkspaceCollections();
+    return updated;
+  };
+
+  const deleteFrameworkRequirement = async (requirementId: string): Promise<void> => {
+    await dbService.deleteFrameworkRequirement(requirementId);
+    await loadWorkspaceCollections();
   };
 
   const importRequirementTemplateItems = async (items: RequirementTemplateItem[]): Promise<Requirement[]> => {
@@ -1105,6 +1162,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const createPack = async (name: string, description: string, requirementIds: string[], docIds: string[]): Promise<AuditPack> => {
+    const activeRequirementIds = requirementIds.filter(requirementId =>
+      frameworkRequirements.some(requirement => requirement.id === requirementId && (requirement.lifecycle_status || 'ACTIVE') === 'ACTIVE')
+    );
     const newPack = await dbService.addAuditPack({
       name,
       description,
@@ -1112,7 +1172,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       share_token: null,
       share_expires_at: null,
       pin_code: null,
-      requirements: requirementIds,
+      requirements: activeRequirementIds,
       documents: docIds,
       created_by: user?.id || null
     });
@@ -1173,6 +1233,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         updateOrgProfile,
         requirements,
         documents,
+        archivedDocuments,
         frameworkRequirements,
         requirementEvidenceTypes,
         requirementDocuments,
@@ -1196,8 +1257,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         updateDocumentMetadata,
         getDocumentSignedUrl,
         deleteDocument,
+        restoreDocument,
+        permanentlyDeleteDocument,
+        findPossibleDuplicateDocuments,
         createFrameworkRequirement,
         updateFrameworkRequirement,
+        archiveFrameworkRequirement,
+        restoreFrameworkRequirement,
+        deactivateFrameworkRequirement,
+        deleteFrameworkRequirement,
         importRequirementTemplateItems,
         linkDocumentToRequirement,
         unlinkDocumentFromRequirement,

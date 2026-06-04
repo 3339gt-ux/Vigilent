@@ -62,6 +62,7 @@ export default function CompetencyMatrixPage() {
   const [departmentFilter, setDepartmentFilter] = useState('All');
   const [typeFilter, setTypeFilter] = useState('All');
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
+  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [selectedPackId, setSelectedPackId] = useState(COMPETENCY_TEMPLATE_PACKS[0]?.id || '');
   const [importMessage, setImportMessage] = useState('');
   const [formMessage, setFormMessage] = useState('');
@@ -147,6 +148,32 @@ export default function CompetencyMatrixPage() {
             (link.object_type === 'competency_type' && link.object_id === activeCell.competencyType.id) ||
             (activeCell.record && link.object_type === 'competency_record' && link.object_id === activeCell.record.id))
         )
+      )
+    : [];
+
+  const selectedPersonRows = selectedPerson
+    ? activeTypes.map(type => {
+        const cell = matrix.find(item => item.person.id === selectedPerson.id && item.competencyType.id === type.id);
+        const evidenceCount = cell?.record
+          ? competencyRecordDocuments.filter(link => link.competency_record_id === cell.record?.id).length
+          : 0;
+        const openActionCount = actions.filter(action =>
+          action.status !== 'Complete' &&
+          action.status !== 'Cancelled' &&
+          actionObjectLinks.some(link =>
+            link.action_id === action.id &&
+            ((link.object_type === 'person' && link.object_id === selectedPerson.id) ||
+              (link.object_type === 'competency_type' && link.object_id === type.id) ||
+              (cell?.record && link.object_type === 'competency_record' && link.object_id === cell.record.id))
+          )
+        ).length;
+        return { type, cell, evidenceCount, openActionCount };
+      })
+    : [];
+
+  const selectedPersonActions = selectedPerson
+    ? actions.filter(action =>
+        actionObjectLinks.some(link => link.action_id === action.id && link.object_type === 'person' && link.object_id === selectedPerson.id)
       )
     : [];
 
@@ -301,8 +328,13 @@ export default function CompetencyMatrixPage() {
                   ) : filteredPeople.map(person => (
                     <tr key={person.id} className="hover:bg-muted/30">
                       <td className="p-3 sticky left-0 bg-card z-10">
-                        <span className="font-extrabold block">{person.display_name}</span>
-                        <span className="text-[10px] text-muted-foreground">{person.department || 'No department'} | {person.person_type}</span>
+                        <button
+                          onClick={() => setSelectedPerson(person)}
+                          className="w-full text-left rounded-lg p-1 -m-1 hover:bg-muted cursor-pointer transition-colors"
+                        >
+                          <span className="font-extrabold block">{person.display_name}</span>
+                          <span className="text-[10px] text-muted-foreground">{person.department || 'No department'} | {person.person_type}</span>
+                        </button>
                       </td>
                       {filteredTypes.map(type => {
                         const cell = matrix.find(item => item.person.id === person.id && item.competencyType.id === type.id);
@@ -372,7 +404,7 @@ export default function CompetencyMatrixPage() {
       </div>
 
       {activeCell && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex justify-end">
+        <div className="fixed inset-0 z-50 bg-black/60 flex justify-end">
           <div className="w-full max-w-xl bg-card border-l border-border h-full overflow-y-auto p-6 space-y-5">
             <div className="flex justify-between gap-3">
               <div>
@@ -459,6 +491,84 @@ export default function CompetencyMatrixPage() {
                   <span className="text-[10px] text-muted-foreground">{action.status}{action.target_due_date || action.due_date ? ` | Due ${action.target_due_date || action.due_date}` : ''}</span>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedPerson && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex justify-end">
+          <div className="w-full max-w-2xl bg-card border-l border-border h-full overflow-y-auto p-6 space-y-5">
+            <div className="flex justify-between gap-3 border-b border-border pb-4">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block">Person Detail</span>
+                <h2 className="text-xl font-extrabold">{selectedPerson.display_name}</h2>
+                <p className="text-xs text-muted-foreground mt-1">{selectedPerson.role || selectedPerson.person_type} | {selectedPerson.department || 'No department'}</p>
+              </div>
+              <button onClick={() => setSelectedPerson(null)} className="p-2 hover:bg-muted rounded-lg h-fit"><X className="w-4 h-4" /></button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              {[
+                ['Employee #', selectedPerson.employee_number || 'Not set'],
+                ['Email', selectedPerson.email || 'Not set'],
+                ['Type', selectedPerson.person_type],
+                ['Status', selectedPerson.active ? 'Active' : 'Inactive'],
+                ['Start', selectedPerson.start_date || 'Not set'],
+                ['End', selectedPerson.end_date || 'Not set']
+              ].map(([label, value]) => (
+                <div key={label} className="p-3 bg-muted border border-border rounded-lg">
+                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold block">{label}</span>
+                  <span className="font-bold text-foreground break-words">{value}</span>
+                </div>
+              ))}
+            </div>
+            {selectedPerson.notes && <p className="text-xs text-muted-foreground bg-muted border border-border rounded-lg p-3">{selectedPerson.notes}</p>}
+
+            <div className="space-y-3">
+              <h3 className="text-sm font-extrabold">Competencies</h3>
+              <div className="space-y-2">
+                {selectedPersonRows.map(({ type, cell, evidenceCount, openActionCount }) => (
+                  <button
+                    key={type.id}
+                    onClick={() => {
+                      openCell(selectedPerson, type);
+                      setSelectedPerson(null);
+                    }}
+                    className="w-full text-left p-3 bg-muted/30 border border-border rounded-lg hover:bg-muted transition-colors"
+                  >
+                    <div className="flex justify-between gap-3">
+                      <div className="min-w-0">
+                        <span className="font-bold block truncate">{type.title}</span>
+                        <span className="text-[10px] text-muted-foreground">{type.category}</span>
+                      </div>
+                      <span className={`px-2 py-0.5 h-fit rounded-full border text-[9px] font-bold ${statusClass(cell?.status || 'Missing')}`}>
+                        {cell?.status || 'Missing'}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-3 text-[10px] text-muted-foreground">
+                      <span>Completed: <strong className="text-foreground">{cell?.record?.completed_date || 'None'}</strong></span>
+                      <span>Expiry: <strong className="text-foreground">{cell?.record?.expiry_date || 'None'}</strong></span>
+                      <span>Evidence: <strong className="text-foreground">{evidenceCount}</strong></span>
+                      <span>Open actions: <strong className="text-foreground">{openActionCount}</strong></span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3 border-t border-border pt-4">
+              <h3 className="text-sm font-extrabold">Linked Actions</h3>
+              {selectedPersonActions.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No actions are directly linked to this person.</p>
+              ) : (
+                selectedPersonActions.map(action => (
+                  <div key={action.id} className="p-3 bg-muted/30 border border-border rounded-lg text-xs">
+                    <span className="font-bold block">{action.title}</span>
+                    <span className="text-[10px] text-muted-foreground">{action.status}{action.target_due_date || action.due_date ? ` | Due ${action.target_due_date || action.due_date}` : ''}</span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

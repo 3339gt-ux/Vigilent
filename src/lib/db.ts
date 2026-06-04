@@ -3,6 +3,7 @@ import { evidenceStorageBucket, isDemoMode, requireDemoMode, requireProductionEn
 import { throwSupabaseError } from './supabaseDiagnostics';
 import {
   buildEvidenceStoragePath,
+  calculateEvidenceFileHash,
   sanitizeEvidenceFilename,
   validateEvidenceFile
 } from './evidenceStorage';
@@ -1272,6 +1273,82 @@ export const dbService = {
     return updated;
   },
 
+  async requirementHasLinkedHistory(requirementId: string): Promise<boolean> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const checks = await Promise.all([
+        supabase!.from('requirement_documents').select('id', { count: 'exact', head: true }).eq('organisation_id', orgId).eq('requirement_id', requirementId),
+        supabase!.from('requirement_evidence_criteria').select('id', { count: 'exact', head: true }).eq('organisation_id', orgId).eq('requirement_id', requirementId),
+        supabase!.from('reviews').select('id', { count: 'exact', head: true }).eq('organisation_id', orgId).eq('requirement_id', requirementId),
+        supabase!.from('requirement_actions').select('id', { count: 'exact', head: true }).eq('organisation_id', orgId).eq('requirement_id', requirementId),
+        supabase!.from('requirement_competency_types').select('id', { count: 'exact', head: true }).eq('organisation_id', orgId).eq('requirement_id', requirementId)
+      ]);
+      checks.forEach((result, index) => {
+        if (result.error) throwSupabaseError(`requirements.lifecycle linked history check ${index}`, result.error);
+      });
+      return checks.some(result => (result.count || 0) > 0);
+    }
+
+    return (
+      getStorageItem('vigilen_requirement_documents', MOCK_REQUIREMENT_DOCUMENTS).some((link: RequirementDocument) => link.requirement_id === requirementId) ||
+      getStorageItem('vigilen_requirement_evidence_criteria', MOCK_REQUIREMENT_EVIDENCE_CRITERIA).some((criterion: RequirementEvidenceCriterion) => criterion.requirement_id === requirementId) ||
+      getStorageItem('vigilen_reviews', MOCK_REVIEWS).some((review: Review) => review.requirement_id === requirementId) ||
+      getStorageItem('vigilen_requirement_actions', MOCK_REQUIREMENT_ACTIONS).some((link: RequirementAction) => link.requirement_id === requirementId) ||
+      getStorageItem('vigilen_requirement_competency_types', MOCK_REQUIREMENT_COMPETENCY_TYPES).some((link: RequirementCompetencyType) => link.requirement_id === requirementId)
+    );
+  },
+
+  async archiveFrameworkRequirement(requirementId: string): Promise<Requirement> {
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+    const updated = await this.updateFrameworkRequirement(requirementId, {
+      lifecycle_status: 'ARCHIVED',
+      archived_at: new Date().toISOString(),
+      archived_by: userId
+    });
+    await this.logActivity('Requirement Archived', `Archived requirement "${updated.title}" by user ${userId}`);
+    return updated;
+  },
+
+  async restoreFrameworkRequirement(requirementId: string): Promise<Requirement> {
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+    const updated = await this.updateFrameworkRequirement(requirementId, {
+      lifecycle_status: 'ACTIVE',
+      archived_at: null,
+      archived_by: null,
+      deactivated_at: null,
+      deactivated_by: null,
+      deleted_at: null,
+      deleted_by: null
+    });
+    await this.logActivity('Requirement Restored', `Restored requirement "${updated.title}" by user ${userId}`);
+    return updated;
+  },
+
+  async deactivateFrameworkRequirement(requirementId: string): Promise<Requirement> {
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+    const updated = await this.updateFrameworkRequirement(requirementId, {
+      lifecycle_status: 'DEACTIVATED',
+      deactivated_at: new Date().toISOString(),
+      deactivated_by: userId
+    });
+    await this.logActivity('Requirement Deactivated', `Deactivated requirement "${updated.title}" by user ${userId}`);
+    return updated;
+  },
+
+  async deleteFrameworkRequirement(requirementId: string): Promise<void> {
+    const hasHistory = await this.requirementHasLinkedHistory(requirementId);
+    if (hasHistory) {
+      throw new Error('This requirement has linked evidence, criteria, reviews, actions, or competency history. Archive it instead to preserve history.');
+    }
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+    const updated = await this.updateFrameworkRequirement(requirementId, {
+      lifecycle_status: 'DELETED',
+      deleted_at: new Date().toISOString(),
+      deleted_by: userId
+    });
+    await this.logActivity('Requirement Deleted', `Deleted requirement "${updated.title}" by user ${userId}`);
+  },
+
   async getRequirementEvidenceTypes(): Promise<RequirementEvidenceType[]> {
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
@@ -2163,6 +2240,28 @@ export const dbService = {
     return created;
   },
 
+  async deleteCompetencyRecord(recordId: string): Promise<void> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+
+    if (shouldUseSupabase()) {
+      const { error } = await supabase!
+        .from('competency_records')
+        .delete()
+        .eq('id', recordId)
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('competency_records.delete active organisation', error);
+      await this.logActivity('Competency Record Deleted', `Deleted competency record ${recordId}.`);
+      return;
+    }
+
+    const records = getStorageItem('vigilen_competency_records', MOCK_COMPETENCY_RECORDS);
+    setStorageItem(
+      'vigilen_competency_records',
+      records.filter((record: CompetencyRecord) => record.id !== recordId)
+    );
+    await this.logActivity('Competency Record Deleted', `Deleted competency record ${recordId}.`);
+  },
+
   async getCompetencyRecordDocuments(): Promise<CompetencyRecordDocument[]> {
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
@@ -2379,13 +2478,75 @@ export const dbService = {
         .select('*')
         .eq('organization_id', orgId)
         .neq('status', 'deleted')
+        .is('permanently_deleted_at', null)
         .order('created_at', { ascending: false });
       if (error) throwSupabaseError('evidence_documents.select active organization', error);
       return data || [];
     } else {
       initMockDb();
-      return getStorageItem('vigilen_documents', MOCK_DOCUMENTS).filter((doc: EvidenceDocument) => doc.status !== 'deleted');
+      return getStorageItem('vigilen_documents', MOCK_DOCUMENTS).filter((doc: EvidenceDocument) => doc.status !== 'deleted' && !doc.permanently_deleted_at);
     }
+  },
+
+  async getArchivedDocuments(): Promise<EvidenceDocument[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('evidence_documents')
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq('status', 'deleted')
+        .is('permanently_deleted_at', null)
+        .order('archived_at', { ascending: false, nullsFirst: false });
+      if (error) throwSupabaseError('evidence_documents.select archived organization', error);
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_documents', MOCK_DOCUMENTS).filter((doc: EvidenceDocument) => doc.status === 'deleted' && !doc.permanently_deleted_at);
+  },
+
+  async findPossibleDuplicateDocuments(file: File, fileHash?: string | null): Promise<EvidenceDocument[]> {
+    const hash = fileHash || await calculateEvidenceFileHash(file);
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const matches = new Map<string, EvidenceDocument>();
+
+      if (hash) {
+        const { data, error } = await supabase!
+          .from('evidence_documents')
+          .select('*')
+          .eq('organization_id', orgId)
+          .is('permanently_deleted_at', null)
+          .eq('file_hash', hash)
+          .order('created_at', { ascending: false });
+        if (error) throwSupabaseError('evidence_documents.select duplicate hash candidates', error);
+        (data || []).forEach(document => matches.set(document.id, document));
+      }
+
+      const { data: metadataMatches, error: metadataError } = await supabase!
+        .from('evidence_documents')
+        .select('*')
+        .eq('organization_id', orgId)
+        .is('permanently_deleted_at', null)
+        .eq('original_file_name', file.name)
+        .eq('file_size_bytes', file.size)
+        .eq('mime_type', file.type || '')
+        .order('created_at', { ascending: false });
+      if (metadataError) throwSupabaseError('evidence_documents.select duplicate metadata candidates', metadataError);
+      (metadataMatches || []).forEach(document => matches.set(document.id, document));
+
+      return Array.from(matches.values()).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_documents', MOCK_DOCUMENTS).filter((doc: EvidenceDocument) =>
+      !doc.permanently_deleted_at &&
+      (doc.file_hash === hash ||
+        ((doc.original_file_name || doc.file_name) === file.name &&
+          doc.file_size_bytes === file.size &&
+          (doc.mime_type || '') === file.type))
+    );
   },
 
   async addDocument(doc: Omit<EvidenceDocument, 'id' | 'created_at' | 'updated_at' | 'organization_id'>): Promise<EvidenceDocument> {
@@ -2424,6 +2585,7 @@ export const dbService = {
         safe_file_name: sanitizeEvidenceFilename(input.file.name),
         storage_path: null,
         mime_type: input.file.type,
+        file_hash: input.file_hash || await calculateEvidenceFileHash(input.file),
         file_size_bytes: input.file.size,
         category: input.category,
         status: input.status,
@@ -2444,6 +2606,7 @@ export const dbService = {
 
     const orgId = await getCurrentSupabaseOrganizationId();
     const userId = await getCurrentSupabaseUserId();
+    const fileHash = input.file_hash || await calculateEvidenceFileHash(input.file);
     const documentId = crypto.randomUUID();
     const originalFilename = input.file.name;
     const safeFilename = sanitizeEvidenceFilename(originalFilename);
@@ -2469,6 +2632,7 @@ export const dbService = {
       safe_file_name: safeFilename,
       storage_path: storagePath,
       mime_type: input.file.type,
+      file_hash: fileHash,
       file_size_bytes: input.file.size,
       category: input.category,
       status: input.status,
@@ -2487,7 +2651,10 @@ export const dbService = {
       .select()
       .single();
 
-    if (error) throwSupabaseError('evidence_documents.insert private storage record', error);
+    if (error) {
+      await supabase.storage.from(evidenceStorageBucket).remove([storagePath]);
+      throwSupabaseError('evidence_documents.insert private storage record', error);
+    }
 
     await this.logActivity('Document Uploaded', `Uploaded document "${data.title}" (${data.original_file_name || data.file_name})`);
     return data;
@@ -2509,7 +2676,7 @@ export const dbService = {
       .select('id, organization_id, status, storage_path')
       .eq('id', docId)
       .eq('organization_id', orgId)
-      .neq('status', 'deleted')
+      .is('permanently_deleted_at', null)
       .maybeSingle();
 
     if (docError) throwSupabaseError('evidence_documents.select signed url target', docError);
@@ -2533,7 +2700,7 @@ export const dbService = {
         .update(updates)
         .eq('id', docId)
         .eq('organization_id', orgId)
-        .neq('status', 'deleted')
+        .is('permanently_deleted_at', null)
         .select()
         .single();
       if (error) throwSupabaseError('evidence_documents.update active organization', error);
@@ -2571,9 +2738,11 @@ export const dbService = {
   async deleteDocument(docId: string): Promise<void> {
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
+      const userId = await getCurrentSupabaseUserId();
+      const archivedAt = new Date().toISOString();
       const { error } = await supabase!
         .from('evidence_documents')
-        .update({ status: 'deleted', updated_at: new Date().toISOString() })
+        .update({ status: 'deleted', archived_at: archivedAt, archived_by: userId, deleted_at: archivedAt, deleted_by: userId, updated_at: archivedAt })
         .eq('id', docId)
         .eq('organization_id', orgId)
         .select('id')
@@ -2616,8 +2785,9 @@ export const dbService = {
       );
     } else {
       const docs = getStorageItem('vigilen_documents', MOCK_DOCUMENTS);
+      const archivedAt = new Date().toISOString();
       const updatedDocs = docs.map((d: EvidenceDocument) =>
-        d.id === docId ? { ...d, status: 'deleted' as DocumentStatus, updated_at: new Date().toISOString() } : d
+        d.id === docId ? { ...d, status: 'deleted' as DocumentStatus, archived_at: archivedAt, archived_by: MOCK_PROFILE.id, deleted_at: archivedAt, deleted_by: MOCK_PROFILE.id, updated_at: archivedAt } : d
       );
       setStorageItem('vigilen_documents', updatedDocs);
 
@@ -2632,6 +2802,92 @@ export const dbService = {
       setStorageItem('vigilen_cells', updatedCells);
       await this.logActivity('Document Removed', `Deleted document with ID ${docId}`);
     }
+  },
+
+  async restoreDocument(docId: string): Promise<EvidenceDocument> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('evidence_documents')
+        .update({ status: 'Active', archived_at: null, archived_by: null, deleted_at: null, deleted_by: null, updated_at: new Date().toISOString() })
+        .eq('id', docId)
+        .eq('organization_id', orgId)
+        .is('permanently_deleted_at', null)
+        .select()
+        .single();
+      if (error) throwSupabaseError('evidence_documents.restore archived document', error);
+      await this.logActivity('Document Restored', `Restored evidence document ${docId}.`);
+      return data;
+    }
+
+    const docs = getStorageItem('vigilen_documents', MOCK_DOCUMENTS);
+    const idx = docs.findIndex((doc: EvidenceDocument) => doc.id === docId);
+    if (idx === -1) throw new Error('Document not found.');
+    docs[idx] = { ...docs[idx], status: 'Active', archived_at: null, archived_by: null, deleted_at: null, deleted_by: null, updated_at: new Date().toISOString() };
+    setStorageItem('vigilen_documents', docs);
+    await this.logActivity('Document Restored', `Restored evidence document ${docId}.`);
+    return docs[idx];
+  },
+
+  async permanentlyDeleteDocument(docId: string): Promise<void> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const now = new Date().toISOString();
+      const { data: doc, error: docError } = await supabase!
+        .from('evidence_documents')
+        .select('id, storage_path')
+        .eq('id', docId)
+        .eq('organization_id', orgId)
+        .maybeSingle();
+      if (docError) throwSupabaseError('evidence_documents.select permanent delete target', docError);
+
+      await Promise.all([
+        supabase!.from('requirement_documents').delete().eq('organisation_id', orgId).eq('document_id', docId),
+        supabase!.from('requirement_evidence_criterion_matches').delete().eq('organisation_id', orgId).eq('document_id', docId),
+        supabase!.from('action_documents').delete().eq('organisation_id', orgId).eq('document_id', docId),
+        supabase!.from('competency_record_documents').delete().eq('organisation_id', orgId).eq('document_id', docId)
+      ].map(promise => promise.then(({ error }) => {
+        if (error) throwSupabaseError('document link cleanup permanent delete', error);
+      })));
+
+      const { data: packs, error: packsError } = await supabase!
+        .from('audit_packs')
+        .select('id, documents')
+        .eq('organization_id', orgId);
+      if (packsError) throwSupabaseError('audit_packs.select for permanent document cleanup', packsError);
+      await Promise.all((packs || [])
+        .filter((pack: Pick<AuditPack, 'id' | 'documents'>) => pack.documents.includes(docId))
+        .map((pack: Pick<AuditPack, 'id' | 'documents'>) =>
+          supabase!.from('audit_packs')
+            .update({ documents: pack.documents.filter(id => id !== docId), updated_at: now })
+            .eq('id', pack.id)
+            .eq('organization_id', orgId)
+            .then(({ error }) => {
+              if (error) throwSupabaseError('audit_packs.unlink permanently deleted document', error);
+            })
+        ));
+
+      if (doc?.storage_path) {
+        const { error: removeError } = await supabase!.storage.from(evidenceStorageBucket).remove([doc.storage_path]);
+        if (removeError) console.warn('Could not remove storage object during permanent delete:', removeError);
+      }
+
+      const { error } = await supabase!
+        .from('evidence_documents')
+        .update({ permanently_deleted_at: now, updated_at: now })
+        .eq('id', docId)
+        .eq('organization_id', orgId);
+      if (error) throwSupabaseError('evidence_documents.mark permanently deleted', error);
+      await this.logActivity('Document Permanently Deleted', `Marked evidence document ${docId} as permanently deleted.`);
+      return;
+    }
+
+    const docs = getStorageItem('vigilen_documents', MOCK_DOCUMENTS);
+    setStorageItem(
+      'vigilen_documents',
+      docs.map((doc: EvidenceDocument) => doc.id === docId ? { ...doc, permanently_deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() } : doc)
+    );
+    await this.logActivity('Document Permanently Deleted', `Marked evidence document ${docId} as permanently deleted.`);
   },
 
   // Matrix Cells

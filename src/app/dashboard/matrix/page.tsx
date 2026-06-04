@@ -324,7 +324,7 @@ export default function EvidenceMatrix() {
 
       {/* Modal 1: Link Evidence Document to Cell */}
       {activeCell && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
           <div className="bg-card border border-border w-full max-w-md rounded-2xl p-6 relative shadow-2xl">
             <button
               onClick={() => setActiveCell(null)}
@@ -402,7 +402,7 @@ export default function EvidenceMatrix() {
 
       {/* Modal 2: Register New Asset */}
       {showAddTargetModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
           <div className="bg-card border border-border w-full max-w-sm rounded-2xl p-6 relative shadow-2xl">
             <button
               onClick={() => setShowAddTargetModal(false)}
@@ -479,7 +479,7 @@ export default function EvidenceMatrix() {
 
       {/* Modal 3: Add Custom Requirement */}
       {showAddReqModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
           <div className="bg-card border border-border w-full max-w-md rounded-2xl p-6 relative shadow-2xl">
             <button
               onClick={() => setShowAddReqModal(false)}

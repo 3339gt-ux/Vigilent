@@ -60,6 +60,10 @@ Documents and requirements are many-to-many:
 
 The Evidence Vault can link an uploaded record to requirements. The Requirements page can link requirements to existing records.
 
+Requirement evidence criteria also support drag-and-drop multi-file upload. Files uploaded on a criterion are saved as normal private Evidence Vault documents and automatically linked to that criterion.
+
+The Requirements table keeps evidence state compact in one `Evidence Coverage` column. The chip shows counts such as `2/3 covered`, `partial`, `missing`, `Criteria missing`, or `Not assessed`, with the full explanation in the tooltip and detail panel.
+
 ## Reviews And Actions
 
 Reviews record status, notes, review date, and next due date.

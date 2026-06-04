@@ -112,7 +112,9 @@ export default function AuditPackBuilder() {
     const readinessByRequirementId = new Map(
       readinessReport.requirements.map(item => [item.requirement.id, item])
     );
-    return frameworkRequirements.map(requirement => {
+    return frameworkRequirements
+    .filter(requirement => (requirement.lifecycle_status || 'ACTIVE') === 'ACTIVE')
+    .map(requirement => {
       const linkedDocuments = getLinkedDocumentsForRequirement(requirement.id, documents, requirementDocuments);
       const readiness = readinessByRequirementId.get(requirement.id);
       const status = readiness?.status || calculateRequirementStatus(requirement, linkedDocuments);

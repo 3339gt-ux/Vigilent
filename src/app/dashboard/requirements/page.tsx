@@ -3,8 +3,8 @@
 import React, { useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
-import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
-import type { Action, Requirement, RequirementStatus } from '@/lib/types';
+import { EvidenceDropzone } from '@/components/EvidenceDropzone';
+import type { Action, Requirement, RequirementEvidenceCoverage, RequirementLifecycleStatus, RequirementStatus } from '@/lib/types';
 import { REQUIREMENT_TEMPLATE_PACKS } from '@/lib/requirementTemplatePacks';
 import {
   ClipboardList,
@@ -16,21 +16,47 @@ import {
 } from 'lucide-react';
 
 const statusClass = (status: RequirementStatus) => {
-  if (status === 'GREEN') return 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400';
-  if (status === 'AMBER') return 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400';
-  if (status === 'RED') return 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400';
-  return 'bg-zinc-500/10 border-zinc-500/20 text-zinc-500';
+  if (status === 'GREEN') return 'bg-emerald-500/10 dark:bg-emerald-500/5 border-emerald-500/20 text-emerald-700 dark:text-emerald-400';
+  if (status === 'AMBER') return 'bg-amber-500/10 dark:bg-amber-500/5 border-amber-500/20 text-amber-700 dark:text-amber-400';
+  if (status === 'RED') return 'bg-rose-500/10 dark:bg-rose-500/5 border-rose-500/20 text-rose-700 dark:text-rose-400';
+  return 'bg-zinc-500/10 dark:bg-zinc-500/5 border-zinc-500/20 text-zinc-650 dark:text-zinc-400';
 };
 
 const riskOptions: Requirement['risk_level'][] = ['Low', 'Medium', 'High', 'Critical'];
 const frequencyOptions: Requirement['review_frequency'][] = ['Weekly', 'Monthly', 'Quarterly', 'Annually', 'Custom'];
 const requirementStatusOptions: RequirementStatus[] = ['GREEN', 'AMBER', 'RED', 'GREY'];
+type RequirementView = 'active' | 'archive' | 'inactive';
+
+const lifecycleLabel = (status?: RequirementLifecycleStatus) => status || 'ACTIVE';
+
+const coverageChip = (coverage?: RequirementEvidenceCoverage) => {
+  if (!coverage) return { label: 'Not Assessed', title: 'Evidence coverage has not been assessed.', className: statusClass('GREY') };
+  if (coverage.totalRequired === 0) {
+    return { label: 'Criteria Missing', title: coverage.summary || 'No evidence criteria are configured for this requirement.', className: statusClass('GREY') };
+  }
+  const status: RequirementStatus = coverage.status === 'Fully Covered'
+    ? 'GREEN'
+    : coverage.status === 'Partially Covered'
+      ? 'AMBER'
+      : 'RED';
+  const label = coverage.status === 'Fully Covered'
+    ? `${coverage.coveredRequired}/${coverage.totalRequired} Covered`
+    : coverage.status === 'Partially Covered'
+      ? `${coverage.coveredRequired}/${coverage.totalRequired} Partial`
+      : 'Criteria Missing';
+  return {
+    label,
+    title: coverage.summary,
+    className: statusClass(status)
+  };
+};
 
 export default function RequirementsPage() {
   const {
     user,
     documents,
     frameworkRequirements,
+    requirementDocuments,
     reviews,
     actions,
     requirementActions,
@@ -41,6 +67,10 @@ export default function RequirementsPage() {
     createFrameworkRequirement,
     importRequirementTemplateItems,
     updateFrameworkRequirement,
+    archiveFrameworkRequirement,
+    restoreFrameworkRequirement,
+    deactivateFrameworkRequirement,
+    deleteFrameworkRequirement,
     linkDocumentToRequirement,
     unlinkDocumentFromRequirement,
     upsertRequirementEvidenceCriterion,
@@ -55,6 +85,7 @@ export default function RequirementsPage() {
     unlinkDocumentFromAction,
     uploadActionAttachment,
     getDocumentSignedUrl,
+    findPossibleDuplicateDocuments,
     linkCompetencyTypeToRequirement,
     unlinkCompetencyTypeFromRequirement,
     readinessReport
@@ -62,6 +93,7 @@ export default function RequirementsPage() {
 
   const [search, setSearch] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<'All' | RequirementStatus>('All');
+  const [requirementView, setRequirementView] = useState<RequirementView>('active');
   const [selectedRequirement, setSelectedRequirement] = useState<Requirement | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -79,7 +111,6 @@ export default function RequirementsPage() {
   const [linkingDocumentId, setLinkingDocumentId] = useState('');
   const [linkingCompetencyTypeId, setLinkingCompetencyTypeId] = useState('');
   const [criterionLinkingDocumentId, setCriterionLinkingDocumentId] = useState<Record<string, string>>({});
-  const [uploadingCriterionId, setUploadingCriterionId] = useState<string | null>(null);
   const [criterionTitle, setCriterionTitle] = useState('');
   const [criterionEvidenceType, setCriterionEvidenceType] = useState('');
   const [criterionRequired, setCriterionRequired] = useState(true);
@@ -135,15 +166,30 @@ export default function RequirementsPage() {
   };
 
   const assessedRequirements = useMemo(() => {
-    return readinessReport.requirements.map(item => ({
+    const readinessRows = readinessReport.requirements.map(item => ({
       ...item.requirement,
       status: item.status,
       linkedDocuments: item.linkedDocuments,
       evidenceCoverage: item.evidenceCoverage
     }));
-  }, [readinessReport.requirements]);
+    const readinessIds = new Set(readinessRows.map(requirement => requirement.id));
+    const lifecycleRows = frameworkRequirements
+      .filter(requirement => !readinessIds.has(requirement.id))
+      .map(requirement => ({
+        ...requirement,
+        linkedDocuments: documents.filter(document =>
+          requirementDocuments.some(link => link.requirement_id === requirement.id && link.document_id === document.id)
+        ),
+        evidenceCoverage: undefined
+      }));
+    return [...readinessRows, ...lifecycleRows];
+  }, [documents, frameworkRequirements, readinessReport.requirements, requirementDocuments]);
 
   const filteredRequirements = assessedRequirements.filter(requirement => {
+    const lifecycle = lifecycleLabel(requirement.lifecycle_status);
+    if (requirementView === 'active' && lifecycle !== 'ACTIVE') return false;
+    if (requirementView === 'archive' && lifecycle !== 'ARCHIVED') return false;
+    if (requirementView === 'inactive' && lifecycle !== 'DEACTIVATED') return false;
     const matchesSearch =
       requirement.title.toLowerCase().includes(search.toLowerCase()) ||
       requirement.category.toLowerCase().includes(search.toLowerCase()) ||
@@ -178,6 +224,7 @@ export default function RequirementsPage() {
   const completedOrCancelledActions = selectedActions.filter(action => action.status === 'Complete' || action.status === 'Cancelled');
   const selectedActionRequirements = selectedAction
     ? frameworkRequirements.filter(requirement =>
+        lifecycleLabel(requirement.lifecycle_status) === 'ACTIVE' &&
         requirementActions.some(link => link.action_id === selectedAction.id && link.requirement_id === requirement.id)
       )
     : [];
@@ -186,7 +233,9 @@ export default function RequirementsPage() {
     : null;
   const selectedPack = REQUIREMENT_TEMPLATE_PACKS.find(pack => pack.id === selectedPackId) || REQUIREMENT_TEMPLATE_PACKS[0];
   const existingRequirementKeys = new Set(
-    frameworkRequirements.map(requirement => `${requirement.title.trim().toLowerCase()}::${requirement.category.trim().toLowerCase()}`)
+    frameworkRequirements
+      .filter(requirement => lifecycleLabel(requirement.lifecycle_status) !== 'DELETED')
+      .map(requirement => `${requirement.title.trim().toLowerCase()}::${requirement.category.trim().toLowerCase()}`)
   );
   const templateKey = (title: string, category: string) => `${title.trim().toLowerCase()}::${category.trim().toLowerCase()}`;
 
@@ -285,6 +334,67 @@ export default function RequirementsPage() {
     }
   };
 
+  const handleArchiveRequirement = async () => {
+    if (!selectedRequirement) return;
+    const confirmed = window.confirm('Archive Requirement?\n\nArchived requirements remain available for historical review but are excluded from readiness scoring and audit packs.');
+    if (!confirmed) return;
+    setEditError('');
+    setEditSuccess('');
+    try {
+      const updated = await archiveFrameworkRequirement(selectedRequirement.id);
+      setSelectedRequirement(updated);
+      setRequirementView('archive');
+      setEditSuccess('Requirement archived.');
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : 'Could not archive requirement.');
+    }
+  };
+
+  const handleRestoreRequirement = async () => {
+    if (!selectedRequirement) return;
+    setEditError('');
+    setEditSuccess('');
+    try {
+      const updated = await restoreFrameworkRequirement(selectedRequirement.id);
+      setSelectedRequirement(updated);
+      setRequirementView('active');
+      setEditSuccess('Requirement restored to Active.');
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : 'Could not restore requirement.');
+    }
+  };
+
+  const handleDeactivateRequirement = async () => {
+    if (!selectedRequirement) return;
+    const confirmed = window.confirm('Deactivate Requirement?\n\nDeactivated requirements are retained for history but excluded from readiness scoring and audit packs.');
+    if (!confirmed) return;
+    setEditError('');
+    setEditSuccess('');
+    try {
+      const updated = await deactivateFrameworkRequirement(selectedRequirement.id);
+      setSelectedRequirement(updated);
+      setRequirementView('inactive');
+      setEditSuccess('Requirement deactivated.');
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : 'Could not deactivate requirement.');
+    }
+  };
+
+  const handleDeleteRequirement = async () => {
+    if (!selectedRequirement) return;
+    const confirmed = window.confirm('Delete Requirement?\n\nOnly requirements with no linked evidence, criteria, reviews, actions, or competency history can be deleted. If deletion is blocked, archive the requirement instead.');
+    if (!confirmed) return;
+    setEditError('');
+    setEditSuccess('');
+    try {
+      await deleteFrameworkRequirement(selectedRequirement.id);
+      setSelectedRequirement(null);
+      setEditSuccess('Requirement deleted.');
+    } catch (error) {
+      setEditError(`${error instanceof Error ? error.message : 'Could not delete requirement.'} Archive instead to preserve history.`);
+    }
+  };
+
   const handleLinkDocument = async () => {
     if (!selectedRequirement || !linkingDocumentId) return;
     await linkDocumentToRequirement(selectedRequirement.id, linkingDocumentId);
@@ -327,16 +437,6 @@ export default function RequirementsPage() {
     setCriterionRequired(true);
     setCriterionValidityRequired(true);
     setCriterionMinimumCount('1');
-  };
-
-  const handleUploadCriterionEvidence = async (criterionId: string, file: File | null) => {
-    if (!file) return;
-    setUploadingCriterionId(criterionId);
-    try {
-      await uploadEvidenceForCriterion(criterionId, file, selectedRequirement?.category || 'Evidence');
-    } finally {
-      setUploadingCriterionId(null);
-    }
   };
 
   const handleCreateAction = async (e: React.FormEvent) => {
@@ -415,6 +515,26 @@ export default function RequirementsPage() {
         </p>
       </div>
 
+      <div className="flex bg-muted p-1 border border-border rounded-xl w-full sm:max-w-md shadow-xs">
+        {([
+          ['active', `Active (${frameworkRequirements.filter(requirement => lifecycleLabel(requirement.lifecycle_status) === 'ACTIVE').length})`],
+          ['archive', `Archive (${frameworkRequirements.filter(requirement => requirement.lifecycle_status === 'ARCHIVED').length})`],
+          ['inactive', `Inactive (${frameworkRequirements.filter(requirement => requirement.lifecycle_status === 'DEACTIVATED').length})`]
+        ] as [RequirementView, string][]).map(([view, label]) => (
+          <button
+            key={view}
+            onClick={() => { setRequirementView(view); setSelectedRequirement(null); setSelectedStatus('All'); }}
+            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold text-center transition-all ${
+              requirementView === view
+                ? 'bg-card text-foreground shadow-xs border border-border/40'
+                : 'text-muted-foreground hover:text-foreground hover:bg-card'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {(['GREEN', 'AMBER', 'RED', 'GREY'] as RequirementStatus[]).map(status => (
           <button
@@ -464,7 +584,7 @@ export default function RequirementsPage() {
                     <th className="p-4">Category</th>
                     <th className="p-4">Owner</th>
                     <th className="p-4 text-center">Status</th>
-                    <th className="p-4">Next Due Date</th>
+                    <th className="p-4">{requirementView === 'archive' ? 'Archived Date' : requirementView === 'inactive' ? 'Deactivated Date' : 'Next Due Date'}</th>
                     <th className="p-4">Evidence Coverage</th>
                     <th className="p-4">Linked Evidence</th>
                     <th className="p-4">Actions</th>
@@ -486,6 +606,7 @@ export default function RequirementsPage() {
                         .filter(review => review.requirement_id === requirement.id)
                         .sort((a, b) => new Date(b.review_date).getTime() - new Date(a.review_date).getTime())[0];
                       const actionCount = requirementActions.filter(link => link.requirement_id === requirement.id).length;
+                      const coverage = coverageChip(requirement.evidenceCoverage);
                       return (
                         <tr
                           key={requirement.id}
@@ -510,21 +631,37 @@ export default function RequirementsPage() {
                               {requirement.status}
                             </span>
                           </td>
-                          <td className="p-4 text-muted-foreground font-semibold">{requirement.next_due_date || 'Not set'}</td>
                           <td className="p-4 text-muted-foreground font-semibold">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-bold ${
-                              requirement.status === 'GREEN' ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-600 dark:text-emerald-400' :
-                              requirement.status === 'AMBER' ? 'bg-amber-500/5 border-amber-500/20 text-amber-600 dark:text-amber-400' :
-                              requirement.status === 'RED' ? 'bg-rose-500/5 border-rose-500/20 text-rose-600 dark:text-rose-400' :
-                              'bg-zinc-500/5 border-zinc-500/20 text-zinc-500'
-                            }`}>
-                              {requirement.evidenceCoverage?.coveragePercent === null
-                                ? requirement.evidenceCoverage?.summary || 'Not assessed'
-                                : `${requirement.evidenceCoverage?.coveredRequired}/${requirement.evidenceCoverage?.totalRequired} covered`}
+                            {requirementView === 'archive'
+                              ? (requirement.archived_at ? new Date(requirement.archived_at).toLocaleDateString() : 'Not recorded')
+                              : requirementView === 'inactive'
+                                ? (requirement.deactivated_at ? new Date(requirement.deactivated_at).toLocaleDateString() : 'Not recorded')
+                                : (requirement.next_due_date || 'Not set')}
+                          </td>
+                          <td className="p-4 text-muted-foreground font-semibold max-w-[150px]">
+                            <span
+                              title={coverage.title}
+                              className={`inline-flex max-w-full items-center justify-center whitespace-nowrap truncate px-2 py-1 rounded border text-[10px] font-bold ${coverage.className}`}
+                            >
+                              {coverage.label}
                             </span>
                           </td>
                           <td className="p-4 text-muted-foreground font-semibold">{requirement.linkedDocuments.length}</td>
-                          <td className="p-4 text-muted-foreground font-semibold">{actionCount}</td>
+                          <td className="p-4 text-muted-foreground font-semibold">
+                            {requirementView === 'active' ? actionCount : (
+                              <button
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setSelectedRequirement(requirement);
+                                  void restoreFrameworkRequirement(requirement.id);
+                                  setRequirementView('active');
+                                }}
+                                className="px-2 py-1 rounded bg-indigo-600 text-white text-[10px] font-bold"
+                              >
+                                Restore
+                              </button>
+                            )}
+                          </td>
                           <td className="p-4 text-muted-foreground font-semibold">{lastReview?.review_date || 'None'}</td>
                         </tr>
                       );
@@ -676,7 +813,18 @@ export default function RequirementsPage() {
                   <div className="flex justify-between"><span className="text-muted-foreground">Category</span><span className="font-bold">{selectedAssessed.category}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Owner</span><span className="font-bold">{selectedAssessed.owner || 'Unassigned'}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Risk</span><span className="font-bold">{selectedAssessed.risk_level}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Stored Status</span><span className="font-bold">{selectedAssessed.status}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Lifecycle</span><span className="font-bold">{lifecycleLabel(selectedAssessed.lifecycle_status)}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-muted-foreground">Stored Status</span>
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full border leading-none ${statusClass(selectedAssessed.status)}`}>
+                      <span className={`h-1 w-1 rounded-full shrink-0 ${
+                        selectedAssessed.status === 'GREEN' ? 'bg-emerald-500' :
+                        selectedAssessed.status === 'AMBER' ? 'bg-amber-500' :
+                        selectedAssessed.status === 'RED' ? 'bg-rose-500' :
+                        'bg-zinc-400 dark:bg-zinc-500'
+                      }`} />
+                      {selectedAssessed.status}
+                    </span>
+                  </div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Review Frequency</span><span className="font-bold">{selectedAssessed.review_frequency}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Last Review</span><span className="font-bold">{selectedAssessed.review_date || 'Not set'}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Next / Target Due</span><span className="font-bold">{selectedAssessed.next_due_date || 'Not set'}</span></div>
@@ -689,6 +837,26 @@ export default function RequirementsPage() {
                   )}
                 </div>
               )}
+
+              <div className="border-t border-border/60 pt-4 space-y-3">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Lifecycle Management</span>
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  Archived and deactivated requirements are retained for history but excluded from readiness scoring and audit packs.
+                </p>
+                <div className="grid grid-cols-2 gap-2 text-[10px] font-bold">
+                  {lifecycleLabel(selectedAssessed.lifecycle_status) === 'ACTIVE' ? (
+                    <>
+                      <button onClick={handleArchiveRequirement} className="py-2 rounded-lg bg-muted hover:bg-muted/80 border border-border">Archive</button>
+                      <button onClick={handleDeactivateRequirement} className="py-2 rounded-lg bg-muted hover:bg-muted/80 border border-border">Deactivate</button>
+                    </>
+                  ) : (
+                    <button onClick={handleRestoreRequirement} className="col-span-2 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white">Restore to Active</button>
+                  )}
+                  <button onClick={handleDeleteRequirement} className="col-span-2 py-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/15 border border-rose-500/20 text-rose-600 dark:text-rose-300">
+                    Delete if Safe
+                  </button>
+                </div>
+              </div>
 
               <div className="border-t border-border/60 pt-4 space-y-3">
                 <div>
@@ -759,10 +927,20 @@ export default function RequirementsPage() {
                               <LinkIcon className="w-3.5 h-3.5" />
                             </button>
                           </div>
-                          <label className="px-2 py-1.5 bg-muted hover:bg-muted/80 border border-border rounded-md text-center font-bold cursor-pointer">
-                            {uploadingCriterionId === result.criterion.id ? 'Uploading...' : `Upload (${formatMaxEvidenceUploadSize()})`}
-                            <input type="file" accept={evidenceAcceptAttribute} className="hidden" onChange={event => handleUploadCriterionEvidence(result.criterion.id, event.target.files?.[0] || null)} />
-                          </label>
+                          <EvidenceDropzone
+                            label="Upload criterion evidence"
+                            helperText="Uploaded files are saved as private Evidence Vault records and linked to this criterion."
+                            buttonLabel="Upload"
+                            compact
+                            multiple
+                            onUpload={async (file, updateStatus) => {
+                              updateStatus('saving record');
+                              const doc = await uploadEvidenceForCriterion(result.criterion.id, file, selectedRequirement?.category || 'Evidence');
+                              updateStatus('linking');
+                              return doc;
+                            }}
+                            findDuplicates={findPossibleDuplicateDocuments}
+                          />
                         </div>
                         <div className="flex gap-2">
                           <button
@@ -1011,7 +1189,18 @@ export default function RequirementsPage() {
 
               <div className="border-t border-border/60 pt-4 space-y-2 text-[10px] text-muted-foreground">
                 <span className="font-bold uppercase tracking-widest block">Status History</span>
-                <p>Current calculated status: {selectedAssessed.status}</p>
+                <div className="flex items-center gap-1.5 mt-1 text-[10px]">
+                  <span>Current calculated status:</span>
+                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded-full border leading-none ${statusClass(selectedAssessed.status)}`}>
+                    <span className={`h-1 w-1 rounded-full shrink-0 ${
+                      selectedAssessed.status === 'GREEN' ? 'bg-emerald-500' :
+                      selectedAssessed.status === 'AMBER' ? 'bg-amber-500' :
+                      selectedAssessed.status === 'RED' ? 'bg-rose-500' :
+                      'bg-zinc-400 dark:bg-zinc-500'
+                    }`} />
+                    {selectedAssessed.status}
+                  </span>
+                </div>
                 <span className="font-bold uppercase tracking-widest block pt-2">Notes</span>
                 <p>Notes are captured through review entries and action descriptions.</p>
               </div>
@@ -1029,7 +1218,7 @@ export default function RequirementsPage() {
       </div>
 
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
           <div className="bg-card border border-border w-full max-w-lg rounded-2xl p-6 relative shadow-2xl">
             <button onClick={() => setShowCreateModal(false)} className="absolute top-4 right-4 p-1 hover:bg-muted rounded">
               <X className="w-4 h-4" />
@@ -1097,7 +1286,7 @@ export default function RequirementsPage() {
       )}
 
       {showImportModal && selectedPack && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
           <div className="bg-card border border-border w-full max-w-5xl rounded-2xl p-6 relative shadow-2xl max-h-[88vh] overflow-hidden flex flex-col">
             <button onClick={() => setShowImportModal(false)} className="absolute top-4 right-4 p-1 hover:bg-muted rounded">
               <X className="w-4 h-4" />
@@ -1233,6 +1422,7 @@ export default function RequirementsPage() {
         onUnlinkDocument={unlinkDocumentFromAction}
         onUploadAttachment={uploadActionAttachment}
         onOpenDocument={getDocumentSignedUrl}
+        onFindDuplicates={findPossibleDuplicateDocuments}
       />
     </div>
   );

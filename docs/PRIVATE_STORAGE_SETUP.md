@@ -65,3 +65,7 @@ Apply the SQL files in this order:
 - No evidence file public URLs are produced or stored.
 - Signed URLs expire after `NEXT_PUBLIC_VIGILEN_SIGNED_URL_TTL_SECONDS`.
 - Files uploaded from Action Records appear in Evidence Vault under category `Actions`.
+- Drag-and-drop and multi-file uploads use the same private bucket, document rows, RLS policies and signed URL flow as standard uploads. No separate attachment bucket or public upload path is required.
+- Duplicate detection stores a client-side SHA-256 hash in `evidence_documents.file_hash` when available.
+- Archive metadata is stored on `evidence_documents` using `archived_at`, `archived_by`, `deleted_at`, `deleted_by`, and `permanently_deleted_at`.
+- Permanent delete in v1 marks `permanently_deleted_at`, removes known document links, removes audit-pack document references, and attempts private storage object removal.

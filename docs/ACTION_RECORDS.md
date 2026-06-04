@@ -45,6 +45,8 @@ Users can attach evidence in two ways:
 
 Direct action uploads create a normal private Evidence Vault document with category `Actions`, then create an `action_documents` link to the action. The action timeline records `Evidence Added` with `Uploaded attachment: {filename}`. The uploaded document remains visible in Evidence Vault and can be filtered by the `Actions` category.
 
+The Action Detail drawer supports drag-and-drop and multi-file attachment upload through the shared Evidence Vault dropzone. Each file is validated independently and a failed file does not block other uploads.
+
 When a user opens a document in Evidence Vault, any linked actions are shown with title, status, due date, owner, related requirement, and an `Open linked action` button.
 
 ## Security

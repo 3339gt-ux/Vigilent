@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import { EvidenceDropzone } from '@/components/EvidenceDropzone';
 import {
   Action,
   ActionDocument,
@@ -9,8 +10,7 @@ import {
   EvidenceDocument,
   Requirement
 } from '@/lib/types';
-import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
-import { CheckCircle2, FileText, Link as LinkIcon, Loader2, Play, RotateCcw, Upload, X } from 'lucide-react';
+import { CheckCircle2, FileText, Link as LinkIcon, Play, RotateCcw, X } from 'lucide-react';
 
 type ActionDetailDrawerProps = {
   action: Action | null;
@@ -25,6 +25,7 @@ type ActionDetailDrawerProps = {
   onUnlinkDocument: (actionId: string, documentId: string) => Promise<void>;
   onUploadAttachment: (actionId: string, file: File) => Promise<EvidenceDocument>;
   onOpenDocument: (documentId: string) => Promise<string>;
+  onFindDuplicates?: (file: File, fileHash: string) => Promise<EvidenceDocument[]>;
 };
 
 const formatDateTime = (value?: string | null) => value ? new Date(value).toLocaleString() : 'Not recorded';
@@ -50,7 +51,8 @@ export function ActionDetailDrawer({
   onLinkDocument,
   onUnlinkDocument,
   onUploadAttachment,
-  onOpenDocument
+  onOpenDocument,
+  onFindDuplicates
 }: ActionDetailDrawerProps) {
   const [updateType, setUpdateType] = useState<ActionUpdateType>('Note');
   const [updateNote, setUpdateNote] = useState('');
@@ -58,12 +60,9 @@ export function ActionDetailDrawer({
   const [completionNote, setCompletionNote] = useState('');
   const [cancellationNote, setCancellationNote] = useState('');
   const [reopenNote, setReopenNote] = useState('');
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadFileName, setUploadFileName] = useState('');
   const [uploadMessage, setUploadMessage] = useState('');
   const [error, setError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
 
   const linkedDocumentIds = useMemo(
     () => new Set(actionDocuments.filter(link => link.action_id === action?.id).map(link => link.document_id)),
@@ -108,24 +107,6 @@ export function ActionDetailDrawer({
     });
   };
 
-  const handleUploadAttachment = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!uploadFile) return;
-    setIsUploading(true);
-    setError('');
-    setUploadMessage('');
-    try {
-      const doc = await onUploadAttachment(action.id, uploadFile);
-      setUploadFile(null);
-      setUploadFileName('');
-      setUploadMessage(`Uploaded "${doc.original_file_name || doc.file_name}" to private Evidence Vault category Actions and linked it to this action.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Attachment upload failed.');
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
   const handleOpenDocument = async (documentId: string) => {
     await runAction(async () => {
       const url = await onOpenDocument(documentId);
@@ -168,9 +149,9 @@ export function ActionDetailDrawer({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex justify-end">
+    <div className="fixed inset-0 z-50 bg-black/60 flex justify-end">
       <div className="bg-card border-l border-border w-full max-w-3xl h-full overflow-y-auto shadow-2xl">
-        <div className="sticky top-0 z-10 bg-card/95 backdrop-blur border-b border-border p-5 flex items-start justify-between gap-4">
+        <div className="sticky top-0 z-10 bg-card border-b border-border p-5 flex items-start justify-between gap-4">
           <div className="min-w-0">
             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Action Record</span>
             <h2 className="text-lg font-extrabold truncate">{action.title}</h2>
@@ -259,38 +240,30 @@ export function ActionDetailDrawer({
                 <LinkIcon className="w-4 h-4" />
               </button>
             </div>
-            <form onSubmit={handleUploadAttachment} className="p-3 bg-muted/30 border border-border/60 rounded-lg space-y-2">
-              <div className="flex items-center gap-2">
-                <Upload className="w-4 h-4 text-indigo-500" />
-                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Upload New Attachment</span>
+            <EvidenceDropzone
+              label="Upload new action attachments"
+              helperText="Drops create private Evidence Vault records in Actions, then link them to this action."
+              buttonLabel="Attach files"
+              compact
+              multiple
+              onUpload={async (file, updateStatus) => {
+                setUploadMessage('');
+                setError('');
+                updateStatus('saving record');
+                const doc = await onUploadAttachment(action.id, file);
+                updateStatus('linking');
+                return doc;
+              }}
+              onComplete={docs => {
+                setUploadMessage(`Uploaded ${docs.length} attachment${docs.length === 1 ? '' : 's'} to private Evidence Vault category Actions and linked to this action.`);
+              }}
+              findDuplicates={onFindDuplicates}
+            />
+            {uploadMessage && (
+              <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded text-[10px] text-emerald-600 dark:text-emerald-300">
+                {uploadMessage}
               </div>
-              <input
-                type="file"
-                accept={evidenceAcceptAttribute}
-                onChange={event => {
-                  const file = event.target.files?.[0] || null;
-                  setUploadFile(file);
-                  setUploadFileName(file?.name || '');
-                  setUploadMessage('');
-                }}
-                className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-[11px]"
-              />
-              <p className="text-[9px] text-muted-foreground">
-                {uploadFileName || `PDF, DOCX, XLSX, PNG, JPG, or JPEG. Max ${formatMaxEvidenceUploadSize()}.`}
-              </p>
-              {uploadMessage && (
-                <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded text-[10px] text-emerald-600 dark:text-emerald-300">
-                  {uploadMessage}
-                </div>
-              )}
-              <button
-                disabled={!uploadFile || isUploading}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/40 text-white font-bold rounded-lg"
-              >
-                {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                {isUploading ? 'Uploading...' : 'Upload Attachment'}
-              </button>
-            </form>
+            )}
           </section>
 
           <section className="border-t border-border/50 pt-5 space-y-3 text-xs">

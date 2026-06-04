@@ -77,14 +77,27 @@ alter table public.evidence_documents add column if not exists original_file_nam
 alter table public.evidence_documents add column if not exists safe_file_name text;
 alter table public.evidence_documents add column if not exists storage_path text;
 alter table public.evidence_documents add column if not exists mime_type text;
+alter table public.evidence_documents add column if not exists file_hash text;
 alter table public.evidence_documents add column if not exists tags text[] not null default '{}'::text[];
 alter table public.evidence_documents add column if not exists review_date date;
 alter table public.evidence_documents add column if not exists training_date date;
 alter table public.evidence_documents add column if not exists calibration_date date;
+alter table public.evidence_documents add column if not exists archived_at timestamp with time zone;
+alter table public.evidence_documents add column if not exists archived_by uuid references public.profiles(id) on delete set null;
+alter table public.evidence_documents add column if not exists deleted_at timestamp with time zone;
+alter table public.evidence_documents add column if not exists deleted_by uuid references public.profiles(id) on delete set null;
+alter table public.evidence_documents add column if not exists permanently_deleted_at timestamp with time zone;
 
 create unique index if not exists evidence_documents_storage_path_idx
     on public.evidence_documents (storage_path)
     where storage_path is not null;
+
+create index if not exists evidence_documents_duplicate_lookup_idx
+    on public.evidence_documents (organization_id, original_file_name, file_size_bytes, mime_type);
+
+create index if not exists evidence_documents_hash_lookup_idx
+    on public.evidence_documents (organization_id, file_hash)
+    where file_hash is not null;
 
 -- 4b. Standards-agnostic Requirements Framework
 create table if not exists public.requirements (
@@ -106,6 +119,13 @@ create table if not exists public.requirements (
 );
 
 alter table public.requirements add column if not exists notes text;
+alter table public.requirements add column if not exists lifecycle_status text not null default 'ACTIVE';
+alter table public.requirements add column if not exists archived_at timestamp with time zone;
+alter table public.requirements add column if not exists archived_by uuid references public.profiles(id) on delete set null;
+alter table public.requirements add column if not exists deactivated_at timestamp with time zone;
+alter table public.requirements add column if not exists deactivated_by uuid references public.profiles(id) on delete set null;
+alter table public.requirements add column if not exists deleted_at timestamp with time zone;
+alter table public.requirements add column if not exists deleted_by uuid references public.profiles(id) on delete set null;
 
 create table if not exists public.requirement_evidence_types (
     id uuid primary key default uuid_generate_v4(),
@@ -336,6 +356,7 @@ create table if not exists public.requirement_evidence_criterion_matches (
 );
 
 create index if not exists requirements_organisation_status_idx on public.requirements (organisation_id, status);
+create index if not exists requirements_organisation_lifecycle_idx on public.requirements (organisation_id, lifecycle_status);
 create index if not exists requirement_documents_organisation_idx on public.requirement_documents (organisation_id, requirement_id, document_id);
 create index if not exists requirement_evidence_criteria_organisation_idx on public.requirement_evidence_criteria (organisation_id, requirement_id, is_required);
 create index if not exists requirement_evidence_criterion_matches_organisation_idx on public.requirement_evidence_criterion_matches (organisation_id, criterion_id, match_status);

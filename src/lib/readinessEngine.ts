@@ -341,14 +341,20 @@ export const buildReadinessReport = (input: {
   today?: Date;
 }): ReadinessReport => {
   const today = input.today || new Date();
-  const requirementReadiness = input.requirements.map(requirement =>
+  const includedRequirements = input.requirements.filter(requirement =>
+    (requirement.lifecycle_status || 'ACTIVE') === 'ACTIVE'
+  );
+  const includedRequirementIds = new Set(includedRequirements.map(requirement => requirement.id));
+  const includedRequirementActions = input.requirementActions.filter(link => includedRequirementIds.has(link.requirement_id));
+
+  const requirementReadiness = includedRequirements.map(requirement =>
     assessRequirementReadiness(
       requirement,
       input.documents,
       input.requirementDocuments,
       input.reviews,
       input.actions,
-      input.requirementActions,
+      includedRequirementActions,
       input.requirementEvidenceCriteria || [],
       input.requirementEvidenceCriterionMatches || [],
       input.competencyTypes || [],
@@ -381,11 +387,11 @@ export const buildReadinessReport = (input: {
     return dueDays !== null && dueDays < 0;
   });
 
-  const requirementById = new Map(input.requirements.map(requirement => [requirement.id, requirement]));
+  const requirementById = new Map(includedRequirements.map(requirement => [requirement.id, requirement]));
   const openActionItems = input.actions
     .filter(action => action.status === 'Open' || action.status === 'In Progress')
     .map(action => {
-      const linkedRequirements = input.requirementActions
+      const linkedRequirements = includedRequirementActions
         .filter(link => link.action_id === action.id)
         .map(link => requirementById.get(link.requirement_id))
         .filter((requirement): requirement is Requirement => Boolean(requirement));

@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import Link from 'next/link';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
+import { EvidenceDropzone } from '@/components/EvidenceDropzone';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import { isDemoMode } from '@/lib/env';
 import type { Action } from '@/lib/types';
@@ -47,7 +48,8 @@ export default function DashboardPage() {
     linkDocumentToAction,
     unlinkDocumentFromAction,
     uploadActionAttachment,
-    getDocumentSignedUrl
+    getDocumentSignedUrl,
+    findPossibleDuplicateDocuments
   } = useApp();
 
   const [uploadTitle, setUploadTitle] = useState('');
@@ -208,6 +210,17 @@ export default function DashboardPage() {
             <FileSpreadsheet className="w-6 h-6" />
           </div>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Link href="/dashboard/requirements" className="bg-card border border-border p-4 rounded-xl hover:bg-muted/30 transition-colors">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Active Requirements</span>
+          <span className="text-2xl font-extrabold block mt-1 text-foreground">{stats.activeRequirements}</span>
+        </Link>
+        <Link href="/dashboard/requirements" className="bg-card border border-border p-4 rounded-xl hover:bg-muted/30 transition-colors">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Archived Requirements</span>
+          <span className="text-2xl font-extrabold block mt-1 text-muted-foreground">{stats.archivedRequirements}</span>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
@@ -644,6 +657,28 @@ export default function DashboardPage() {
                 />
               </div>
 
+              <EvidenceDropzone
+                label="Drag files here for quick multi-upload"
+                helperText={`Uses selected category and expiry date. Max ${formatMaxEvidenceUploadSize()} per file.`}
+                buttonLabel="Choose files"
+                compact
+                multiple
+                onUpload={async (file, updateStatus) => {
+                  updateStatus('saving record');
+                  const doc = await uploadDocument({
+                    file,
+                    title: file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim() || file.name,
+                    category: uploadCategory,
+                    expiry_date: uploadExpiry || null,
+                    issue_date: new Date().toISOString().split('T')[0],
+                    metadata: { source: 'dashboard_quick_dropzone' }
+                  });
+                  return doc;
+                }}
+                onComplete={docs => setUploadSuccess(`Uploaded ${docs.length} document${docs.length === 1 ? '' : 's'} to private storage.`)}
+                findDuplicates={findPossibleDuplicateDocuments}
+              />
+
               {uploadError && (
                 <div className="p-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-300 text-[11px]">
                   {uploadError}
@@ -686,6 +721,7 @@ export default function DashboardPage() {
         onUnlinkDocument={unlinkDocumentFromAction}
         onUploadAttachment={uploadActionAttachment}
         onOpenDocument={getDocumentSignedUrl}
+        onFindDuplicates={findPossibleDuplicateDocuments}
       />
     </div>
   );
