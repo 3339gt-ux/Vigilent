@@ -265,7 +265,7 @@ export default function BillingPage() {
       {/* Stripe Gateway Checkout Simulator Overlay Modal */}
       {showCheckoutModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-card border border-border w-full max-w-sm rounded-2xl p-6 relative shadow-2xl">
+          <div className="bg-card solid-panel border border-border w-full max-w-sm rounded-2xl p-6 relative shadow-2xl">
             <button
               onClick={() => setShowCheckoutModal(false)}
               className="absolute top-4 right-4 p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded"

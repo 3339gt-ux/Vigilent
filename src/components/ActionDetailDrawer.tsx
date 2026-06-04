@@ -150,8 +150,8 @@ export function ActionDetailDrawer({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex justify-end">
-      <div className="bg-card border-l border-border w-full max-w-3xl h-full overflow-y-auto shadow-2xl">
-        <div className="sticky top-0 z-10 bg-card border-b border-border p-5 flex items-start justify-between gap-4">
+      <div className="bg-card solid-panel border-l border-border w-full max-w-3xl h-full overflow-y-auto shadow-2xl">
+        <div className="sticky top-0 z-10 bg-card solid-panel border-b border-border p-5 flex items-start justify-between gap-4">
           <div className="min-w-0">
             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Action Record</span>
             <h2 className="text-lg font-extrabold truncate">{action.title}</h2>

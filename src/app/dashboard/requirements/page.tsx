@@ -1219,7 +1219,7 @@ export default function RequirementsPage() {
 
       {showCreateModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-card border border-border w-full max-w-lg rounded-2xl p-6 relative shadow-2xl">
+          <div className="bg-card solid-panel border border-border w-full max-w-lg rounded-2xl p-6 relative shadow-2xl">
             <button onClick={() => setShowCreateModal(false)} className="absolute top-4 right-4 p-1 hover:bg-muted rounded">
               <X className="w-4 h-4" />
             </button>
@@ -1287,7 +1287,7 @@ export default function RequirementsPage() {
 
       {showImportModal && selectedPack && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-card border border-border w-full max-w-5xl rounded-2xl p-6 relative shadow-2xl max-h-[88vh] overflow-hidden flex flex-col">
+          <div className="bg-card solid-panel border border-border w-full max-w-5xl rounded-2xl p-6 relative shadow-2xl max-h-[88vh] overflow-hidden flex flex-col">
             <button onClick={() => setShowImportModal(false)} className="absolute top-4 right-4 p-1 hover:bg-muted rounded">
               <X className="w-4 h-4" />
             </button>

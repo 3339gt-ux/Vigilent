@@ -275,7 +275,7 @@ export function EvidenceDropzone({
 
       {duplicateDecision && (
         <div className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl bg-card border border-border rounded-2xl shadow-2xl p-6 space-y-4">
+          <div className="w-full max-w-2xl bg-card solid-panel border border-border rounded-2xl shadow-2xl p-6 space-y-4">
             <div className="flex items-center gap-3 border-b border-border/60 pb-3">
               <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-500 shrink-0">
                 <AlertCircle className="w-6 h-6 animate-pulse" />

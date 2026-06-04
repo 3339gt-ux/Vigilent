@@ -687,7 +687,7 @@ export default function EvidenceVault() {
     const linkedCriterionIds = new Set(requirementEvidenceCriterionMatches.filter(match => match.document_id === doc.id && match.match_status !== 'Rejected').map(match => match.criterion_id));
 
     return (
-      <div className="border-t lg:border-t-0 lg:border-l border-border/60 bg-card overflow-y-auto p-5 space-y-5 text-xs">
+      <div className="border-t lg:border-t-0 lg:border-l border-border/60 bg-card solid-panel overflow-y-auto p-5 space-y-5 text-xs">
         <div className="space-y-1">
           <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Metadata Profile</span>
           <h4 className="text-sm font-extrabold text-foreground truncate" title={doc.title}>{doc.title}</h4>
@@ -1765,7 +1765,7 @@ export default function EvidenceVault() {
       {/* Upload Dialog Modal Overlay */}
       {showUploadModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-card border border-border w-full max-w-md rounded-2xl p-6 relative shadow-2xl">
+          <div className="bg-card solid-panel border border-border w-full max-w-md rounded-2xl p-6 relative shadow-2xl">
             <button
               onClick={() => setShowUploadModal(false)}
               className="absolute top-4 right-4 p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded"
@@ -1908,7 +1908,7 @@ export default function EvidenceVault() {
 
       {previewDoc && !largePreviewDoc && (
         <div
-          className="fixed z-[55] w-80 bg-card border border-indigo-500/20 rounded-2xl shadow-2xl p-4 space-y-3 transition-all duration-200"
+          className="fixed z-[55] w-80 bg-card solid-panel border border-indigo-500/20 rounded-2xl shadow-2xl p-4 space-y-3 transition-all duration-200"
           style={{ top: previewPosition.top, left: previewPosition.left }}
           onMouseEnter={cancelPreviewClose}
           onMouseLeave={stopPreview}
@@ -1944,7 +1944,7 @@ export default function EvidenceVault() {
 
       {largePreviewDoc && (
         <div className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-7xl h-[88vh] bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+          <div className="w-full max-w-7xl h-[88vh] bg-card solid-panel border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden">
             <div className="flex items-center justify-between gap-4 p-5 border-b border-border/60 shrink-0">
               <div className="min-w-0">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-650 dark:text-indigo-400">Private Vault Preview</span>
@@ -1979,7 +1979,7 @@ export default function EvidenceVault() {
 
       {duplicateWarning && (
         <div className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl bg-card border border-border rounded-2xl shadow-2xl p-6 space-y-4">
+          <div className="w-full max-w-2xl bg-card solid-panel border border-border rounded-2xl shadow-2xl p-6 space-y-4">
             <div className="flex items-center gap-3 border-b border-border/60 pb-3">
               <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-500 shrink-0">
                 <AlertCircle className="w-6 h-6 animate-pulse" />

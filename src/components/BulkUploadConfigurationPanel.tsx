@@ -242,9 +242,9 @@ export function BulkUploadConfigurationPanel(props: BulkUploadConfigurationPanel
 
   return (
     <div className="fixed inset-0 z-[60] bg-black/60 flex justify-end">
-      <div className="w-full max-w-5xl bg-card border-l border-border h-full flex flex-col shadow-2xl">
+      <div className="w-full max-w-5xl bg-card solid-panel border-l border-border h-full flex flex-col shadow-2xl">
         {/* Sticky Header */}
-        <div className="sticky top-0 z-10 bg-card border-b border-border p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0">
+        <div className="sticky top-0 z-10 bg-card solid-panel border-b border-border p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0">
           <div>
             <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Batch Upload Manager</span>
             <h2 className="text-lg font-extrabold flex items-center gap-2">

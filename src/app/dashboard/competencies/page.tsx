@@ -405,7 +405,7 @@ export default function CompetencyMatrixPage() {
 
       {activeCell && (
         <div className="fixed inset-0 z-50 bg-black/60 flex justify-end">
-          <div className="w-full max-w-xl bg-card border-l border-border h-full overflow-y-auto p-6 space-y-5">
+          <div className="w-full max-w-xl bg-card solid-panel border-l border-border h-full overflow-y-auto p-6 space-y-5">
             <div className="flex justify-between gap-3">
               <div>
                 <h2 className="text-xl font-extrabold">{activeCell.competencyType.title}</h2>
@@ -498,7 +498,7 @@ export default function CompetencyMatrixPage() {
 
       {selectedPerson && (
         <div className="fixed inset-0 z-50 bg-black/60 flex justify-end">
-          <div className="w-full max-w-2xl bg-card border-l border-border h-full overflow-y-auto p-6 space-y-5">
+          <div className="w-full max-w-2xl bg-card solid-panel border-l border-border h-full overflow-y-auto p-6 space-y-5">
             <div className="flex justify-between gap-3 border-b border-border pb-4">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block">Person Detail</span>
