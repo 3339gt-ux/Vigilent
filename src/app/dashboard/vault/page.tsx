@@ -7,24 +7,24 @@ import { BulkUploadConfigurationPanel } from '@/components/BulkUploadConfigurati
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
 import { Action, EvidenceDocument } from '@/lib/types';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
-import { 
-  FolderLock, 
-  Search, 
-  Filter, 
-  Upload, 
-  Eye, 
-  Trash2, 
-  Calendar, 
-  X, 
-  FileText, 
+import {
+  FolderLock,
+  Search,
+  Filter,
+  Upload,
+  Eye,
+  Trash2,
+  Calendar,
+  X,
+  FileText,
   Loader2,
   FileCheck,
   Plus,
 } from 'lucide-react';
 
 export default function EvidenceVault() {
-  const { 
-    documents, 
+  const {
+    documents,
     frameworkRequirements,
     requirementDocuments,
     requirementEvidenceCriteria,
@@ -36,8 +36,8 @@ export default function EvidenceVault() {
     requirementActions,
     actionUpdates,
     actionDocuments,
-    uploadDocument, 
-    updateDocumentMetadata, 
+    uploadDocument,
+    updateDocumentMetadata,
     getDocumentSignedUrl,
     deleteDocument,
     linkDocumentToRequirement,
@@ -68,7 +68,7 @@ export default function EvidenceVault() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [uploadSuccess, setUploadSuccess] = useState('');
-  
+
   // Side-drawer / Editing state
   const [selectedDoc, setSelectedDoc] = useState<EvidenceDocument | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -93,7 +93,7 @@ export default function EvidenceVault() {
   // Heuristic metadata auto-suggester based on filename
   const handleFileNameChange = (val: string) => {
     setNewFileName(val);
-    
+
     // 1. Guess category
     if (val.toLowerCase().includes('mot') || val.toLowerCase().includes('hgv') || val.toLowerCase().includes('truck') || val.toLowerCase().includes('van')) {
       setNewCategory('Vehicle');
@@ -137,7 +137,7 @@ export default function EvidenceVault() {
   const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle || !newFile) return;
-    
+
     setIsUploading(true);
     setUploadError('');
     setUploadSuccess('');
@@ -150,7 +150,7 @@ export default function EvidenceVault() {
         issue_date: newIssue || null,
         metadata: {}
       });
-      
+
       // Reset
       setNewTitle('');
       setNewCategory('Vehicle');
@@ -311,7 +311,7 @@ export default function EvidenceVault() {
   // Filtered documents list
   const filteredDocs = documents
     .filter(doc => {
-      const matchesSearch = doc.title.toLowerCase().includes(search.toLowerCase()) || 
+      const matchesSearch = doc.title.toLowerCase().includes(search.toLowerCase()) ||
                             doc.file_name.toLowerCase().includes(search.toLowerCase());
       const matchesCategory = selectedCategory === 'All' || doc.category === selectedCategory;
       const matchesStatus = selectedStatus === 'All' || doc.status === selectedStatus;
@@ -351,7 +351,7 @@ export default function EvidenceVault() {
 
   return (
     <div className="space-y-6">
-      
+
       {/* Head section */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -387,10 +387,10 @@ export default function EvidenceVault() {
 
       {/* Grid: Search, Filters, and Table */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start">
-        
+
         {/* Main vault browser list (2 cols) */}
         <div className="xl:col-span-2 space-y-4">
-          
+
           {/* Controls Bar */}
           <div className="bg-card border border-border p-4 rounded-xl flex flex-col md:flex-row gap-4 items-center justify-between">
             <div className="relative w-full md:max-w-xs">
@@ -406,7 +406,7 @@ export default function EvidenceVault() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-              
+
               {/* Category selector */}
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Filter className="w-3.5 h-3.5" />
@@ -480,11 +480,11 @@ export default function EvidenceVault() {
                     filteredDocs.map(doc => {
                       const isSelected = selectedDoc?.id === doc.id;
                       return (
-                        <tr 
+                        <tr
                           key={doc.id}
                           className={`hover:bg-muted/50 transition-colors cursor-pointer border-l-2 ${
-                            isSelected 
-                              ? 'bg-indigo-500/5 border-l-indigo-600' 
+                            isSelected
+                              ? 'bg-indigo-500/5 border-l-indigo-600'
                               : 'border-l-transparent'
                           }`}
                           onClick={() => handleSelectDoc(doc)}
@@ -525,7 +525,7 @@ export default function EvidenceVault() {
                           </td>
                           <td className="p-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
-                              <button 
+                              <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleSelectDoc(doc);
@@ -535,7 +535,7 @@ export default function EvidenceVault() {
                               >
                                 <Eye className="w-4 h-4" />
                               </button>
-                              <button 
+                              <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleDeleteDoc(doc.id);
@@ -562,7 +562,7 @@ export default function EvidenceVault() {
         <div className="bg-card border border-border rounded-xl p-6 shadow-sm sticky top-24">
           {selectedDoc ? (
             <div className="space-y-6">
-              
+
               {/* Drawer Header */}
               <div className="flex justify-between items-start border-b border-border/60 pb-4">
                 <div className="space-y-1">
@@ -571,7 +571,7 @@ export default function EvidenceVault() {
                     {selectedDoc.title}
                   </h2>
                 </div>
-                <button 
+                <button
                   onClick={() => setSelectedDoc(null)}
                   className="p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded"
                 >
@@ -848,7 +848,7 @@ export default function EvidenceVault() {
 
               <div className="border-t border-border/60 pt-4 space-y-4">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Audit Attributes</span>
-                
+
                 {/* Meta listing */}
                 {Object.keys(selectedDoc.metadata).length === 0 ? (
                   <p className="text-[10px] text-muted-foreground italic">No custom attributes assigned. Add tags for vehicle ID, garage names, or driver licence numbers below.</p>
@@ -1098,6 +1098,7 @@ export default function EvidenceVault() {
         competencyRecords={competencyRecords}
         people={people}
         competencyTypes={competencyTypes}
+        uploadContext="vault"
         onClose={() => setBulkConfigDocs([])}
         onUpdateDocument={updateDocumentMetadata}
         onLinkRequirement={linkDocumentToRequirement}

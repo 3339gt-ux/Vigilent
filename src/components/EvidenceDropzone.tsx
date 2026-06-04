@@ -1,7 +1,17 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import { FileCheck, Loader2, UploadCloud } from 'lucide-react';
+import {
+  FileCheck,
+  Loader2,
+  UploadCloud,
+  FileText,
+  Image as ImageIcon,
+  FileSpreadsheet,
+  FileArchive,
+  CheckCircle2,
+  AlertCircle
+} from 'lucide-react';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize, validateEvidenceFile } from '@/lib/evidenceStorage';
 import type { EvidenceDocument } from '@/lib/types';
 
@@ -33,10 +43,20 @@ const formatBytes = (bytes: number) => {
 
 const queueId = () => `upload-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+const getFileIcon = (fileName: string) => {
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  if (['pdf'].includes(ext || '')) return <FileText className="w-5 h-5 text-rose-500" />;
+  if (['png', 'jpg', 'jpeg', 'svg', 'webp', 'gif'].includes(ext || '')) return <ImageIcon className="w-5 h-5 text-blue-500" />;
+  if (['xls', 'xlsx', 'csv'].includes(ext || '')) return <FileSpreadsheet className="w-5 h-5 text-emerald-500" />;
+  if (['doc', 'docx'].includes(ext || '')) return <FileText className="w-5 h-5 text-indigo-500" />;
+  if (['zip', 'rar', 'tar', 'gz'].includes(ext || '')) return <FileArchive className="w-5 h-5 text-amber-500" />;
+  return <FileText className="w-5 h-5 text-zinc-500" />;
+};
+
 export function EvidenceDropzone({
-  label = 'Upload evidence',
+  label = 'Upload evidence documents',
   helperText = `PDF, DOCX, XLSX, PNG, JPG or JPEG. Max ${formatMaxEvidenceUploadSize()}.`,
-  buttonLabel = 'Choose files',
+  buttonLabel = 'Browse Files',
   multiple = true,
   disabled = false,
   compact = false,
@@ -88,8 +108,8 @@ export function EvidenceDropzone({
   };
 
   const dropClasses = isDragging
-    ? 'border-blue-500 bg-blue-500/10 text-blue-700 dark:text-blue-300'
-    : 'border-border bg-muted/20 hover:bg-muted/40 text-foreground';
+    ? 'border-indigo-500 bg-indigo-500/5 dark:bg-indigo-500/10 ring-2 ring-indigo-500/20'
+    : 'border-border bg-muted/20 hover:bg-muted/40 hover:border-border-hover text-foreground';
 
   return (
     <div className="space-y-3">
@@ -97,27 +117,39 @@ export function EvidenceDropzone({
         role="button"
         tabIndex={disabled ? -1 : 0}
         aria-disabled={disabled}
-        onClick={() => !disabled && inputRef.current?.click()}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!disabled) inputRef.current?.click();
+        }}
         onKeyDown={event => {
           if (!disabled && (event.key === 'Enter' || event.key === ' ')) {
             event.preventDefault();
+            event.stopPropagation();
             inputRef.current?.click();
           }
         }}
+        onDragEnter={event => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (!disabled) setIsDragging(true);
+        }}
         onDragOver={event => {
           event.preventDefault();
+          event.stopPropagation();
           if (!disabled) setIsDragging(true);
         }}
         onDragLeave={event => {
           event.preventDefault();
+          event.stopPropagation();
           setIsDragging(false);
         }}
         onDrop={event => {
           event.preventDefault();
+          event.stopPropagation();
           setIsDragging(false);
           processFiles(event.dataTransfer.files);
         }}
-        className={`relative border-2 border-dashed rounded-xl transition-colors ${dropClasses} ${compact ? 'p-3' : 'p-5'} ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+        className={`relative border-2 border-dashed rounded-xl transition-all duration-200 ${dropClasses} ${compact ? 'p-4' : 'p-6'} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       >
         <input
           ref={inputRef}
@@ -126,41 +158,88 @@ export function EvidenceDropzone({
           multiple={multiple}
           disabled={disabled}
           className="hidden"
-          onChange={event => processFiles(event.target.files || [])}
+          onChange={event => {
+            event.stopPropagation();
+            processFiles(event.target.files || []);
+          }}
         />
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-blue-600/10 text-blue-600 dark:text-blue-300 shrink-0">
-            {isDragging ? <FileCheck className="w-5 h-5" /> : <UploadCloud className="w-5 h-5" />}
+        <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
+          <div className="p-3 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+            {isDragging ? <FileCheck className="w-6 h-6 animate-pulse" /> : <UploadCloud className="w-6 h-6" />}
           </div>
-          <div className="min-w-0">
-            <p className="font-extrabold text-xs">{isDragging ? 'Drop evidence files to upload' : label}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{helperText}</p>
+          <div className="min-w-0 flex-1">
+            <p className="font-extrabold text-sm text-foreground">
+              {isDragging ? 'Drop files here' : label}
+            </p>
+            <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+              {isDragging ? 'Release files to start uploading' : helperText}
+            </p>
           </div>
-          <span className="ml-auto px-3 py-1.5 rounded-lg bg-blue-600 text-white text-[10px] font-bold shrink-0">
+          <button
+            type="button"
+            disabled={disabled}
+            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold shrink-0 transition-colors shadow-sm"
+          >
             {buttonLabel}
-          </span>
+          </button>
         </div>
       </div>
 
       {queue.length > 0 && (
-        <div className="space-y-1.5 text-[10px]">
-          {queue.slice(0, 8).map(item => (
-            <div key={item.id} className="flex items-center justify-between gap-3 p-2 bg-card border border-border rounded-lg">
-              <div className="min-w-0">
-                <span className="font-bold block truncate">{item.fileName}</span>
-                <span className="text-muted-foreground">{formatBytes(item.fileSize)}</span>
-                {item.error && <span className="text-rose-500 block mt-0.5">{item.error}</span>}
-              </div>
-              <span className={`shrink-0 px-2 py-1 rounded font-bold uppercase ${
-                item.status === 'complete' ? 'bg-emerald-500/10 text-emerald-500' :
-                item.status === 'failed' ? 'bg-rose-500/10 text-rose-500' :
-                'bg-blue-500/10 text-blue-500'
-              }`}>
-                {item.status !== 'complete' && item.status !== 'failed' && <Loader2 className="w-3 h-3 inline mr-1 animate-spin" />}
-                {item.status}
-              </span>
-            </div>
-          ))}
+        <div className="space-y-2 mt-3">
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1">
+            <span className="font-bold">Upload Queue</span>
+            <span>{queue.filter(q => q.status === 'complete').length} of {queue.length} completed</span>
+          </div>
+          <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+            {queue.map(item => {
+              const isFailed = item.status === 'failed';
+              const isComplete = item.status === 'complete';
+              return (
+                <div
+                  key={item.id}
+                  className={`flex items-center justify-between gap-3 p-3 bg-card border rounded-xl transition-all ${
+                    isFailed ? 'border-rose-500/20 bg-rose-500/5' :
+                    isComplete ? 'border-emerald-500/20 bg-emerald-500/5' :
+                    'border-border hover:border-border-hover shadow-xs'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="p-2 bg-muted rounded-lg shrink-0">
+                      {getFileIcon(item.fileName)}
+                    </div>
+                    <div className="min-w-0 flex-1 text-left">
+                      <span className="font-bold text-xs text-foreground block truncate">{item.fileName}</span>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground mt-0.5">
+                        <span>{formatBytes(item.fileSize)}</span>
+                        <span className="text-muted-foreground/30">•</span>
+                        <span className={
+                          isFailed ? 'text-rose-600 dark:text-rose-400 font-semibold' :
+                          isComplete ? 'text-emerald-600 dark:text-emerald-400 font-semibold' :
+                          'text-indigo-600 dark:text-indigo-400 font-medium'
+                        }>
+                          {item.status === 'validating' && 'Verifying file...'}
+                          {item.status === 'uploading' && 'Uploading document...'}
+                          {item.status === 'saving record' && 'Saving configuration...'}
+                          {item.status === 'linking' && 'Linking to records...'}
+                          {item.status === 'complete' && 'Upload successful'}
+                          {item.status === 'failed' && (item.error || 'Failed')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="shrink-0 flex items-center gap-2">
+                    {isComplete && <CheckCircle2 className="w-4.5 h-4.5 text-emerald-500" />}
+                    {isFailed && <AlertCircle className="w-4.5 h-4.5 text-rose-500" />}
+                    {!isComplete && !isFailed && (
+                      <Loader2 className="w-4.5 h-4.5 text-indigo-650 dark:text-indigo-455 animate-spin shrink-0" />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
