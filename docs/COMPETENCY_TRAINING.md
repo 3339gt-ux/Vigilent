@@ -75,6 +75,7 @@ Evidence operations in the person drawer reuse the private Evidence Vault:
 
 - link existing Evidence Vault documents
 - upload a new private Evidence Vault document in category `Training & Competency`
+- drag and drop one or many competency evidence files through the shared upload dropzone
 - open evidence through a signed URL
 - unlink evidence from the competency record
 

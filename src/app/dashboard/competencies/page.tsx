@@ -5,7 +5,8 @@ import { useApp } from '@/context/AppContext';
 import { buildCompetencyMatrix } from '@/lib/competencyEngine';
 import { COMPETENCY_TEMPLATE_PACKS } from '@/lib/competencyTemplates';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
-import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
+import { EvidenceDropzone } from '@/components/EvidenceDropzone';
+import { formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import type {
   Action,
   CompetencyCategory,
@@ -17,7 +18,7 @@ import type {
   PersonType,
   RequirementRiskLevel
 } from '@/lib/types';
-import { Link as LinkIcon, Plus, Search, Trash2, Upload, UserCheck, X, Grid, User, Folder, AlertTriangle, ChevronDown } from 'lucide-react';
+import { Link as LinkIcon, Plus, Search, Trash2, UserCheck, X, Grid, User, Folder, AlertTriangle, ChevronDown } from 'lucide-react';
 
 const categories: CompetencyCategory[] = [
   'Safety',
@@ -746,23 +747,6 @@ export default function CompetencyMatrixPage() {
     setFormMessage('Record cleared without deleting history or evidence links.');
   };
 
-  const handleUploadEvidence = async (file: File | null) => {
-    if (!activeCell?.record || !file) {
-      setFormMessage('Save the competency record before uploading evidence.');
-      return;
-    }
-    setUploading(true);
-    setFormMessage('');
-    try {
-      await uploadCompetencyEvidence(activeCell.record.id, file);
-      setFormMessage('Evidence uploaded and linked to this competency record.');
-    } catch (error) {
-      setFormMessage(error instanceof Error ? error.message : 'Upload failed.');
-    } finally {
-      setUploading(false);
-    }
-  };
-
   const handleCreateGapAction = async () => {
     if (!activeCell) return;
     await createActionForCompetencyGap({
@@ -844,22 +828,6 @@ export default function CompetencyMatrixPage() {
     await linkDocumentToCompetencyRecord(record.id, documentId);
     setPersonRecordLinkIds({ ...personRecordLinkIds, [rowKey]: '' });
     setPersonMessage('Evidence linked to competency record.');
-  };
-
-  const uploadEvidenceFromPerson = async (record: CompetencyRecord | null, file: File | null) => {
-    if (!record || !file) {
-      setPersonMessage('Save the competency record before uploading evidence.');
-      return;
-    }
-    setPersonRecordUploadingId(record.id);
-    try {
-      await uploadCompetencyEvidence(record.id, file);
-      setPersonMessage('Evidence uploaded to private Evidence Vault and linked to this competency record.');
-    } catch (error) {
-      setPersonMessage(error instanceof Error ? error.message : 'Evidence upload failed.');
-    } finally {
-      setPersonRecordUploadingId(null);
-    }
   };
 
   const createGapActionFromPerson = async (person: Person, competencyType: CompetencyType, record: CompetencyRecord | null) => {
@@ -1988,10 +1956,27 @@ export default function CompetencyMatrixPage() {
                                               >
                                                 <LinkIcon className="w-3.5 h-3.5" /> Link
                                               </button>
-                                              <label className={`py-1.5 bg-muted hover:bg-muted-hover border border-border rounded-lg font-bold text-[11px] text-foreground flex items-center justify-center gap-1 text-center transition-all ${row.record ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
-                                                <Upload className="w-3.5 h-3.5" /> {personRecordUploadingId === row.record?.id ? 'Uploading...' : 'Upload'}
-                                                <input disabled={!row.record} type="file" accept={evidenceAcceptAttribute} className="hidden" onChange={event => uploadEvidenceFromPerson(row.record, event.target.files?.[0] || null)} />
-                                              </label>
+                                              <EvidenceDropzone
+                                                label="Upload competency evidence"
+                                                helperText="Saved under Training & Competency and linked to this record."
+                                                buttonLabel="Upload"
+                                                compact
+                                                multiple
+                                                disabled={!row.record || personRecordUploadingId === row.record?.id}
+                                                onUpload={async (file, updateStatus) => {
+                                                  if (!row.record) throw new Error('Save the competency record before uploading evidence.');
+                                                  setPersonRecordUploadingId(row.record.id);
+                                                  updateStatus('saving record');
+                                                  try {
+                                                    const doc = await uploadCompetencyEvidence(row.record.id, file);
+                                                    updateStatus('linking');
+                                                    return doc;
+                                                  } finally {
+                                                    setPersonRecordUploadingId(null);
+                                                  }
+                                                }}
+                                                onComplete={docs => setPersonMessage(`Uploaded ${docs.length} evidence file${docs.length === 1 ? '' : 's'} to private Evidence Vault and linked to this competency record.`)}
+                                              />
                                             </div>
                                           </div>
                                         </div>
@@ -2207,10 +2192,27 @@ export default function CompetencyMatrixPage() {
                     <LinkIcon className="w-4 h-4" /> Link Evidence
                   </button>
                 </div>
-                <label className="w-full py-2 bg-muted hover:bg-muted/80 border border-border rounded-lg font-bold flex items-center justify-center gap-2 cursor-pointer text-center">
-                  <Upload className="w-4 h-4" /> {uploading ? 'Uploading...' : 'Upload Evidence'}
-                  <input type="file" accept={evidenceAcceptAttribute} className="hidden" onChange={event => handleUploadEvidence(event.target.files?.[0] || null)} />
-                </label>
+                <EvidenceDropzone
+                  label="Upload competency evidence"
+                  helperText={`Private Evidence Vault records under Training & Competency. Max ${formatMaxEvidenceUploadSize()}.`}
+                  buttonLabel="Upload"
+                  compact
+                  multiple
+                  disabled={!activeCell.record || uploading}
+                  onUpload={async (file, updateStatus) => {
+                    if (!activeCell.record) throw new Error('Save the competency record before uploading evidence.');
+                    setUploading(true);
+                    updateStatus('saving record');
+                    try {
+                      const doc = await uploadCompetencyEvidence(activeCell.record.id, file);
+                      updateStatus('linking');
+                      return doc;
+                    } finally {
+                      setUploading(false);
+                    }
+                  }}
+                  onComplete={docs => setFormMessage(`Uploaded ${docs.length} evidence file${docs.length === 1 ? '' : 's'} and linked to this competency record.`)}
+                />
               </div>
               <p className="text-[10px] text-muted-foreground">Uploads are saved as private Evidence Vault records under Training & Competency. Max {formatMaxEvidenceUploadSize()}.</p>
             </div>

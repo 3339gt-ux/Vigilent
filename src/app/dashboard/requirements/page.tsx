@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
-import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
+import { EvidenceDropzone } from '@/components/EvidenceDropzone';
 import type { Action, Requirement, RequirementStatus } from '@/lib/types';
 import { REQUIREMENT_TEMPLATE_PACKS } from '@/lib/requirementTemplatePacks';
 import {
@@ -79,7 +79,6 @@ export default function RequirementsPage() {
   const [linkingDocumentId, setLinkingDocumentId] = useState('');
   const [linkingCompetencyTypeId, setLinkingCompetencyTypeId] = useState('');
   const [criterionLinkingDocumentId, setCriterionLinkingDocumentId] = useState<Record<string, string>>({});
-  const [uploadingCriterionId, setUploadingCriterionId] = useState<string | null>(null);
   const [criterionTitle, setCriterionTitle] = useState('');
   const [criterionEvidenceType, setCriterionEvidenceType] = useState('');
   const [criterionRequired, setCriterionRequired] = useState(true);
@@ -327,16 +326,6 @@ export default function RequirementsPage() {
     setCriterionRequired(true);
     setCriterionValidityRequired(true);
     setCriterionMinimumCount('1');
-  };
-
-  const handleUploadCriterionEvidence = async (criterionId: string, file: File | null) => {
-    if (!file) return;
-    setUploadingCriterionId(criterionId);
-    try {
-      await uploadEvidenceForCriterion(criterionId, file, selectedRequirement?.category || 'Evidence');
-    } finally {
-      setUploadingCriterionId(null);
-    }
   };
 
   const handleCreateAction = async (e: React.FormEvent) => {
@@ -748,10 +737,19 @@ export default function RequirementsPage() {
                               <LinkIcon className="w-3.5 h-3.5" />
                             </button>
                           </div>
-                          <label className="px-2 py-1.5 bg-muted hover:bg-muted/80 border border-border rounded-md text-center font-bold cursor-pointer">
-                            {uploadingCriterionId === result.criterion.id ? 'Uploading...' : `Upload (${formatMaxEvidenceUploadSize()})`}
-                            <input type="file" accept={evidenceAcceptAttribute} className="hidden" onChange={event => handleUploadCriterionEvidence(result.criterion.id, event.target.files?.[0] || null)} />
-                          </label>
+                          <EvidenceDropzone
+                            label="Upload criterion evidence"
+                            helperText="Uploaded files are saved as private Evidence Vault records and linked to this criterion."
+                            buttonLabel="Upload"
+                            compact
+                            multiple
+                            onUpload={async (file, updateStatus) => {
+                              updateStatus('saving record');
+                              const doc = await uploadEvidenceForCriterion(result.criterion.id, file, selectedRequirement?.category || 'Evidence');
+                              updateStatus('linking');
+                              return doc;
+                            }}
+                          />
                         </div>
                         <div className="flex gap-2">
                           <button

@@ -60,6 +60,8 @@ Documents and requirements are many-to-many:
 
 The Evidence Vault can link an uploaded record to requirements. The Requirements page can link requirements to existing records.
 
+Requirement evidence criteria also support drag-and-drop multi-file upload. Files uploaded on a criterion are saved as normal private Evidence Vault documents and automatically linked to that criterion.
+
 ## Reviews And Actions
 
 Reviews record status, notes, review date, and next due date.

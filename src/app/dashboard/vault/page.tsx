@@ -3,6 +3,8 @@
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
+import { BulkUploadConfigurationPanel } from '@/components/BulkUploadConfigurationPanel';
+import { EvidenceDropzone } from '@/components/EvidenceDropzone';
 import { Action, EvidenceDocument } from '@/lib/types';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import { 
@@ -27,6 +29,9 @@ export default function EvidenceVault() {
     requirementDocuments,
     requirementEvidenceCriteria,
     requirementEvidenceCriterionMatches,
+    people,
+    competencyTypes,
+    competencyRecords,
     actions,
     requirementActions,
     actionUpdates,
@@ -37,6 +42,8 @@ export default function EvidenceVault() {
     deleteDocument,
     linkDocumentToRequirement,
     unlinkDocumentFromRequirement,
+    linkDocumentToEvidenceCriterion,
+    linkDocumentToCompetencyRecord,
     updateAction,
     addActionUpdate,
     linkDocumentToAction,
@@ -81,6 +88,7 @@ export default function EvidenceVault() {
   const [fileError, setFileError] = useState('');
   const [selectedRequirementId, setSelectedRequirementId] = useState('');
   const [selectedAction, setSelectedAction] = useState<Action | null>(null);
+  const [bulkConfigDocs, setBulkConfigDocs] = useState<EvidenceDocument[]>([]);
 
   // Heuristic metadata auto-suggester based on filename
   const handleFileNameChange = (val: string) => {
@@ -157,6 +165,19 @@ export default function EvidenceVault() {
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const uploadVaultFile = async (file: File, updateStatus: (status: 'validating' | 'uploading' | 'saving record' | 'linking' | 'complete' | 'failed') => void) => {
+    updateStatus('saving record');
+    return uploadDocument({
+      file,
+      title: file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim() || file.name,
+      category: 'General',
+      expiry_date: null,
+      issue_date: new Date().toISOString().split('T')[0],
+      metadata: { source: 'vault_dropzone' },
+      tags: []
+    });
   };
 
   const handleSelectDoc = (doc: EvidenceDocument) => {
@@ -354,6 +375,15 @@ export default function EvidenceVault() {
           Upload a private evidence file, select it from the table, then use <strong className="text-foreground">Linked Requirements</strong> in the detail panel to connect the record to one or more requirements. Files open through temporary signed URLs only.
         </p>
       </div>
+
+      <EvidenceDropzone
+        label="Drop evidence files anywhere here or choose files"
+        helperText={`Creates private Evidence Vault documents in General by default. Configure metadata and links after upload. Max ${formatMaxEvidenceUploadSize()}.`}
+        buttonLabel="Upload files"
+        multiple
+        onUpload={uploadVaultFile}
+        onComplete={docs => setBulkConfigDocs(docs)}
+      />
 
       {/* Grid: Search, Filters, and Table */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start">
@@ -1058,6 +1088,22 @@ export default function EvidenceVault() {
         onUnlinkDocument={unlinkDocumentFromAction}
         onUploadAttachment={uploadActionAttachment}
         onOpenDocument={getDocumentSignedUrl}
+      />
+
+      <BulkUploadConfigurationPanel
+        documents={bulkConfigDocs}
+        requirements={frameworkRequirements}
+        criteria={requirementEvidenceCriteria}
+        actions={actions}
+        competencyRecords={competencyRecords}
+        people={people}
+        competencyTypes={competencyTypes}
+        onClose={() => setBulkConfigDocs([])}
+        onUpdateDocument={updateDocumentMetadata}
+        onLinkRequirement={linkDocumentToRequirement}
+        onLinkCriterion={linkDocumentToEvidenceCriterion}
+        onLinkAction={linkDocumentToAction}
+        onLinkCompetencyRecord={linkDocumentToCompetencyRecord}
       />
 
     </div>

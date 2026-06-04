@@ -65,3 +65,4 @@ Apply the SQL files in this order:
 - No evidence file public URLs are produced or stored.
 - Signed URLs expire after `NEXT_PUBLIC_VIGILEN_SIGNED_URL_TTL_SECONDS`.
 - Files uploaded from Action Records appear in Evidence Vault under category `Actions`.
+- Drag-and-drop and multi-file uploads use the same private bucket, document rows, RLS policies and signed URL flow as standard uploads. No separate attachment bucket or public upload path is required.

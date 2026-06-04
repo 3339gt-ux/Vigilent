@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import Link from 'next/link';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
+import { EvidenceDropzone } from '@/components/EvidenceDropzone';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import { isDemoMode } from '@/lib/env';
 import type { Action } from '@/lib/types';
@@ -643,6 +644,27 @@ export default function DashboardPage() {
                   className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
                 />
               </div>
+
+              <EvidenceDropzone
+                label="Drag files here for quick multi-upload"
+                helperText={`Uses selected category and expiry date. Max ${formatMaxEvidenceUploadSize()} per file.`}
+                buttonLabel="Choose files"
+                compact
+                multiple
+                onUpload={async (file, updateStatus) => {
+                  updateStatus('saving record');
+                  const doc = await uploadDocument({
+                    file,
+                    title: file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim() || file.name,
+                    category: uploadCategory,
+                    expiry_date: uploadExpiry || null,
+                    issue_date: new Date().toISOString().split('T')[0],
+                    metadata: { source: 'dashboard_quick_dropzone' }
+                  });
+                  return doc;
+                }}
+                onComplete={docs => setUploadSuccess(`Uploaded ${docs.length} document${docs.length === 1 ? '' : 's'} to private storage.`)}
+              />
 
               {uploadError && (
                 <div className="p-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-300 text-[11px]">
