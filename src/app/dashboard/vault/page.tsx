@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import { useApp } from '@/context/AppContext';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { BulkUploadConfigurationPanel } from '@/components/BulkUploadConfigurationPanel';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
+import { EVIDENCE_CATEGORY_GROUPS, flattenCategoryGroups } from '@/lib/categoryPresets';
 import { Action, EvidenceDocument } from '@/lib/types';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import { calculateEvidenceFileHash } from '@/lib/evidenceStorage';
@@ -61,7 +62,10 @@ export default function EvidenceVault() {
     addActionUpdate,
     linkDocumentToAction,
     unlinkDocumentFromAction,
-    uploadActionAttachment
+    uploadActionAttachment,
+    evidenceCategories,
+    upsertEvidenceCategory,
+    archiveEvidenceCategory
   } = useApp();
 
   // Search & Filter state
@@ -75,7 +79,7 @@ export default function EvidenceVault() {
   // Upload dialog state
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [newTitle, setNewTitle] = useState('');
-  const [newCategory, setNewCategory] = useState('Vehicle');
+  const [newCategory, setNewCategory] = useState('General');
   const [newFileName, setNewFileName] = useState('');
   const [newFile, setNewFile] = useState<File | null>(null);
   const [newExpiry, setNewExpiry] = useState('');
@@ -118,6 +122,8 @@ export default function EvidenceVault() {
     onConfirm: () => void;
     onCancel: () => void;
   } | null>(null);
+  const [newCustomCategory, setNewCustomCategory] = useState('');
+  const [categoryMessage, setCategoryMessage] = useState('');
   const previewCacheRef = useRef<Record<string, string>>({});
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previewCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -128,13 +134,13 @@ export default function EvidenceVault() {
 
     // 1. Guess category
     if (val.toLowerCase().includes('mot') || val.toLowerCase().includes('hgv') || val.toLowerCase().includes('truck') || val.toLowerCase().includes('van')) {
-      setNewCategory('Vehicle');
+      setNewCategory('Fleet');
     } else if (val.toLowerCase().includes('cpc') || val.toLowerCase().includes('driver') || val.toLowerCase().includes('license') || val.toLowerCase().includes('qualification')) {
-      setNewCategory('Driver');
+      setNewCategory('Training & Competency');
     } else if (val.toLowerCase().includes('fire') || val.toLowerCase().includes('warehouse') || val.toLowerCase().includes('loler') || val.toLowerCase().includes('lift')) {
-      setNewCategory('Facility');
+      setNewCategory('Warehouse');
     } else if (val.toLowerCase().includes('insurance') || val.toLowerCase().includes('licence') || val.toLowerCase().includes('transit')) {
-      setNewCategory('General');
+      setNewCategory('Insurance');
     }
 
     // 2. Guess expiry date (e.g., if filename contains "2027-06-30" or "30-06-2027")
@@ -183,7 +189,7 @@ export default function EvidenceVault() {
 
       // Reset
       setNewTitle('');
-      setNewCategory('Vehicle');
+      setNewCategory('General');
       setNewFileName('');
       setNewFile(null);
       setNewExpiry('');
@@ -242,6 +248,51 @@ export default function EvidenceVault() {
       metadata: { source: 'vault_dropzone' },
       tags: []
     });
+  };
+
+  const evidenceCategoryOptions = useMemo(() => {
+    const names = new Set<string>([
+      ...flattenCategoryGroups(EVIDENCE_CATEGORY_GROUPS),
+      ...documents.map(document => document.category),
+      ...archivedDocuments.map(document => document.category),
+      ...evidenceCategories.filter(category => category.active).map(category => category.name)
+    ].filter(Boolean));
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [archivedDocuments, documents, evidenceCategories]);
+
+  const handleCreateEvidenceCategory = async () => {
+    if (!newCustomCategory.trim()) return;
+    try {
+      await upsertEvidenceCategory({
+        name: newCustomCategory.trim(),
+        category_group: 'Custom',
+        description: 'Custom evidence category',
+        active: true
+      });
+      setNewCategory(newCustomCategory.trim());
+      setSelectedCategory(newCustomCategory.trim());
+      setNewCustomCategory('');
+      setCategoryMessage('Evidence category created.');
+    } catch (error) {
+      setCategoryMessage(error instanceof Error ? error.message : 'Could not create evidence category.');
+    }
+  };
+
+  const handleArchiveEvidenceCategory = async (categoryId: string) => {
+    const category = evidenceCategories.find(item => item.id === categoryId);
+    if (!category) return;
+    const inUse = [...documents, ...archivedDocuments].some(document => document.category === category.name);
+    const confirmed = confirm(inUse
+      ? `Archive "${category.name}"?\n\nExisting evidence keeps this category text, but it will be hidden from the managed custom category list.`
+      : `Archive unused category "${category.name}"?`);
+    if (!confirmed) return;
+    try {
+      await archiveEvidenceCategory(categoryId);
+      if (selectedCategory === category.name) setSelectedCategory('All');
+      setCategoryMessage('Evidence category archived.');
+    } catch (error) {
+      setCategoryMessage(error instanceof Error ? error.message : 'Could not archive evidence category.');
+    }
   };
 
   const syncDocumentEditState = (doc: EvidenceDocument) => {
@@ -735,12 +786,7 @@ export default function EvidenceVault() {
               onChange={e => setEditCategory(e.target.value)}
               className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none disabled:opacity-60"
             >
-              <option value="Vehicle">Vehicle</option>
-              <option value="Driver">Driver</option>
-              <option value="Facility">Facility</option>
-              <option value="General">General</option>
-              <option value="Actions">Actions</option>
-              <option value="Training & Competency">Training & Competency</option>
+              {evidenceCategoryOptions.map(category => <option key={category} value={category}>{category}</option>)}
             </select>
           </div>
 
@@ -1034,6 +1080,41 @@ export default function EvidenceVault() {
         }}
       />
 
+      <div className="bg-card border border-border rounded-xl p-3 space-y-3 text-xs">
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+          <input
+            value={newCustomCategory}
+            onChange={event => setNewCustomCategory(event.target.value)}
+            placeholder="Create custom evidence category..."
+            className="flex-1 px-3 py-2 bg-muted border border-border rounded-lg outline-none"
+          />
+          <button
+            onClick={handleCreateEvidenceCategory}
+            disabled={!newCustomCategory.trim()}
+            className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg font-bold"
+          >
+            Create Category
+          </button>
+        </div>
+        {categoryMessage && <p className="text-[11px] text-muted-foreground">{categoryMessage}</p>}
+        {evidenceCategories.filter(category => category.active && !category.is_system).length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {evidenceCategories.filter(category => category.active && !category.is_system).map(category => (
+              <span key={category.id} className="inline-flex items-center gap-1.5 px-2 py-1 bg-muted border border-border rounded-full font-bold">
+                {category.name}
+                <button
+                  onClick={() => handleArchiveEvidenceCategory(category.id)}
+                  className="text-muted-foreground hover:text-rose-500"
+                  title="Archive custom category"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex bg-muted/60 p-1 border border-border/80 rounded-xl w-full sm:max-w-[280px] shrink-0 shadow-xs">
@@ -1122,11 +1203,7 @@ export default function EvidenceVault() {
                   className="bg-muted border border-border/80 rounded px-2 py-1 outline-none text-xs text-foreground font-semibold"
                 >
                   <option value="All">All Categories</option>
-                  <option value="Vehicle">Vehicle</option>
-                  <option value="Driver">Driver</option>
-                  <option value="Facility">Facility</option>
-                  <option value="General">General</option>
-                  <option value="Actions">Actions</option>
+                  {evidenceCategoryOptions.map(category => <option key={category} value={category}>{category}</option>)}
                 </select>
               </div>
 
@@ -1461,11 +1538,7 @@ export default function EvidenceVault() {
                     onChange={e => setEditCategory(e.target.value)}
                     className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
                   >
-                    <option value="Vehicle">Vehicle</option>
-                    <option value="Driver">Driver</option>
-                    <option value="Facility">Facility</option>
-                    <option value="General">General</option>
-                    <option value="Actions">Actions</option>
+                    {evidenceCategoryOptions.map(category => <option key={category} value={category}>{category}</option>)}
                   </select>
                 </div>
 
@@ -1842,11 +1915,7 @@ export default function EvidenceVault() {
                     onChange={e => setNewCategory(e.target.value)}
                     className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
                   >
-                    <option value="Vehicle">Vehicle</option>
-                    <option value="Driver">Driver</option>
-                    <option value="Facility">Facility</option>
-                    <option value="General">General</option>
-                    <option value="Actions">Actions</option>
+                    {evidenceCategoryOptions.map(category => <option key={category} value={category}>{category}</option>)}
                   </select>
                 </div>
 

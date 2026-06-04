@@ -4,6 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
+import { REQUIREMENT_CATEGORY_GROUPS, flattenCategoryGroups } from '@/lib/categoryPresets';
 import type { Action, Requirement, RequirementEvidenceCoverage, RequirementLifecycleStatus, RequirementStatus } from '@/lib/types';
 import { REQUIREMENT_TEMPLATE_PACKS } from '@/lib/requirementTemplatePacks';
 import {
@@ -88,11 +89,15 @@ export default function RequirementsPage() {
     findPossibleDuplicateDocuments,
     linkCompetencyTypeToRequirement,
     unlinkCompetencyTypeFromRequirement,
+    requirementCategories,
+    upsertRequirementCategory,
+    archiveRequirementCategory,
     readinessReport
   } = useApp();
 
   const [search, setSearch] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<'All' | RequirementStatus>('All');
+  const [selectedCategory, setSelectedCategory] = useState('All');
   const [requirementView, setRequirementView] = useState<RequirementView>('active');
   const [selectedRequirement, setSelectedRequirement] = useState<Requirement | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -136,6 +141,17 @@ export default function RequirementsPage() {
   const [editReviewDate, setEditReviewDate] = useState('');
   const [editNextDueDate, setEditNextDueDate] = useState('');
   const [editNotes, setEditNotes] = useState('');
+  const [newCustomCategory, setNewCustomCategory] = useState('');
+  const [categoryMessage, setCategoryMessage] = useState('');
+
+  const requirementCategoryOptions = useMemo(() => {
+    const names = new Set<string>([
+      ...flattenCategoryGroups(REQUIREMENT_CATEGORY_GROUPS),
+      ...frameworkRequirements.map(requirement => requirement.category),
+      ...requirementCategories.filter(category => category.active).map(category => category.name)
+    ].filter(Boolean));
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [frameworkRequirements, requirementCategories]);
 
   const selectRequirement = (req: Requirement | null) => {
     setSelectedRequirement(req);
@@ -195,7 +211,8 @@ export default function RequirementsPage() {
       requirement.category.toLowerCase().includes(search.toLowerCase()) ||
       (requirement.owner || '').toLowerCase().includes(search.toLowerCase());
     const matchesStatus = selectedStatus === 'All' || requirement.status === selectedStatus;
-    return matchesSearch && matchesStatus;
+    const matchesCategory = selectedCategory === 'All' || requirement.category === selectedCategory;
+    return matchesSearch && matchesStatus && matchesCategory;
   });
 
   const selectedAssessed = selectedRequirement
@@ -287,6 +304,41 @@ export default function RequirementsPage() {
     setNewNextDue('');
     setNewDescription('');
     setShowCreateModal(false);
+  };
+
+  const handleCreateRequirementCategory = async () => {
+    if (!newCustomCategory.trim()) return;
+    try {
+      await upsertRequirementCategory({
+        name: newCustomCategory.trim(),
+        category_group: 'Custom',
+        description: 'Custom requirement category',
+        active: true
+      });
+      setNewCategory(newCustomCategory.trim());
+      setSelectedCategory(newCustomCategory.trim());
+      setNewCustomCategory('');
+      setCategoryMessage('Requirement category created.');
+    } catch (error) {
+      setCategoryMessage(error instanceof Error ? error.message : 'Could not create category.');
+    }
+  };
+
+  const handleArchiveRequirementCategory = async (categoryId: string) => {
+    const category = requirementCategories.find(item => item.id === categoryId);
+    if (!category) return;
+    const inUse = frameworkRequirements.some(requirement => requirement.category === category.name);
+    const confirmed = window.confirm(inUse
+      ? `Archive "${category.name}"?\n\nExisting requirements keep this category text, but it will be hidden from the managed custom category list.`
+      : `Archive unused category "${category.name}"?`);
+    if (!confirmed) return;
+    try {
+      await archiveRequirementCategory(categoryId);
+      if (selectedCategory === category.name) setSelectedCategory('All');
+      setCategoryMessage('Requirement category archived.');
+    } catch (error) {
+      setCategoryMessage(error instanceof Error ? error.message : 'Could not archive category.');
+    }
   };
 
   const handleSaveRequirementEdit = async (event: React.FormEvent) => {
@@ -562,17 +614,62 @@ export default function RequirementsPage() {
                 className="w-full pl-9 pr-4 py-2 bg-muted border border-border/80 rounded-lg text-xs outline-none focus:border-indigo-500"
               />
             </div>
-            <select
-              value={selectedStatus}
-              onChange={event => setSelectedStatus(event.target.value as 'All' | RequirementStatus)}
-              className="bg-muted border border-border/80 rounded px-2 py-1 outline-none text-xs text-foreground font-semibold"
-            >
-              <option value="All">All Statuses</option>
-              <option value="GREEN">Green</option>
-              <option value="AMBER">Amber</option>
-              <option value="RED">Red</option>
-              <option value="GREY">Grey</option>
-            </select>
+            <div className="flex flex-wrap gap-2 w-full md:w-auto justify-end">
+              <select
+                value={selectedCategory}
+                onChange={event => setSelectedCategory(event.target.value)}
+                className="bg-muted border border-border/80 rounded px-2 py-1 outline-none text-xs text-foreground font-semibold"
+              >
+                <option value="All">All Categories</option>
+                {requirementCategoryOptions.map(category => <option key={category} value={category}>{category}</option>)}
+              </select>
+              <select
+                value={selectedStatus}
+                onChange={event => setSelectedStatus(event.target.value as 'All' | RequirementStatus)}
+                className="bg-muted border border-border/80 rounded px-2 py-1 outline-none text-xs text-foreground font-semibold"
+              >
+                <option value="All">All Statuses</option>
+                <option value="GREEN">Green</option>
+                <option value="AMBER">Amber</option>
+                <option value="RED">Red</option>
+                <option value="GREY">Grey</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="bg-card border border-border rounded-xl p-3 space-y-3 text-xs">
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+              <input
+                value={newCustomCategory}
+                onChange={event => setNewCustomCategory(event.target.value)}
+                placeholder="Create custom requirement category..."
+                className="flex-1 px-3 py-2 bg-muted border border-border rounded-lg outline-none"
+              />
+              <button
+                onClick={handleCreateRequirementCategory}
+                disabled={!newCustomCategory.trim()}
+                className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg font-bold"
+              >
+                Create Category
+              </button>
+            </div>
+            {categoryMessage && <p className="text-[11px] text-muted-foreground">{categoryMessage}</p>}
+            {requirementCategories.filter(category => category.active && !category.is_system).length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {requirementCategories.filter(category => category.active && !category.is_system).map(category => (
+                  <span key={category.id} className="inline-flex items-center gap-1.5 px-2 py-1 bg-muted border border-border rounded-full font-bold">
+                    {category.name}
+                    <button
+                      onClick={() => handleArchiveRequirementCategory(category.id)}
+                      className="text-muted-foreground hover:text-rose-500"
+                      title="Archive custom category"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
@@ -727,11 +824,13 @@ export default function RequirementsPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Category</label>
-                      <input
+                      <select
                         value={editCategory}
                         onChange={event => setEditCategory(event.target.value)}
                         className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none"
-                      />
+                      >
+                        {requirementCategoryOptions.map(category => <option key={category} value={category}>{category}</option>)}
+                      </select>
                     </div>
                     <div>
                       <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Owner</label>
@@ -1241,7 +1340,9 @@ export default function RequirementsPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Category</label>
-                  <input value={newCategory} onChange={event => setNewCategory(event.target.value)} className="w-full px-3 py-2 bg-muted border border-border/80 rounded-lg outline-none" />
+                  <select value={newCategory} onChange={event => setNewCategory(event.target.value)} className="w-full px-3 py-2 bg-muted border border-border/80 rounded-lg outline-none">
+                    {requirementCategoryOptions.map(category => <option key={category} value={category}>{category}</option>)}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Owner</label>

@@ -2,10 +2,11 @@
 
 import React, { useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
+import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { buildCompetencyMatrix } from '@/lib/competencyEngine';
 import { COMPETENCY_TEMPLATE_PACKS } from '@/lib/competencyTemplates';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
-import type { CompetencyCategory, CompetencyRecord, CompetencyStatus, CompetencyType, Person, PersonType, RequirementRiskLevel } from '@/lib/types';
+import type { Action, CompetencyCategory, CompetencyRecord, CompetencyStatus, CompetencyType, Person, PersonType, RequirementRiskLevel } from '@/lib/types';
 import { Link as LinkIcon, Plus, Search, Upload, UserCheck, X } from 'lucide-react';
 
 const categories: CompetencyCategory[] = [
@@ -46,6 +47,9 @@ export default function CompetencyMatrixPage() {
     documents,
     actionObjectLinks,
     actions,
+    actionUpdates,
+    actionDocuments,
+    frameworkRequirements,
     competencySummary,
     upsertPerson,
     upsertCompetencyType,
@@ -55,6 +59,12 @@ export default function CompetencyMatrixPage() {
     unlinkDocumentFromCompetencyRecord,
     uploadCompetencyEvidence,
     createActionForCompetencyGap,
+    updateAction,
+    addActionUpdate,
+    linkDocumentToAction,
+    unlinkDocumentFromAction,
+    uploadActionAttachment,
+    findPossibleDuplicateDocuments,
     getDocumentSignedUrl
   } = useApp();
 
@@ -63,6 +73,7 @@ export default function CompetencyMatrixPage() {
   const [typeFilter, setTypeFilter] = useState('All');
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
+  const [selectedAction, setSelectedAction] = useState<Action | null>(null);
   const [selectedPackId, setSelectedPackId] = useState(COMPETENCY_TEMPLATE_PACKS[0]?.id || '');
   const [importMessage, setImportMessage] = useState('');
   const [formMessage, setFormMessage] = useState('');
@@ -77,6 +88,7 @@ export default function CompetencyMatrixPage() {
   });
   const [linkDocumentId, setLinkDocumentId] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [isEvidenceDragging, setIsEvidenceDragging] = useState(false);
   const [newPerson, setNewPerson] = useState({
     first_name: '',
     last_name: '',
@@ -177,6 +189,25 @@ export default function CompetencyMatrixPage() {
       )
     : [];
 
+  const selectedPersonGroupedRows = selectedPerson
+    ? categories.map(category => ({
+        category,
+        rows: selectedPersonRows.filter(row => row.type.category === category)
+      })).filter(group => group.rows.length > 0)
+    : [];
+
+  const selectedPersonStatusBreakdown = selectedPersonRows.reduce<Record<CompetencyStatus, number>>((acc, row) => {
+    const status = row.cell?.status || 'Missing';
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, {
+    Valid: 0,
+    'Expiring Soon': 0,
+    Expired: 0,
+    Missing: 0,
+    'Not Required': 0
+  });
+
   const handleCreatePerson = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!newPerson.first_name.trim() || !newPerson.last_name.trim()) return;
@@ -253,6 +284,42 @@ export default function CompetencyMatrixPage() {
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleEvidenceFiles = async (files: FileList | File[]) => {
+    const fileList = Array.from(files);
+    if (fileList.length === 0) return;
+    for (const file of fileList) {
+      await handleUploadEvidence(file);
+    }
+  };
+
+  const handleMarkNotRequired = async () => {
+    if (!activeCell) return;
+    const confirmed = window.confirm('Mark this competency as not required for this person? The record is retained for history.');
+    if (!confirmed) return;
+    const saved = await upsertCompetencyRecord({
+      id: activeCell.record?.id,
+      person_id: activeCell.person.id,
+      competency_type_id: activeCell.competencyType.id,
+      completed_date: activeCell.record?.completed_date || null,
+      expiry_date: activeCell.record?.expiry_date || null,
+      trainer: activeCell.record?.trainer || null,
+      provider: activeCell.record?.provider || null,
+      certificate_number: activeCell.record?.certificate_number || null,
+      status: 'Not Required',
+      notes: recordForm.notes || activeCell.record?.notes || null
+    });
+    setActiveCell({ ...activeCell, record: saved });
+    setRecordForm({ ...recordForm, status: 'Not Required' });
+    setFormMessage('Competency marked as not required.');
+  };
+
+  const handleArchiveFromPerson = async () => {
+    if (!activeCell) return;
+    const confirmed = window.confirm('Remove this competency from the active person view?\n\nThis keeps history by marking the competency record as Not Required.');
+    if (!confirmed) return;
+    await handleMarkNotRequired();
   };
 
   const handleCreateGapAction = async () => {
@@ -404,8 +471,8 @@ export default function CompetencyMatrixPage() {
       </div>
 
       {activeCell && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex justify-end">
-          <div className="w-full max-w-xl bg-card solid-panel border-l border-border h-full overflow-y-auto p-6 space-y-5">
+        <div className={`fixed inset-0 z-[70] flex justify-end ${selectedPerson ? 'pointer-events-none' : 'bg-black/60'}`}>
+          <div className="pointer-events-auto w-full max-w-xl bg-card solid-panel border-l border-border h-full overflow-y-auto p-6 space-y-5 shadow-2xl">
             <div className="flex justify-between gap-3">
               <div>
                 <h2 className="text-xl font-extrabold">{activeCell.competencyType.title}</h2>
@@ -468,9 +535,26 @@ export default function CompetencyMatrixPage() {
                     <LinkIcon className="w-4 h-4" /> Link Evidence
                   </button>
                 </div>
-                <label className="w-full py-2 bg-muted hover:bg-muted/80 border border-border rounded-lg font-bold flex items-center justify-center gap-2 cursor-pointer text-center">
+                <label
+                  onDragOver={event => {
+                    event.preventDefault();
+                    setIsEvidenceDragging(true);
+                  }}
+                  onDragLeave={() => setIsEvidenceDragging(false)}
+                  onDrop={event => {
+                    event.preventDefault();
+                    setIsEvidenceDragging(false);
+                    void handleEvidenceFiles(event.dataTransfer.files);
+                  }}
+                  className={`w-full min-h-24 py-2 px-3 border rounded-lg font-bold flex flex-col items-center justify-center gap-2 cursor-pointer text-center transition-colors ${
+                    isEvidenceDragging
+                      ? 'bg-indigo-500/10 border-indigo-500 text-indigo-700 dark:text-indigo-300'
+                      : 'bg-muted hover:bg-muted/80 border-border'
+                  }`}
+                >
                   <Upload className="w-4 h-4" /> {uploading ? 'Uploading...' : 'Upload Evidence'}
-                  <input type="file" accept={evidenceAcceptAttribute} className="hidden" onChange={event => handleUploadEvidence(event.target.files?.[0] || null)} />
+                  <span className="text-[10px] font-medium text-muted-foreground">Click or drop files here</span>
+                  <input type="file" accept={evidenceAcceptAttribute} multiple className="hidden" onChange={event => event.target.files && handleEvidenceFiles(event.target.files)} />
                 </label>
               </div>
               <p className="text-[10px] text-muted-foreground">Uploads are saved as private Evidence Vault records under Training & Competency. Max {formatMaxEvidenceUploadSize()}.</p>
@@ -479,100 +563,177 @@ export default function CompetencyMatrixPage() {
             <div className="border-t border-border pt-4 space-y-3 text-xs">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-extrabold">Actions</h3>
-                <button onClick={handleCreateGapAction} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold flex items-center gap-1">
+              <button onClick={handleCreateGapAction} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold flex items-center gap-1">
                   <Plus className="w-3.5 h-3.5" /> Create Gap Action
                 </button>
               </div>
               {relatedActions.length === 0 ? (
                 <p className="text-[11px] text-muted-foreground">No actions linked to this person or competency.</p>
               ) : relatedActions.map(action => (
-                <div key={action.id} className="p-3 bg-muted/30 border border-border rounded-lg">
-                  <span className="font-bold block">{action.title}</span>
-                  <span className="text-[10px] text-muted-foreground">{action.status}{action.target_due_date || action.due_date ? ` | Due ${action.target_due_date || action.due_date}` : ''}</span>
+                <div key={action.id} className="p-3 bg-muted/30 border border-border rounded-lg flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <span className="font-bold block truncate">{action.title}</span>
+                    <span className="text-[10px] text-muted-foreground">{action.status}{action.target_due_date || action.due_date ? ` | Due ${action.target_due_date || action.due_date}` : ''}</span>
+                  </div>
+                  <button onClick={() => setSelectedAction(action)} className="px-2 py-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 rounded font-bold">Open</button>
                 </div>
               ))}
+            </div>
+
+            <div className="border-t border-border pt-4 grid grid-cols-2 gap-2 text-xs">
+              <button onClick={handleMarkNotRequired} className="py-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-700 dark:text-amber-300 rounded-lg font-bold">
+                Mark Not Required
+              </button>
+              <button onClick={handleArchiveFromPerson} className="py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-700 dark:text-rose-300 rounded-lg font-bold">
+                Remove from Person
+              </button>
             </div>
           </div>
         </div>
       )}
 
       {selectedPerson && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex justify-end">
-          <div className="w-full max-w-2xl bg-card solid-panel border-l border-border h-full overflow-y-auto p-6 space-y-5">
-            <div className="flex justify-between gap-3 border-b border-border pb-4">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="w-full max-w-6xl h-[88vh] bg-card solid-panel border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            <div className="flex justify-between gap-3 border-b border-border p-5 shrink-0">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block">Person Detail</span>
                 <h2 className="text-xl font-extrabold">{selectedPerson.display_name}</h2>
                 <p className="text-xs text-muted-foreground mt-1">{selectedPerson.role || selectedPerson.person_type} | {selectedPerson.department || 'No department'}</p>
               </div>
-              <button onClick={() => setSelectedPerson(null)} className="p-2 hover:bg-muted rounded-lg h-fit"><X className="w-4 h-4" /></button>
+              <button
+                onClick={() => {
+                  setSelectedPerson(null);
+                  setActiveCell(null);
+                }}
+                className="p-2 hover:bg-muted rounded-lg h-fit"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              {[
-                ['Employee #', selectedPerson.employee_number || 'Not set'],
-                ['Email', selectedPerson.email || 'Not set'],
-                ['Type', selectedPerson.person_type],
-                ['Status', selectedPerson.active ? 'Active' : 'Inactive'],
-                ['Start', selectedPerson.start_date || 'Not set'],
-                ['End', selectedPerson.end_date || 'Not set']
-              ].map(([label, value]) => (
-                <div key={label} className="p-3 bg-muted border border-border rounded-lg">
-                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold block">{label}</span>
-                  <span className="font-bold text-foreground break-words">{value}</span>
+            <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] flex-1 min-h-0">
+              <aside className="border-r border-border p-5 overflow-y-auto space-y-4 bg-muted/20">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {[
+                    ['Employee #', selectedPerson.employee_number || 'Not set'],
+                    ['Email', selectedPerson.email || 'Not set'],
+                    ['Department', selectedPerson.department || 'Not set'],
+                    ['Role', selectedPerson.role || 'Not set'],
+                    ['Type', selectedPerson.person_type],
+                    ['Status', selectedPerson.active ? 'Active' : 'Inactive'],
+                    ['Start', selectedPerson.start_date || 'Not set'],
+                    ['End', selectedPerson.end_date || 'Not set']
+                  ].map(([label, value]) => (
+                    <div key={label} className="p-3 bg-card border border-border rounded-lg">
+                      <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold block">{label}</span>
+                      <span className="font-bold text-foreground break-words">{value}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            {selectedPerson.notes && <p className="text-xs text-muted-foreground bg-muted border border-border rounded-lg p-3">{selectedPerson.notes}</p>}
 
-            <div className="space-y-3">
-              <h3 className="text-sm font-extrabold">Competencies</h3>
-              <div className="space-y-2">
-                {selectedPersonRows.map(({ type, cell, evidenceCount, openActionCount }) => (
-                  <button
-                    key={type.id}
-                    onClick={() => {
-                      openCell(selectedPerson, type);
-                      setSelectedPerson(null);
-                    }}
-                    className="w-full text-left p-3 bg-muted/30 border border-border rounded-lg hover:bg-muted transition-colors"
-                  >
-                    <div className="flex justify-between gap-3">
-                      <div className="min-w-0">
-                        <span className="font-bold block truncate">{type.title}</span>
-                        <span className="text-[10px] text-muted-foreground">{type.category}</span>
+                {selectedPerson.notes && <p className="text-xs text-muted-foreground bg-card border border-border rounded-lg p-3">{selectedPerson.notes}</p>}
+
+                <div className="grid grid-cols-2 gap-2">
+                  {statusOptions.map(status => (
+                    <div key={status} className={`rounded-lg border p-2 ${statusClass(status)}`}>
+                      <span className="text-[9px] font-bold uppercase block">{status}</span>
+                      <span className="text-lg font-extrabold">{selectedPersonStatusBreakdown[status] || 0}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-3 border-t border-border pt-4">
+                  <h3 className="text-sm font-extrabold">Linked Actions</h3>
+                  {selectedPersonActions.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No actions are directly linked to this person.</p>
+                  ) : (
+                    selectedPersonActions.map(action => (
+                      <div key={action.id} className="p-3 bg-card border border-border rounded-lg text-xs">
+                        <span className="font-bold block">{action.title}</span>
+                        <span className="text-[10px] text-muted-foreground">{action.status}{action.target_due_date || action.due_date ? ` | Due ${action.target_due_date || action.due_date}` : ''}</span>
                       </div>
-                      <span className={`px-2 py-0.5 h-fit rounded-full border text-[9px] font-bold ${statusClass(cell?.status || 'Missing')}`}>
-                        {cell?.status || 'Missing'}
-                      </span>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-3 text-[10px] text-muted-foreground">
-                      <span>Completed: <strong className="text-foreground">{cell?.record?.completed_date || 'None'}</strong></span>
-                      <span>Expiry: <strong className="text-foreground">{cell?.record?.expiry_date || 'None'}</strong></span>
-                      <span>Evidence: <strong className="text-foreground">{evidenceCount}</strong></span>
-                      <span>Open actions: <strong className="text-foreground">{openActionCount}</strong></span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
+                    ))
+                  )}
+                </div>
+              </aside>
 
-            <div className="space-y-3 border-t border-border pt-4">
-              <h3 className="text-sm font-extrabold">Linked Actions</h3>
-              {selectedPersonActions.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No actions are directly linked to this person.</p>
-              ) : (
-                selectedPersonActions.map(action => (
-                  <div key={action.id} className="p-3 bg-muted/30 border border-border rounded-lg text-xs">
-                    <span className="font-bold block">{action.title}</span>
-                    <span className="text-[10px] text-muted-foreground">{action.status}{action.target_due_date || action.due_date ? ` | Due ${action.target_due_date || action.due_date}` : ''}</span>
+              <main className="p-5 overflow-y-auto space-y-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-extrabold">Competencies by Category</h3>
+                    <p className="text-xs text-muted-foreground">Select any row to edit the competency record in the side panel without closing this workspace.</p>
                   </div>
-                ))
-              )}
+                  {activeCell?.person.id === selectedPerson.id && (
+                    <span className="hidden lg:inline-flex text-[10px] font-bold text-indigo-600 dark:text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 rounded-full px-2 py-1">
+                      Editing: {activeCell.competencyType.title}
+                    </span>
+                  )}
+                </div>
+
+                {selectedPersonGroupedRows.map(group => (
+                  <section key={group.category} className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <h4 className="text-xs font-extrabold uppercase tracking-widest text-muted-foreground">{group.category}</h4>
+                      <span className="text-[10px] text-muted-foreground font-bold">{group.rows.length} record{group.rows.length === 1 ? '' : 's'}</span>
+                    </div>
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
+                      {group.rows.map(({ type, cell, evidenceCount, openActionCount }) => (
+                        <button
+                          key={type.id}
+                          onClick={() => openCell(selectedPerson, type)}
+                          className={`w-full text-left p-3 border rounded-xl hover:bg-muted transition-colors ${
+                            activeCell?.person.id === selectedPerson.id && activeCell.competencyType.id === type.id
+                              ? 'border-indigo-500 bg-indigo-500/5'
+                              : 'border-border bg-card'
+                          }`}
+                        >
+                          <div className="flex justify-between gap-3">
+                            <div className="min-w-0">
+                              <span className="font-bold block truncate">{type.title}</span>
+                              <span className="text-[10px] text-muted-foreground">{type.category}</span>
+                            </div>
+                            <span className={`px-2 py-0.5 h-fit rounded-full border text-[9px] font-bold ${statusClass(cell?.status || 'Missing')}`}>
+                              {cell?.status || 'Missing'}
+                            </span>
+                          </div>
+                          <div className="mt-2 grid grid-cols-3 gap-2 text-[10px] text-muted-foreground">
+                            <span>Expiry <strong className="text-foreground block">{cell?.record?.expiry_date || 'None'}</strong></span>
+                            <span>Evidence <strong className="text-foreground block">{evidenceCount}</strong></span>
+                            <span>Open actions <strong className="text-foreground block">{openActionCount}</strong></span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+
+                {selectedPersonGroupedRows.length === 0 && (
+                  <div className="p-6 border border-dashed border-border rounded-xl text-center text-xs text-muted-foreground">
+                    No active competency types are available for this person.
+                  </div>
+                )}
+              </main>
             </div>
           </div>
         </div>
       )}
+
+      <ActionDetailDrawer
+        action={selectedAction}
+        requirements={frameworkRequirements}
+        documents={documents}
+        actionUpdates={actionUpdates}
+        actionDocuments={actionDocuments}
+        onClose={() => setSelectedAction(null)}
+        onUpdateAction={updateAction}
+        onAddUpdate={addActionUpdate}
+        onLinkDocument={linkDocumentToAction}
+        onUnlinkDocument={unlinkDocumentFromAction}
+        onUploadAttachment={uploadActionAttachment}
+        onOpenDocument={getDocumentSignedUrl}
+        onFindDuplicates={findPossibleDuplicateDocuments}
+      />
     </div>
   );
 }

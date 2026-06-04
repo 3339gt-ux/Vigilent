@@ -318,6 +318,18 @@ export interface RequirementTemplatePack {
   requirements: RequirementTemplateItem[];
 }
 
+export interface ManagedCategory {
+  id: string;
+  organisation_id: string;
+  name: string;
+  description: string | null;
+  category_group: string | null;
+  is_system: boolean;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Person {
   id: string;
   organisation_id: string;

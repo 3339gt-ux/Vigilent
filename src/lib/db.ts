@@ -35,6 +35,7 @@ import {
   AuditPack,
   AuditLog,
   Person,
+  ManagedCategory,
   CellStatus,
   DocumentStatus
 } from './types';
@@ -981,6 +982,12 @@ const shouldUseSupabase = () => {
 
 const nowIso = () => new Date().toISOString();
 
+const categoryStorageKey = (type: 'requirement' | 'evidence') =>
+  type === 'requirement' ? 'vigilen_requirement_categories' : 'vigilen_evidence_categories';
+
+const categoryTableName = (type: 'requirement' | 'evidence') =>
+  type === 'requirement' ? 'requirement_categories' : 'evidence_categories';
+
 const buildStatusNote = (previousStatus: string | null, newStatus: string, note?: string | null) => {
   const statusLine = `Previous status: ${previousStatus || 'none'}. New status: ${newStatus}.`;
   return note?.trim() ? `${statusLine} ${note.trim()}` : statusLine;
@@ -1188,6 +1195,148 @@ export const dbService = {
       await this.logActivity('Requirement Added', `Created new requirement "${newReq.title}"`);
       return newReq;
     }
+  },
+
+  async getManagedCategories(type: 'requirement' | 'evidence'): Promise<ManagedCategory[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from(categoryTableName(type))
+        .select('*')
+        .eq('organisation_id', orgId)
+        .order('category_group', { ascending: true, nullsFirst: false })
+        .order('name', { ascending: true });
+      if (error && (error as { code?: string }).code === 'PGRST205') return [];
+      if (error) throwSupabaseError(`${categoryTableName(type)}.select active organisation`, error);
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem(categoryStorageKey(type), []);
+  },
+
+  async getRequirementCategories(): Promise<ManagedCategory[]> {
+    return this.getManagedCategories('requirement');
+  },
+
+  async getEvidenceCategories(): Promise<ManagedCategory[]> {
+    return this.getManagedCategories('evidence');
+  },
+
+  async upsertManagedCategory(
+    type: 'requirement' | 'evidence',
+    input: Partial<ManagedCategory> & Pick<ManagedCategory, 'name'>
+  ): Promise<ManagedCategory> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const cleanName = input.name.trim();
+    if (!cleanName) throw new Error('Category name is required.');
+
+    const payload = {
+      name: cleanName,
+      description: input.description || null,
+      category_group: input.category_group || 'Custom',
+      is_system: input.is_system ?? false,
+      active: input.active ?? true,
+      organisation_id: orgId,
+      updated_at: nowIso()
+    };
+
+    if (shouldUseSupabase()) {
+      let existingId = input.id || null;
+      if (!existingId) {
+        const { data: existing, error: existingError } = await supabase!
+          .from(categoryTableName(type))
+          .select('id')
+          .eq('organisation_id', orgId)
+          .ilike('name', cleanName)
+          .maybeSingle();
+        if (existingError) throwSupabaseError(`${categoryTableName(type)}.select before upsert`, existingError);
+        existingId = existing?.id || null;
+      }
+
+      const query = existingId
+        ? supabase!.from(categoryTableName(type)).update(payload).eq('id', existingId).eq('organisation_id', orgId)
+        : supabase!.from(categoryTableName(type)).insert([payload]);
+      const { data, error } = await query.select().single();
+      if (error) throwSupabaseError(`${categoryTableName(type)}.upsert active organisation`, error);
+      await this.logActivity(`${type === 'requirement' ? 'Requirement' : 'Evidence'} Category Saved`, `Saved category "${data.name}".`);
+      return data;
+    }
+
+    const categories = getStorageItem(categoryStorageKey(type), []);
+    const idx = categories.findIndex((category: ManagedCategory) =>
+      input.id ? category.id === input.id : category.name.toLowerCase() === cleanName.toLowerCase()
+    );
+    if (idx !== -1) {
+      const updated = { ...categories[idx], ...payload };
+      categories[idx] = updated;
+      setStorageItem(categoryStorageKey(type), categories);
+      await this.logActivity(`${type === 'requirement' ? 'Requirement' : 'Evidence'} Category Saved`, `Saved category "${updated.name}".`);
+      return updated;
+    }
+
+    const created: ManagedCategory = {
+      id: `${type}-cat-${Math.random().toString(36).substr(2, 9)}`,
+      ...payload,
+      created_at: nowIso(),
+      updated_at: nowIso()
+    };
+    categories.unshift(created);
+    setStorageItem(categoryStorageKey(type), categories);
+    await this.logActivity(`${type === 'requirement' ? 'Requirement' : 'Evidence'} Category Added`, `Created category "${created.name}".`);
+    return created;
+  },
+
+  async upsertRequirementCategory(input: Partial<ManagedCategory> & Pick<ManagedCategory, 'name'>): Promise<ManagedCategory> {
+    return this.upsertManagedCategory('requirement', input);
+  },
+
+  async upsertEvidenceCategory(input: Partial<ManagedCategory> & Pick<ManagedCategory, 'name'>): Promise<ManagedCategory> {
+    return this.upsertManagedCategory('evidence', input);
+  },
+
+  async archiveManagedCategory(type: 'requirement' | 'evidence', categoryId: string): Promise<ManagedCategory> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+
+    if (shouldUseSupabase()) {
+      const { data: existing, error: existingError } = await supabase!
+        .from(categoryTableName(type))
+        .select('*')
+        .eq('id', categoryId)
+        .eq('organisation_id', orgId)
+        .single();
+      if (existingError) throwSupabaseError(`${categoryTableName(type)}.select before archive`, existingError);
+      if (existing.is_system) throw new Error('Preset categories cannot be archived.');
+
+      const { data, error } = await supabase!
+        .from(categoryTableName(type))
+        .update({ active: false, updated_at: nowIso() })
+        .eq('id', categoryId)
+        .eq('organisation_id', orgId)
+        .select()
+        .single();
+      if (error) throwSupabaseError(`${categoryTableName(type)}.archive active organisation`, error);
+      await this.logActivity(`${type === 'requirement' ? 'Requirement' : 'Evidence'} Category Archived`, `Archived category "${data.name}".`);
+      return data;
+    }
+
+    const categories = getStorageItem(categoryStorageKey(type), []);
+    const idx = categories.findIndex((category: ManagedCategory) => category.id === categoryId);
+    if (idx === -1) throw new Error('Category not found.');
+    if (categories[idx].is_system) throw new Error('Preset categories cannot be archived.');
+    const updated = { ...categories[idx], active: false, updated_at: nowIso() };
+    categories[idx] = updated;
+    setStorageItem(categoryStorageKey(type), categories);
+    await this.logActivity(`${type === 'requirement' ? 'Requirement' : 'Evidence'} Category Archived`, `Archived category "${updated.name}".`);
+    return updated;
+  },
+
+  async archiveRequirementCategory(categoryId: string): Promise<ManagedCategory> {
+    return this.archiveManagedCategory('requirement', categoryId);
+  },
+
+  async archiveEvidenceCategory(categoryId: string): Promise<ManagedCategory> {
+    return this.archiveManagedCategory('evidence', categoryId);
   },
 
   // Standards-agnostic Requirements Framework

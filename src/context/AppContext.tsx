@@ -46,6 +46,7 @@ import {
   CompetencyRecordDocument,
   CompetencyTemplateItem,
   CompetencyType,
+  ManagedCategory,
   Person,
   RequirementCompetencyType,
   RequirementTemplateItem
@@ -99,6 +100,8 @@ interface AppContextType {
   competencyRecords: CompetencyRecord[];
   competencyRecordDocuments: CompetencyRecordDocument[];
   requirementCompetencyTypes: RequirementCompetencyType[];
+  requirementCategories: ManagedCategory[];
+  evidenceCategories: ManagedCategory[];
   matrixCells: MatrixCell[];
   auditPacks: AuditPack[];
   auditLogs: AuditLog[];
@@ -125,6 +128,10 @@ interface AppContextType {
   restoreFrameworkRequirement: (requirementId: string) => Promise<Requirement>;
   deactivateFrameworkRequirement: (requirementId: string) => Promise<Requirement>;
   deleteFrameworkRequirement: (requirementId: string) => Promise<void>;
+  upsertRequirementCategory: (input: Partial<ManagedCategory> & Pick<ManagedCategory, 'name'>) => Promise<ManagedCategory>;
+  archiveRequirementCategory: (categoryId: string) => Promise<ManagedCategory>;
+  upsertEvidenceCategory: (input: Partial<ManagedCategory> & Pick<ManagedCategory, 'name'>) => Promise<ManagedCategory>;
+  archiveEvidenceCategory: (categoryId: string) => Promise<ManagedCategory>;
   importRequirementTemplateItems: (items: RequirementTemplateItem[]) => Promise<Requirement[]>;
   linkDocumentToRequirement: (requirementId: string, documentId: string) => Promise<void>;
   unlinkDocumentFromRequirement: (requirementId: string, documentId: string) => Promise<void>;
@@ -206,6 +213,8 @@ const emptyCollections = {
   competencyRecords: [] as CompetencyRecord[],
   competencyRecordDocuments: [] as CompetencyRecordDocument[],
   requirementCompetencyTypes: [] as RequirementCompetencyType[],
+  requirementCategories: [] as ManagedCategory[],
+  evidenceCategories: [] as ManagedCategory[],
   matrixCells: [] as MatrixCell[],
   auditPacks: [] as AuditPack[],
   auditLogs: [] as AuditLog[]
@@ -271,6 +280,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [competencyRecords, setCompetencyRecords] = useState<CompetencyRecord[]>([]);
   const [competencyRecordDocuments, setCompetencyRecordDocuments] = useState<CompetencyRecordDocument[]>([]);
   const [requirementCompetencyTypes, setRequirementCompetencyTypes] = useState<RequirementCompetencyType[]>([]);
+  const [requirementCategories, setRequirementCategories] = useState<ManagedCategory[]>([]);
+  const [evidenceCategories, setEvidenceCategories] = useState<ManagedCategory[]>([]);
   const [matrixCells, setMatrixCells] = useState<MatrixCell[]>([]);
   const [auditPacks, setAuditPacks] = useState<AuditPack[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -330,6 +341,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setCompetencyRecords([]);
     setCompetencyRecordDocuments([]);
     setRequirementCompetencyTypes([]);
+    setRequirementCategories([]);
+    setEvidenceCategories([]);
     setMatrixCells([]);
     setAuditPacks([]);
     setAuditLogs([]);
@@ -409,6 +422,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       competencyRecordRows,
       competencyRecordDocumentRows,
       requirementCompetencyTypeRows,
+      requirementCategoryRows,
+      evidenceCategoryRows,
       cells,
       packs,
       logs
@@ -432,6 +447,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dbService.getCompetencyRecords(),
       dbService.getCompetencyRecordDocuments(),
       dbService.getRequirementCompetencyTypes(),
+      dbService.getRequirementCategories(),
+      dbService.getEvidenceCategories(),
       dbService.getMatrixCells(),
       dbService.getAuditPacks(),
       dbService.getAuditLogs()
@@ -456,6 +473,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setCompetencyRecords(competencyRecordRows);
     setCompetencyRecordDocuments(competencyRecordDocumentRows);
     setRequirementCompetencyTypes(requirementCompetencyTypeRows);
+    setRequirementCategories(requirementCategoryRows);
+    setEvidenceCategories(evidenceCategoryRows);
     setMatrixCells(cells);
     setAuditPacks(packs);
     setAuditLogs(logs);
@@ -529,6 +548,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setCompetencyRecords(emptyCollections.competencyRecords);
       setCompetencyRecordDocuments(emptyCollections.competencyRecordDocuments);
       setRequirementCompetencyTypes(emptyCollections.requirementCompetencyTypes);
+      setRequirementCategories(emptyCollections.requirementCategories);
+      setEvidenceCategories(emptyCollections.evidenceCategories);
       setMatrixCells(emptyCollections.matrixCells);
       setAuditPacks(emptyCollections.auditPacks);
       setAuditLogs(emptyCollections.auditLogs);
@@ -789,7 +810,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       'vigilen_competency_types',
       'vigilen_competency_records',
       'vigilen_competency_record_documents',
-      'vigilen_requirement_competency_types'
+      'vigilen_requirement_competency_types',
+      'vigilen_requirement_categories',
+      'vigilen_evidence_categories'
     ].forEach(key => localStorage.removeItem(key));
 
     initMockDb();
@@ -898,6 +921,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const deleteFrameworkRequirement = async (requirementId: string): Promise<void> => {
     await dbService.deleteFrameworkRequirement(requirementId);
     await loadWorkspaceCollections();
+  };
+
+  const upsertRequirementCategory: AppContextType['upsertRequirementCategory'] = async (input) => {
+    const category = await dbService.upsertRequirementCategory(input);
+    await loadWorkspaceCollections();
+    return category;
+  };
+
+  const archiveRequirementCategory = async (categoryId: string): Promise<ManagedCategory> => {
+    const category = await dbService.archiveRequirementCategory(categoryId);
+    await loadWorkspaceCollections();
+    return category;
+  };
+
+  const upsertEvidenceCategory: AppContextType['upsertEvidenceCategory'] = async (input) => {
+    const category = await dbService.upsertEvidenceCategory(input);
+    await loadWorkspaceCollections();
+    return category;
+  };
+
+  const archiveEvidenceCategory = async (categoryId: string): Promise<ManagedCategory> => {
+    const category = await dbService.archiveEvidenceCategory(categoryId);
+    await loadWorkspaceCollections();
+    return category;
   };
 
   const importRequirementTemplateItems = async (items: RequirementTemplateItem[]): Promise<Requirement[]> => {
@@ -1250,6 +1297,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         competencyRecords,
         competencyRecordDocuments,
         requirementCompetencyTypes,
+        requirementCategories,
+        evidenceCategories,
         matrixCells,
         auditPacks,
         auditLogs,
@@ -1266,6 +1315,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         restoreFrameworkRequirement,
         deactivateFrameworkRequirement,
         deleteFrameworkRequirement,
+        upsertRequirementCategory,
+        archiveRequirementCategory,
+        upsertEvidenceCategory,
+        archiveEvidenceCategory,
         importRequirementTemplateItems,
         linkDocumentToRequirement,
         unlinkDocumentFromRequirement,

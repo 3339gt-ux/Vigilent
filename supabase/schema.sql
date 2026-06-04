@@ -127,6 +127,32 @@ alter table public.requirements add column if not exists deactivated_by uuid ref
 alter table public.requirements add column if not exists deleted_at timestamp with time zone;
 alter table public.requirements add column if not exists deleted_by uuid references public.profiles(id) on delete set null;
 
+create table if not exists public.requirement_categories (
+    id uuid primary key default uuid_generate_v4(),
+    organisation_id uuid not null references public.organizations(id) on delete cascade,
+    name text not null,
+    description text,
+    category_group text,
+    is_system boolean not null default false,
+    active boolean not null default true,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    unique (organisation_id, name)
+);
+
+create table if not exists public.evidence_categories (
+    id uuid primary key default uuid_generate_v4(),
+    organisation_id uuid not null references public.organizations(id) on delete cascade,
+    name text not null,
+    description text,
+    category_group text,
+    is_system boolean not null default false,
+    active boolean not null default true,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    unique (organisation_id, name)
+);
+
 create table if not exists public.requirement_evidence_types (
     id uuid primary key default uuid_generate_v4(),
     requirement_id uuid not null references public.requirements(id) on delete cascade,
@@ -357,6 +383,8 @@ create table if not exists public.requirement_evidence_criterion_matches (
 
 create index if not exists requirements_organisation_status_idx on public.requirements (organisation_id, status);
 create index if not exists requirements_organisation_lifecycle_idx on public.requirements (organisation_id, lifecycle_status);
+create index if not exists requirement_categories_organisation_active_idx on public.requirement_categories (organisation_id, active, category_group, name);
+create index if not exists evidence_categories_organisation_active_idx on public.evidence_categories (organisation_id, active, category_group, name);
 create index if not exists requirement_documents_organisation_idx on public.requirement_documents (organisation_id, requirement_id, document_id);
 create index if not exists requirement_evidence_criteria_organisation_idx on public.requirement_evidence_criteria (organisation_id, requirement_id, is_required);
 create index if not exists requirement_evidence_criterion_matches_organisation_idx on public.requirement_evidence_criterion_matches (organisation_id, criterion_id, match_status);
@@ -429,6 +457,8 @@ alter table public.matrix_cells enable row level security;
 alter table public.audit_packs enable row level security;
 alter table public.audit_logs enable row level security;
 alter table public.requirements enable row level security;
+alter table public.requirement_categories enable row level security;
+alter table public.evidence_categories enable row level security;
 alter table public.requirement_evidence_types enable row level security;
 alter table public.requirement_documents enable row level security;
 alter table public.requirement_evidence_criteria enable row level security;
@@ -616,6 +646,10 @@ drop policy if exists "Users can read logs in own organization" on public.audit_
 drop policy if exists "Users can insert logs in own organization" on public.audit_logs;
 drop policy if exists "Users can read requirements framework in own organisation" on public.requirements;
 drop policy if exists "Members can write requirements framework in own organisation" on public.requirements;
+drop policy if exists "Users can read requirement categories in own organisation" on public.requirement_categories;
+drop policy if exists "Members can write requirement categories in own organisation" on public.requirement_categories;
+drop policy if exists "Users can read evidence categories in own organisation" on public.evidence_categories;
+drop policy if exists "Members can write evidence categories in own organisation" on public.evidence_categories;
 drop policy if exists "Users can read requirement evidence types in own organisation" on public.requirement_evidence_types;
 drop policy if exists "Members can write requirement evidence types in own organisation" on public.requirement_evidence_types;
 drop policy if exists "Users can read requirement document links in own organisation" on public.requirement_documents;
@@ -772,6 +806,35 @@ create policy "Users can read requirements framework in own organisation" on pub
 
 drop policy if exists "Members can write requirements framework in own organisation" on public.requirements;
 create policy "Members can write requirements framework in own organisation" on public.requirements
+    for all using (
+        public.can_write_organization(organisation_id)
+    ) with check (
+        public.can_write_organization(organisation_id)
+    );
+
+-- Managed Categories
+drop policy if exists "Users can read requirement categories in own organisation" on public.requirement_categories;
+create policy "Users can read requirement categories in own organisation" on public.requirement_categories
+    for select using (
+        public.is_organization_member(organisation_id)
+    );
+
+drop policy if exists "Members can write requirement categories in own organisation" on public.requirement_categories;
+create policy "Members can write requirement categories in own organisation" on public.requirement_categories
+    for all using (
+        public.can_write_organization(organisation_id)
+    ) with check (
+        public.can_write_organization(organisation_id)
+    );
+
+drop policy if exists "Users can read evidence categories in own organisation" on public.evidence_categories;
+create policy "Users can read evidence categories in own organisation" on public.evidence_categories
+    for select using (
+        public.is_organization_member(organisation_id)
+    );
+
+drop policy if exists "Members can write evidence categories in own organisation" on public.evidence_categories;
+create policy "Members can write evidence categories in own organisation" on public.evidence_categories
     for all using (
         public.can_write_organization(organisation_id)
     ) with check (
