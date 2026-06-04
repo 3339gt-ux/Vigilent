@@ -67,7 +67,10 @@ Run these checks in demo mode and Supabase mode.
 - [ ] Hover or focus an image evidence row and confirm a signed preview appears.
 - [ ] Hover or focus a PDF evidence row and confirm a preview or fallback appears.
 - [ ] Hover or focus a DOCX/XLSX evidence row and confirm a file card fallback appears.
+- [ ] Confirm the hover preview appears beside the hovered row/icon instead of fixed over unrelated UI.
+- [ ] Move the pointer from the row to the preview and confirm the preview remains available long enough to click Expand.
 - [ ] Click preview and confirm the larger preview modal opens.
+- [ ] Confirm the larger preview modal shows the file preview on the left and metadata, linked requirements, criteria, actions, competency records, and archive actions on the right.
 - [ ] Open from the preview modal and confirm it uses a signed URL.
 
 ## Validation Commands

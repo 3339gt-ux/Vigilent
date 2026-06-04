@@ -31,7 +31,8 @@
 ## Requirements Page
 
 - Visit `/dashboard/requirements`.
-- Confirm table columns show Title, Category, Owner, Status, Next Due Date, Linked Evidence, Actions, and Last Review.
+- Confirm table columns show Title, Category, Owner, Status, Next Due Date, Evidence Coverage, Linked Evidence, Actions, and Last Review.
+- Confirm Evidence Coverage displays a compact chip and the full explanation appears on hover/focus title text.
 - Create a new generic requirement.
 - Confirm it appears with `GREY` or calculated status.
 - Filter by status and search by title/category/owner.

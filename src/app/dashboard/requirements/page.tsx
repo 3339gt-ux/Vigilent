@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
-import type { Action, Requirement, RequirementStatus } from '@/lib/types';
+import type { Action, Requirement, RequirementEvidenceCoverage, RequirementStatus } from '@/lib/types';
 import { REQUIREMENT_TEMPLATE_PACKS } from '@/lib/requirementTemplatePacks';
 import {
   ClipboardList,
@@ -25,6 +25,29 @@ const statusClass = (status: RequirementStatus) => {
 const riskOptions: Requirement['risk_level'][] = ['Low', 'Medium', 'High', 'Critical'];
 const frequencyOptions: Requirement['review_frequency'][] = ['Weekly', 'Monthly', 'Quarterly', 'Annually', 'Custom'];
 const requirementStatusOptions: RequirementStatus[] = ['GREEN', 'AMBER', 'RED', 'GREY'];
+
+const coverageChip = (coverage?: RequirementEvidenceCoverage) => {
+  if (!coverage) return { label: 'Not assessed', title: 'Evidence coverage has not been assessed.', className: statusClass('GREY') };
+  if (coverage.totalRequired === 0) {
+    return { label: 'Criteria missing', title: coverage.summary || 'No evidence criteria are configured for this requirement.', className: statusClass('GREY') };
+  }
+  const base = `${coverage.coveredRequired}/${coverage.totalRequired} covered`;
+  const suffix = coverage.status === 'Fully Covered'
+    ? ''
+    : coverage.status === 'Partially Covered'
+      ? ' partial'
+      : ' missing';
+  const status: RequirementStatus = coverage.status === 'Fully Covered'
+    ? 'GREEN'
+    : coverage.status === 'Partially Covered'
+      ? 'AMBER'
+      : 'RED';
+  return {
+    label: `${base}${suffix}`,
+    title: coverage.summary,
+    className: statusClass(status)
+  };
+};
 
 export default function RequirementsPage() {
   const {
@@ -476,6 +499,7 @@ export default function RequirementsPage() {
                         .filter(review => review.requirement_id === requirement.id)
                         .sort((a, b) => new Date(b.review_date).getTime() - new Date(a.review_date).getTime())[0];
                       const actionCount = requirementActions.filter(link => link.requirement_id === requirement.id).length;
+                      const coverage = coverageChip(requirement.evidenceCoverage);
                       return (
                         <tr
                           key={requirement.id}
@@ -495,11 +519,12 @@ export default function RequirementsPage() {
                             </span>
                           </td>
                           <td className="p-4 text-muted-foreground font-semibold">{requirement.next_due_date || 'Not set'}</td>
-                          <td className="p-4 text-muted-foreground font-semibold">
-                            <span className={`px-2 py-1 rounded border text-[10px] font-bold ${statusClass(requirement.status)}`}>
-                              {requirement.evidenceCoverage?.coveragePercent === null
-                                ? requirement.evidenceCoverage?.summary || 'Not assessed'
-                                : `${requirement.evidenceCoverage?.coveredRequired}/${requirement.evidenceCoverage?.totalRequired} covered`}
+                          <td className="p-4 text-muted-foreground font-semibold max-w-[150px]">
+                            <span
+                              title={coverage.title}
+                              className={`inline-flex max-w-full items-center justify-center whitespace-nowrap truncate px-2 py-1 rounded border text-[10px] font-bold ${coverage.className}`}
+                            >
+                              {coverage.label}
                             </span>
                           </td>
                           <td className="p-4 text-muted-foreground font-semibold">{requirement.linkedDocuments.length}</td>

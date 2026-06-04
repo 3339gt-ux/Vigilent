@@ -177,7 +177,7 @@ export function EvidenceDropzone({
           setIsDragging(false);
           processFiles(event.dataTransfer.files);
         }}
-        className={`relative border-2 border-dashed rounded-xl transition-all duration-200 ${dropClasses} ${compact ? 'p-4' : 'p-6'} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+        className={`relative border-2 border-dashed rounded-xl transition-all duration-200 ${dropClasses} ${compact ? 'p-3' : 'p-6'} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       >
         <input
           ref={inputRef}
@@ -191,22 +191,22 @@ export function EvidenceDropzone({
             processFiles(event.target.files || []);
           }}
         />
-        <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
-          <div className="p-3 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
-            {isDragging ? <FileCheck className="w-6 h-6 animate-pulse" /> : <UploadCloud className="w-6 h-6" />}
+        <div className={`flex ${compact ? 'items-start gap-2 text-left' : 'flex-col sm:flex-row items-center gap-4 text-center sm:text-left'}`}>
+          <div className={`${compact ? 'p-2 rounded-lg' : 'p-3 rounded-xl'} bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0`}>
+            {isDragging ? <FileCheck className={`${compact ? 'w-4 h-4' : 'w-6 h-6'} animate-pulse`} /> : <UploadCloud className={compact ? 'w-4 h-4' : 'w-6 h-6'} />}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="font-extrabold text-sm text-foreground">
+            <p className={`font-extrabold text-foreground ${compact ? 'text-xs leading-tight' : 'text-sm'}`}>
               {isDragging ? 'Drop files here' : label}
             </p>
-            <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+            <p className={`text-muted-foreground mt-1 ${compact ? 'text-[10px] leading-snug' : 'text-[11px] leading-relaxed'}`}>
               {isDragging ? 'Release files to start uploading' : helperText}
             </p>
           </div>
           <button
             type="button"
             disabled={disabled}
-            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold shrink-0 transition-colors shadow-sm"
+            className={`${compact ? 'px-2.5 py-1.5 text-[10px]' : 'px-4 py-2 text-xs'} rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold shrink-0 transition-colors shadow-sm`}
           >
             {buttonLabel}
           </button>

@@ -105,6 +105,7 @@ export default function EvidenceVault() {
   const [previewDoc, setPreviewDoc] = useState<EvidenceDocument | null>(null);
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewError, setPreviewError] = useState('');
+  const [previewPosition, setPreviewPosition] = useState({ top: 96, left: 24 });
   const [largePreviewDoc, setLargePreviewDoc] = useState<EvidenceDocument | null>(null);
   const [largePreviewUrl, setLargePreviewUrl] = useState('');
   const [duplicateWarning, setDuplicateWarning] = useState<{
@@ -116,6 +117,7 @@ export default function EvidenceVault() {
   } | null>(null);
   const previewCacheRef = useRef<Record<string, string>>({});
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Heuristic metadata auto-suggester based on filename
   const handleFileNameChange = (val: string) => {
@@ -239,8 +241,29 @@ export default function EvidenceVault() {
     });
   };
 
-  const startPreview = (doc: EvidenceDocument) => {
+  const positionPreview = (anchor?: HTMLElement | null) => {
+    if (!anchor || typeof window === 'undefined') return;
+    const rect = anchor.getBoundingClientRect();
+    const width = 320;
+    const height = 340;
+    const gap = 12;
+    const margin = 16;
+    const hasRightSpace = rect.right + gap + width <= window.innerWidth - margin;
+    const left = hasRightSpace
+      ? rect.right + gap
+      : Math.max(margin, rect.left - width - gap);
+    const top = Math.min(Math.max(margin, rect.top), Math.max(margin, window.innerHeight - height - margin));
+    setPreviewPosition({ top, left });
+  };
+
+  const cancelPreviewClose = () => {
+    if (previewCloseTimerRef.current) clearTimeout(previewCloseTimerRef.current);
+  };
+
+  const startPreview = (doc: EvidenceDocument, anchor?: HTMLElement | null) => {
     if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+    cancelPreviewClose();
+    positionPreview(anchor);
     setPreviewDoc(doc);
     setPreviewError('');
     previewTimerRef.current = setTimeout(async () => {
@@ -258,12 +281,16 @@ export default function EvidenceVault() {
 
   const stopPreview = () => {
     if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
-    setPreviewDoc(null);
-    setPreviewUrl('');
-    setPreviewError('');
+    if (previewCloseTimerRef.current) clearTimeout(previewCloseTimerRef.current);
+    previewCloseTimerRef.current = setTimeout(() => {
+      setPreviewDoc(null);
+      setPreviewUrl('');
+      setPreviewError('');
+    }, 350);
   };
 
   const openLargePreview = async (doc: EvidenceDocument) => {
+    cancelPreviewClose();
     setLargePreviewDoc(doc);
     setPreviewDoc(doc);
     if (!previewCacheRef.current[doc.id]) {
@@ -355,8 +382,7 @@ export default function EvidenceVault() {
     setIsOpeningFile(true);
     setFileError('');
     try {
-      const signedUrl = await getDocumentSignedUrl(selectedDoc.id);
-      window.open(signedUrl, '_blank', 'noopener,noreferrer');
+      await openLargePreview(selectedDoc);
     } catch (err) {
       setFileError(err instanceof Error ? err.message : 'Could not open this file.');
     } finally {
@@ -493,6 +519,31 @@ export default function EvidenceVault() {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  };
+
+  const getDocumentLinkedData = (docId: string) => {
+    const linkedRequirements = requirementDocuments
+      .filter(link => link.document_id === docId)
+      .map(link => frameworkRequirements.find(requirement => requirement.id === link.requirement_id))
+      .filter((requirement): requirement is NonNullable<typeof requirement> => Boolean(requirement));
+    const linkedCriteria = requirementEvidenceCriterionMatches
+      .filter(match => match.document_id === docId && match.match_status !== 'Rejected')
+      .map(match => requirementEvidenceCriteria.find(criterion => criterion.id === match.criterion_id))
+      .filter((criterion): criterion is NonNullable<typeof criterion> => Boolean(criterion));
+    const linkedActions = actionDocuments
+      .filter(link => link.document_id === docId)
+      .map(link => actions.find(action => action.id === link.action_id))
+      .filter((action): action is Action => Boolean(action));
+    const linkedCompetencies = competencyRecordDocuments
+      .filter(link => link.document_id === docId)
+      .map(link => {
+        const record = competencyRecords.find(candidate => candidate.id === link.competency_record_id);
+        const person = record ? people.find(candidate => candidate.id === record.person_id) : null;
+        const type = record ? competencyTypes.find(candidate => candidate.id === record.competency_type_id) : null;
+        return record && type ? { record, person, type } : null;
+      })
+      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+    return { linkedRequirements, linkedCriteria, linkedActions, linkedCompetencies };
   };
 
   const renderPreviewContent = (doc: EvidenceDocument, url: string, isLarge: boolean = false) => {
@@ -827,9 +878,9 @@ export default function EvidenceVault() {
                           <td className="p-4">
                             <div className="flex items-center gap-3">
                               <button
-                                onMouseEnter={() => startPreview(doc)}
+                                onMouseEnter={event => startPreview(doc, event.currentTarget)}
                                 onMouseLeave={stopPreview}
-                                onFocus={() => startPreview(doc)}
+                                onFocus={event => startPreview(doc, event.currentTarget)}
                                 onBlur={stopPreview}
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -841,9 +892,9 @@ export default function EvidenceVault() {
                                 <FileText className="w-4 h-4" />
                               </button>
                               <div
-                                onMouseEnter={() => startPreview(doc)}
+                                onMouseEnter={event => startPreview(doc, event.currentTarget)}
                                 onMouseLeave={stopPreview}
-                                onFocus={() => startPreview(doc)}
+                                onFocus={event => startPreview(doc, event.currentTarget)}
                                 onBlur={stopPreview}
                                 tabIndex={0}
                                 className="overflow-hidden max-w-[180px] sm:max-w-xs outline-none"
@@ -1466,7 +1517,13 @@ export default function EvidenceVault() {
       )}
 
       {previewDoc && !largePreviewDoc && (
-        <div className="fixed right-6 bottom-6 z-[55] w-80 bg-card/90 backdrop-blur-md border border-indigo-500/20 rounded-2xl shadow-2xl p-4 space-y-3 transition-all duration-200">
+        <div
+          className="fixed z-[55] w-80 bg-card/95 backdrop-blur-md border border-indigo-500/20 rounded-2xl shadow-2xl p-4 space-y-3 transition-all duration-200"
+          style={{ top: previewPosition.top, left: previewPosition.left }}
+          onMouseEnter={cancelPreviewClose}
+          onMouseLeave={stopPreview}
+          onFocus={cancelPreviewClose}
+        >
           <div className="flex items-start justify-between gap-2.5">
             <div className="min-w-0">
               <span className="text-[9px] font-bold uppercase tracking-wider text-indigo-650 dark:text-indigo-400 block mb-0.5">Document Preview</span>
@@ -1497,7 +1554,7 @@ export default function EvidenceVault() {
 
       {largePreviewDoc && (
         <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-5xl h-[85vh] bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+          <div className="w-full max-w-7xl h-[88vh] bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden">
             <div className="flex items-center justify-between gap-4 p-5 border-b border-border/60 shrink-0">
               <div className="min-w-0">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-650 dark:text-indigo-400">Private Vault Preview</span>
@@ -1520,8 +1577,101 @@ export default function EvidenceVault() {
                 </button>
               </div>
             </div>
-            <div className="flex-1 bg-muted/20 p-6 overflow-hidden flex flex-col items-center justify-center relative">
-              {renderPreviewContent(largePreviewDoc, largePreviewUrl || previewUrl, true)}
+            <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px]">
+              <div className="bg-muted/20 p-6 overflow-hidden flex flex-col items-center justify-center relative">
+                {renderPreviewContent(largePreviewDoc, largePreviewUrl || previewUrl, true)}
+              </div>
+              <div className="border-t lg:border-t-0 lg:border-l border-border/60 bg-card overflow-y-auto p-5 space-y-5 text-xs">
+                {(() => {
+                  const links = getDocumentLinkedData(largePreviewDoc.id);
+                  const dates = [
+                    ['Issue', largePreviewDoc.issue_date],
+                    ['Expiry', largePreviewDoc.expiry_date],
+                    ['Review', largePreviewDoc.review_date],
+                    ['Training', largePreviewDoc.training_date],
+                    ['Calibration', largePreviewDoc.calibration_date]
+                  ].filter(([, value]) => Boolean(value));
+                  return (
+                    <>
+                      <section className="space-y-2">
+                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Metadata</h4>
+                        <div className="grid grid-cols-2 gap-2">
+                          <span className="p-2 rounded-lg bg-muted/30 border border-border/60"><strong className="block text-foreground">Category</strong>{largePreviewDoc.category}</span>
+                          <span className="p-2 rounded-lg bg-muted/30 border border-border/60"><strong className="block text-foreground">Status</strong>{largePreviewDoc.status}</span>
+                          <span className="p-2 rounded-lg bg-muted/30 border border-border/60"><strong className="block text-foreground">Size</strong>{formatBytes(largePreviewDoc.file_size_bytes)}</span>
+                          <span className="p-2 rounded-lg bg-muted/30 border border-border/60"><strong className="block text-foreground">Uploaded</strong>{new Date(largePreviewDoc.created_at).toLocaleDateString()}</span>
+                        </div>
+                        {dates.length > 0 && (
+                          <div className="space-y-1">
+                            {dates.map(([label, value]) => (
+                              <div key={label} className="flex justify-between gap-2 text-[11px]">
+                                <span className="text-muted-foreground">{label}</span>
+                                <span className="font-bold text-foreground">{value}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </section>
+
+                      <section className="space-y-2">
+                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Linked Requirements</h4>
+                        {links.linkedRequirements.length === 0 ? <p className="text-muted-foreground">No linked requirements.</p> : links.linkedRequirements.map(requirement => (
+                          <div key={requirement.id} className="p-2 rounded-lg bg-muted/30 border border-border/60">
+                            <span className="font-bold block text-foreground">{requirement.title}</span>
+                            <span className="text-[10px] text-muted-foreground">{requirement.category} | {requirement.status}</span>
+                          </div>
+                        ))}
+                      </section>
+
+                      <section className="space-y-2">
+                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Evidence Criteria</h4>
+                        {links.linkedCriteria.length === 0 ? <p className="text-muted-foreground">No linked evidence criteria.</p> : links.linkedCriteria.map(criterion => (
+                          <div key={criterion.id} className="p-2 rounded-lg bg-muted/30 border border-border/60">
+                            <span className="font-bold block text-foreground">{criterion.title}</span>
+                            <span className="text-[10px] text-muted-foreground">{criterion.evidence_type || 'Evidence'} | Min {criterion.minimum_count}</span>
+                          </div>
+                        ))}
+                      </section>
+
+                      <section className="space-y-2">
+                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Linked Actions</h4>
+                        {links.linkedActions.length === 0 ? <p className="text-muted-foreground">No linked actions.</p> : links.linkedActions.map(action => (
+                          <button
+                            key={action.id}
+                            onClick={() => setSelectedAction(action)}
+                            className="w-full text-left p-2 rounded-lg bg-muted/30 border border-border/60 hover:bg-muted transition-colors"
+                          >
+                            <span className="font-bold block text-foreground">{action.title}</span>
+                            <span className="text-[10px] text-muted-foreground">{action.status}{action.target_due_date || action.due_date ? ` | Due ${action.target_due_date || action.due_date}` : ''}</span>
+                          </button>
+                        ))}
+                      </section>
+
+                      <section className="space-y-2">
+                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Competency Links</h4>
+                        {links.linkedCompetencies.length === 0 ? <p className="text-muted-foreground">No linked competency records.</p> : links.linkedCompetencies.map(item => (
+                          <div key={item.record.id} className="p-2 rounded-lg bg-muted/30 border border-border/60">
+                            <span className="font-bold block text-foreground">{item.type.title}</span>
+                            <span className="text-[10px] text-muted-foreground">{item.person?.display_name || 'Unassigned person'} | {item.record.status}</span>
+                          </div>
+                        ))}
+                      </section>
+
+                      <section className="space-y-2">
+                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Record Actions</h4>
+                        {largePreviewDoc.status === 'deleted' ? (
+                          <div className="grid grid-cols-2 gap-2">
+                            <button onClick={() => handleRestoreDoc(largePreviewDoc.id)} className="py-2 rounded-lg bg-muted hover:bg-muted/80 border border-border font-bold">Restore</button>
+                            <button onClick={() => handlePermanentDeleteDoc(largePreviewDoc.id)} className="py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold">Delete Forever</button>
+                          </div>
+                        ) : (
+                          <button onClick={() => handleDeleteDoc(largePreviewDoc.id)} className="w-full py-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/15 border border-rose-500/20 text-rose-600 dark:text-rose-300 font-bold">Archive Document</button>
+                        )}
+                      </section>
+                    </>
+                  );
+                })()}
+              </div>
             </div>
           </div>
         </div>

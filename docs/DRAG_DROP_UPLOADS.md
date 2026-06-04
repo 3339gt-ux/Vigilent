@@ -39,6 +39,12 @@ Supabase upload progress is not exposed consistently by the current client flow,
 
 The dropzone checks possible duplicates before upload. Duplicate lookup includes active and archived Evidence Vault records in the current organisation. A SHA-256 hash match is shown separately from metadata-only matches. Users can skip one file, cancel remaining duplicate files, or upload anyway.
 
+Production duplicate lookup uses ordinary organisation-scoped Supabase filters for hash matches and metadata matches. It avoids raw `or(...)` filter strings so filenames with spaces, punctuation, or PDF metadata do not bypass duplicate warnings.
+
+## Compact Surfaces
+
+The shared dropzone has a compact mode for drawers and matrix cells. Compact mode keeps the same validation, duplicate detection, queue states, and private upload flow, but reduces padding and stacks controls so competency drawers do not overlap or push action controls off-screen.
+
 ## Bulk Configuration
 
 After Evidence Vault bulk upload, Vygilence opens a configuration panel where uploaded documents can be updated with:

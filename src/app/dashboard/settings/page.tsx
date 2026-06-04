@@ -3,10 +3,18 @@
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { isDemoMode } from '@/lib/env';
-import { Save, ShieldAlert, Key, Bell, User, CheckCircle2, Copy, Check } from 'lucide-react';
+import { Save, ShieldAlert, Key, Bell, User, CheckCircle2, Copy, Check, Palette } from 'lucide-react';
 
 export default function SettingsPage() {
-  const { user } = useApp();
+  const {
+    user,
+    themePreference,
+    accentColor,
+    appearanceMode,
+    setThemePreference,
+    setAccentColor,
+    setAppearanceMode
+  } = useApp();
 
   // Profile Form States
   const [name, setName] = useState(user?.full_name || 'Jane Doe');
@@ -140,7 +148,7 @@ export default function SettingsPage() {
               <label htmlFor="alert-30d" className="flex items-center justify-between p-2.5 bg-muted/40 hover:bg-muted/80 rounded-lg cursor-pointer border border-border/50">
                 <div className="space-y-0.5">
                   <span className="font-bold text-foreground block">30 Days Advance Alert</span>
-                  <span className="text-[10px] text-muted-foreground block">Flag assets as 'Expiring Soon' at 30 days.</span>
+                  <span className="text-[10px] text-muted-foreground block">Flag assets as Expiring Soon at 30 days.</span>
                 </div>
                 <input
                   id="alert-30d"
@@ -154,7 +162,7 @@ export default function SettingsPage() {
               <label htmlFor="alert-60d" className="flex items-center justify-between p-2.5 bg-muted/40 hover:bg-muted/80 rounded-lg cursor-pointer border border-border/50">
                 <div className="space-y-0.5">
                   <span className="font-bold text-foreground block">60 Days Advance Alert</span>
-                  <span className="text-[10px] text-muted-foreground block">Flag assets as 'Expiring Soon' at 60 days.</span>
+                  <span className="text-[10px] text-muted-foreground block">Flag assets as Expiring Soon at 60 days.</span>
                 </div>
                 <input
                   id="alert-60d"
@@ -168,7 +176,7 @@ export default function SettingsPage() {
               <label htmlFor="alert-99d" className="flex items-center justify-between p-2.5 bg-muted/40 hover:bg-muted/80 rounded-lg cursor-pointer border border-border/50">
                 <div className="space-y-0.5">
                   <span className="font-bold text-foreground block">90 Days Advance Alert</span>
-                  <span className="text-[10px] text-muted-foreground block">Flag assets as 'Expiring Soon' at 90 days.</span>
+                  <span className="text-[10px] text-muted-foreground block">Flag assets as Expiring Soon at 90 days.</span>
                 </div>
                 <input
                   id="alert-99d"
@@ -267,6 +275,73 @@ export default function SettingsPage() {
           </div>
         </div>
 
+      </div>
+
+      <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
+        <div className="flex items-center gap-2 border-b border-border pb-3">
+          <Palette className="w-5 h-5 text-indigo-500" />
+          <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">Appearance</h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-2">Theme</span>
+            <div className="grid grid-cols-3 gap-1.5">
+              {(['system', 'light', 'dark'] as const).map(option => (
+                <button
+                  key={option}
+                  onClick={() => setThemePreference(option)}
+                  className={`px-3 py-2 rounded-lg border font-bold capitalize transition-colors ${
+                    themePreference === option
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-muted/40 hover:bg-muted border-border text-foreground'
+                  }`}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-2">Accent</span>
+            <div className="grid grid-cols-5 gap-1.5">
+              {(['blue', 'teal', 'emerald', 'purple', 'amber'] as const).map(option => (
+                <button
+                  key={option}
+                  onClick={() => setAccentColor(option)}
+                  className={`h-9 rounded-lg border font-bold text-[10px] capitalize transition-all ${
+                    accentColor === option
+                      ? 'ring-2 ring-offset-2 ring-indigo-500 ring-offset-background border-indigo-500'
+                      : 'border-border hover:border-border-hover'
+                  } ${option === 'blue' ? 'bg-blue-500' : option === 'teal' ? 'bg-cyan-500' : option === 'emerald' ? 'bg-emerald-500' : option === 'purple' ? 'bg-purple-500' : 'bg-amber-500'} text-white`}
+                  title={`${option} accent`}
+                >
+                  {option.slice(0, 1).toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-2">Colour Mode</span>
+            <div className="grid grid-cols-2 gap-1.5">
+              {(['default', 'colorful'] as const).map(option => (
+                <button
+                  key={option}
+                  onClick={() => setAppearanceMode(option)}
+                  className={`px-3 py-2 rounded-lg border font-bold capitalize transition-colors ${
+                    appearanceMode === option
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-muted/40 hover:bg-muted border-border text-foreground'
+                  }`}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
     </div>

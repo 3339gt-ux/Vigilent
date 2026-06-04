@@ -50,6 +50,7 @@ Run these checks in demo mode and production mode.
 - [ ] Upload a new evidence file from the competency drawer.
 - [ ] Link an existing Evidence Vault document from a person competency row.
 - [ ] Upload a new evidence file from a person competency row.
+- [ ] Confirm compact upload areas do not overlap link buttons, action controls, or long helper text in the person drawer.
 - [ ] Confirm the uploaded file appears in Evidence Vault as `Training & Competency`.
 - [ ] Open linked evidence and confirm it uses a signed URL.
 - [ ] Unlink evidence from the competency record.

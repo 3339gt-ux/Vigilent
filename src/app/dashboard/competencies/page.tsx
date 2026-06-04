@@ -1949,7 +1949,7 @@ export default function CompetencyMatrixPage() {
                                                 <option key={document.id} value={document.id}>{document.title}</option>
                                               ))}
                                             </select>
-                                            <div className="grid grid-cols-2 gap-2">
+                                            <div className="grid grid-cols-1 gap-2">
                                               <button
                                                 disabled={!row.record || !personRecordLinkIds[rowKey]}
                                                 onClick={() => linkEvidenceFromPerson(row.record, rowKey)}
@@ -1958,8 +1958,8 @@ export default function CompetencyMatrixPage() {
                                                 <LinkIcon className="w-3.5 h-3.5" /> Link
                                               </button>
                                               <EvidenceDropzone
-                                                label="Upload competency evidence"
-                                                helperText="Saved under Training & Competency and linked to this record."
+                                                label="Upload evidence"
+                                                helperText="Private vault record linked to this competency."
                                                 buttonLabel="Upload"
                                                 compact
                                                 multiple
@@ -2184,7 +2184,7 @@ export default function CompetencyMatrixPage() {
                 </div>
               ))}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3">
                 <div className="space-y-2">
                   <select value={linkDocumentId} onChange={event => setLinkDocumentId(event.target.value)} className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none">
                     <option value="">Link existing evidence</option>
@@ -2195,8 +2195,8 @@ export default function CompetencyMatrixPage() {
                   </button>
                 </div>
                 <EvidenceDropzone
-                  label="Upload competency evidence"
-                  helperText={`Private Evidence Vault records under Training & Competency. Max ${formatMaxEvidenceUploadSize()}.`}
+                  label="Upload evidence"
+                  helperText={`Private vault record linked to this competency. Max ${formatMaxEvidenceUploadSize()}.`}
                   buttonLabel="Upload"
                   compact
                   multiple

@@ -13,6 +13,7 @@ The Vault supports:
 - possible duplicate warnings before upload
 - post-upload bulk configuration
 - hover/focus preview using temporary signed URLs
+- full private preview panel with metadata and linked records
 - archive, restore and permanent-delete workflows
 
 Bulk uploads default to category `General`. Users can edit metadata and links immediately after upload.
@@ -51,6 +52,8 @@ Uploaded documents can be linked to existing:
 - Competency Records
 
 Action and competency-specific upload areas automatically create the correct link after upload. If linking fails after the document is created, the Evidence Vault document remains available for manual linking.
+
+The preview panel shows linked requirements, evidence criteria, action records, and competency records for the selected document. Action links can be opened from the panel. File access still uses a temporary signed URL; no public preview URL is stored.
 
 ## Security
 

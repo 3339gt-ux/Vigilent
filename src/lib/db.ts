@@ -2434,15 +2434,33 @@ export const dbService = {
     const hash = fileHash || await calculateEvidenceFileHash(file);
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
-      const { data, error } = await supabase!
+      const matches = new Map<string, EvidenceDocument>();
+
+      if (hash) {
+        const { data, error } = await supabase!
+          .from('evidence_documents')
+          .select('*')
+          .eq('organization_id', orgId)
+          .is('permanently_deleted_at', null)
+          .eq('file_hash', hash)
+          .order('created_at', { ascending: false });
+        if (error) throwSupabaseError('evidence_documents.select duplicate hash candidates', error);
+        (data || []).forEach(document => matches.set(document.id, document));
+      }
+
+      const { data: metadataMatches, error: metadataError } = await supabase!
         .from('evidence_documents')
         .select('*')
         .eq('organization_id', orgId)
         .is('permanently_deleted_at', null)
-        .or(`file_hash.eq.${hash},and(original_file_name.eq.${file.name},file_size_bytes.eq.${file.size},mime_type.eq.${file.type})`)
+        .eq('original_file_name', file.name)
+        .eq('file_size_bytes', file.size)
+        .eq('mime_type', file.type || '')
         .order('created_at', { ascending: false });
-      if (error) throwSupabaseError('evidence_documents.select duplicate candidates', error);
-      return data || [];
+      if (metadataError) throwSupabaseError('evidence_documents.select duplicate metadata candidates', metadataError);
+      (metadataMatches || []).forEach(document => matches.set(document.id, document));
+
+      return Array.from(matches.values()).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     }
 
     initMockDb();

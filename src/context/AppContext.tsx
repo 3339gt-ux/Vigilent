@@ -51,9 +51,43 @@ import {
   RequirementTemplateItem
 } from '@/lib/types';
 
+type ThemePreference = 'light' | 'dark' | 'system';
+type AccentPreference = 'blue' | 'teal' | 'emerald' | 'purple' | 'amber';
+type AppearanceMode = 'default' | 'colorful';
+
+const readStoredThemePreference = (): ThemePreference => {
+  if (typeof window === 'undefined') return 'system';
+  const stored = localStorage.getItem('vygilence_theme_preference') || localStorage.getItem('vigilen_theme');
+  return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system';
+};
+
+const readStoredAccentColor = (): AccentPreference => {
+  if (typeof window === 'undefined') return 'blue';
+  const stored = localStorage.getItem('vygilence_accent_color');
+  return stored === 'blue' || stored === 'teal' || stored === 'emerald' || stored === 'purple' || stored === 'amber' ? stored : 'blue';
+};
+
+const readStoredAppearanceMode = (): AppearanceMode => {
+  if (typeof window === 'undefined') return 'default';
+  const stored = localStorage.getItem('vygilence_appearance_mode');
+  return stored === 'default' || stored === 'colorful' ? stored : 'default';
+};
+
+const resolveThemePreference = (preference: ThemePreference): 'light' | 'dark' => {
+  if (preference !== 'system') return preference;
+  if (typeof window === 'undefined') return 'dark';
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+};
+
 interface AppContextType {
   theme: 'light' | 'dark';
+  themePreference: ThemePreference;
+  accentColor: AccentPreference;
+  appearanceMode: AppearanceMode;
   toggleTheme: () => void;
+  setThemePreference: (theme: ThemePreference) => void;
+  setAccentColor: (accent: AccentPreference) => void;
+  setAppearanceMode: (mode: AppearanceMode) => void;
 
   authUser: User | null;
   user: Profile | null;
@@ -231,7 +265,10 @@ const calculateDocumentStatus = (expiryDate: string | null): DocumentStatus => {
 };
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [themePreference, setThemePreferenceState] = useState<ThemePreference>(() => readStoredThemePreference());
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => resolveThemePreference(readStoredThemePreference()));
+  const [accentColor, setAccentColorState] = useState<AccentPreference>(() => readStoredAccentColor());
+  const [appearanceMode, setAppearanceModeState] = useState<AppearanceMode>(() => readStoredAppearanceMode());
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [user, setUser] = useState<Profile | null>(null);
   const [organization, setOrganization] = useState<Organization | null>(null);
@@ -325,7 +362,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       root.classList.add('light');
       root.classList.remove('dark');
     }
-  }, [theme]);
+    root.dataset.accent = accentColor;
+    root.dataset.appearance = appearanceMode;
+  }, [accentColor, appearanceMode, theme]);
 
   const loadWorkspaceCollections = async () => {
     const [
@@ -506,28 +545,60 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    const resolveSystemTheme = () => {
+      const preference = (localStorage.getItem('vygilence_theme_preference') || localStorage.getItem('vigilen_theme') || 'system') as ThemePreference;
+      if (preference === 'system') {
+        setTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      }
+    };
+    resolveSystemTheme();
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    media.addEventListener('change', resolveSystemTheme);
+
     loadData();
 
     if (isDemoMode) {
-      const storedTheme = localStorage.getItem('vigilen_theme') as 'light' | 'dark';
-      if (storedTheme) setTheme(storedTheme);
-      return;
+      return () => media.removeEventListener('change', resolveSystemTheme);
     }
 
-    if (!supabase) return;
+    if (!supabase) return () => media.removeEventListener('change', resolveSystemTheme);
     const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
       void loadData();
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      media.removeEventListener('change', resolveSystemTheme);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const toggleTheme = () => {
     const nextTheme = theme === 'light' ? 'dark' : 'light';
+    setThemePreferenceState(nextTheme);
     setTheme(nextTheme);
-    if (isDemoMode) {
+    localStorage.setItem('vygilence_theme_preference', nextTheme);
+    localStorage.setItem('vigilen_theme', nextTheme);
+  };
+
+  const setThemePreference = (nextTheme: ThemePreference) => {
+    setThemePreferenceState(nextTheme);
+    localStorage.setItem('vygilence_theme_preference', nextTheme);
+    if (nextTheme === 'system') {
+      setTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    } else {
+      setTheme(nextTheme);
       localStorage.setItem('vigilen_theme', nextTheme);
     }
+  };
+
+  const setAccentColor = (accent: AccentPreference) => {
+    setAccentColorState(accent);
+    localStorage.setItem('vygilence_accent_color', accent);
+  };
+
+  const setAppearanceMode = (mode: AppearanceMode) => {
+    setAppearanceModeState(mode);
+    localStorage.setItem('vygilence_appearance_mode', mode);
   };
 
   const login = async (email: string, password: string): Promise<boolean> => {
@@ -1111,7 +1182,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <AppContext.Provider
       value={{
         theme,
+        themePreference,
+        accentColor,
+        appearanceMode,
         toggleTheme,
+        setThemePreference,
+        setAccentColor,
+        setAppearanceMode,
         authUser,
         user,
         organization,

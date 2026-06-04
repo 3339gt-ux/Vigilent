@@ -79,6 +79,8 @@ Evidence operations in the person drawer reuse the private Evidence Vault:
 - open evidence through a signed URL
 - unlink evidence from the competency record
 
+Competency upload surfaces use the compact shared dropzone. The compact layout preserves duplicate checks, validation, signed URL security, and queue status while stacking link/upload controls in drawers so long filenames and helper text do not overlap action controls.
+
 Action operations reuse Action Records. A user can create a gap action from a person competency row or open an existing linked action in the shared action detail drawer, including the action timeline and attachments.
 
 ## Security
