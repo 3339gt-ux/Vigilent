@@ -54,7 +54,9 @@ export default function EvidenceVault() {
     linkDocumentToRequirement,
     unlinkDocumentFromRequirement,
     linkDocumentToEvidenceCriterion,
+    unlinkDocumentFromEvidenceCriterion,
     linkDocumentToCompetencyRecord,
+    unlinkDocumentFromCompetencyRecord,
     updateAction,
     addActionUpdate,
     linkDocumentToAction,
@@ -100,6 +102,7 @@ export default function EvidenceVault() {
   const [isOpeningFile, setIsOpeningFile] = useState(false);
   const [fileError, setFileError] = useState('');
   const [selectedRequirementId, setSelectedRequirementId] = useState('');
+  const [selectedCriterionId, setSelectedCriterionId] = useState('');
   const [selectedAction, setSelectedAction] = useState<Action | null>(null);
   const [bulkConfigDocs, setBulkConfigDocs] = useState<EvidenceDocument[]>([]);
   const [previewDoc, setPreviewDoc] = useState<EvidenceDocument | null>(null);
@@ -241,6 +244,30 @@ export default function EvidenceVault() {
     });
   };
 
+  const syncDocumentEditState = (doc: EvidenceDocument) => {
+    setEditTitle(doc.title);
+    setEditCategory(doc.category);
+    setEditExpiry(doc.expiry_date || '');
+    setEditIssue(doc.issue_date || '');
+    setEditReview(doc.review_date || '');
+    setEditTraining(doc.training_date || '');
+    setEditCalibration(doc.calibration_date || '');
+    setEditTags((doc.tags || []).join(', '));
+    setMetaKey('');
+    setMetaVal('');
+    setFileError('');
+    setSaveError('');
+    setSaveSuccess('');
+    setSelectedRequirementId('');
+    setSelectedCriterionId('');
+  };
+
+  const applyUpdatedDocument = (doc: EvidenceDocument) => {
+    if (selectedDoc?.id === doc.id) setSelectedDoc(doc);
+    if (previewDoc?.id === doc.id) setPreviewDoc(doc);
+    if (largePreviewDoc?.id === doc.id) setLargePreviewDoc(doc);
+  };
+
   const positionPreview = (anchor?: HTMLElement | null) => {
     if (!anchor || typeof window === 'undefined') return;
     const rect = anchor.getBoundingClientRect();
@@ -291,6 +318,8 @@ export default function EvidenceVault() {
 
   const openLargePreview = async (doc: EvidenceDocument) => {
     cancelPreviewClose();
+    setSelectedDoc(doc);
+    syncDocumentEditState(doc);
     setLargePreviewDoc(doc);
     setPreviewDoc(doc);
     if (!previewCacheRef.current[doc.id]) {
@@ -307,20 +336,7 @@ export default function EvidenceVault() {
 
   const handleSelectDoc = (doc: EvidenceDocument) => {
     setSelectedDoc(doc);
-    setEditTitle(doc.title);
-    setEditCategory(doc.category);
-    setEditExpiry(doc.expiry_date || '');
-    setEditIssue(doc.issue_date || '');
-    setEditReview(doc.review_date || '');
-    setEditTraining(doc.training_date || '');
-    setEditCalibration(doc.calibration_date || '');
-    setEditTags((doc.tags || []).join(', '));
-    setMetaKey('');
-    setMetaVal('');
-    setFileError('');
-    setSaveError('');
-    setSaveSuccess('');
-    setSelectedRequirementId('');
+    syncDocumentEditState(doc);
   };
 
   const handleLinkRequirement = async () => {
@@ -348,6 +364,55 @@ export default function EvidenceVault() {
     }
   };
 
+  const handleLinkCriterion = async () => {
+    if (!selectedDoc || !selectedCriterionId) return;
+    setSaveError('');
+    setSaveSuccess('');
+    try {
+      await linkDocumentToEvidenceCriterion(selectedCriterionId, selectedDoc.id);
+      setSelectedCriterionId('');
+      setSaveSuccess('Evidence linked to criterion.');
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not link this evidence criterion.');
+    }
+  };
+
+  const handleUnlinkCriterion = async (criterionId: string) => {
+    if (!selectedDoc) return;
+    setSaveError('');
+    setSaveSuccess('');
+    try {
+      await unlinkDocumentFromEvidenceCriterion(criterionId, selectedDoc.id);
+      setSaveSuccess('Evidence criterion link removed.');
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not remove this evidence criterion link.');
+    }
+  };
+
+  const handleUnlinkAction = async (actionId: string) => {
+    if (!selectedDoc) return;
+    setSaveError('');
+    setSaveSuccess('');
+    try {
+      await unlinkDocumentFromAction(actionId, selectedDoc.id);
+      setSaveSuccess('Action attachment link removed.');
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not remove this action attachment link.');
+    }
+  };
+
+  const handleUnlinkCompetencyRecord = async (recordId: string) => {
+    if (!selectedDoc) return;
+    setSaveError('');
+    setSaveSuccess('');
+    try {
+      await unlinkDocumentFromCompetencyRecord(recordId, selectedDoc.id);
+      setSaveSuccess('Competency evidence link removed.');
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not remove this competency evidence link.');
+    }
+  };
+
   const handleSaveMetadata = async () => {
     if (!selectedDoc) return;
     setIsSaving(true);
@@ -368,7 +433,8 @@ export default function EvidenceVault() {
         calibration_date: editCalibration || null,
         tags
       });
-      setSelectedDoc(updated);
+      applyUpdatedDocument(updated);
+      syncDocumentEditState(updated);
       setSaveSuccess('Document metadata saved.');
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Could not save document metadata.');
@@ -393,16 +459,18 @@ export default function EvidenceVault() {
   const handleAddMetaItem = async () => {
     if (!selectedDoc || !metaKey || !metaVal) return;
     setIsSaving(true);
+    setSaveError('');
+    setSaveSuccess('');
     try {
       const updatedMeta = { ...selectedDoc.metadata, [metaKey]: metaVal };
       const updated = await updateDocumentMetadata(selectedDoc.id, {
         metadata: updatedMeta
       });
-      setSelectedDoc(updated);
-      setMetaKey('');
-      setMetaVal('');
+      applyUpdatedDocument(updated);
+      syncDocumentEditState(updated);
+      setSaveSuccess('Custom attribute added.');
     } catch (err) {
-      console.error(err);
+      setSaveError(err instanceof Error ? err.message : 'Could not add custom attribute.');
     } finally {
       setIsSaving(false);
     }
@@ -411,15 +479,19 @@ export default function EvidenceVault() {
   const handleRemoveMetaItem = async (keyToRemove: string) => {
     if (!selectedDoc) return;
     setIsSaving(true);
+    setSaveError('');
+    setSaveSuccess('');
     try {
       const updatedMeta = { ...selectedDoc.metadata };
       delete updatedMeta[keyToRemove];
       const updated = await updateDocumentMetadata(selectedDoc.id, {
         metadata: updatedMeta
       });
-      setSelectedDoc(updated);
+      applyUpdatedDocument(updated);
+      syncDocumentEditState(updated);
+      setSaveSuccess('Custom attribute removed.');
     } catch (err) {
-      console.error(err);
+      setSaveError(err instanceof Error ? err.message : 'Could not remove custom attribute.');
     } finally {
       setIsSaving(false);
     }
@@ -603,6 +675,320 @@ export default function EvidenceVault() {
             </button>
           )}
         </div>
+      </div>
+    );
+  };
+
+  const renderEditablePreviewMetadataPanel = (doc: EvidenceDocument) => {
+    const editable = selectedDoc?.id === doc.id;
+    const metadata = doc.metadata || {};
+    const linkedData = getDocumentLinkedData(doc.id);
+    const linkedRequirementIds = new Set(requirementDocuments.filter(link => link.document_id === doc.id).map(link => link.requirement_id));
+    const linkedCriterionIds = new Set(requirementEvidenceCriterionMatches.filter(match => match.document_id === doc.id && match.match_status !== 'Rejected').map(match => match.criterion_id));
+
+    return (
+      <div className="border-t lg:border-t-0 lg:border-l border-border/60 bg-card overflow-y-auto p-5 space-y-5 text-xs">
+        <div className="space-y-1">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Metadata Profile</span>
+          <h4 className="text-sm font-extrabold text-foreground truncate" title={doc.title}>{doc.title}</h4>
+          {!editable && (
+            <p className="text-[10px] text-amber-600 dark:text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg p-2">
+              This preview is not loaded into the metadata editor. Close and reopen the preview from the document row to edit it.
+            </p>
+          )}
+        </div>
+
+        {saveError && (
+          <div className="p-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-300 text-[11px]">
+            {saveError}
+          </div>
+        )}
+        {saveSuccess && (
+          <div className="p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 text-[11px]">
+            {saveSuccess}
+          </div>
+        )}
+
+        <section className="space-y-3">
+          <div>
+            <label htmlFor="preview-edit-title" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+              Document Title
+            </label>
+            <input
+              id="preview-edit-title"
+              type="text"
+              value={editTitle}
+              disabled={!editable || isSaving}
+              onChange={e => setEditTitle(e.target.value)}
+              className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none disabled:opacity-60"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="preview-edit-category" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+              Category
+            </label>
+            <select
+              id="preview-edit-category"
+              value={editCategory}
+              disabled={!editable || isSaving}
+              onChange={e => setEditCategory(e.target.value)}
+              className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none disabled:opacity-60"
+            >
+              <option value="Vehicle">Vehicle</option>
+              <option value="Driver">Driver</option>
+              <option value="Facility">Facility</option>
+              <option value="General">General</option>
+              <option value="Actions">Actions</option>
+              <option value="Training & Competency">Training & Competency</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              ['preview-edit-issue', 'Issue', editIssue, setEditIssue],
+              ['preview-edit-expiry', 'Expiry', editExpiry, setEditExpiry],
+              ['preview-edit-review', 'Review', editReview, setEditReview],
+              ['preview-edit-training', 'Training', editTraining, setEditTraining],
+              ['preview-edit-calibration', 'Calibration', editCalibration, setEditCalibration]
+            ].map(([id, label, value, setter]) => (
+              <div key={id as string}>
+                <label htmlFor={id as string} className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                  {label as string}
+                </label>
+                <input
+                  id={id as string}
+                  type="date"
+                  value={value as string}
+                  disabled={!editable || isSaving}
+                  onChange={e => (setter as React.Dispatch<React.SetStateAction<string>>)(e.target.value)}
+                  className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none disabled:opacity-60"
+                />
+              </div>
+            ))}
+          </div>
+
+          <div>
+            <label htmlFor="preview-edit-tags" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+              Tags
+            </label>
+            <input
+              id="preview-edit-tags"
+              type="text"
+              value={editTags}
+              disabled={!editable || isSaving}
+              onChange={e => setEditTags(e.target.value)}
+              placeholder="fleet, driver, annual"
+              className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none disabled:opacity-60"
+            />
+          </div>
+
+          <button
+            onClick={handleSaveMetadata}
+            disabled={!editable || isSaving || !editTitle.trim()}
+            className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/40 text-white font-semibold rounded-lg flex items-center justify-center gap-1.5 shadow-sm transition-colors"
+          >
+            {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileCheck className="w-3.5 h-3.5" />}
+            Save Primary Metadata
+          </button>
+        </section>
+
+        <section className="border-t border-border/60 pt-4 space-y-3">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Linked Requirements</span>
+          {linkedData.linkedRequirements.length === 0 ? (
+            <p className="text-[10px] text-muted-foreground italic">This record is not linked to a requirement yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {linkedData.linkedRequirements.map(requirement => (
+                <div key={requirement.id} className="flex justify-between items-center gap-2 p-2 bg-muted/50 rounded-lg text-[11px]">
+                  <span className="font-bold truncate">{requirement.title}</span>
+                  <button onClick={() => handleUnlinkRequirement(requirement.id)} disabled={!editable} className="text-rose-500 font-bold disabled:opacity-50">Unlink</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <select
+              value={selectedRequirementId}
+              onChange={e => setSelectedRequirementId(e.target.value)}
+              disabled={!editable}
+              className="min-w-0 flex-1 px-2.5 py-1.5 bg-muted border border-border/80 rounded-md outline-none text-[11px] disabled:opacity-60"
+            >
+              <option value="">Select requirement</option>
+              {frameworkRequirements.filter(requirement => !linkedRequirementIds.has(requirement.id)).map(requirement => (
+                <option key={requirement.id} value={requirement.id}>{requirement.title}</option>
+              ))}
+            </select>
+            <button onClick={handleLinkRequirement} disabled={!editable || !selectedRequirementId} className="px-2.5 py-1.5 bg-indigo-600 disabled:bg-indigo-600/40 text-white rounded-md text-[10px] font-bold">
+              Link
+            </button>
+          </div>
+        </section>
+
+        <section className="border-t border-border/60 pt-4 space-y-3">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Linked Evidence Criteria</span>
+          {linkedData.linkedCriteria.length === 0 ? (
+            <p className="text-[10px] text-muted-foreground italic">This record is not matched to evidence coverage criteria.</p>
+          ) : (
+            <div className="space-y-2">
+              {linkedData.linkedCriteria.map(criterion => {
+                const requirement = frameworkRequirements.find(item => item.id === criterion.requirement_id);
+                return (
+                  <div key={criterion.id} className="p-2 bg-muted/50 border border-border/60 rounded-lg text-[11px] space-y-2">
+                    <div className="flex justify-between gap-2">
+                      <span className="font-bold truncate">{criterion.title}</span>
+                      <span className="text-[9px] uppercase font-bold text-muted-foreground">{criterion.is_required ? 'Required' : 'Optional'}</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">{requirement?.title || 'Requirement'} | {criterion.evidence_type || 'Evidence'}</p>
+                    <button onClick={() => handleUnlinkCriterion(criterion.id)} disabled={!editable} className="text-rose-500 font-bold text-[10px] disabled:opacity-50">Unlink criterion</button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <select
+              value={selectedCriterionId}
+              onChange={e => setSelectedCriterionId(e.target.value)}
+              disabled={!editable}
+              className="min-w-0 flex-1 px-2.5 py-1.5 bg-muted border border-border/80 rounded-md outline-none text-[11px] disabled:opacity-60"
+            >
+              <option value="">Select criterion</option>
+              {requirementEvidenceCriteria.filter(criterion => !linkedCriterionIds.has(criterion.id)).map(criterion => (
+                <option key={criterion.id} value={criterion.id}>{criterion.title}</option>
+              ))}
+            </select>
+            <button onClick={handleLinkCriterion} disabled={!editable || !selectedCriterionId} className="px-2.5 py-1.5 bg-indigo-600 disabled:bg-indigo-600/40 text-white rounded-md text-[10px] font-bold">
+              Link
+            </button>
+          </div>
+        </section>
+
+        <section className="border-t border-border/60 pt-4 space-y-3">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Linked Actions</span>
+          {linkedData.linkedActions.length === 0 ? (
+            <p className="text-[10px] text-muted-foreground italic">This record is not attached to any action.</p>
+          ) : (
+            <div className="space-y-2">
+              {linkedData.linkedActions.map(action => {
+                const relatedRequirement = frameworkRequirements.find(requirement =>
+                  requirementActions.some(link => link.action_id === action.id && link.requirement_id === requirement.id)
+                );
+                return (
+                  <div key={action.id} className="p-3 bg-muted/50 border border-border/60 rounded-lg text-[11px] space-y-2">
+                    <div className="flex justify-between gap-3">
+                      <div className="min-w-0">
+                        <span className="font-bold block truncate">{action.title}</span>
+                        <span className="text-[10px] text-muted-foreground block truncate">
+                          {relatedRequirement?.title || 'No related requirement'} | Owner: {action.owner || 'Unassigned'}
+                        </span>
+                      </div>
+                      <span className="text-[9px] uppercase font-bold text-muted-foreground shrink-0">{action.status}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 text-[10px]">
+                      <span className="text-muted-foreground">Due: <strong className="text-foreground">{action.target_due_date || action.due_date || 'No date'}</strong></span>
+                      <div className="flex gap-2">
+                        <button onClick={() => setSelectedAction(action)} className="text-indigo-500 font-bold">Open</button>
+                        <button onClick={() => handleUnlinkAction(action.id)} disabled={!editable} className="text-rose-500 font-bold disabled:opacity-50">Unlink</button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <section className="border-t border-border/60 pt-4 space-y-3">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Linked Competency Records</span>
+          {linkedData.linkedCompetencies.length === 0 ? (
+            <p className="text-[10px] text-muted-foreground italic">This record is not linked to any competency record.</p>
+          ) : (
+            <div className="space-y-2">
+              {linkedData.linkedCompetencies.map(item => (
+                <div key={item.record.id} className="p-2 rounded-lg bg-muted/50 border border-border/60 text-[11px] space-y-1.5">
+                  <span className="font-bold block text-foreground">{item.type.title}</span>
+                  <span className="text-[10px] text-muted-foreground block">{item.person?.display_name || 'Unassigned person'} | {item.record.status}</span>
+                  <div className="flex items-center justify-between gap-2 text-[10px]">
+                    <span className="text-muted-foreground">Open from Competency Matrix.</span>
+                    <button onClick={() => handleUnlinkCompetencyRecord(item.record.id)} disabled={!editable} className="text-rose-500 font-bold disabled:opacity-50">Unlink</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="border-t border-border/60 pt-4 space-y-3">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Audit Attributes</span>
+          {Object.keys(metadata).length === 0 ? (
+            <p className="text-[10px] text-muted-foreground italic">No custom attributes assigned.</p>
+          ) : (
+            <div className="space-y-2">
+              {Object.entries(metadata).map(([key, value]) => (
+                <div key={key} className="flex justify-between items-center gap-2 p-2 bg-muted/50 rounded-lg text-[11px]">
+                  <span className="font-semibold text-muted-foreground truncate">{key}:</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-bold text-foreground truncate">{String(value)}</span>
+                    <button onClick={() => handleRemoveMetaItem(key)} disabled={!editable || isSaving} className="p-0.5 text-muted-foreground hover:text-rose-500 disabled:opacity-50" title="Remove attribute">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <input
+              type="text"
+              placeholder="Attribute key"
+              value={metaKey}
+              disabled={!editable || isSaving}
+              onChange={e => setMetaKey(e.target.value)}
+              className="px-2.5 py-1.5 bg-muted border border-border/80 rounded-md outline-none text-[11px] disabled:opacity-60"
+            />
+            <input
+              type="text"
+              placeholder="Value"
+              value={metaVal}
+              disabled={!editable || isSaving}
+              onChange={e => setMetaVal(e.target.value)}
+              className="px-2.5 py-1.5 bg-muted border border-border/80 rounded-md outline-none text-[11px] disabled:opacity-60"
+            />
+          </div>
+          <button onClick={handleAddMetaItem} disabled={!editable || isSaving || !metaKey || !metaVal} className="w-full py-1.5 bg-muted hover:bg-muted/80 text-foreground border border-border font-bold text-[10px] rounded-lg transition-colors flex items-center justify-center gap-1 disabled:opacity-50">
+            <Plus className="w-3.5 h-3.5" />
+            Add Custom Attribute
+          </button>
+        </section>
+
+        <section className="border-t border-border/60 pt-4 space-y-2 text-[10px] text-muted-foreground font-semibold">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">File Details</span>
+          <div className="flex justify-between gap-3">
+            <span>Storage filename</span>
+            <span className="text-foreground font-bold truncate">{doc.file_name}</span>
+          </div>
+          <div className="flex justify-between gap-3">
+            <span>File size</span>
+            <span className="text-foreground font-bold">{formatBytes(doc.file_size_bytes)}</span>
+          </div>
+          <div className="flex justify-between gap-3">
+            <span>Upload date</span>
+            <span className="text-foreground font-bold">{new Date(doc.created_at).toLocaleDateString()}</span>
+          </div>
+        </section>
+
+        <section className="border-t border-border/60 pt-4 space-y-2">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Record Actions</span>
+          {doc.status === 'deleted' ? (
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => handleRestoreDoc(doc.id)} className="py-2 rounded-lg bg-muted hover:bg-muted/80 border border-border font-bold">Restore</button>
+              <button onClick={() => handlePermanentDeleteDoc(doc.id)} className="py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold">Delete Forever</button>
+            </div>
+          ) : (
+            <button onClick={() => handleDeleteDoc(doc.id)} className="w-full py-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/15 border border-rose-500/20 text-rose-600 dark:text-rose-300 font-bold">Archive Document</button>
+          )}
+        </section>
       </div>
     );
   };
@@ -1581,97 +1967,7 @@ export default function EvidenceVault() {
               <div className="bg-muted/20 p-6 overflow-hidden flex flex-col items-center justify-center relative">
                 {renderPreviewContent(largePreviewDoc, largePreviewUrl || previewUrl, true)}
               </div>
-              <div className="border-t lg:border-t-0 lg:border-l border-border/60 bg-card overflow-y-auto p-5 space-y-5 text-xs">
-                {(() => {
-                  const links = getDocumentLinkedData(largePreviewDoc.id);
-                  const dates = [
-                    ['Issue', largePreviewDoc.issue_date],
-                    ['Expiry', largePreviewDoc.expiry_date],
-                    ['Review', largePreviewDoc.review_date],
-                    ['Training', largePreviewDoc.training_date],
-                    ['Calibration', largePreviewDoc.calibration_date]
-                  ].filter(([, value]) => Boolean(value));
-                  return (
-                    <>
-                      <section className="space-y-2">
-                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Metadata</h4>
-                        <div className="grid grid-cols-2 gap-2">
-                          <span className="p-2 rounded-lg bg-muted/30 border border-border/60"><strong className="block text-foreground">Category</strong>{largePreviewDoc.category}</span>
-                          <span className="p-2 rounded-lg bg-muted/30 border border-border/60"><strong className="block text-foreground">Status</strong>{largePreviewDoc.status}</span>
-                          <span className="p-2 rounded-lg bg-muted/30 border border-border/60"><strong className="block text-foreground">Size</strong>{formatBytes(largePreviewDoc.file_size_bytes)}</span>
-                          <span className="p-2 rounded-lg bg-muted/30 border border-border/60"><strong className="block text-foreground">Uploaded</strong>{new Date(largePreviewDoc.created_at).toLocaleDateString()}</span>
-                        </div>
-                        {dates.length > 0 && (
-                          <div className="space-y-1">
-                            {dates.map(([label, value]) => (
-                              <div key={label} className="flex justify-between gap-2 text-[11px]">
-                                <span className="text-muted-foreground">{label}</span>
-                                <span className="font-bold text-foreground">{value}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </section>
-
-                      <section className="space-y-2">
-                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Linked Requirements</h4>
-                        {links.linkedRequirements.length === 0 ? <p className="text-muted-foreground">No linked requirements.</p> : links.linkedRequirements.map(requirement => (
-                          <div key={requirement.id} className="p-2 rounded-lg bg-muted/30 border border-border/60">
-                            <span className="font-bold block text-foreground">{requirement.title}</span>
-                            <span className="text-[10px] text-muted-foreground">{requirement.category} | {requirement.status}</span>
-                          </div>
-                        ))}
-                      </section>
-
-                      <section className="space-y-2">
-                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Evidence Criteria</h4>
-                        {links.linkedCriteria.length === 0 ? <p className="text-muted-foreground">No linked evidence criteria.</p> : links.linkedCriteria.map(criterion => (
-                          <div key={criterion.id} className="p-2 rounded-lg bg-muted/30 border border-border/60">
-                            <span className="font-bold block text-foreground">{criterion.title}</span>
-                            <span className="text-[10px] text-muted-foreground">{criterion.evidence_type || 'Evidence'} | Min {criterion.minimum_count}</span>
-                          </div>
-                        ))}
-                      </section>
-
-                      <section className="space-y-2">
-                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Linked Actions</h4>
-                        {links.linkedActions.length === 0 ? <p className="text-muted-foreground">No linked actions.</p> : links.linkedActions.map(action => (
-                          <button
-                            key={action.id}
-                            onClick={() => setSelectedAction(action)}
-                            className="w-full text-left p-2 rounded-lg bg-muted/30 border border-border/60 hover:bg-muted transition-colors"
-                          >
-                            <span className="font-bold block text-foreground">{action.title}</span>
-                            <span className="text-[10px] text-muted-foreground">{action.status}{action.target_due_date || action.due_date ? ` | Due ${action.target_due_date || action.due_date}` : ''}</span>
-                          </button>
-                        ))}
-                      </section>
-
-                      <section className="space-y-2">
-                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Competency Links</h4>
-                        {links.linkedCompetencies.length === 0 ? <p className="text-muted-foreground">No linked competency records.</p> : links.linkedCompetencies.map(item => (
-                          <div key={item.record.id} className="p-2 rounded-lg bg-muted/30 border border-border/60">
-                            <span className="font-bold block text-foreground">{item.type.title}</span>
-                            <span className="text-[10px] text-muted-foreground">{item.person?.display_name || 'Unassigned person'} | {item.record.status}</span>
-                          </div>
-                        ))}
-                      </section>
-
-                      <section className="space-y-2">
-                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Record Actions</h4>
-                        {largePreviewDoc.status === 'deleted' ? (
-                          <div className="grid grid-cols-2 gap-2">
-                            <button onClick={() => handleRestoreDoc(largePreviewDoc.id)} className="py-2 rounded-lg bg-muted hover:bg-muted/80 border border-border font-bold">Restore</button>
-                            <button onClick={() => handlePermanentDeleteDoc(largePreviewDoc.id)} className="py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold">Delete Forever</button>
-                          </div>
-                        ) : (
-                          <button onClick={() => handleDeleteDoc(largePreviewDoc.id)} className="w-full py-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/15 border border-rose-500/20 text-rose-600 dark:text-rose-300 font-bold">Archive Document</button>
-                        )}
-                      </section>
-                    </>
-                  );
-                })()}
-              </div>
+              {renderEditablePreviewMetadataPanel(largePreviewDoc)}
             </div>
           </div>
         </div>
