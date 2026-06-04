@@ -38,13 +38,21 @@ The `Dashboard -> Competency Matrix` page includes:
 
 - people rows and competency type columns
 - Green/Amber/Red/Grey-style status coding through competency statuses
-- add person
-- add competency type
-- import template pack
+- add person with suggested department and role values while still allowing custom text
+- edit person details from a person drawer
+- deactivate/reactivate people instead of deleting history
+- add competency type with labelled validity/refresher/risk fields
+- edit or deactivate/reactivate competency types
+- preview template packs before import
+- select or clear individual template competencies
 - edit competency record
+- mark a competency record as `Not Required`
+- clear a competency record back to `Missing` without removing evidence history
 - link existing Evidence Vault document
 - upload new private evidence
 - create action from competency gap
+
+Inactive people and inactive competency types are hidden from the matrix by default. Use the Active/Inactive/All filters to inspect retired people or inactive type definitions.
 
 ## Security
 

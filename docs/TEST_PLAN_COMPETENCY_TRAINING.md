@@ -6,9 +6,26 @@ Run these checks in demo mode and production mode.
 
 - [ ] Open `Dashboard -> Competency Matrix`.
 - [ ] Confirm demo people and competency types appear.
-- [ ] Add a person with department, role, and person type.
-- [ ] Add a competency type with category, risk, validity period, and refresher period.
-- [ ] Import a template pack and confirm duplicates are skipped.
+- [ ] Add a person with suggested department, suggested role, and person type.
+- [ ] Confirm custom department and role text can still be entered.
+- [ ] Add a competency type with category, labelled risk, validity period, and refresher period.
+- [ ] Confirm validity/refresher helper text is visible.
+- [ ] Preview a template pack before import.
+- [ ] Select and clear individual template competencies.
+- [ ] Confirm duplicates are labelled and cannot be selected.
+- [ ] Import selected non-duplicate competencies only.
+- [ ] Use Active/Inactive/All filters for people and competency types.
+
+## People And Types
+
+- [ ] Click a person name and confirm the person detail drawer opens.
+- [ ] Edit department, role, type, email, active status, notes, start date, and end date.
+- [ ] Deactivate a person and confirm they disappear from the Active matrix view.
+- [ ] Reactivate the person from the Inactive or All view.
+- [ ] Open a competency type from the column header or management list.
+- [ ] Edit title, category, description, validity period, refresher period, evidence required, default risk, and active status.
+- [ ] Deactivate a competency type and confirm it disappears from the Active matrix view.
+- [ ] Reactivate the type from the Inactive or All view.
 
 ## Records
 
@@ -17,6 +34,8 @@ Run these checks in demo mode and production mode.
 - [ ] Save an expiring record and confirm Amber status.
 - [ ] Save an expired record and confirm Red status.
 - [ ] Save `Not Required` and confirm it is excluded from compliance scoring.
+- [ ] Use Mark Not Required in the record drawer.
+- [ ] Use Clear Record and confirm the record returns to Missing without deleting linked evidence.
 
 ## Evidence
 
