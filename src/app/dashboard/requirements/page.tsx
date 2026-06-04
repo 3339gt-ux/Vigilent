@@ -16,10 +16,10 @@ import {
 } from 'lucide-react';
 
 const statusClass = (status: RequirementStatus) => {
-  if (status === 'GREEN') return 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400';
-  if (status === 'AMBER') return 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400';
-  if (status === 'RED') return 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400';
-  return 'bg-zinc-500/10 border-zinc-500/20 text-zinc-500';
+  if (status === 'GREEN') return 'bg-emerald-500/10 dark:bg-emerald-500/5 border-emerald-500/20 text-emerald-700 dark:text-emerald-400';
+  if (status === 'AMBER') return 'bg-amber-500/10 dark:bg-amber-500/5 border-amber-500/20 text-amber-700 dark:text-amber-400';
+  if (status === 'RED') return 'bg-rose-500/10 dark:bg-rose-500/5 border-rose-500/20 text-rose-700 dark:text-rose-400';
+  return 'bg-zinc-500/10 dark:bg-zinc-500/5 border-zinc-500/20 text-zinc-650 dark:text-zinc-400';
 };
 
 const riskOptions: Requirement['risk_level'][] = ['Low', 'Medium', 'High', 'Critical'];
@@ -514,7 +514,13 @@ export default function RequirementsPage() {
                           <td className="p-4 text-muted-foreground font-semibold">{requirement.category}</td>
                           <td className="p-4 text-muted-foreground font-semibold">{requirement.owner || 'Unassigned'}</td>
                           <td className="p-4 text-center">
-                            <span className={`inline-block px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full border ${statusClass(requirement.status)}`}>
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full border leading-none shadow-xs ${statusClass(requirement.status)}`}>
+                              <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${
+                                requirement.status === 'GREEN' ? 'bg-emerald-500' :
+                                requirement.status === 'AMBER' ? 'bg-amber-500' :
+                                requirement.status === 'RED' ? 'bg-rose-500' :
+                                'bg-zinc-400 dark:bg-zinc-500'
+                              }`} />
                               {requirement.status}
                             </span>
                           </td>
@@ -680,7 +686,17 @@ export default function RequirementsPage() {
                   <div className="flex justify-between"><span className="text-muted-foreground">Category</span><span className="font-bold">{selectedAssessed.category}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Owner</span><span className="font-bold">{selectedAssessed.owner || 'Unassigned'}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Risk</span><span className="font-bold">{selectedAssessed.risk_level}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Stored Status</span><span className="font-bold">{selectedAssessed.status}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-muted-foreground">Stored Status</span>
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full border leading-none ${statusClass(selectedAssessed.status)}`}>
+                      <span className={`h-1 w-1 rounded-full shrink-0 ${
+                        selectedAssessed.status === 'GREEN' ? 'bg-emerald-500' :
+                        selectedAssessed.status === 'AMBER' ? 'bg-amber-500' :
+                        selectedAssessed.status === 'RED' ? 'bg-rose-500' :
+                        'bg-zinc-400 dark:bg-zinc-500'
+                      }`} />
+                      {selectedAssessed.status}
+                    </span>
+                  </div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Review Frequency</span><span className="font-bold">{selectedAssessed.review_frequency}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Last Review</span><span className="font-bold">{selectedAssessed.review_date || 'Not set'}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Next / Target Due</span><span className="font-bold">{selectedAssessed.next_due_date || 'Not set'}</span></div>
@@ -1025,7 +1041,18 @@ export default function RequirementsPage() {
 
               <div className="border-t border-border/60 pt-4 space-y-2 text-[10px] text-muted-foreground">
                 <span className="font-bold uppercase tracking-widest block">Status History</span>
-                <p>Current calculated status: {selectedAssessed.status}</p>
+                <div className="flex items-center gap-1.5 mt-1 text-[10px]">
+                  <span>Current calculated status:</span>
+                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded-full border leading-none ${statusClass(selectedAssessed.status)}`}>
+                    <span className={`h-1 w-1 rounded-full shrink-0 ${
+                      selectedAssessed.status === 'GREEN' ? 'bg-emerald-500' :
+                      selectedAssessed.status === 'AMBER' ? 'bg-amber-500' :
+                      selectedAssessed.status === 'RED' ? 'bg-rose-500' :
+                      'bg-zinc-400 dark:bg-zinc-500'
+                    }`} />
+                    {selectedAssessed.status}
+                  </span>
+                </div>
                 <span className="font-bold uppercase tracking-widest block pt-2">Notes</span>
                 <p>Notes are captured through review entries and action descriptions.</p>
               </div>

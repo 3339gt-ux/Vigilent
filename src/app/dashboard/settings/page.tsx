@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { isDemoMode } from '@/lib/env';
-import { Save, ShieldAlert, Key, Bell, User, CheckCircle2, Copy, Check, Palette } from 'lucide-react';
+import { Save, ShieldAlert, Key, Bell, User, CheckCircle2, Copy, Check, Palette, Sun, Moon, Monitor } from 'lucide-react';
 
 export default function SettingsPage() {
   const {
@@ -283,60 +283,81 @@ export default function SettingsPage() {
           <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">Appearance</h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-xs">
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-2">Theme</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-2">Theme Mode</span>
             <div className="grid grid-cols-3 gap-1.5">
-              {(['system', 'light', 'dark'] as const).map(option => (
-                <button
-                  key={option}
-                  onClick={() => setThemePreference(option)}
-                  className={`px-3 py-2 rounded-lg border font-bold capitalize transition-colors ${
-                    themePreference === option
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'bg-muted/40 hover:bg-muted border-border text-foreground'
-                  }`}
-                >
-                  {option}
-                </button>
-              ))}
+              {(['system', 'light', 'dark'] as const).map(option => {
+                const Icon = option === 'system' ? Monitor : option === 'light' ? Sun : Moon;
+                return (
+                  <button
+                    key={option}
+                    onClick={() => setThemePreference(option)}
+                    className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border font-bold capitalize transition-all ${
+                      themePreference === option
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                        : 'bg-muted/40 hover:bg-muted border-border text-foreground hover:border-border-hover'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5 shrink-0" />
+                    <span className="text-[11px]">{option}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-2">Accent</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-2">Accent Branding</span>
             <div className="grid grid-cols-5 gap-1.5">
-              {(['blue', 'teal', 'emerald', 'purple', 'amber'] as const).map(option => (
-                <button
-                  key={option}
-                  onClick={() => setAccentColor(option)}
-                  className={`h-9 rounded-lg border font-bold text-[10px] capitalize transition-all ${
-                    accentColor === option
-                      ? 'ring-2 ring-offset-2 ring-indigo-500 ring-offset-background border-indigo-500'
-                      : 'border-border hover:border-border-hover'
-                  } ${option === 'blue' ? 'bg-blue-500' : option === 'teal' ? 'bg-cyan-500' : option === 'emerald' ? 'bg-emerald-500' : option === 'purple' ? 'bg-purple-500' : 'bg-amber-500'} text-white`}
-                  title={`${option} accent`}
-                >
-                  {option.slice(0, 1).toUpperCase()}
-                </button>
-              ))}
+              {(['blue', 'teal', 'emerald', 'purple', 'amber'] as const).map(option => {
+                const colorBg =
+                  option === 'blue' ? 'bg-blue-500 hover:bg-blue-600' :
+                  option === 'teal' ? 'bg-cyan-500 hover:bg-cyan-600' :
+                  option === 'emerald' ? 'bg-emerald-500 hover:bg-emerald-600' :
+                  option === 'purple' ? 'bg-purple-500 hover:bg-purple-600' :
+                  'bg-amber-500 hover:bg-amber-600';
+                return (
+                  <button
+                    key={option}
+                    onClick={() => setAccentColor(option)}
+                    className={`w-full h-9 rounded-lg border font-bold capitalize transition-all flex items-center justify-center relative ${
+                      accentColor === option
+                        ? 'ring-2 ring-offset-2 ring-indigo-500 ring-offset-background border-transparent scale-[1.02]'
+                        : 'border-border hover:border-border-hover hover:scale-[1.02]'
+                    } ${colorBg} text-white`}
+                    title={`${option} accent`}
+                  >
+                    {accentColor === option ? (
+                      <Check className="w-4 h-4 shadow-xs" />
+                    ) : (
+                      <span className="text-[9px] text-white/95 font-black uppercase tracking-wider">{option.slice(0, 2)}</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-2">Colour Mode</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-2">Colour Contrast Mode</span>
             <div className="grid grid-cols-2 gap-1.5">
               {(['default', 'colorful'] as const).map(option => (
                 <button
                   key={option}
                   onClick={() => setAppearanceMode(option)}
-                  className={`px-3 py-2 rounded-lg border font-bold capitalize transition-colors ${
+                  className={`flex flex-col items-start p-2.5 rounded-lg border text-left transition-all ${
                     appearanceMode === option
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'bg-muted/40 hover:bg-muted border-border text-foreground'
+                      ? 'bg-indigo-500/5 border-indigo-650 ring-1 ring-indigo-650'
+                      : 'bg-muted/30 border-border hover:bg-muted/50 hover:border-border-hover'
                   }`}
                 >
-                  {option}
+                  <span className="font-extrabold text-[11px] text-foreground capitalize">{option}</span>
+                  <span className="text-[9px] text-muted-foreground mt-0.5 leading-normal">
+                    {option === 'default'
+                      ? 'Slate layouts with clean, neutral styling borders.'
+                      : 'Vibrant highlight elements and visual badge contrasts.'}
+                  </span>
                 </button>
               ))}
             </div>
