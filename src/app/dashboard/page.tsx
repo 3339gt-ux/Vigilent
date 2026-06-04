@@ -48,7 +48,8 @@ export default function DashboardPage() {
     linkDocumentToAction,
     unlinkDocumentFromAction,
     uploadActionAttachment,
-    getDocumentSignedUrl
+    getDocumentSignedUrl,
+    findPossibleDuplicateDocuments
   } = useApp();
 
   const [uploadTitle, setUploadTitle] = useState('');
@@ -664,6 +665,7 @@ export default function DashboardPage() {
                   return doc;
                 }}
                 onComplete={docs => setUploadSuccess(`Uploaded ${docs.length} document${docs.length === 1 ? '' : 's'} to private storage.`)}
+                findDuplicates={findPossibleDuplicateDocuments}
               />
 
               {uploadError && (
@@ -708,6 +710,7 @@ export default function DashboardPage() {
         onUnlinkDocument={unlinkDocumentFromAction}
         onUploadAttachment={uploadActionAttachment}
         onOpenDocument={getDocumentSignedUrl}
+        onFindDuplicates={findPossibleDuplicateDocuments}
       />
     </div>
   );

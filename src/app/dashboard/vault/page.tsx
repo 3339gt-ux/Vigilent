@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import Image from 'next/image';
 import { useApp } from '@/context/AppContext';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { BulkUploadConfigurationPanel } from '@/components/BulkUploadConfigurationPanel';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
 import { Action, EvidenceDocument } from '@/lib/types';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
+import { calculateEvidenceFileHash } from '@/lib/evidenceStorage';
 import {
   FolderLock,
   Search,
@@ -25,6 +27,7 @@ import {
 export default function EvidenceVault() {
   const {
     documents,
+    archivedDocuments,
     frameworkRequirements,
     requirementDocuments,
     requirementEvidenceCriteria,
@@ -32,6 +35,7 @@ export default function EvidenceVault() {
     people,
     competencyTypes,
     competencyRecords,
+    competencyRecordDocuments,
     actions,
     requirementActions,
     actionUpdates,
@@ -40,6 +44,9 @@ export default function EvidenceVault() {
     updateDocumentMetadata,
     getDocumentSignedUrl,
     deleteDocument,
+    restoreDocument,
+    permanentlyDeleteDocument,
+    findPossibleDuplicateDocuments,
     linkDocumentToRequirement,
     unlinkDocumentFromRequirement,
     linkDocumentToEvidenceCriterion,
@@ -56,6 +63,8 @@ export default function EvidenceVault() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [sortBy, setSortBy] = useState<'title' | 'expiry' | 'uploaded'>('uploaded');
+  const [vaultView, setVaultView] = useState<'active' | 'archive'>('active');
+  const [selectedArchiveIds, setSelectedArchiveIds] = useState<Set<string>>(new Set());
 
   // Upload dialog state
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -89,6 +98,13 @@ export default function EvidenceVault() {
   const [selectedRequirementId, setSelectedRequirementId] = useState('');
   const [selectedAction, setSelectedAction] = useState<Action | null>(null);
   const [bulkConfigDocs, setBulkConfigDocs] = useState<EvidenceDocument[]>([]);
+  const [previewDoc, setPreviewDoc] = useState<EvidenceDocument | null>(null);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [previewError, setPreviewError] = useState('');
+  const [largePreviewDoc, setLargePreviewDoc] = useState<EvidenceDocument | null>(null);
+  const [largePreviewUrl, setLargePreviewUrl] = useState('');
+  const previewCacheRef = useRef<Record<string, string>>({});
+  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Heuristic metadata auto-suggester based on filename
   const handleFileNameChange = (val: string) => {
@@ -142,12 +158,20 @@ export default function EvidenceVault() {
     setUploadError('');
     setUploadSuccess('');
     try {
+      const fileHash = await calculateEvidenceFileHash(newFile);
+      const duplicates = await findPossibleDuplicateDocuments(newFile, fileHash);
+      if (duplicates.length > 0 && !confirm(`Possible duplicate found for "${newFile.name}". Upload anyway?`)) {
+        setUploadError('Upload cancelled because a possible duplicate already exists.');
+        setIsUploading(false);
+        return;
+      }
       await uploadDocument({
         file: newFile,
         title: newTitle,
         category: newCategory,
         expiry_date: newExpiry || null,
         issue_date: newIssue || null,
+        file_hash: fileHash,
         metadata: {}
       });
 
@@ -178,6 +202,45 @@ export default function EvidenceVault() {
       metadata: { source: 'vault_dropzone' },
       tags: []
     });
+  };
+
+  const startPreview = (doc: EvidenceDocument) => {
+    if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+    setPreviewDoc(doc);
+    setPreviewError('');
+    previewTimerRef.current = setTimeout(async () => {
+      try {
+        const cached = previewCacheRef.current[doc.id];
+        const url = cached || await getDocumentSignedUrl(doc.id);
+        previewCacheRef.current[doc.id] = url;
+        setPreviewUrl(url);
+      } catch (error) {
+        setPreviewError(error instanceof Error ? error.message : 'Preview unavailable. Open private file.');
+        setPreviewUrl('');
+      }
+    }, 300);
+  };
+
+  const stopPreview = () => {
+    if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+    setPreviewDoc(null);
+    setPreviewUrl('');
+    setPreviewError('');
+  };
+
+  const openLargePreview = async (doc: EvidenceDocument) => {
+    setLargePreviewDoc(doc);
+    setPreviewDoc(doc);
+    if (!previewCacheRef.current[doc.id]) {
+      try {
+        previewCacheRef.current[doc.id] = await getDocumentSignedUrl(doc.id);
+      } catch (error) {
+        setPreviewError(error instanceof Error ? error.message : 'Preview unavailable. Open private file.');
+      }
+    }
+    const url = previewCacheRef.current[doc.id] || '';
+    setPreviewUrl(url);
+    setLargePreviewUrl(url);
   };
 
   const handleSelectDoc = (doc: EvidenceDocument) => {
@@ -305,11 +368,45 @@ export default function EvidenceVault() {
     if (confirm('Archive this evidence document? The private file remains stored, but the record will be hidden from normal views.')) {
       await deleteDocument(id);
       setSelectedDoc(null);
+      setVaultView('archive');
     }
   };
 
+  const handleRestoreDoc = async (id: string) => {
+    await restoreDocument(id);
+    setSelectedArchiveIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  const handlePermanentDeleteDoc = async (id: string) => {
+    if (!confirm('Permanently delete this archived evidence document? This cannot be undone. Vygilence will mark the record permanently deleted, clean links, and attempt to remove the private storage object.')) return;
+    await permanentlyDeleteDocument(id);
+    setSelectedArchiveIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    if (selectedDoc?.id === id) setSelectedDoc(null);
+  };
+
+  const handleBulkRestore = async () => {
+    for (const id of selectedArchiveIds) await restoreDocument(id);
+    setSelectedArchiveIds(new Set());
+  };
+
+  const handleBulkPermanentDelete = async () => {
+    if (selectedArchiveIds.size === 0) return;
+    if (!confirm(`Permanently delete ${selectedArchiveIds.size} archived document(s)? This cannot be undone.`)) return;
+    for (const id of selectedArchiveIds) await permanentlyDeleteDocument(id);
+    setSelectedArchiveIds(new Set());
+  };
+
+  const sourceDocs = vaultView === 'archive' ? archivedDocuments : documents;
   // Filtered documents list
-  const filteredDocs = documents
+  const filteredDocs = sourceDocs
     .filter(doc => {
       const matchesSearch = doc.title.toLowerCase().includes(search.toLowerCase()) ||
                             doc.file_name.toLowerCase().includes(search.toLowerCase());
@@ -349,6 +446,43 @@ export default function EvidenceVault() {
       )
     : [];
 
+  const getDocumentLinkSummary = (docId: string) => {
+    const requirementCount = requirementDocuments.filter(link => link.document_id === docId).length;
+    const criterionCount = requirementEvidenceCriterionMatches.filter(match => match.document_id === docId && match.match_status !== 'Rejected').length;
+    const actionCount = actionDocuments.filter(link => link.document_id === docId).length;
+    const competencyCount = competencyRecordDocuments.filter(link => link.document_id === docId).length;
+    return { requirementCount, criterionCount, actionCount, competencyCount };
+  };
+
+  const renderPreviewContent = (doc: EvidenceDocument, url: string) => {
+    const mime = doc.mime_type || '';
+    if (!url) {
+      return <p className="text-xs text-muted-foreground">{previewError || 'Preview unavailable. Open private file.'}</p>;
+    }
+    if (mime.startsWith('image/')) {
+      return (
+        <Image
+          src={url}
+          alt={doc.title}
+          width={640}
+          height={360}
+          unoptimized
+          className="max-h-72 w-full object-contain rounded-lg bg-muted"
+        />
+      );
+    }
+    if (mime === 'application/pdf') {
+      return <iframe src={url} title={doc.title} className="w-full h-72 rounded-lg border border-border bg-muted" />;
+    }
+    return (
+      <div className="p-4 bg-muted/30 border border-border rounded-lg text-xs space-y-2">
+        <FileText className="w-8 h-8 text-indigo-500" />
+        <p className="font-bold">{doc.original_file_name || doc.file_name}</p>
+        <p className="text-muted-foreground">Preview unavailable for this file type. Open the private file in a new tab.</p>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
 
@@ -383,7 +517,31 @@ export default function EvidenceVault() {
         multiple
         onUpload={uploadVaultFile}
         onComplete={docs => setBulkConfigDocs(docs)}
+        findDuplicates={findPossibleDuplicateDocuments}
       />
+
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card border border-border rounded-xl p-3">
+        <div className="flex gap-2">
+          <button
+            onClick={() => { setVaultView('active'); setSelectedDoc(null); }}
+            className={`px-4 py-2 rounded-lg text-xs font-bold ${vaultView === 'active' ? 'bg-indigo-600 text-white' : 'bg-muted border border-border'}`}
+          >
+            Active Evidence ({documents.length})
+          </button>
+          <button
+            onClick={() => { setVaultView('archive'); setSelectedDoc(null); }}
+            className={`px-4 py-2 rounded-lg text-xs font-bold ${vaultView === 'archive' ? 'bg-indigo-600 text-white' : 'bg-muted border border-border'}`}
+          >
+            Archive ({archivedDocuments.length})
+          </button>
+        </div>
+        {vaultView === 'archive' && (
+          <div className="flex flex-wrap gap-2 text-xs">
+            <button disabled={selectedArchiveIds.size === 0} onClick={handleBulkRestore} className="px-3 py-2 bg-muted border border-border disabled:opacity-50 rounded-lg font-bold">Bulk restore</button>
+            <button disabled={selectedArchiveIds.size === 0} onClick={handleBulkPermanentDelete} className="px-3 py-2 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 disabled:opacity-50 rounded-lg font-bold">Bulk permanently delete</button>
+          </div>
+        )}
+      </div>
 
       {/* Grid: Search, Filters, and Table */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start">
@@ -460,9 +618,10 @@ export default function EvidenceVault() {
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-muted/50 border-b border-border/80 text-muted-foreground font-bold uppercase tracking-wider">
+                    {vaultView === 'archive' && <th className="p-4 select-none w-10">Select</th>}
                     <th className="p-4 select-none">Document Name</th>
                     <th className="p-4 select-none">Category</th>
-                    <th className="p-4 select-none">Expiry Date</th>
+                    <th className="p-4 select-none">{vaultView === 'archive' ? 'Archived' : 'Expiry Date'}</th>
                     <th className="p-4 select-none text-center">Status</th>
                     <th className="p-4 select-none text-right">Actions</th>
                   </tr>
@@ -470,15 +629,16 @@ export default function EvidenceVault() {
                 <tbody className="divide-y divide-border/60">
                   {filteredDocs.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="p-8 text-center text-muted-foreground">
-                        {documents.length === 0
-                          ? 'No evidence records yet. Upload a PDF, DOCX, XLSX, PNG, JPG, or JPEG to start building readiness evidence.'
+                      <td colSpan={vaultView === 'archive' ? 6 : 5} className="p-8 text-center text-muted-foreground">
+                        {sourceDocs.length === 0
+                          ? (vaultView === 'archive' ? 'No archived evidence. Archived files will appear here for restore or permanent deletion.' : 'No active evidence records yet. Upload a PDF, DOCX, XLSX, PNG, JPG, or JPEG to start building readiness evidence.')
                           : 'No evidence files match your search parameters.'}
                       </td>
                     </tr>
                   ) : (
                     filteredDocs.map(doc => {
                       const isSelected = selectedDoc?.id === doc.id;
+                      const linkSummary = getDocumentLinkSummary(doc.id);
                       return (
                         <tr
                           key={doc.id}
@@ -489,14 +649,52 @@ export default function EvidenceVault() {
                           }`}
                           onClick={() => handleSelectDoc(doc)}
                         >
+                          {vaultView === 'archive' && (
+                            <td className="p-4" onClick={e => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={selectedArchiveIds.has(doc.id)}
+                                onChange={event => setSelectedArchiveIds(prev => {
+                                  const next = new Set(prev);
+                                  if (event.target.checked) next.add(doc.id);
+                                  else next.delete(doc.id);
+                                  return next;
+                                })}
+                              />
+                            </td>
+                          )}
                           <td className="p-4">
                             <div className="flex items-center gap-3">
-                              <div className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg shrink-0">
+                              <button
+                                onMouseEnter={() => startPreview(doc)}
+                                onMouseLeave={stopPreview}
+                                onFocus={() => startPreview(doc)}
+                                onBlur={stopPreview}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openLargePreview(doc);
+                                }}
+                                className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg shrink-0 hover:bg-indigo-500/20"
+                                title="Preview private file"
+                              >
                                 <FileText className="w-4 h-4" />
-                              </div>
-                              <div className="overflow-hidden max-w-[180px] sm:max-w-xs">
+                              </button>
+                              <div
+                                onMouseEnter={() => startPreview(doc)}
+                                onMouseLeave={stopPreview}
+                                onFocus={() => startPreview(doc)}
+                                onBlur={stopPreview}
+                                tabIndex={0}
+                                className="overflow-hidden max-w-[180px] sm:max-w-xs outline-none"
+                              >
                                 <span className="font-bold block truncate">{doc.title}</span>
                                 <span className="text-[10px] text-muted-foreground block truncate">{doc.file_name}</span>
+                                {doc.file_hash && <span className="text-[9px] text-amber-500 font-bold">Duplicate checks enabled</span>}
+                                {vaultView === 'archive' && (
+                                  <span className="text-[9px] text-muted-foreground block">
+                                    Links: {linkSummary.requirementCount} req, {linkSummary.criterionCount} criteria, {linkSummary.actionCount} actions, {linkSummary.competencyCount} competencies
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </td>
@@ -504,7 +702,9 @@ export default function EvidenceVault() {
                             {doc.category}
                           </td>
                           <td className="p-4 font-semibold text-muted-foreground">
-                            {doc.expiry_date ? (
+                            {vaultView === 'archive' ? (
+                              <span>{doc.archived_at ? new Date(doc.archived_at).toLocaleDateString() : 'Archived'}</span>
+                            ) : doc.expiry_date ? (
                               <span className="flex items-center gap-1.5">
                                 <Calendar className="w-3.5 h-3.5" />
                                 {doc.expiry_date}
@@ -515,16 +715,40 @@ export default function EvidenceVault() {
                           </td>
                           <td className="p-4 text-center">
                             <span className={`inline-block px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full border ${
+                              vaultView === 'archive' ? 'bg-zinc-500/10 border-zinc-500/20 text-zinc-500' :
                               doc.status === 'Active' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400' :
                               doc.status === 'Expiring Soon' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400' :
                               doc.status === 'Expired' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400' :
                               'bg-zinc-500/10 border-zinc-500/20 text-zinc-500'
                             }`}>
-                              {doc.status}
+                              {vaultView === 'archive' ? 'Archived' : doc.status}
                             </span>
                           </td>
                           <td className="p-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
+                              {vaultView === 'archive' ? (
+                                <>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRestoreDoc(doc.id);
+                                    }}
+                                    className="px-2 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded font-bold text-[10px]"
+                                  >
+                                    Restore
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handlePermanentDeleteDoc(doc.id);
+                                    }}
+                                    className="px-2 py-1 bg-rose-500/10 text-rose-500 rounded font-bold text-[10px]"
+                                  >
+                                    Delete forever
+                                  </button>
+                                </>
+                              ) : (
+                                <>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -545,6 +769,8 @@ export default function EvidenceVault() {
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1075,6 +1301,45 @@ export default function EvidenceVault() {
         </div>
       )}
 
+      {previewDoc && !largePreviewDoc && (
+        <div className="fixed right-6 bottom-6 z-[55] w-80 bg-card border border-border rounded-xl shadow-2xl p-3 space-y-2">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <span className="font-extrabold text-xs block truncate">{previewDoc.title}</span>
+              <span className="text-[10px] text-muted-foreground block truncate">{previewDoc.original_file_name || previewDoc.file_name}</span>
+            </div>
+            <button onClick={() => openLargePreview(previewDoc)} className="text-[10px] font-bold text-indigo-500">Open preview</button>
+          </div>
+          {renderPreviewContent(previewDoc, previewUrl)}
+        </div>
+      )}
+
+      {largePreviewDoc && (
+        <div className="fixed inset-0 z-[70] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto bg-card border border-border rounded-2xl shadow-2xl p-5 space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Private preview</span>
+                <h3 className="text-lg font-extrabold truncate">{largePreviewDoc.title}</h3>
+                <p className="text-xs text-muted-foreground truncate">{largePreviewDoc.original_file_name || largePreviewDoc.file_name}</p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <button
+                  onClick={async () => window.open(largePreviewUrl || await getDocumentSignedUrl(largePreviewDoc.id), '_blank', 'noopener,noreferrer')}
+                  className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold"
+                >
+                  Open private file
+                </button>
+                <button onClick={() => { setLargePreviewDoc(null); setLargePreviewUrl(''); }} className="p-2 hover:bg-muted rounded-lg" aria-label="Close preview">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            {renderPreviewContent(largePreviewDoc, largePreviewUrl || previewUrl)}
+          </div>
+        </div>
+      )}
+
       <ActionDetailDrawer
         action={currentSelectedAction}
         requirements={selectedActionRequirements}
@@ -1088,6 +1353,7 @@ export default function EvidenceVault() {
         onUnlinkDocument={unlinkDocumentFromAction}
         onUploadAttachment={uploadActionAttachment}
         onOpenDocument={getDocumentSignedUrl}
+        onFindDuplicates={findPossibleDuplicateDocuments}
       />
 
       <BulkUploadConfigurationPanel

@@ -10,9 +10,36 @@ The Vault supports:
 - drag-and-drop upload through the shared `EvidenceDropzone`
 - multi-file upload
 - per-file validation and upload status
+- possible duplicate warnings before upload
 - post-upload bulk configuration
+- hover/focus preview using temporary signed URLs
+- archive, restore and permanent-delete workflows
 
 Bulk uploads default to category `General`. Users can edit metadata and links immediately after upload.
+
+## Duplicate Detection
+
+Vygilence calculates a client-side SHA-256 hash where available and stores it on `evidence_documents.file_hash`. Before a file is uploaded, the UI searches the active organisation, including archived records, for:
+
+- matching SHA-256 hash
+- matching original filename
+- matching file size
+- matching MIME type
+
+The UI labels these as `Possible duplicate` unless there is a hash match. Users can cancel the file, cancel remaining duplicates, or upload anyway. Non-duplicate files in the same batch continue.
+
+## Archive
+
+Archive uses the existing `status = deleted` compatibility state plus archive metadata:
+
+- `archived_at`
+- `archived_by`
+- `deleted_at`
+- `deleted_by`
+
+Archived evidence is hidden from normal active views and appears in the Evidence Vault Archive tab. Users can restore one or many archived records.
+
+Permanent delete in v1 marks `permanently_deleted_at`, cleans known link tables, removes the document from audit packs, and attempts to remove the private storage object. If the storage object is already missing, the record is still marked permanently deleted.
 
 ## Links
 

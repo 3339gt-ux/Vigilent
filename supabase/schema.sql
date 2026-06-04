@@ -77,14 +77,27 @@ alter table public.evidence_documents add column if not exists original_file_nam
 alter table public.evidence_documents add column if not exists safe_file_name text;
 alter table public.evidence_documents add column if not exists storage_path text;
 alter table public.evidence_documents add column if not exists mime_type text;
+alter table public.evidence_documents add column if not exists file_hash text;
 alter table public.evidence_documents add column if not exists tags text[] not null default '{}'::text[];
 alter table public.evidence_documents add column if not exists review_date date;
 alter table public.evidence_documents add column if not exists training_date date;
 alter table public.evidence_documents add column if not exists calibration_date date;
+alter table public.evidence_documents add column if not exists archived_at timestamp with time zone;
+alter table public.evidence_documents add column if not exists archived_by uuid references public.profiles(id) on delete set null;
+alter table public.evidence_documents add column if not exists deleted_at timestamp with time zone;
+alter table public.evidence_documents add column if not exists deleted_by uuid references public.profiles(id) on delete set null;
+alter table public.evidence_documents add column if not exists permanently_deleted_at timestamp with time zone;
 
 create unique index if not exists evidence_documents_storage_path_idx
     on public.evidence_documents (storage_path)
     where storage_path is not null;
+
+create index if not exists evidence_documents_duplicate_lookup_idx
+    on public.evidence_documents (organization_id, original_file_name, file_size_bytes, mime_type);
+
+create index if not exists evidence_documents_hash_lookup_idx
+    on public.evidence_documents (organization_id, file_hash)
+    where file_hash is not null;
 
 -- 4b. Standards-agnostic Requirements Framework
 create table if not exists public.requirements (

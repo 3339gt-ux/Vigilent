@@ -12,7 +12,7 @@ import {
   CheckCircle2,
   AlertCircle
 } from 'lucide-react';
-import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize, validateEvidenceFile } from '@/lib/evidenceStorage';
+import { calculateEvidenceFileHash, evidenceAcceptAttribute, formatMaxEvidenceUploadSize, validateEvidenceFile } from '@/lib/evidenceStorage';
 import type { EvidenceDocument } from '@/lib/types';
 
 export type EvidenceUploadQueueItem = {
@@ -33,6 +33,7 @@ type EvidenceDropzoneProps = {
   compact?: boolean;
   onUpload: (file: File, updateStatus: (status: EvidenceUploadQueueItem['status']) => void) => Promise<EvidenceDocument>;
   onComplete?: (documents: EvidenceDocument[]) => void;
+  findDuplicates?: (file: File, fileHash: string) => Promise<EvidenceDocument[]>;
 };
 
 const formatBytes = (bytes: number) => {
@@ -61,11 +62,18 @@ export function EvidenceDropzone({
   disabled = false,
   compact = false,
   onUpload,
-  onComplete
+  onComplete,
+  findDuplicates
 }: EvidenceDropzoneProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [queue, setQueue] = useState<EvidenceUploadQueueItem[]>([]);
+  const [duplicateDecision, setDuplicateDecision] = useState<{
+    file: File;
+    fileHash: string;
+    matches: EvidenceDocument[];
+    resolve: (decision: 'upload' | 'skip' | 'cancel-all') => void;
+  } | null>(null);
 
   const updateItem = (id: string, patch: Partial<EvidenceUploadQueueItem>) => {
     setQueue(current => current.map(item => item.id === id ? { ...item, ...patch } : item));
@@ -85,12 +93,32 @@ export function EvidenceDropzone({
     setQueue(current => [...nextItems, ...current]);
 
     const uploadedDocs: EvidenceDocument[] = [];
+    let cancelRemainingDuplicates = false;
     for (let index = 0; index < files.length; index += 1) {
       const file = files[index];
       const item = nextItems[index];
       try {
         updateItem(item.id, { status: 'validating' });
         validateEvidenceFile(file);
+        const fileHash = await calculateEvidenceFileHash(file);
+        if (findDuplicates && !cancelRemainingDuplicates) {
+          const matches = await findDuplicates(file, fileHash);
+          if (matches.length > 0) {
+            const decision = await new Promise<'upload' | 'skip' | 'cancel-all'>(resolve => {
+              setDuplicateDecision({ file, fileHash, matches, resolve });
+            });
+            setDuplicateDecision(null);
+            if (decision === 'cancel-all') {
+              cancelRemainingDuplicates = true;
+              updateItem(item.id, { status: 'failed', error: 'Cancelled possible duplicate upload.' });
+              continue;
+            }
+            if (decision === 'skip') {
+              updateItem(item.id, { status: 'failed', error: 'Skipped possible duplicate.' });
+              continue;
+            }
+          }
+        }
         updateItem(item.id, { status: 'uploading' });
         const document = await onUpload(file, status => updateItem(item.id, { status }));
         updateItem(item.id, { status: 'complete', document });
@@ -239,6 +267,49 @@ export function EvidenceDropzone({
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {duplicateDecision && (
+        <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-card border border-border rounded-2xl shadow-2xl p-5 space-y-4">
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-amber-500">Possible duplicate</span>
+              <h3 className="text-lg font-extrabold mt-1">{duplicateDecision.file.name}</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                This file may already exist in the active organisation. A hash match is a stronger signal; matching filename, size and MIME type is a possible duplicate.
+              </p>
+            </div>
+            <div className="space-y-2 max-h-72 overflow-y-auto text-xs">
+              {duplicateDecision.matches.map(match => {
+                const hashMatches = Boolean(match.file_hash && match.file_hash === duplicateDecision.fileHash);
+                return (
+                  <div key={match.id} className="p-3 bg-muted/30 border border-border rounded-lg">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <span className="font-extrabold block truncate">{match.title}</span>
+                        <span className="text-[10px] text-muted-foreground block truncate">{match.original_file_name || match.file_name}</span>
+                      </div>
+                      <span className={`shrink-0 px-2 py-1 rounded font-bold ${hashMatches ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                        {hashMatches ? 'Hash match' : 'Metadata match'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 text-[10px] text-muted-foreground">
+                      <span>Category: <strong className="text-foreground">{match.category}</strong></span>
+                      <span>Status: <strong className="text-foreground">{match.status === 'deleted' ? 'Archived' : match.status}</strong></span>
+                      <span>Uploaded: <strong className="text-foreground">{new Date(match.created_at).toLocaleDateString()}</strong></span>
+                      <span>Expiry/review: <strong className="text-foreground">{match.expiry_date || match.review_date || 'Not dated'}</strong></span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button onClick={() => duplicateDecision.resolve('skip')} className="py-2 bg-muted border border-border rounded-lg font-bold text-xs">Cancel this file</button>
+              <button onClick={() => duplicateDecision.resolve('cancel-all')} className="py-2 bg-muted border border-border rounded-lg font-bold text-xs">Cancel all duplicates</button>
+              <button onClick={() => duplicateDecision.resolve('upload')} className="py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs">Upload anyway</button>
+            </div>
           </div>
         </div>
       )}

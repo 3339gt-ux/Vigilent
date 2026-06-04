@@ -53,6 +53,22 @@ Run these checks in demo mode and Supabase mode.
 - [ ] Drop an oversized file and confirm a clear per-file error.
 - [ ] Mix supported and unsupported files and confirm supported files still upload.
 - [ ] Confirm RLS or permission errors are readable.
+- [ ] Drag the same PDF twice and confirm the possible duplicate modal appears.
+- [ ] Cancel a possible duplicate and confirm it is not uploaded.
+- [ ] Upload a possible duplicate anyway and confirm it creates a separate record.
+- [ ] Drag five files including two possible duplicates and confirm non-duplicates continue.
+
+## Archive And Preview
+
+- [ ] Archive one document and confirm it appears in the Evidence Vault Archive tab.
+- [ ] Restore the archived document and confirm it returns to Active Evidence.
+- [ ] Archive multiple documents and bulk restore them.
+- [ ] Archive multiple documents and bulk permanently delete them.
+- [ ] Hover or focus an image evidence row and confirm a signed preview appears.
+- [ ] Hover or focus a PDF evidence row and confirm a preview or fallback appears.
+- [ ] Hover or focus a DOCX/XLSX evidence row and confirm a file card fallback appears.
+- [ ] Click preview and confirm the larger preview modal opens.
+- [ ] Open from the preview modal and confirm it uses a signed URL.
 
 ## Validation Commands
 

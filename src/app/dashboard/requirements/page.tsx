@@ -55,6 +55,7 @@ export default function RequirementsPage() {
     unlinkDocumentFromAction,
     uploadActionAttachment,
     getDocumentSignedUrl,
+    findPossibleDuplicateDocuments,
     linkCompetencyTypeToRequirement,
     unlinkCompetencyTypeFromRequirement,
     readinessReport
@@ -749,6 +750,7 @@ export default function RequirementsPage() {
                               updateStatus('linking');
                               return doc;
                             }}
+                            findDuplicates={findPossibleDuplicateDocuments}
                           />
                         </div>
                         <div className="flex gap-2">
@@ -1220,6 +1222,7 @@ export default function RequirementsPage() {
         onUnlinkDocument={unlinkDocumentFromAction}
         onUploadAttachment={uploadActionAttachment}
         onOpenDocument={getDocumentSignedUrl}
+        onFindDuplicates={findPossibleDuplicateDocuments}
       />
     </div>
   );

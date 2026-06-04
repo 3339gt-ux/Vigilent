@@ -271,7 +271,8 @@ export default function CompetencyMatrixPage() {
     unlinkDocumentFromCompetencyRecord,
     uploadCompetencyEvidence,
     createActionForCompetencyGap,
-    getDocumentSignedUrl
+    getDocumentSignedUrl,
+    findPossibleDuplicateDocuments
   } = useApp();
 
   const [viewMode, setViewMode] = useState<'matrix' | 'person' | 'category'>('matrix');
@@ -1976,6 +1977,7 @@ export default function CompetencyMatrixPage() {
                                                   }
                                                 }}
                                                 onComplete={docs => setPersonMessage(`Uploaded ${docs.length} evidence file${docs.length === 1 ? '' : 's'} to private Evidence Vault and linked to this competency record.`)}
+                                                findDuplicates={findPossibleDuplicateDocuments}
                                               />
                                             </div>
                                           </div>
@@ -2212,6 +2214,7 @@ export default function CompetencyMatrixPage() {
                     }
                   }}
                   onComplete={docs => setFormMessage(`Uploaded ${docs.length} evidence file${docs.length === 1 ? '' : 's'} and linked to this competency record.`)}
+                  findDuplicates={findPossibleDuplicateDocuments}
                 />
               </div>
               <p className="text-[10px] text-muted-foreground">Uploads are saved as private Evidence Vault records under Training & Competency. Max {formatMaxEvidenceUploadSize()}.</p>
@@ -2358,6 +2361,7 @@ export default function CompetencyMatrixPage() {
         onUnlinkDocument={unlinkDocumentFromAction}
         onUploadAttachment={uploadActionAttachment}
         onOpenDocument={getDocumentSignedUrl}
+        onFindDuplicates={findPossibleDuplicateDocuments}
       />
     </div>
   );

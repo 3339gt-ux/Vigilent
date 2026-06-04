@@ -25,6 +25,7 @@ type ActionDetailDrawerProps = {
   onUnlinkDocument: (actionId: string, documentId: string) => Promise<void>;
   onUploadAttachment: (actionId: string, file: File) => Promise<EvidenceDocument>;
   onOpenDocument: (documentId: string) => Promise<string>;
+  onFindDuplicates?: (file: File, fileHash: string) => Promise<EvidenceDocument[]>;
 };
 
 const formatDateTime = (value?: string | null) => value ? new Date(value).toLocaleString() : 'Not recorded';
@@ -50,7 +51,8 @@ export function ActionDetailDrawer({
   onLinkDocument,
   onUnlinkDocument,
   onUploadAttachment,
-  onOpenDocument
+  onOpenDocument,
+  onFindDuplicates
 }: ActionDetailDrawerProps) {
   const [updateType, setUpdateType] = useState<ActionUpdateType>('Note');
   const [updateNote, setUpdateNote] = useState('');
@@ -255,6 +257,7 @@ export function ActionDetailDrawer({
               onComplete={docs => {
                 setUploadMessage(`Uploaded ${docs.length} attachment${docs.length === 1 ? '' : 's'} to private Evidence Vault category Actions and linked to this action.`);
               }}
+              findDuplicates={onFindDuplicates}
             />
             {uploadMessage && (
               <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded text-[10px] text-emerald-600 dark:text-emerald-300">
