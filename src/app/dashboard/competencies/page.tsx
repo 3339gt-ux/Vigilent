@@ -324,16 +324,6 @@ export default function CompetencyMatrixPage() {
   const [notRequiredNote, setNotRequiredNote] = useState('');
   const [removeConfirmCell, setRemoveConfirmCell] = useState<{ person: Person; competencyType: CompetencyType; record: CompetencyRecord | null; hasEvidence: boolean; hasActions: boolean } | null>(null);
 
-  const [prevPersonId, setPrevPersonId] = useState<string | null>(null);
-  if (selectedPerson?.id !== prevPersonId) {
-    setPrevPersonId(selectedPerson?.id || null);
-    setDrawerSearch('');
-    setDrawerCategoryFilter('All');
-    setDrawerStatusFilter('All');
-    setExpandedRecords(new Set());
-    setCollapsedCategories(new Set());
-  }
-
   const selectedPack = COMPETENCY_TEMPLATE_PACKS.find(pack => pack.id === selectedPackId) || COMPETENCY_TEMPLATE_PACKS[0];
   const existingTemplateKeys = useMemo(
     () => new Set(competencyTypes.map(type => templateKey(type))),
@@ -436,6 +426,11 @@ export default function CompetencyMatrixPage() {
     setPersonEditForm(personToForm(person));
     setIsEditingPerson(false);
     setPersonMessage('');
+    setDrawerSearch('');
+    setDrawerCategoryFilter('All');
+    setDrawerStatusFilter('All');
+    setExpandedRecords(new Set());
+    setCollapsedCategories(new Set());
   };
 
   const openType = (type: CompetencyType) => {
