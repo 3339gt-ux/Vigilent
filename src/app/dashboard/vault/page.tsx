@@ -22,6 +22,10 @@ import {
   Loader2,
   FileCheck,
   Plus,
+  RefreshCw,
+  FolderArchive,
+  Inbox,
+  AlertCircle
 } from 'lucide-react';
 
 export default function EvidenceVault() {
@@ -103,6 +107,13 @@ export default function EvidenceVault() {
   const [previewError, setPreviewError] = useState('');
   const [largePreviewDoc, setLargePreviewDoc] = useState<EvidenceDocument | null>(null);
   const [largePreviewUrl, setLargePreviewUrl] = useState('');
+  const [duplicateWarning, setDuplicateWarning] = useState<{
+    file: File;
+    fileHash: string;
+    matches: EvidenceDocument[];
+    onConfirm: () => void;
+    onCancel: () => void;
+  } | null>(null);
   const previewCacheRef = useRef<Record<string, string>>({});
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -150,23 +161,13 @@ export default function EvidenceVault() {
     if (file) handleFileNameChange(file.name);
   };
 
-  const handleUploadSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTitle || !newFile) return;
-
+  const performUpload = async (file: File, fileHash: string) => {
     setIsUploading(true);
     setUploadError('');
     setUploadSuccess('');
     try {
-      const fileHash = await calculateEvidenceFileHash(newFile);
-      const duplicates = await findPossibleDuplicateDocuments(newFile, fileHash);
-      if (duplicates.length > 0 && !confirm(`Possible duplicate found for "${newFile.name}". Upload anyway?`)) {
-        setUploadError('Upload cancelled because a possible duplicate already exists.');
-        setIsUploading(false);
-        return;
-      }
       await uploadDocument({
-        file: newFile,
+        file,
         title: newTitle,
         category: newCategory,
         expiry_date: newExpiry || null,
@@ -187,6 +188,40 @@ export default function EvidenceVault() {
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Upload failed.');
     } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleUploadSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle || !newFile) return;
+
+    setIsUploading(true);
+    setUploadError('');
+    setUploadSuccess('');
+    try {
+      const fileHash = await calculateEvidenceFileHash(newFile);
+      const duplicates = await findPossibleDuplicateDocuments(newFile, fileHash);
+      if (duplicates.length > 0) {
+        setIsUploading(false);
+        setDuplicateWarning({
+          file: newFile,
+          fileHash,
+          matches: duplicates,
+          onConfirm: () => {
+            setDuplicateWarning(null);
+            performUpload(newFile, fileHash);
+          },
+          onCancel: () => {
+            setDuplicateWarning(null);
+            setUploadError('Upload cancelled because a possible duplicate already exists.');
+          }
+        });
+        return;
+      }
+      await performUpload(newFile, fileHash);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed.');
       setIsUploading(false);
     }
   };
@@ -454,31 +489,69 @@ export default function EvidenceVault() {
     return { requirementCount, criterionCount, actionCount, competencyCount };
   };
 
-  const renderPreviewContent = (doc: EvidenceDocument, url: string) => {
+  const formatBytes = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  };
+
+  const renderPreviewContent = (doc: EvidenceDocument, url: string, isLarge: boolean = false) => {
     const mime = doc.mime_type || '';
     if (!url) {
-      return <p className="text-xs text-muted-foreground">{previewError || 'Preview unavailable. Open private file.'}</p>;
+      return (
+        <div className="flex flex-col items-center justify-center py-8 text-center space-y-3 w-full">
+          <Loader2 className="w-6 h-6 animate-spin text-indigo-600 dark:text-indigo-400" />
+          <p className="text-xs text-muted-foreground font-medium">{previewError || 'Retrieving secure preview URL...'}</p>
+        </div>
+      );
     }
     if (mime.startsWith('image/')) {
       return (
-        <Image
-          src={url}
-          alt={doc.title}
-          width={640}
-          height={360}
-          unoptimized
-          className="max-h-72 w-full object-contain rounded-lg bg-muted"
-        />
+        <div className={isLarge ? "w-full h-full flex items-center justify-center" : "w-full"}>
+          <Image
+            src={url}
+            alt={doc.title}
+            width={isLarge ? 1280 : 640}
+            height={isLarge ? 720 : 360}
+            unoptimized
+            className={`w-full object-contain rounded-xl bg-muted/30 border border-border/40 ${isLarge ? "max-h-[55vh]" : "max-h-40"}`}
+          />
+        </div>
       );
     }
     if (mime === 'application/pdf') {
-      return <iframe src={url} title={doc.title} className="w-full h-72 rounded-lg border border-border bg-muted" />;
+      return (
+        <iframe
+          src={url}
+          title={doc.title}
+          className={`w-full rounded-xl border border-border/80 bg-muted/10 ${isLarge ? "h-[55vh]" : "h-40"}`}
+        />
+      );
     }
     return (
-      <div className="p-4 bg-muted/30 border border-border rounded-lg text-xs space-y-2">
-        <FileText className="w-8 h-8 text-indigo-500" />
-        <p className="font-bold">{doc.original_file_name || doc.file_name}</p>
-        <p className="text-muted-foreground">Preview unavailable for this file type. Open the private file in a new tab.</p>
+      <div className="w-full flex items-center justify-center">
+        <div className={`w-full border border-border/80 rounded-xl text-center flex flex-col items-center justify-center bg-muted/10 ${isLarge ? "max-w-md p-6 my-4 space-y-3.5" : "p-4 space-y-2"}`}>
+          <div className={`bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center shrink-0 ${isLarge ? "w-14 h-14" : "w-9 h-9"}`}>
+            <FileText className={isLarge ? "w-7 h-7" : "w-4.5 h-4.5"} />
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-foreground truncate max-w-[240px] mx-auto">{doc.original_file_name || doc.file_name}</h4>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              Type: {mime.split('/').pop()?.toUpperCase() || 'Unknown'} • Size: {formatBytes(doc.file_size_bytes)}
+            </p>
+          </div>
+          <p className="text-[11px] text-muted-foreground leading-normal max-w-xs mx-auto">
+            Direct preview is only supported for PDF documents and image files. Excel sheets, Word files, and Zip archives can be viewed by opening the private link directly.
+          </p>
+          {isLarge && (
+            <button
+              onClick={async () => window.open(url, '_blank', 'noopener,noreferrer')}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-755 text-white rounded-lg text-xs font-bold shadow-sm transition-colors"
+            >
+              Open File in New Tab
+            </button>
+          )}
+        </div>
       </div>
     );
   };
@@ -520,25 +593,58 @@ export default function EvidenceVault() {
         findDuplicates={findPossibleDuplicateDocuments}
       />
 
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card border border-border rounded-xl p-3">
-        <div className="flex gap-2">
-          <button
-            onClick={() => { setVaultView('active'); setSelectedDoc(null); }}
-            className={`px-4 py-2 rounded-lg text-xs font-bold ${vaultView === 'active' ? 'bg-indigo-600 text-white' : 'bg-muted border border-border'}`}
-          >
-            Active Evidence ({documents.length})
-          </button>
-          <button
-            onClick={() => { setVaultView('archive'); setSelectedDoc(null); }}
-            className={`px-4 py-2 rounded-lg text-xs font-bold ${vaultView === 'archive' ? 'bg-indigo-600 text-white' : 'bg-muted border border-border'}`}
-          >
-            Archive ({archivedDocuments.length})
-          </button>
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex bg-muted/60 p-1 border border-border/80 rounded-xl w-full sm:max-w-[280px] shrink-0 shadow-xs">
+            <button
+              onClick={() => { setVaultView('active'); setSelectedDoc(null); setSelectedArchiveIds(new Set()); }}
+              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold text-center transition-all ${
+                vaultView === 'active'
+                  ? 'bg-card text-foreground shadow-xs border border-border/20'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+              }`}
+            >
+              Active ({documents.length})
+            </button>
+            <button
+              onClick={() => { setVaultView('archive'); setSelectedDoc(null); setSelectedArchiveIds(new Set()); }}
+              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold text-center transition-all ${
+                vaultView === 'archive'
+                  ? 'bg-card text-foreground shadow-xs border border-border/20'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+              }`}
+            >
+              Archive ({archivedDocuments.length})
+            </button>
+          </div>
         </div>
-        {vaultView === 'archive' && (
-          <div className="flex flex-wrap gap-2 text-xs">
-            <button disabled={selectedArchiveIds.size === 0} onClick={handleBulkRestore} className="px-3 py-2 bg-muted border border-border disabled:opacity-50 rounded-lg font-bold">Bulk restore</button>
-            <button disabled={selectedArchiveIds.size === 0} onClick={handleBulkPermanentDelete} className="px-3 py-2 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 disabled:opacity-50 rounded-lg font-bold">Bulk permanently delete</button>
+
+        {/* Dynamic Bulk Action Toolbar */}
+        {vaultView === 'archive' && selectedArchiveIds.size > 0 && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/50 rounded-xl p-3 shadow-xs animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 text-indigo-650 dark:text-indigo-400">
+                <FolderArchive className="w-4 h-4" />
+              </div>
+              <div className="text-xs">
+                <span className="font-extrabold text-indigo-950 dark:text-indigo-50">{selectedArchiveIds.size}</span>
+                <span className="text-indigo-700 dark:text-indigo-300 ml-1 font-medium">{selectedArchiveIds.size === 1 ? 'document selected' : 'documents selected'}</span>
+              </div>
+            </div>
+            <div className="flex gap-2 text-xs">
+              <button
+                onClick={handleBulkRestore}
+                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-755 text-white rounded-lg font-bold transition-all shadow-sm shadow-indigo-650/15 flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Restore Selected
+              </button>
+              <button
+                onClick={handleBulkPermanentDelete}
+                className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold transition-colors shadow-sm shadow-rose-600/15 flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Delete Forever
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -629,10 +735,64 @@ export default function EvidenceVault() {
                 <tbody className="divide-y divide-border/60">
                   {filteredDocs.length === 0 ? (
                     <tr>
-                      <td colSpan={vaultView === 'archive' ? 6 : 5} className="p-8 text-center text-muted-foreground">
-                        {sourceDocs.length === 0
-                          ? (vaultView === 'archive' ? 'No archived evidence. Archived files will appear here for restore or permanent deletion.' : 'No active evidence records yet. Upload a PDF, DOCX, XLSX, PNG, JPG, or JPEG to start building readiness evidence.')
-                          : 'No evidence files match your search parameters.'}
+                      <td colSpan={vaultView === 'archive' ? 6 : 5} className="p-12 text-center">
+                        {sourceDocs.length === 0 ? (
+                          vaultView === 'archive' ? (
+                            <div className="max-w-sm mx-auto flex flex-col items-center justify-center space-y-3 py-6">
+                              <div className="w-12 h-12 rounded-2xl bg-muted border border-border flex items-center justify-center text-muted-foreground shadow-xs">
+                                <FolderArchive className="w-6 h-6" />
+                              </div>
+                              <div>
+                                <h4 className="text-xs font-bold text-foreground">Archive is Empty</h4>
+                                <p className="text-[11px] text-muted-foreground mt-1 max-w-[280px] leading-normal">
+                                  Archived records are hidden from normal compliance logs but remain restorable here.
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="max-w-sm mx-auto flex flex-col items-center justify-center space-y-4.5 py-6">
+                              <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-650 flex items-center justify-center shadow-xs">
+                                <Upload className="w-6 h-6 animate-bounce" />
+                              </div>
+                              <div>
+                                <h4 className="text-xs font-bold text-foreground">Your Evidence Vault is Empty</h4>
+                                <p className="text-[11px] text-muted-foreground mt-1 max-w-[280px] leading-normal">
+                                  Upload a PDF certificate, spreadsheet log, or image to start building compliance readiness evidence.
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => setShowUploadModal(true)}
+                                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-755 text-white rounded-lg text-[10px] font-bold shadow-sm transition-colors"
+                              >
+                                Upload First Document
+                              </button>
+                            </div>
+                          )
+                        ) : (
+                          <div className="max-w-sm mx-auto flex flex-col items-center justify-center space-y-3 py-6">
+                            <div className="w-12 h-12 rounded-2xl bg-muted border border-border flex items-center justify-center text-muted-foreground shadow-xs">
+                              <Inbox className="w-5 h-5 text-muted-foreground/60" />
+                            </div>
+                            <div>
+                              <h4 className="text-xs font-bold text-foreground">No matching documents</h4>
+                              <p className="text-[11px] text-muted-foreground mt-1 max-w-[280px] leading-normal">
+                                Double-check your spelling, adjust compliance categories, or clear filters.
+                              </p>
+                            </div>
+                            {(search || selectedCategory !== 'All' || selectedStatus !== 'All') && (
+                              <button
+                                onClick={() => {
+                                  setSearch('');
+                                  setSelectedCategory('All');
+                                  setSelectedStatus('All');
+                                }}
+                                className="px-3 py-1 bg-muted hover:bg-muted/80 border border-border rounded-lg text-[10px] font-bold text-foreground transition-colors"
+                              >
+                                Reset Search Filters
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ) : (
@@ -653,6 +813,7 @@ export default function EvidenceVault() {
                             <td className="p-4" onClick={e => e.stopPropagation()}>
                               <input
                                 type="checkbox"
+                                className="rounded border-border text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 bg-muted/40 cursor-pointer"
                                 checked={selectedArchiveIds.has(doc.id)}
                                 onChange={event => setSelectedArchiveIds(prev => {
                                   const next = new Set(prev);
@@ -703,7 +864,10 @@ export default function EvidenceVault() {
                           </td>
                           <td className="p-4 font-semibold text-muted-foreground">
                             {vaultView === 'archive' ? (
-                              <span>{doc.archived_at ? new Date(doc.archived_at).toLocaleDateString() : 'Archived'}</span>
+                              <span className="flex items-center gap-1.5">
+                                <Calendar className="w-3.5 h-3.5 text-muted-foreground/60" />
+                                {doc.archived_at ? new Date(doc.archived_at).toLocaleDateString() : new Date(doc.updated_at || doc.created_at).toLocaleDateString()}
+                              </span>
                             ) : doc.expiry_date ? (
                               <span className="flex items-center gap-1.5">
                                 <Calendar className="w-3.5 h-3.5" />
@@ -1302,40 +1466,123 @@ export default function EvidenceVault() {
       )}
 
       {previewDoc && !largePreviewDoc && (
-        <div className="fixed right-6 bottom-6 z-[55] w-80 bg-card border border-border rounded-xl shadow-2xl p-3 space-y-2">
-          <div className="flex items-start justify-between gap-2">
+        <div className="fixed right-6 bottom-6 z-[55] w-80 bg-card/90 backdrop-blur-md border border-indigo-500/20 rounded-2xl shadow-2xl p-4 space-y-3 transition-all duration-200">
+          <div className="flex items-start justify-between gap-2.5">
             <div className="min-w-0">
-              <span className="font-extrabold text-xs block truncate">{previewDoc.title}</span>
+              <span className="text-[9px] font-bold uppercase tracking-wider text-indigo-650 dark:text-indigo-400 block mb-0.5">Document Preview</span>
+              <span className="font-extrabold text-xs block truncate text-foreground">{previewDoc.title}</span>
               <span className="text-[10px] text-muted-foreground block truncate">{previewDoc.original_file_name || previewDoc.file_name}</span>
             </div>
-            <button onClick={() => openLargePreview(previewDoc)} className="text-[10px] font-bold text-indigo-500">Open preview</button>
+            <div className="flex gap-1.5 items-center shrink-0">
+              <button
+                onClick={() => openLargePreview(previewDoc)}
+                className="px-2 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 rounded-lg transition-colors"
+              >
+                Expand
+              </button>
+              <button
+                onClick={stopPreview}
+                className="p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded-lg transition-colors"
+                title="Dismiss preview"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
-          {renderPreviewContent(previewDoc, previewUrl)}
+          <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/10 p-2">
+            {renderPreviewContent(previewDoc, previewUrl, false)}
+          </div>
         </div>
       )}
 
       {largePreviewDoc && (
-        <div className="fixed inset-0 z-[70] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto bg-card border border-border rounded-2xl shadow-2xl p-5 space-y-4">
-            <div className="flex items-start justify-between gap-3">
+        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-5xl h-[85vh] bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between gap-4 p-5 border-b border-border/60 shrink-0">
               <div className="min-w-0">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Private preview</span>
-                <h3 className="text-lg font-extrabold truncate">{largePreviewDoc.title}</h3>
-                <p className="text-xs text-muted-foreground truncate">{largePreviewDoc.original_file_name || largePreviewDoc.file_name}</p>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-650 dark:text-indigo-400">Private Vault Preview</span>
+                <h3 className="text-base font-extrabold text-foreground truncate mt-0.5">{largePreviewDoc.title}</h3>
+                <p className="text-[11px] text-muted-foreground truncate mt-0.5">{largePreviewDoc.original_file_name || largePreviewDoc.file_name}</p>
               </div>
-              <div className="flex gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={async () => window.open(largePreviewUrl || await getDocumentSignedUrl(largePreviewDoc.id), '_blank', 'noopener,noreferrer')}
-                  className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-755 text-white rounded-lg text-xs font-bold shadow-md shadow-indigo-650/10 transition-colors flex items-center gap-1.5"
                 >
-                  Open private file
+                  <FileText className="w-4 h-4" /> Open File
                 </button>
-                <button onClick={() => { setLargePreviewDoc(null); setLargePreviewUrl(''); }} className="p-2 hover:bg-muted rounded-lg" aria-label="Close preview">
-                  <X className="w-4 h-4" />
+                <button
+                  onClick={() => { setLargePreviewDoc(null); setLargePreviewUrl(''); }}
+                  className="p-2 hover:bg-muted rounded-xl transition-colors border border-transparent hover:border-border/60"
+                  aria-label="Close preview"
+                >
+                  <X className="w-4.5 h-4.5" />
                 </button>
               </div>
             </div>
-            {renderPreviewContent(largePreviewDoc, largePreviewUrl || previewUrl)}
+            <div className="flex-1 bg-muted/20 p-6 overflow-hidden flex flex-col items-center justify-center relative">
+              {renderPreviewContent(largePreviewDoc, largePreviewUrl || previewUrl, true)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {duplicateWarning && (
+        <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-card border border-border rounded-2xl shadow-2xl p-6 space-y-4">
+            <div className="flex items-center gap-3 border-b border-border/60 pb-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-500 shrink-0">
+                <AlertCircle className="w-6 h-6 animate-pulse" />
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400">Potential Duplicate Document</span>
+                <h3 className="text-base font-extrabold text-foreground mt-0.5">{duplicateWarning.file.name}</h3>
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              This file may already exist in the active organization. A hash match indicates identical content, while matching filename and metadata represents a possible duplicate.
+            </p>
+
+            <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+              {duplicateWarning.matches.map(match => {
+                const hashMatches = Boolean(match.file_hash && match.file_hash === duplicateWarning.fileHash);
+                return (
+                  <div key={match.id} className="p-3 border rounded-xl transition-all bg-muted/20 border-border/80">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <span className="font-extrabold text-xs text-foreground block truncate">{match.title}</span>
+                        <span className="text-[10px] text-muted-foreground block truncate">{match.original_file_name || match.file_name}</span>
+                      </div>
+                      <span className={`shrink-0 px-2 py-0.5 rounded-full font-bold text-[9px] uppercase tracking-wider ${hashMatches ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'}`}>
+                        {hashMatches ? 'Exact Content Match' : 'Metadata Match'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 text-[10px] text-muted-foreground border-t border-border/40 pt-2">
+                      <span>Category: <strong className="text-foreground">{match.category}</strong></span>
+                      <span>Status: <strong className="text-foreground">{match.status === 'deleted' ? 'Archived' : match.status}</strong></span>
+                      <span>Uploaded: <strong className="text-foreground">{new Date(match.created_at).toLocaleDateString()}</strong></span>
+                      <span>Expiry: <strong className="text-foreground">{match.expiry_date || 'None'}</strong></span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-col sm:flex-row justify-end gap-2 border-t border-border/60 pt-4">
+              <button
+                onClick={duplicateWarning.onCancel}
+                className="px-4 py-2 bg-muted hover:bg-muted/80 border border-border rounded-lg font-bold text-xs transition-colors"
+              >
+                Cancel Upload
+              </button>
+              <button
+                onClick={duplicateWarning.onConfirm}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-755 text-white rounded-lg font-bold text-xs transition-all shadow-md shadow-indigo-650/15"
+              >
+                Upload Anyway
+              </button>
+            </div>
           </div>
         </div>
       )}

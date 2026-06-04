@@ -273,42 +273,65 @@ export function EvidenceDropzone({
 
       {duplicateDecision && (
         <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl bg-card border border-border rounded-2xl shadow-2xl p-5 space-y-4">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-amber-500">Possible duplicate</span>
-              <h3 className="text-lg font-extrabold mt-1">{duplicateDecision.file.name}</h3>
-              <p className="text-xs text-muted-foreground mt-1">
-                This file may already exist in the active organisation. A hash match is a stronger signal; matching filename, size and MIME type is a possible duplicate.
-              </p>
+          <div className="w-full max-w-2xl bg-card border border-border rounded-2xl shadow-2xl p-6 space-y-4">
+            <div className="flex items-center gap-3 border-b border-border/60 pb-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-500 shrink-0">
+                <AlertCircle className="w-6 h-6 animate-pulse" />
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400">Potential Duplicate Document</span>
+                <h3 className="text-base font-extrabold text-foreground mt-0.5">{duplicateDecision.file.name}</h3>
+              </div>
             </div>
-            <div className="space-y-2 max-h-72 overflow-y-auto text-xs">
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              This file may already exist in the active organization. A hash match indicates identical content, while matching filename and metadata represents a possible duplicate.
+            </p>
+
+            <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
               {duplicateDecision.matches.map(match => {
                 const hashMatches = Boolean(match.file_hash && match.file_hash === duplicateDecision.fileHash);
                 return (
-                  <div key={match.id} className="p-3 bg-muted/30 border border-border rounded-lg">
+                  <div key={match.id} className="p-3 border rounded-xl transition-all bg-muted/20 border-border/80">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <span className="font-extrabold block truncate">{match.title}</span>
+                        <span className="font-extrabold text-xs text-foreground block truncate">{match.title}</span>
                         <span className="text-[10px] text-muted-foreground block truncate">{match.original_file_name || match.file_name}</span>
                       </div>
-                      <span className={`shrink-0 px-2 py-1 rounded font-bold ${hashMatches ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-500'}`}>
-                        {hashMatches ? 'Hash match' : 'Metadata match'}
+                      <span className={`shrink-0 px-2 py-0.5 rounded-full font-bold text-[9px] uppercase tracking-wider ${hashMatches ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'}`}>
+                        {hashMatches ? 'Exact Content Match' : 'Metadata Match'}
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 text-[10px] text-muted-foreground">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 text-[10px] text-muted-foreground border-t border-border/40 pt-2">
                       <span>Category: <strong className="text-foreground">{match.category}</strong></span>
                       <span>Status: <strong className="text-foreground">{match.status === 'deleted' ? 'Archived' : match.status}</strong></span>
                       <span>Uploaded: <strong className="text-foreground">{new Date(match.created_at).toLocaleDateString()}</strong></span>
-                      <span>Expiry/review: <strong className="text-foreground">{match.expiry_date || match.review_date || 'Not dated'}</strong></span>
+                      <span>Expiry: <strong className="text-foreground">{match.expiry_date || 'None'}</strong></span>
                     </div>
                   </div>
                 );
               })}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <button onClick={() => duplicateDecision.resolve('skip')} className="py-2 bg-muted border border-border rounded-lg font-bold text-xs">Cancel this file</button>
-              <button onClick={() => duplicateDecision.resolve('cancel-all')} className="py-2 bg-muted border border-border rounded-lg font-bold text-xs">Cancel all duplicates</button>
-              <button onClick={() => duplicateDecision.resolve('upload')} className="py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs">Upload anyway</button>
+
+            <div className="flex flex-col sm:flex-row justify-end gap-2 border-t border-border/60 pt-4">
+              <button
+                onClick={() => duplicateDecision.resolve('skip')}
+                className="px-4 py-2 bg-muted hover:bg-muted/80 border border-border rounded-lg font-bold text-xs transition-colors"
+              >
+                Skip File
+              </button>
+              <button
+                onClick={() => duplicateDecision.resolve('cancel-all')}
+                className="px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-600 rounded-lg font-bold text-xs transition-colors"
+              >
+                Cancel All Duplicates
+              </button>
+              <button
+                onClick={() => duplicateDecision.resolve('upload')}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-755 text-white rounded-lg font-bold text-xs transition-all shadow-md shadow-indigo-650/15"
+              >
+                Upload Anyway
+              </button>
             </div>
           </div>
         </div>
