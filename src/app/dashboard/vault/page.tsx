@@ -26,7 +26,9 @@ import {
   RefreshCw,
   FolderArchive,
   Inbox,
-  AlertCircle
+  AlertCircle,
+  ChevronDown,
+  Archive
 } from 'lucide-react';
 
 export default function EvidenceVault() {
@@ -124,6 +126,8 @@ export default function EvidenceVault() {
   } | null>(null);
   const [newCustomCategory, setNewCustomCategory] = useState('');
   const [categoryMessage, setCategoryMessage] = useState('');
+  const [isCatDropdownOpen, setIsCatDropdownOpen] = useState(false);
+  const [catSearchQuery, setCatSearchQuery] = useState('');
   const previewCacheRef = useRef<Record<string, string>>({});
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previewCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -260,17 +264,24 @@ export default function EvidenceVault() {
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [archivedDocuments, documents, evidenceCategories]);
 
-  const handleCreateEvidenceCategory = async () => {
-    if (!newCustomCategory.trim()) return;
+  const filteredCatOptions = useMemo(() => {
+    const query = catSearchQuery.toLowerCase().trim();
+    if (!query) return evidenceCategoryOptions;
+    return evidenceCategoryOptions.filter(cat => cat.toLowerCase().includes(query));
+  }, [evidenceCategoryOptions, catSearchQuery]);
+
+  const handleCreateEvidenceCategory = async (overrideName?: string) => {
+    const nameToUse = (overrideName || newCustomCategory).trim();
+    if (!nameToUse) return;
     try {
       await upsertEvidenceCategory({
-        name: newCustomCategory.trim(),
+        name: nameToUse,
         category_group: 'Custom',
         description: 'Custom evidence category',
         active: true
       });
-      setNewCategory(newCustomCategory.trim());
-      setSelectedCategory(newCustomCategory.trim());
+      setNewCategory(nameToUse);
+      setSelectedCategory(nameToUse);
       setNewCustomCategory('');
       setCategoryMessage('Evidence category created.');
     } catch (error) {
@@ -1080,40 +1091,7 @@ export default function EvidenceVault() {
         }}
       />
 
-      <div className="bg-card border border-border rounded-xl p-3 space-y-3 text-xs">
-        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-          <input
-            value={newCustomCategory}
-            onChange={event => setNewCustomCategory(event.target.value)}
-            placeholder="Create custom evidence category..."
-            className="flex-1 px-3 py-2 bg-muted border border-border rounded-lg outline-none"
-          />
-          <button
-            onClick={handleCreateEvidenceCategory}
-            disabled={!newCustomCategory.trim()}
-            className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg font-bold"
-          >
-            Create Category
-          </button>
-        </div>
-        {categoryMessage && <p className="text-[11px] text-muted-foreground">{categoryMessage}</p>}
-        {evidenceCategories.filter(category => category.active && !category.is_system).length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {evidenceCategories.filter(category => category.active && !category.is_system).map(category => (
-              <span key={category.id} className="inline-flex items-center gap-1.5 px-2 py-1 bg-muted border border-border rounded-full font-bold">
-                {category.name}
-                <button
-                  onClick={() => handleArchiveEvidenceCategory(category.id)}
-                  className="text-muted-foreground hover:text-rose-500"
-                  title="Archive custom category"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Category Management consolidated to popover filter dropdown */}
 
       <div className="space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1177,6 +1155,134 @@ export default function EvidenceVault() {
         {/* Main vault browser list (2 cols) */}
         <div className="xl:col-span-2 space-y-4">
 
+          {/* Category Chips Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3 bg-card border border-border p-3.5 rounded-xl">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {['All', 'General', 'Training & Competency', 'Insurance', 'Fleet'].map(catName => {
+                const isSelected = selectedCategory === catName;
+                return (
+                  <button
+                    key={catName}
+                    type="button"
+                    onClick={() => setSelectedCategory(catName)}
+                    className={`px-3 py-1 rounded-full text-xs font-bold transition-all border ${
+                      isSelected
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                        : 'bg-muted text-muted-foreground border-border hover:bg-muted/70 hover:text-foreground'
+                    }`}
+                  >
+                    {catName}
+                  </button>
+                );
+              })}
+              {!['All', 'General', 'Training & Competency', 'Insurance', 'Fleet'].includes(selectedCategory) && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory(selectedCategory)}
+                  className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-650 text-white border border-indigo-650 shadow-xs flex items-center gap-1.5"
+                >
+                  <span>{selectedCategory}</span>
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedCategory('All');
+                    }}
+                    className="hover:bg-indigo-700/80 rounded p-0.5"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </span>
+                </button>
+              )}
+            </div>
+
+            {/* Custom Category Popover Trigger */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsCatDropdownOpen(!isCatDropdownOpen)}
+                className="bg-muted hover:bg-muted/80 border border-border rounded-lg px-3 py-1.5 text-xs text-foreground font-semibold flex items-center gap-1.5 transition-colors"
+              >
+                <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+                <span>Filter Category</span>
+                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+              </button>
+
+              {isCatDropdownOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setIsCatDropdownOpen(false)} />
+                  <div className="absolute right-0 mt-1 w-64 bg-card solid-panel border border-border rounded-xl shadow-xl z-50 p-3 space-y-2.5">
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={catSearchQuery}
+                        onChange={(e) => setCatSearchQuery(e.target.value)}
+                        placeholder="Search or add category..."
+                        className="w-full pl-8 pr-3 py-1.5 bg-muted border border-border rounded-lg text-xs outline-none focus:border-indigo-500 transition-colors"
+                        autoFocus
+                      />
+                    </div>
+
+                    <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1">
+                      {filteredCatOptions.length === 0 ? (
+                        <p className="text-[10px] text-muted-foreground italic text-center py-2">No matching categories.</p>
+                      ) : (
+                        filteredCatOptions.map(catName => {
+                          const isSelected = selectedCategory === catName;
+                          const customCatObj = evidenceCategories.find(c => c.name === catName && !c.is_system && c.active);
+                          return (
+                            <div
+                              key={catName}
+                              className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+                                isSelected ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold' : 'hover:bg-muted text-foreground'
+                              }`}
+                              onClick={() => {
+                                setSelectedCategory(catName);
+                                setIsCatDropdownOpen(false);
+                                setCatSearchQuery('');
+                              }}
+                            >
+                              <span className="truncate flex-1">{catName}</span>
+                              {customCatObj && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void handleArchiveEvidenceCategory(customCatObj.id);
+                                  }}
+                                  className="text-muted-foreground hover:text-rose-500 p-0.5 rounded hover:bg-muted-foreground/10 transition-colors shrink-0"
+                                  title="Archive custom category"
+                                >
+                                  <Archive className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {catSearchQuery.trim() && !filteredCatOptions.some(c => c.toLowerCase() === catSearchQuery.trim().toLowerCase()) && (
+                      <div className="border-t border-border pt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleCreateEvidenceCategory(catSearchQuery.trim());
+                            setIsCatDropdownOpen(false);
+                            setCatSearchQuery('');
+                          }}
+                          className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 transition-colors animate-fade-in"
+                        >
+                          <Plus className="w-3 h-3" /> Create Category "{catSearchQuery.trim()}"
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
           {/* Controls Bar */}
           <div className="bg-card border border-border p-4 rounded-xl flex flex-col md:flex-row gap-4 items-center justify-between">
             <div className="relative w-full md:max-w-xs">
@@ -1192,20 +1298,6 @@ export default function EvidenceVault() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-
-              {/* Category selector */}
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Filter className="w-3.5 h-3.5" />
-                <select
-                  id="vault-filter-cat"
-                  value={selectedCategory}
-                  onChange={e => setSelectedCategory(e.target.value)}
-                  className="bg-muted border border-border/80 rounded px-2 py-1 outline-none text-xs text-foreground font-semibold"
-                >
-                  <option value="All">All Categories</option>
-                  {evidenceCategoryOptions.map(category => <option key={category} value={category}>{category}</option>)}
-                </select>
-              </div>
 
               {/* Status filter */}
               <select

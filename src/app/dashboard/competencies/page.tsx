@@ -7,7 +7,7 @@ import { buildCompetencyMatrix } from '@/lib/competencyEngine';
 import { COMPETENCY_TEMPLATE_PACKS } from '@/lib/competencyTemplates';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import type { Action, CompetencyCategory, CompetencyRecord, CompetencyStatus, CompetencyType, Person, PersonType, RequirementRiskLevel } from '@/lib/types';
-import { Link as LinkIcon, Plus, Search, Upload, UserCheck, X } from 'lucide-react';
+import { Link as LinkIcon, Plus, Search, Upload, UserCheck, X, ArrowLeft } from 'lucide-react';
 
 const categories: CompetencyCategory[] = [
   'Safety',
@@ -470,8 +470,8 @@ export default function CompetencyMatrixPage() {
         </div>
       </div>
 
-      {activeCell && (
-        <div className={`fixed inset-0 z-[70] flex justify-end ${selectedPerson ? 'pointer-events-none' : 'bg-black/60'}`}>
+      {activeCell && !selectedPerson && (
+        <div className="fixed inset-0 z-[70] bg-black/60 flex justify-end">
           <div className="pointer-events-auto w-full max-w-xl bg-card solid-panel border-l border-border h-full overflow-y-auto p-6 space-y-5 shadow-2xl">
             <div className="flex justify-between gap-3">
               <div>
@@ -594,10 +594,10 @@ export default function CompetencyMatrixPage() {
 
       {selectedPerson && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-6xl h-[88vh] bg-card solid-panel border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+          <div className="w-full max-w-7xl h-[88vh] bg-card solid-panel border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col">
             <div className="flex justify-between gap-3 border-b border-border p-5 shrink-0">
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block">Person Detail</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block">Person Detail Workspace</span>
                 <h2 className="text-xl font-extrabold">{selectedPerson.display_name}</h2>
                 <p className="text-xs text-muted-foreground mt-1">{selectedPerson.role || selectedPerson.person_type} | {selectedPerson.department || 'No department'}</p>
               </div>
@@ -606,13 +606,15 @@ export default function CompetencyMatrixPage() {
                   setSelectedPerson(null);
                   setActiveCell(null);
                 }}
-                className="p-2 hover:bg-muted rounded-lg h-fit"
+                className="p-2 hover:bg-muted rounded-lg h-fit transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] flex-1 min-h-0">
+            {/* Workspace columns layout */}
+            <div className="relative grid grid-cols-1 lg:grid-cols-[280px_1fr] lg:data-[has-active=true]:grid-cols-[280px_1fr_380px] flex-1 min-h-0" data-has-active={!!(activeCell && activeCell.person.id === selectedPerson.id)}>
+              {/* Column 1: Person Summary */}
               <aside className="border-r border-border p-5 overflow-y-auto space-y-4 bg-muted/20">
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   {[
@@ -625,14 +627,14 @@ export default function CompetencyMatrixPage() {
                     ['Start', selectedPerson.start_date || 'Not set'],
                     ['End', selectedPerson.end_date || 'Not set']
                   ].map(([label, value]) => (
-                    <div key={label} className="p-3 bg-card border border-border rounded-lg">
+                    <div key={label} className="p-2.5 bg-card border border-border rounded-lg">
                       <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold block">{label}</span>
-                      <span className="font-bold text-foreground break-words">{value}</span>
+                      <span className="font-bold text-foreground break-words text-[11px]">{value}</span>
                     </div>
                   ))}
                 </div>
 
-                {selectedPerson.notes && <p className="text-xs text-muted-foreground bg-card border border-border rounded-lg p-3">{selectedPerson.notes}</p>}
+                {selectedPerson.notes && <p className="text-xs text-muted-foreground bg-card border border-border rounded-lg p-3 leading-normal">{selectedPerson.notes}</p>}
 
                 <div className="grid grid-cols-2 gap-2">
                   {statusOptions.map(status => (
@@ -644,76 +646,260 @@ export default function CompetencyMatrixPage() {
                 </div>
 
                 <div className="space-y-3 border-t border-border pt-4">
-                  <h3 className="text-sm font-extrabold">Linked Actions</h3>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Linked Actions</h3>
                   {selectedPersonActions.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No actions are directly linked to this person.</p>
+                    <p className="text-xs text-muted-foreground italic">No actions directly linked to this person.</p>
                   ) : (
-                    selectedPersonActions.map(action => (
-                      <div key={action.id} className="p-3 bg-card border border-border rounded-lg text-xs">
-                        <span className="font-bold block">{action.title}</span>
-                        <span className="text-[10px] text-muted-foreground">{action.status}{action.target_due_date || action.due_date ? ` | Due ${action.target_due_date || action.due_date}` : ''}</span>
-                      </div>
-                    ))
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      {selectedPersonActions.map(action => (
+                        <div key={action.id} className="p-2.5 bg-card border border-border rounded-lg text-xs hover:bg-muted/30 transition-colors">
+                          <span className="font-bold block text-foreground truncate">{action.title}</span>
+                          <span className="text-[10px] text-muted-foreground mt-0.5 block">{action.status}{action.target_due_date || action.due_date ? ` | Due ${action.target_due_date || action.due_date}` : ''}</span>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               </aside>
 
+              {/* Column 2: Competency Records Grouped by Category */}
               <main className="p-5 overflow-y-auto space-y-5">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-base font-extrabold">Competencies by Category</h3>
-                    <p className="text-xs text-muted-foreground">Select any row to edit the competency record in the side panel without closing this workspace.</p>
+                    <h3 className="text-base font-extrabold">Competency Checklist</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">Select a competency card to manage dates, upload evidence, or create actions inline.</p>
                   </div>
-                  {activeCell?.person.id === selectedPerson.id && (
-                    <span className="hidden lg:inline-flex text-[10px] font-bold text-indigo-600 dark:text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 rounded-full px-2 py-1">
-                      Editing: {activeCell.competencyType.title}
+                  {activeCell && activeCell.person.id === selectedPerson.id && (
+                    <span className="hidden lg:inline-flex text-[10px] font-bold text-indigo-650 dark:text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 rounded-full px-2.5 py-0.5">
+                      Selected: {activeCell.competencyType.title}
                     </span>
                   )}
                 </div>
 
-                {selectedPersonGroupedRows.map(group => (
-                  <section key={group.category} className="space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <h4 className="text-xs font-extrabold uppercase tracking-widest text-muted-foreground">{group.category}</h4>
-                      <span className="text-[10px] text-muted-foreground font-bold">{group.rows.length} record{group.rows.length === 1 ? '' : 's'}</span>
-                    </div>
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
-                      {group.rows.map(({ type, cell, evidenceCount, openActionCount }) => (
-                        <button
-                          key={type.id}
-                          onClick={() => openCell(selectedPerson, type)}
-                          className={`w-full text-left p-3 border rounded-xl hover:bg-muted transition-colors ${
-                            activeCell?.person.id === selectedPerson.id && activeCell.competencyType.id === type.id
-                              ? 'border-indigo-500 bg-indigo-500/5'
-                              : 'border-border bg-card'
-                          }`}
-                        >
-                          <div className="flex justify-between gap-3">
-                            <div className="min-w-0">
-                              <span className="font-bold block truncate">{type.title}</span>
-                              <span className="text-[10px] text-muted-foreground">{type.category}</span>
-                            </div>
-                            <span className={`px-2 py-0.5 h-fit rounded-full border text-[9px] font-bold ${statusClass(cell?.status || 'Missing')}`}>
-                              {cell?.status || 'Missing'}
-                            </span>
-                          </div>
-                          <div className="mt-2 grid grid-cols-3 gap-2 text-[10px] text-muted-foreground">
-                            <span>Expiry <strong className="text-foreground block">{cell?.record?.expiry_date || 'None'}</strong></span>
-                            <span>Evidence <strong className="text-foreground block">{evidenceCount}</strong></span>
-                            <span>Open actions <strong className="text-foreground block">{openActionCount}</strong></span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-                ))}
+                <div className="space-y-5">
+                  {selectedPersonGroupedRows.map(group => (
+                    <section key={group.category} className="space-y-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="h-[1px] w-4 bg-border/80" />
+                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{group.category}</h4>
+                        <span className="text-[9px] text-muted-foreground/80 bg-muted px-1.5 py-0.5 rounded-full font-semibold">{group.rows.length}</span>
+                        <span className="h-[1px] flex-1 bg-border/80" />
+                      </div>
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
+                        {group.rows.map(({ type, cell, evidenceCount, openActionCount }) => {
+                          const isActive = activeCell && activeCell.person.id === selectedPerson.id && activeCell.competencyType.id === type.id;
+                          return (
+                            <button
+                              key={type.id}
+                              onClick={() => openCell(selectedPerson, type)}
+                              className={`w-full text-left px-3 py-2.5 border rounded-xl hover:bg-muted/70 transition-all ${
+                                isActive
+                                  ? 'border-indigo-500 bg-indigo-500/5 shadow-xs ring-1 ring-indigo-500/30'
+                                  : 'border-border bg-card'
+                              } flex items-center justify-between gap-3`}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-xs truncate block text-foreground">{type.title}</span>
+                                  {type.validity_period_months && (
+                                    <span className="text-[9px] text-muted-foreground shrink-0 bg-muted px-1.5 py-0.5 rounded font-medium">
+                                      {type.validity_period_months}m validity
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-3 mt-1.5 text-[10px] text-muted-foreground">
+                                  {cell?.record?.expiry_date ? (
+                                    <span>Expiry: <strong className="text-foreground">{cell.record.expiry_date}</strong></span>
+                                  ) : (
+                                    <span className="italic text-muted-foreground/70">No date recorded</span>
+                                  )}
+                                  {evidenceCount > 0 && (
+                                    <span className="flex items-center gap-1 font-semibold text-indigo-650 dark:text-indigo-400">
+                                      {evidenceCount} evidence file{evidenceCount > 1 ? 's' : ''}
+                                    </span>
+                                  )}
+                                  {openActionCount > 0 && (
+                                    <span className="flex items-center gap-1 font-semibold text-rose-500">
+                                      {openActionCount} open action{openActionCount > 1 ? 's' : ''}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <span className={`px-2 py-0.5 rounded-full border text-[9px] font-bold shrink-0 ${statusClass(cell?.status || 'Missing')}`}>
+                                {cell?.status || 'Missing'}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ))}
+                </div>
 
                 {selectedPersonGroupedRows.length === 0 && (
-                  <div className="p-6 border border-dashed border-border rounded-xl text-center text-xs text-muted-foreground">
-                    No active competency types are available for this person.
+                  <div className="p-8 border border-dashed border-border rounded-xl text-center text-xs text-muted-foreground leading-normal">
+                    No active competency types are available for this person. Customize your competency pack or add more competency types to get started.
                   </div>
                 )}
               </main>
+
+              {/* Column 3: Integrated Competency Detail Panel */}
+              {activeCell && activeCell.person.id === selectedPerson.id && (
+                <div className="absolute lg:relative inset-y-0 right-0 w-full lg:w-auto bg-card border-l border-border z-30 flex flex-col h-full overflow-y-auto p-5 space-y-4.5 shadow-xl lg:shadow-none">
+                  <div className="flex justify-between items-start gap-3 border-b border-border pb-3 shrink-0">
+                    <div>
+                      <h3 className="text-sm font-extrabold text-foreground leading-tight">{activeCell.competencyType.title}</h3>
+                      <span className="text-[9px] text-muted-foreground block mt-1 font-medium uppercase tracking-wider">
+                        Category: {activeCell.competencyType.category}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setActiveCell(null)}
+                        className="lg:hidden px-2.5 py-1 text-[11px] font-bold text-indigo-650 dark:text-indigo-400 flex items-center gap-1 bg-indigo-500/10 rounded-lg hover:bg-indigo-500/20"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5" /> Back
+                      </button>
+                      <button
+                        onClick={() => setActiveCell(null)}
+                        className="p-1 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                        title="Close detail panel"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleSaveRecord} className="space-y-3.5 text-xs shrink-0">
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <label className="space-y-1 block">
+                        <span className="text-[9px] font-bold uppercase text-muted-foreground block">Completed</span>
+                        <input type="date" value={recordForm.completed_date} onChange={event => setRecordForm({ ...recordForm, completed_date: event.target.value })} className="w-full px-2.5 py-1.5 bg-muted border border-border rounded-lg outline-none text-xs" />
+                      </label>
+                      <label className="space-y-1 block">
+                        <span className="text-[9px] font-bold uppercase text-muted-foreground block">Expiry</span>
+                        <input type="date" value={recordForm.expiry_date} onChange={event => setRecordForm({ ...recordForm, expiry_date: event.target.value })} className="w-full px-2.5 py-1.5 bg-muted border border-border rounded-lg outline-none text-xs" />
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <input placeholder="Trainer" value={recordForm.trainer} onChange={event => setRecordForm({ ...recordForm, trainer: event.target.value })} className="px-2.5 py-1.5 bg-muted border border-border rounded-lg outline-none text-xs" />
+                      <input placeholder="Provider" value={recordForm.provider} onChange={event => setRecordForm({ ...recordForm, provider: event.target.value })} className="px-2.5 py-1.5 bg-muted border border-border rounded-lg outline-none text-xs" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <input placeholder="Certificate number" value={recordForm.certificate_number} onChange={event => setRecordForm({ ...recordForm, certificate_number: event.target.value })} className="px-2.5 py-1.5 bg-muted border border-border rounded-lg outline-none text-xs" />
+                      <select value={recordForm.status} onChange={event => setRecordForm({ ...recordForm, status: event.target.value as CompetencyStatus })} className="px-2.5 py-1.5 bg-muted border border-border rounded-lg outline-none text-xs font-semibold">
+                        {statusOptions.map(status => <option key={status} value={status}>{status}</option>)}
+                      </select>
+                    </div>
+                    <textarea placeholder="Notes / comments..." value={recordForm.notes} onChange={event => setRecordForm({ ...recordForm, notes: event.target.value })} rows={2} className="w-full px-2.5 py-1.5 bg-muted border border-border rounded-lg outline-none resize-none text-xs leading-normal" />
+                    <button type="submit" className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors text-xs">Save Record</button>
+                  </form>
+
+                  {formMessage && <p className="text-[10px] text-muted-foreground border border-border bg-muted/20 rounded-lg p-2 leading-normal shrink-0">{formMessage}</p>}
+
+                  {/* Evidence Section */}
+                  <div className="border-t border-border pt-3.5 space-y-2.5 text-xs flex-1 min-h-0 flex flex-col">
+                    <h4 className="text-xs font-bold text-foreground">Evidence</h4>
+
+                    {linkedDocuments.length === 0 ? (
+                      <p className="text-[10px] text-muted-foreground italic bg-muted/15 p-2 rounded-lg border border-dashed border-border/80 text-center shrink-0">
+                        No evidence documents linked.
+                      </p>
+                    ) : (
+                      <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1 shrink-0">
+                        {linkedDocuments.map(document => (
+                          <div key={document.id} className="p-2 bg-muted/30 border border-border rounded-lg flex justify-between items-center gap-2 text-xs">
+                            <div className="min-w-0 flex-1">
+                              <span className="font-semibold block truncate text-foreground text-[10px]">{document.title}</span>
+                              <span className="text-[8px] text-muted-foreground truncate block">{document.file_name}</span>
+                            </div>
+                            <div className="flex gap-1 shrink-0">
+                              <button type="button" onClick={async () => window.open(await getDocumentSignedUrl(document.id), '_blank')} className="px-1.5 py-0.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded text-[9px] font-bold hover:bg-indigo-500/20 transition-colors">Open</button>
+                              {activeCell.record && <button type="button" onClick={() => unlinkDocumentFromCompetencyRecord(activeCell.record!.id, document.id)} className="px-1.5 py-0.5 bg-muted border border-border hover:bg-rose-500/10 hover:text-rose-500 rounded text-[9px] font-bold transition-colors">Unlink</button>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="space-y-2 shrink-0">
+                      <div className="flex gap-1.5">
+                        <select value={linkDocumentId} onChange={event => setLinkDocumentId(event.target.value)} className="flex-1 px-2.5 py-1.5 bg-muted border border-border rounded-lg outline-none text-xs font-semibold appearance-none">
+                          <option value="">Link existing evidence...</option>
+                          {documents.map(document => <option key={document.id} value={document.id}>{document.title}</option>)}
+                        </select>
+                        <button disabled={!activeCell.record || !linkDocumentId} onClick={() => activeCell.record && linkDocumentToCompetencyRecord(activeCell.record.id, linkDocumentId)} className="px-2.5 py-1.5 bg-muted hover:bg-muted/80 border border-border disabled:opacity-50 rounded-lg text-xs font-bold transition-colors shrink-0">
+                          Link
+                        </button>
+                      </div>
+
+                      <label
+                        onDragOver={event => {
+                          event.preventDefault();
+                          setIsEvidenceDragging(true);
+                        }}
+                        onDragLeave={() => setIsEvidenceDragging(false)}
+                        onDrop={event => {
+                          event.preventDefault();
+                          setIsEvidenceDragging(false);
+                          void handleEvidenceFiles(event.dataTransfer.files);
+                        }}
+                        className={`w-full min-h-20 border-2 border-dashed rounded-xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2.5 transition-all duration-200 ${
+                          isEvidenceDragging
+                            ? 'bg-indigo-500/10 border-indigo-500 text-indigo-700 dark:text-indigo-300'
+                            : 'bg-muted/30 border-border hover:bg-muted/50 hover:border-indigo-500/50'
+                        }`}
+                      >
+                        <Upload className="w-3.5 h-3.5 text-indigo-500" />
+                        <div className="text-center">
+                          <span className="font-semibold text-[10px] block text-foreground">
+                            {uploading ? 'Uploading...' : 'Drop evidence file here'}
+                          </span>
+                          <span className="text-[8px] text-muted-foreground block">
+                            or click to browse files
+                          </span>
+                        </div>
+                        <input type="file" accept={evidenceAcceptAttribute} multiple className="hidden" onChange={event => event.target.files && handleEvidenceFiles(event.target.files)} />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Actions Section */}
+                  <div className="border-t border-border pt-3.5 space-y-2 text-xs shrink-0">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-foreground">Gap Actions</h4>
+                      <button onClick={handleCreateGapAction} className="px-2 py-1 bg-indigo-650 hover:bg-indigo-700 text-white rounded text-[9px] font-bold flex items-center gap-1 transition-colors">
+                        <Plus className="w-3 h-3" /> Create Gap Action
+                      </button>
+                    </div>
+                    {relatedActions.length === 0 ? (
+                      <p className="text-[10px] text-muted-foreground italic text-center py-1.5 bg-muted/10 rounded-lg border border-dashed border-border/80">No actions linked.</p>
+                    ) : (
+                      <div className="space-y-1.5 max-h-24 overflow-y-auto pr-1">
+                        {relatedActions.map(action => (
+                          <div key={action.id} className="p-2 bg-muted/30 border border-border rounded-lg flex items-center justify-between gap-2 text-xs">
+                            <div className="min-w-0 flex-1">
+                              <span className="font-semibold block truncate text-[10px] text-foreground">{action.title}</span>
+                              <span className="text-[8px] text-muted-foreground block">{action.status}{action.target_due_date || action.due_date ? ` | Due ${action.target_due_date || action.due_date}` : ''}</span>
+                            </div>
+                            <button onClick={() => setSelectedAction(action)} className="px-1.5 py-0.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded text-[9px] font-bold hover:bg-indigo-500/20 transition-colors">Open</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Archiving controls */}
+                  <div className="border-t border-border pt-3.5 grid grid-cols-2 gap-2 text-xs shrink-0">
+                    <button onClick={handleMarkNotRequired} className="py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-700 dark:text-amber-300 rounded-lg font-bold transition-colors">
+                      Not Required
+                    </button>
+                    <button onClick={handleArchiveFromPerson} className="py-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-700 dark:text-rose-300 rounded-lg font-bold transition-colors">
+                      Remove/Archive
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -13,7 +13,10 @@ import {
   Link as LinkIcon,
   Plus,
   Search,
-  X
+  X,
+  Filter,
+  ChevronDown,
+  Archive
 } from 'lucide-react';
 
 const statusClass = (status: RequirementStatus) => {
@@ -143,6 +146,8 @@ export default function RequirementsPage() {
   const [editNotes, setEditNotes] = useState('');
   const [newCustomCategory, setNewCustomCategory] = useState('');
   const [categoryMessage, setCategoryMessage] = useState('');
+  const [isCatDropdownOpen, setIsCatDropdownOpen] = useState(false);
+  const [catSearchQuery, setCatSearchQuery] = useState('');
 
   const requirementCategoryOptions = useMemo(() => {
     const names = new Set<string>([
@@ -152,6 +157,12 @@ export default function RequirementsPage() {
     ].filter(Boolean));
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [frameworkRequirements, requirementCategories]);
+
+  const filteredCatOptions = useMemo(() => {
+    const query = catSearchQuery.toLowerCase().trim();
+    if (!query) return requirementCategoryOptions;
+    return requirementCategoryOptions.filter(cat => cat.toLowerCase().includes(query));
+  }, [requirementCategoryOptions, catSearchQuery]);
 
   const selectRequirement = (req: Requirement | null) => {
     setSelectedRequirement(req);
@@ -248,39 +259,6 @@ export default function RequirementsPage() {
   const currentSelectedAction = selectedAction
     ? actions.find(action => action.id === selectedAction.id) || selectedAction
     : null;
-  const selectedPack = REQUIREMENT_TEMPLATE_PACKS.find(pack => pack.id === selectedPackId) || REQUIREMENT_TEMPLATE_PACKS[0];
-  const existingRequirementKeys = new Set(
-    frameworkRequirements
-      .filter(requirement => lifecycleLabel(requirement.lifecycle_status) !== 'DELETED')
-      .map(requirement => `${requirement.title.trim().toLowerCase()}::${requirement.category.trim().toLowerCase()}`)
-  );
-  const templateKey = (title: string, category: string) => `${title.trim().toLowerCase()}::${category.trim().toLowerCase()}`;
-
-  const openImportModal = () => {
-    const pack = REQUIREMENT_TEMPLATE_PACKS.find(item => item.id === selectedPackId) || REQUIREMENT_TEMPLATE_PACKS[0];
-    setSelectedTemplateKeys(
-      new Set(
-        pack.requirements
-          .filter(item => !existingRequirementKeys.has(templateKey(item.title, item.category)))
-          .map(item => templateKey(item.title, item.category))
-      )
-    );
-    setImportMessage('');
-    setShowImportModal(true);
-  };
-
-  const handlePackChange = (packId: string) => {
-    const pack = REQUIREMENT_TEMPLATE_PACKS.find(item => item.id === packId);
-    setSelectedPackId(packId);
-    setSelectedTemplateKeys(
-      new Set(
-        (pack?.requirements || [])
-          .filter(item => !existingRequirementKeys.has(templateKey(item.title, item.category)))
-          .map(item => templateKey(item.title, item.category))
-      )
-    );
-    setImportMessage('');
-  };
 
   const handleCreateRequirement = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -306,17 +284,18 @@ export default function RequirementsPage() {
     setShowCreateModal(false);
   };
 
-  const handleCreateRequirementCategory = async () => {
-    if (!newCustomCategory.trim()) return;
+  const handleCreateRequirementCategory = async (overrideName?: string) => {
+    const nameToUse = (overrideName || newCustomCategory).trim();
+    if (!nameToUse) return;
     try {
       await upsertRequirementCategory({
-        name: newCustomCategory.trim(),
+        name: nameToUse,
         category_group: 'Custom',
         description: 'Custom requirement category',
         active: true
       });
-      setNewCategory(newCustomCategory.trim());
-      setSelectedCategory(newCustomCategory.trim());
+      setNewCategory(nameToUse);
+      setSelectedCategory(nameToUse);
       setNewCustomCategory('');
       setCategoryMessage('Requirement category created.');
     } catch (error) {
@@ -340,6 +319,14 @@ export default function RequirementsPage() {
       setCategoryMessage(error instanceof Error ? error.message : 'Could not archive category.');
     }
   };
+
+  const selectedPack = REQUIREMENT_TEMPLATE_PACKS.find(pack => pack.id === selectedPackId) || REQUIREMENT_TEMPLATE_PACKS[0];
+  const existingRequirementKeys = new Set(
+    frameworkRequirements
+      .filter(requirement => lifecycleLabel(requirement.lifecycle_status) !== 'DELETED')
+      .map(requirement => `${requirement.title.trim().toLowerCase()}::${requirement.category.trim().toLowerCase()}`)
+  );
+  const templateKey = (title: string, category: string) => `${title.trim().toLowerCase()}::${category.trim().toLowerCase()}`;
 
   const handleSaveRequirementEdit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -535,6 +522,19 @@ export default function RequirementsPage() {
     }
   };
 
+  const handlePackChange = (packId: string) => {
+    const pack = REQUIREMENT_TEMPLATE_PACKS.find(item => item.id === packId);
+    setSelectedPackId(packId);
+    setSelectedTemplateKeys(
+      new Set(
+        (pack?.requirements || [])
+          .filter(item => !existingRequirementKeys.has(templateKey(item.title, item.category)))
+          .map(item => templateKey(item.title, item.category))
+      )
+    );
+    setImportMessage('');
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -546,7 +546,12 @@ export default function RequirementsPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={openImportModal}
+            onClick={() => {
+              const pack = REQUIREMENT_TEMPLATE_PACKS.find(item => item.id === selectedPackId) || REQUIREMENT_TEMPLATE_PACKS[0];
+              const existingKeys = new Set(frameworkRequirements.filter(r => lifecycleLabel(r.lifecycle_status) !== 'DELETED').map(r => `${r.title.trim().toLowerCase()}::${r.category.trim().toLowerCase()}`));
+              setSelectedTemplateKeys(new Set(pack.requirements.filter(item => !existingKeys.has(`${item.title.trim().toLowerCase()}::${item.category.trim().toLowerCase()}`)).map(item => `${item.title.trim().toLowerCase()}::${item.category.trim().toLowerCase()}`)));
+              setShowImportModal(true);
+            }}
             className="flex items-center gap-2 px-4 py-2.5 bg-muted hover:bg-muted/80 text-foreground border border-border text-xs font-semibold rounded-lg"
           >
             <Download className="w-4 h-4" /> Import Template Pack
@@ -558,13 +563,6 @@ export default function RequirementsPage() {
             <Plus className="w-4 h-4" /> Add Requirement
           </button>
         </div>
-      </div>
-
-      <div className="bg-card border border-border rounded-xl p-4 text-xs">
-        <h2 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Getting Started</h2>
-        <p className="text-muted-foreground mt-1 leading-relaxed">
-          Use <strong className="text-foreground">Import Template Pack</strong> to preview practical starter requirements, select only the items you want, and skip duplicates automatically. After import, open a requirement to link existing evidence records and review its calculated status.
-        </p>
       </div>
 
       <div className="flex bg-muted p-1 border border-border rounded-xl w-full sm:max-w-md shadow-xs">
@@ -604,72 +602,159 @@ export default function RequirementsPage() {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start">
         <div className="xl:col-span-2 space-y-4">
-          <div className="bg-card border border-border p-4 rounded-xl flex flex-col md:flex-row gap-4 items-center justify-between">
-            <div className="relative w-full md:max-w-xs">
-              <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                value={search}
-                onChange={event => setSearch(event.target.value)}
-                placeholder="Search requirements..."
-                className="w-full pl-9 pr-4 py-2 bg-muted border border-border/80 rounded-lg text-xs outline-none focus:border-indigo-500"
-              />
-            </div>
-            <div className="flex flex-wrap gap-2 w-full md:w-auto justify-end">
-              <select
-                value={selectedCategory}
-                onChange={event => setSelectedCategory(event.target.value)}
-                className="bg-muted border border-border/80 rounded px-2 py-1 outline-none text-xs text-foreground font-semibold"
-              >
-                <option value="All">All Categories</option>
-                {requirementCategoryOptions.map(category => <option key={category} value={category}>{category}</option>)}
-              </select>
-              <select
-                value={selectedStatus}
-                onChange={event => setSelectedStatus(event.target.value as 'All' | RequirementStatus)}
-                className="bg-muted border border-border/80 rounded px-2 py-1 outline-none text-xs text-foreground font-semibold"
-              >
-                <option value="All">All Statuses</option>
-                <option value="GREEN">Green</option>
-                <option value="AMBER">Amber</option>
-                <option value="RED">Red</option>
-                <option value="GREY">Grey</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="bg-card border border-border rounded-xl p-3 space-y-3 text-xs">
-            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-              <input
-                value={newCustomCategory}
-                onChange={event => setNewCustomCategory(event.target.value)}
-                placeholder="Create custom requirement category..."
-                className="flex-1 px-3 py-2 bg-muted border border-border rounded-lg outline-none"
-              />
-              <button
-                onClick={handleCreateRequirementCategory}
-                disabled={!newCustomCategory.trim()}
-                className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg font-bold"
-              >
-                Create Category
-              </button>
-            </div>
-            {categoryMessage && <p className="text-[11px] text-muted-foreground">{categoryMessage}</p>}
-            {requirementCategories.filter(category => category.active && !category.is_system).length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {requirementCategories.filter(category => category.active && !category.is_system).map(category => (
-                  <span key={category.id} className="inline-flex items-center gap-1.5 px-2 py-1 bg-muted border border-border rounded-full font-bold">
-                    {category.name}
+          {/* Category Chips & Filters Bar */}
+          <div className="flex flex-col gap-3 mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-card border border-border p-3 rounded-xl">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {['All', 'Safety', 'Operational', 'Quality & Compliance'].map(catName => {
+                  const isSelected = selectedCategory === catName;
+                  return (
                     <button
-                      onClick={() => handleArchiveRequirementCategory(category.id)}
-                      className="text-muted-foreground hover:text-rose-500"
-                      title="Archive custom category"
+                      key={catName}
+                      type="button"
+                      onClick={() => setSelectedCategory(catName)}
+                      className={`px-3 py-1 rounded-full text-xs font-bold transition-all border ${
+                        isSelected
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                          : 'bg-muted text-muted-foreground border-border hover:bg-muted/70 hover:text-foreground'
+                      }`}
                     >
-                      <X className="w-3 h-3" />
+                      {catName}
                     </button>
-                  </span>
-                ))}
+                  );
+                })}
+                {!['All', 'Safety', 'Operational', 'Quality & Compliance'].includes(selectedCategory) && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCategory(selectedCategory)}
+                    className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-600 text-white border border-indigo-600 shadow-xs flex items-center gap-1.5"
+                  >
+                    <span>{selectedCategory}</span>
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedCategory('All');
+                      }}
+                      className="hover:bg-indigo-700/80 rounded p-0.5"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </span>
+                  </button>
+                )}
               </div>
-            )}
+
+              {/* Custom Category Popover Trigger */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsCatDropdownOpen(!isCatDropdownOpen)}
+                  className="bg-muted hover:bg-muted/80 border border-border rounded-lg px-3 py-1.5 text-xs text-foreground font-semibold flex items-center gap-1.5 transition-colors"
+                >
+                  <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span>Category Filter</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                </button>
+
+                {isCatDropdownOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setIsCatDropdownOpen(false)} />
+                    <div className="absolute right-0 mt-1 w-64 bg-card solid-panel border border-border rounded-xl shadow-xl z-50 p-3 space-y-2.5">
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={catSearchQuery}
+                          onChange={(e) => setCatSearchQuery(e.target.value)}
+                          placeholder="Search or add category..."
+                          className="w-full pl-8 pr-3 py-1.5 bg-muted border border-border rounded-lg text-xs outline-none focus:border-indigo-500 transition-colors"
+                          autoFocus
+                        />
+                      </div>
+
+                      <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1">
+                        {filteredCatOptions.length === 0 ? (
+                          <p className="text-[10px] text-muted-foreground italic text-center py-2">No matching categories.</p>
+                        ) : (
+                          filteredCatOptions.map(catName => {
+                            const isSelected = selectedCategory === catName;
+                            const customCatObj = requirementCategories.find(c => c.name === catName && !c.is_system && c.active);
+                            return (
+                              <div
+                                key={catName}
+                                className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+                                  isSelected ? 'bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 font-bold' : 'hover:bg-muted text-foreground'
+                                }`}
+                                onClick={() => {
+                                  setSelectedCategory(catName);
+                                  setIsCatDropdownOpen(false);
+                                  setCatSearchQuery('');
+                                }}
+                              >
+                                <span className="truncate flex-1">{catName}</span>
+                                {customCatObj && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void handleArchiveRequirementCategory(customCatObj.id);
+                                    }}
+                                    className="text-muted-foreground hover:text-rose-500 p-0.5 rounded hover:bg-muted-foreground/10 transition-colors shrink-0"
+                                    title="Archive custom category"
+                                  >
+                                    <Archive className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+
+                      {catSearchQuery.trim() && !filteredCatOptions.some(c => c.toLowerCase() === catSearchQuery.trim().toLowerCase()) && (
+                        <div className="border-t border-border pt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void handleCreateRequirementCategory(catSearchQuery.trim());
+                              setIsCatDropdownOpen(false);
+                              setCatSearchQuery('');
+                            }}
+                            className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 transition-colors animate-fade-in"
+                          >
+                            <Plus className="w-3 h-3" /> Create Category "{catSearchQuery.trim()}"
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-card border border-border p-4 rounded-xl flex flex-col md:flex-row gap-4 items-center justify-between">
+              <div className="relative w-full md:max-w-xs">
+                <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  value={search}
+                  onChange={event => setSearch(event.target.value)}
+                  placeholder="Search requirements..."
+                  className="w-full pl-9 pr-4 py-2 bg-muted border border-border/80 rounded-lg text-xs outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2 w-full md:w-auto justify-end">
+                <select
+                  value={selectedStatus}
+                  onChange={event => setSelectedStatus(event.target.value as 'All' | RequirementStatus)}
+                  className="bg-muted border border-border/80 rounded px-2 py-1 outline-none text-xs text-foreground font-semibold cursor-pointer"
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="GREEN">Green</option>
+                  <option value="AMBER">Amber</option>
+                  <option value="RED">Red</option>
+                  <option value="GREY">Grey</option>
+                </select>
+              </div>
+            </div>
           </div>
 
           <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
