@@ -2101,9 +2101,11 @@ export const dbService = {
       expiry_date: input.expiry_date || null,
       status: 'Missing'
     });
+    const recordId = input.id || null;
     const payload = {
-      ...input,
       organisation_id: orgId,
+      person_id: input.person_id,
+      competency_type_id: input.competency_type_id,
       completed_date: input.completed_date || null,
       expiry_date: input.expiry_date || null,
       trainer: input.trainer || null,
@@ -2113,11 +2115,12 @@ export const dbService = {
       notes: input.notes || null,
       updated_at: nowIso()
     };
+    const supabasePayload = recordId ? { id: recordId, ...payload } : payload;
 
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('competency_records')
-        .upsert([payload], { onConflict: 'organisation_id,person_id,competency_type_id' })
+        .upsert([supabasePayload], { onConflict: 'organisation_id,person_id,competency_type_id' })
         .select()
         .single();
       if (error) throwSupabaseError('competency_records.upsert active organisation', error);
@@ -2127,8 +2130,8 @@ export const dbService = {
 
     const records = getStorageItem('vigilen_competency_records', MOCK_COMPETENCY_RECORDS);
     const idx = records.findIndex((record: CompetencyRecord) =>
-      input.id
-        ? record.id === input.id
+      recordId
+        ? record.id === recordId
         : record.person_id === input.person_id && record.competency_type_id === input.competency_type_id
     );
     if (idx !== -1) {
