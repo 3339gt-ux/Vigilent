@@ -1,12 +1,20 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useApp } from '@/context/AppContext';
+import { useApp, VygilenceTheme, InterfaceStyle, ThemePreference } from '@/context/AppContext';
 import { isDemoMode } from '@/lib/env';
-import { Save, ShieldAlert, Key, Bell, User, CheckCircle2, Copy, Check } from 'lucide-react';
+import { Save, ShieldAlert, Key, Bell, User, CheckCircle2, Copy, Check, Palette, Sun, Moon, Monitor, ArrowRight, Eye, Sparkles } from 'lucide-react';
 
 export default function SettingsPage() {
-  const { user } = useApp();
+  const {
+    user,
+    themePreference,
+    vygilenceTheme,
+    interfaceStyle,
+    setThemePreference,
+    setVygilenceTheme,
+    setInterfaceStyle
+  } = useApp();
 
   // Profile Form States
   const [name, setName] = useState(user?.full_name || 'Jane Doe');
@@ -267,6 +275,215 @@ export default function SettingsPage() {
           </div>
         </div>
 
+      </div>
+
+      {/* Appearance Customisation Section */}
+      <div className="bg-card border border-border rounded-xl p-6 shadow-sm space-y-6">
+        <div className="flex items-center gap-2 border-b border-border pb-3">
+          <Palette className="w-5 h-5 text-indigo-500" />
+          <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">Workspace Visual Customisation</h2>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Controls */}
+          <div className="lg:col-span-7 space-y-6">
+            {/* Theme Mode Selector */}
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-2">Theme Mode</span>
+              <div className="grid grid-cols-3 gap-2">
+                {(['system', 'light', 'dark'] as const).map(option => {
+                  const Icon = option === 'system' ? Monitor : option === 'light' ? Sun : Moon;
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setThemePreference(option)}
+                      className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border font-bold capitalize transition-all text-xs cursor-pointer ${
+                        themePreference === option
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                          : 'bg-muted/40 hover:bg-muted border-border text-foreground hover:border-border-hover'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4 shrink-0" />
+                      {option}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Named Vygilence Themes */}
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-2">Vygilence Theme Palette</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {(['sentinel', 'obsidian', 'emerald-watch', 'amber-beacon', 'arc-reactor', 'iron-ledger', 'vanguard'] as const).map(option => {
+                  const themeNames: Record<VygilenceTheme, string> = {
+                    'sentinel': 'Sentinel (Default)',
+                    'obsidian': 'Obsidian Dark',
+                    'emerald-watch': 'Emerald Watch',
+                    'amber-beacon': 'Amber Beacon',
+                    'arc-reactor': 'Arc Reactor',
+                    'iron-ledger': 'Iron Ledger',
+                    'vanguard': 'Vanguard Premium'
+                  };
+
+                  const themeDescs: Record<VygilenceTheme, string> = {
+                    'sentinel': 'Navy, electric blue, & clean white accents.',
+                    'obsidian': 'Executive graphite & soft silver highlights.',
+                    'emerald-watch': 'Graphite with emerald & green glows.',
+                    'amber-beacon': 'Navy with amber & soft gold highlights.',
+                    'arc-reactor': 'Midnight blue with cyan & glass layers.',
+                    'iron-ledger': 'Slate grey & steel blue classic stability.',
+                    'vanguard': 'Premium indigo, purple, & subtle gradients.'
+                  };
+
+                  const themeColors: Record<VygilenceTheme, string> = {
+                    'sentinel': 'bg-blue-500',
+                    'obsidian': 'bg-zinc-400',
+                    'emerald-watch': 'bg-emerald-500',
+                    'amber-beacon': 'bg-amber-500',
+                    'arc-reactor': 'bg-cyan-400',
+                    'iron-ledger': 'bg-slate-500',
+                    'vanguard': 'bg-violet-500'
+                  };
+
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setVygilenceTheme(option)}
+                      className={`flex items-start gap-3 p-3 rounded-lg border text-left transition-all text-xs cursor-pointer ${
+                        vygilenceTheme === option
+                          ? 'bg-indigo-500/5 border-indigo-650 ring-1 ring-indigo-650'
+                          : 'bg-muted/30 border-border hover:bg-muted/50 hover:border-border-hover'
+                      }`}
+                    >
+                      <span className={`w-3.5 h-3.5 rounded-full shrink-0 mt-0.5 border border-white/20 shadow-xs ${themeColors[option]}`} />
+                      <div className="space-y-0.5">
+                        <span className="font-extrabold text-foreground block">{themeNames[option]}</span>
+                        <span className="text-[10px] text-muted-foreground leading-normal block">{themeDescs[option]}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Interface Styles */}
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-2">Interface Style System</span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {(['focused', 'balanced', 'command-centre', 'executive'] as const).map(option => {
+                  const styleNames: Record<InterfaceStyle, string> = {
+                    'focused': 'Focused',
+                    'balanced': 'Balanced',
+                    'command-centre': 'Command Centre',
+                    'executive': 'Executive'
+                  };
+
+                  const styleDescs: Record<InterfaceStyle, string> = {
+                    'focused': 'Minimal highlights, flat cards.',
+                    'balanced': 'Modern recommended defaults.',
+                    'command-centre': 'Enhanced dashboard visibility.',
+                    'executive': 'Presentation gradients & radiuses.'
+                  };
+
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setInterfaceStyle(option)}
+                      className={`flex flex-col p-2.5 rounded-lg border text-left transition-all text-xs cursor-pointer ${
+                        interfaceStyle === option
+                          ? 'bg-indigo-500/5 border-indigo-650 ring-1 ring-indigo-650'
+                          : 'bg-muted/30 border-border hover:bg-muted/50 hover:border-border-hover'
+                      }`}
+                    >
+                      <span className="font-extrabold text-[11px] text-foreground capitalize">{styleNames[option]}</span>
+                      <span className="text-[9px] text-muted-foreground mt-0.5 leading-normal">{styleDescs[option]}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Sandbox Live Preview Container */}
+          <div className="lg:col-span-5 flex flex-col justify-between bg-muted/20 border border-border/80 rounded-xl p-5 space-y-4">
+            <div>
+              <div className="flex items-center gap-1.5 border-b border-border/50 pb-2 mb-4">
+                <Eye className="w-4 h-4 text-indigo-500" />
+                <span className="text-xs font-bold uppercase tracking-wider text-foreground">Interactive Live Preview Sandbox</span>
+              </div>
+
+              <div className="space-y-4">
+                {/* 1. Dashboard card preview */}
+                <div className="bg-card p-4 border border-border rounded-xl space-y-3 shadow-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Preview Dashboard Widget</span>
+                    <span className="px-1.5 py-0.5 bg-indigo-500/10 text-indigo-600 rounded text-[9px] font-bold">Active Theme</span>
+                  </div>
+                  <div className="flex justify-between items-end">
+                    <div>
+                      <span className="text-2xl font-black text-foreground">84%</span>
+                      <span className="text-[9px] text-muted-foreground block mt-0.5">Assessed compliance readiness score</span>
+                    </div>
+                    {/* Button preview inside dashboard card */}
+                    <button type="button" className="px-3 py-1.5 bg-indigo-650 text-white rounded-lg text-[10px] font-bold hover:bg-indigo-700 transition-colors cursor-default">
+                      View Details
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Badge Preview */}
+                <div className="space-y-2">
+                  <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest block">Semantic Badge Safeguards</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                      <span className="w-1 h-1 rounded-full bg-emerald-500" /> Compliant
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400">
+                      <span className="w-1 h-1 rounded-full bg-amber-500" /> Due Soon
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400">
+                      <span className="w-1 h-1 rounded-full bg-rose-500" /> Overdue
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase bg-zinc-500/10 border-zinc-500/20 text-zinc-500 dark:text-zinc-400">
+                      <span className="w-1 h-1 rounded-full bg-zinc-500" /> Excluded
+                    </span>
+                  </div>
+                </div>
+
+                {/* 3. Table Rows Preview */}
+                <div className="space-y-2">
+                  <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest block">Table Rows Layout</span>
+
+                  {/* Requirement table row preview */}
+                  <div className="p-2.5 bg-card border border-border rounded-lg flex items-center justify-between text-[11px] hover:bg-muted/10 transition-colors">
+                    <div className="font-semibold text-foreground truncate">1. Risk Assessment Record</div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[10px] text-muted-foreground">General</span>
+                      <span className="px-1.5 py-0.5 rounded border text-[9px] font-bold bg-indigo-500/10 border-indigo-500/20 text-indigo-650">Link File</span>
+                    </div>
+                  </div>
+
+                  {/* Evidence table row preview */}
+                  <div className="p-2.5 bg-card border border-border rounded-lg flex items-center justify-between text-[11px] hover:bg-muted/10 transition-colors">
+                    <div className="truncate text-muted-foreground font-mono text-[10px]">apex_risk_assessment_2026.pdf</div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[9px] px-1.5 py-0.5 bg-muted border border-border rounded text-muted-foreground font-bold">1.2 MB</span>
+                      <span className="text-indigo-600 font-extrabold hover:underline">Preview</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-[10px] text-muted-foreground mt-4 leading-normal">
+              Previews update in real-time as you switch options. Named themes and interface styles transform shadows, outlines, and border roundness globally across the workspace.
+            </p>
+          </div>
+        </div>
       </div>
 
     </div>

@@ -500,13 +500,24 @@ export default function RequirementsPage() {
                           <td className="p-4 text-muted-foreground font-semibold">{requirement.category}</td>
                           <td className="p-4 text-muted-foreground font-semibold">{requirement.owner || 'Unassigned'}</td>
                           <td className="p-4 text-center">
-                            <span className={`inline-block px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full border ${statusClass(requirement.status)}`}>
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full border leading-none shadow-xs ${statusClass(requirement.status)}`}>
+                              <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${
+                                requirement.status === 'GREEN' ? 'bg-emerald-500' :
+                                requirement.status === 'AMBER' ? 'bg-amber-500' :
+                                requirement.status === 'RED' ? 'bg-rose-500' :
+                                'bg-zinc-400 dark:bg-zinc-500'
+                              }`} />
                               {requirement.status}
                             </span>
                           </td>
                           <td className="p-4 text-muted-foreground font-semibold">{requirement.next_due_date || 'Not set'}</td>
                           <td className="p-4 text-muted-foreground font-semibold">
-                            <span className={`px-2 py-1 rounded border text-[10px] font-bold ${statusClass(requirement.status)}`}>
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-bold ${
+                              requirement.status === 'GREEN' ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-600 dark:text-emerald-400' :
+                              requirement.status === 'AMBER' ? 'bg-amber-500/5 border-amber-500/20 text-amber-600 dark:text-amber-400' :
+                              requirement.status === 'RED' ? 'bg-rose-500/5 border-rose-500/20 text-rose-600 dark:text-rose-400' :
+                              'bg-zinc-500/5 border-zinc-500/20 text-zinc-500'
+                            }`}>
                               {requirement.evidenceCoverage?.coveragePercent === null
                                 ? requirement.evidenceCoverage?.summary || 'Not assessed'
                                 : `${requirement.evidenceCoverage?.coveredRequired}/${requirement.evidenceCoverage?.totalRequired} covered`}

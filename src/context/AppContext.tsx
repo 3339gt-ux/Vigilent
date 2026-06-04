@@ -50,10 +50,19 @@ import {
   RequirementCompetencyType,
   RequirementTemplateItem
 } from '@/lib/types';
+export type ThemePreference = 'light' | 'dark' | 'system';
+export type VygilenceTheme = 'sentinel' | 'obsidian' | 'emerald-watch' | 'amber-beacon' | 'arc-reactor' | 'iron-ledger' | 'vanguard';
+export type InterfaceStyle = 'focused' | 'balanced' | 'command-centre' | 'executive';
 
 interface AppContextType {
   theme: 'light' | 'dark';
+  themePreference: ThemePreference;
+  vygilenceTheme: VygilenceTheme;
+  interfaceStyle: InterfaceStyle;
   toggleTheme: () => void;
+  setThemePreference: (pref: ThemePreference) => void;
+  setVygilenceTheme: (theme: VygilenceTheme) => void;
+  setInterfaceStyle: (style: InterfaceStyle) => void;
 
   authUser: User | null;
   user: Profile | null;
@@ -225,6 +234,9 @@ const calculateDocumentStatus = (expiryDate: string | null): DocumentStatus => {
 };
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const [themePreference, setThemePreferenceState] = useState<ThemePreference>('system');
+  const [vygilenceTheme, setVygilenceThemeState] = useState<VygilenceTheme>('sentinel');
+  const [interfaceStyle, setInterfaceStyleState] = useState<InterfaceStyle>('balanced');
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [user, setUser] = useState<Profile | null>(null);
@@ -308,8 +320,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setAuditLogs([]);
   };
 
+  // Load preferences per user
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const userId = user?.id || 'guest';
+
+    const storedThemePref = localStorage.getItem(`vygilence_theme_pref_${userId}`) || localStorage.getItem('vigilen_theme') || 'system';
+    setThemePreferenceState(storedThemePref as ThemePreference);
+
+    const storedTheme = localStorage.getItem(`vygilence_active_theme_${userId}`) || 'sentinel';
+    setVygilenceThemeState(storedTheme as VygilenceTheme);
+
+    const storedStyle = localStorage.getItem(`vygilence_interface_style_${userId}`) || 'balanced';
+    setInterfaceStyleState(storedStyle as InterfaceStyle);
+  }, [user]);
+
+  // Sync theme Preference (system / light / dark)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const resolveTheme = (pref: ThemePreference): 'light' | 'dark' => {
+      if (pref !== 'system') return pref;
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    };
+
+    setTheme(resolveTheme(themePreference));
+
+    if (themePreference === 'system') {
+      const media = window.matchMedia('(prefers-color-scheme: dark)');
+      const listener = (e: MediaQueryListEvent) => {
+        setTheme(e.matches ? 'dark' : 'light');
+      };
+      media.addEventListener('change', listener);
+      return () => media.removeEventListener('change', listener);
+    }
+  }, [themePreference]);
+
+  // Sync theme and style variables to root DOM element dataset
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
     const root = window.document.documentElement;
+
     if (theme === 'dark') {
       root.classList.add('dark');
       root.classList.remove('light');
@@ -317,7 +368,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       root.classList.add('light');
       root.classList.remove('dark');
     }
-  }, [theme]);
+
+    root.dataset.theme = vygilenceTheme;
+    root.dataset.style = interfaceStyle;
+  }, [theme, vygilenceTheme, interfaceStyle]);
 
   const loadWorkspaceCollections = async () => {
     const [
@@ -510,12 +564,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
+  const setThemePreference = (pref: ThemePreference) => {
+    setThemePreferenceState(pref);
+    const userId = user?.id || 'guest';
+    localStorage.setItem(`vygilence_theme_pref_${userId}`, pref);
+    localStorage.setItem('vigilen_theme', pref);
+  };
+
+  const setVygilenceTheme = (t: VygilenceTheme) => {
+    setVygilenceThemeState(t);
+    const userId = user?.id || 'guest';
+    localStorage.setItem(`vygilence_active_theme_${userId}`, t);
+  };
+
+  const setInterfaceStyle = (s: InterfaceStyle) => {
+    setInterfaceStyleState(s);
+    const userId = user?.id || 'guest';
+    localStorage.setItem(`vygilence_interface_style_${userId}`, s);
+  };
+
   const toggleTheme = () => {
     const nextTheme = theme === 'light' ? 'dark' : 'light';
-    setTheme(nextTheme);
-    if (isDemoMode) {
-      localStorage.setItem('vigilen_theme', nextTheme);
-    }
+    setThemePreference(nextTheme);
   };
 
   const login = async (email: string, password: string): Promise<boolean> => {
@@ -1079,7 +1149,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <AppContext.Provider
       value={{
         theme,
+        themePreference,
+        vygilenceTheme,
+        interfaceStyle,
         toggleTheme,
+        setThemePreference,
+        setVygilenceTheme,
+        setInterfaceStyle,
         authUser,
         user,
         organization,
