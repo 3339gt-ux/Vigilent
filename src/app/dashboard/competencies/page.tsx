@@ -17,7 +17,7 @@ import type {
   PersonType,
   RequirementRiskLevel
 } from '@/lib/types';
-import { Link as LinkIcon, Plus, Search, Trash2, Upload, UserCheck, X, Grid, User, Folder, AlertTriangle } from 'lucide-react';
+import { Link as LinkIcon, Plus, Search, Trash2, Upload, UserCheck, X, Grid, User, Folder, AlertTriangle, ChevronDown } from 'lucide-react';
 
 const categories: CompetencyCategory[] = [
   'Safety',
@@ -315,6 +315,24 @@ export default function CompetencyMatrixPage() {
   const [isEditingPerson, setIsEditingPerson] = useState(false);
   const [isEditingType, setIsEditingType] = useState(false);
   const [expandedStatusKey, setExpandedStatusKey] = useState<string | null>(null);
+  const [drawerSearch, setDrawerSearch] = useState('');
+  const [drawerCategoryFilter, setDrawerCategoryFilter] = useState('All');
+  const [drawerStatusFilter, setDrawerStatusFilter] = useState('All');
+  const [expandedRecords, setExpandedRecords] = useState<Set<string>>(new Set());
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const [notRequiredConfirmCell, setNotRequiredConfirmCell] = useState<{ person: Person; competencyType: CompetencyType; record: CompetencyRecord | null } | null>(null);
+  const [notRequiredNote, setNotRequiredNote] = useState('');
+  const [removeConfirmCell, setRemoveConfirmCell] = useState<{ person: Person; competencyType: CompetencyType; record: CompetencyRecord | null; hasEvidence: boolean; hasActions: boolean } | null>(null);
+
+  const [prevPersonId, setPrevPersonId] = useState<string | null>(null);
+  if (selectedPerson?.id !== prevPersonId) {
+    setPrevPersonId(selectedPerson?.id || null);
+    setDrawerSearch('');
+    setDrawerCategoryFilter('All');
+    setDrawerStatusFilter('All');
+    setExpandedRecords(new Set());
+    setCollapsedCategories(new Set());
+  }
 
   const selectedPack = COMPETENCY_TEMPLATE_PACKS.find(pack => pack.id === selectedPackId) || COMPETENCY_TEMPLATE_PACKS[0];
   const existingTemplateKeys = useMemo(
@@ -512,6 +530,53 @@ export default function CompetencyMatrixPage() {
     });
     return groups;
   }, [selectedPerson, selectedPersonRows]);
+
+  const drawerFilteredRows = useMemo(() => {
+    return selectedPersonRows.filter(row => {
+      const text = `${row.type.title} ${row.type.description || ''}`.toLowerCase();
+      if (drawerSearch && !text.includes(drawerSearch.toLowerCase())) return false;
+
+      if (drawerCategoryFilter !== 'All' && row.type.category !== drawerCategoryFilter) return false;
+
+      if (drawerStatusFilter !== 'All' && row.status !== drawerStatusFilter) return false;
+
+      return true;
+    });
+  }, [selectedPersonRows, drawerSearch, drawerCategoryFilter, drawerStatusFilter]);
+
+  const groupedDrawerRows = useMemo(() => {
+    const groups = {} as Record<CompetencyCategory, typeof selectedPersonRows>;
+    drawerFilteredRows.forEach(row => {
+      const cat = row.type.category;
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(row);
+    });
+    return groups;
+  }, [drawerFilteredRows]);
+
+  const toggleRecordExpanded = (rowKey: string) => {
+    setExpandedRecords(prev => {
+      const next = new Set(prev);
+      if (next.has(rowKey)) {
+        next.delete(rowKey);
+      } else {
+        next.add(rowKey);
+      }
+      return next;
+    });
+  };
+
+  const toggleCategoryCollapsed = (category: string) => {
+    setCollapsedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  };
 
   const categoryViewData = useMemo(() => {
     const data: Array<{
@@ -739,7 +804,7 @@ export default function CompetencyMatrixPage() {
     return saved;
   };
 
-  const markPersonRecordNotRequired = async (person: Person, competencyType: CompetencyType, record: CompetencyRecord | null) => {
+  const markPersonRecordNotRequired = async (person: Person, competencyType: CompetencyType, record: CompetencyRecord | null, note?: string) => {
     await upsertCompetencyRecord({
       id: record?.id,
       person_id: person.id,
@@ -750,14 +815,14 @@ export default function CompetencyMatrixPage() {
       provider: record?.provider || null,
       certificate_number: record?.certificate_number || null,
       status: 'Not Required',
-      notes: record?.notes || 'Marked not required from person detail.'
+      notes: note || record?.notes || 'Marked not required from person detail.'
     });
     setPersonMessage(`${competencyType.title} marked not required.`);
   };
 
   const removePersonRecord = async (person: Person, competencyType: CompetencyType, record: CompetencyRecord | null, hasEvidence: boolean, hasActions: boolean) => {
     if (!record) {
-      await markPersonRecordNotRequired(person, competencyType, null);
+      await markPersonRecordNotRequired(person, competencyType, null, 'Archived via removal from active matrix.');
       return;
     }
 
@@ -771,7 +836,6 @@ export default function CompetencyMatrixPage() {
       return;
     }
 
-    if (!window.confirm(`Delete the ${competencyType.title} record for ${person.display_name}? This is only allowed because no evidence or actions are linked.`)) return;
     await deleteCompetencyRecord(record.id);
     setPersonMessage(`${competencyType.title} removed from this person.`);
   };
@@ -1585,192 +1649,428 @@ export default function CompetencyMatrixPage() {
 
       {selectedPerson && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex justify-end">
-          <div className="w-full max-w-3xl bg-card border-l border-border h-full overflow-y-auto p-6 space-y-5">
-            <div className="flex justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-extrabold">{selectedPerson.display_name}</h2>
-                <p className="text-xs text-muted-foreground mt-1">{selectedPerson.department || 'No department'} | {selectedPerson.role || selectedPerson.person_type}</p>
-              </div>
-              <button onClick={() => setSelectedPerson(null)} className="p-2 hover:bg-muted rounded-lg h-fit"><X className="w-4 h-4" /></button>
-            </div>
-            {isEditingPerson ? (
-              <form onSubmit={async event => {
-                event.preventDefault();
-                const saved = await savePerson(personEditForm, selectedPerson);
-                if (saved) {
-                  setSelectedPerson(saved);
-                  setPersonMessage('Person saved.');
-                  setIsEditingPerson(false);
-                }
-              }} className="space-y-3 text-xs">
-                {renderPersonFields(personEditForm, setPersonEditForm, true)}
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setIsEditingPerson(false)} className="w-1/2 py-2 bg-muted border border-border rounded-lg font-bold">Cancel</button>
-                  <button className="w-1/2 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold">Save Person</button>
+          <div className="w-full max-w-3xl bg-card border-l border-border h-full flex flex-col">
+            {/* Sticky Header Section */}
+            <div className="p-6 pb-4 border-b border-border space-y-4 shrink-0">
+              <div className="flex justify-between items-start gap-3">
+                <div>
+                  <h2 className="text-xl font-extrabold text-indigo-950 dark:text-indigo-50">{selectedPerson.display_name}</h2>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {selectedPerson.department || 'No department'} | {selectedPerson.role || selectedPerson.person_type}
+                  </p>
                 </div>
-              </form>
-            ) : (
-              <div className="space-y-3 text-xs">
-                <div className="grid grid-cols-2 gap-2">
-                  <span>Employee #: <strong>{selectedPerson.employee_number || 'Not set'}</strong></span>
-                  <span>Email: <strong>{selectedPerson.email || 'Not set'}</strong></span>
-                  <span>Type: <strong>{selectedPerson.person_type}</strong></span>
-                  <span>Status: <strong>{selectedPerson.active ? 'Active' : 'Inactive'}</strong></span>
-                  <span>Start: <strong>{selectedPerson.start_date || 'Not set'}</strong></span>
-                  <span>End: <strong>{selectedPerson.end_date || 'Not set'}</strong></span>
-                </div>
-                {selectedPerson.notes && <p className="text-muted-foreground">{selectedPerson.notes}</p>}
                 <div className="flex gap-2">
-                  <button onClick={() => setIsEditingPerson(true)} className="flex-1 py-2 bg-muted border border-border rounded-lg font-bold">Edit Person</button>
-                  <button onClick={async () => {
-                    const saved = await savePerson({ ...personToForm(selectedPerson), active: !selectedPerson.active, end_date: selectedPerson.active ? new Date().toISOString().split('T')[0] : '' }, selectedPerson);
-                    if (saved) {
-                      setSelectedPerson(saved);
-                      setPersonEditForm(personToForm(saved));
-                      setPersonMessage(saved.active ? 'Person reactivated.' : 'Person deactivated.');
-                    }
-                  }} className="flex-1 py-2 bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 rounded-lg font-bold">
-                    {selectedPerson.active ? 'Deactivate Person' : 'Reactivate Person'}
+                  <button
+                    onClick={() => setIsEditingPerson(!isEditingPerson)}
+                    className="px-3 py-1 bg-muted border border-border hover:bg-muted/80 rounded-lg text-xs font-semibold text-foreground transition-all"
+                  >
+                    {isEditingPerson ? 'View Profile' : 'Edit Profile'}
+                  </button>
+                  <button
+                    onClick={() => setSelectedPerson(null)}
+                    className="p-1.5 hover:bg-muted border border-transparent hover:border-border rounded-lg text-muted-foreground transition-all"
+                  >
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
               </div>
-            )}
-            {personMessage && <p className="text-[11px] text-emerald-500 font-semibold">{personMessage}</p>}
-            <div className="border-t border-border pt-4 space-y-2 text-xs">
-              <h3 className="text-sm font-extrabold">Status Breakdown</h3>
-              <div className="grid grid-cols-3 gap-2">
-                {statusOptions.map(status => <span key={status} className={`px-2 py-1 rounded border ${statusClass(status)}`}>{status}: {selectedPersonBreakdown[status]}</span>)}
+
+              {isEditingPerson ? (
+                <form onSubmit={async event => {
+                  event.preventDefault();
+                  const saved = await savePerson(personEditForm, selectedPerson);
+                  if (saved) {
+                    setSelectedPerson(saved);
+                    setPersonMessage('Person saved.');
+                    setIsEditingPerson(false);
+                  }
+                }} className="space-y-3 text-xs bg-muted/20 p-3 rounded-lg border border-border">
+                  {renderPersonFields(personEditForm, setPersonEditForm, true)}
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setIsEditingPerson(false)} className="w-1/2 py-2 bg-muted border border-border rounded-lg font-bold">Cancel</button>
+                    <button className="w-1/2 py-2 bg-indigo-650 hover:bg-indigo-700 text-white rounded-lg font-bold">Save Person</button>
+                  </div>
+                </form>
+              ) : (
+                <div className="text-xs grid grid-cols-2 sm:grid-cols-3 gap-y-2 gap-x-4 bg-muted/25 p-3 rounded-lg border border-border/85">
+                  <span>Employee #: <strong className="text-foreground">{selectedPerson.employee_number || 'Not set'}</strong></span>
+                  <span>Email: <strong className="text-foreground">{selectedPerson.email || 'Not set'}</strong></span>
+                  <span>Type: <strong className="text-foreground">{selectedPerson.person_type}</strong></span>
+                  <span>Status: <strong className={`font-semibold ${selectedPerson.active ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-650 dark:text-rose-450'}`}>{selectedPerson.active ? 'Active' : 'Inactive'}</strong></span>
+                  <span>Start: <strong className="text-foreground">{selectedPerson.start_date || 'Not set'}</strong></span>
+                  <span>End: <strong className="text-foreground">{selectedPerson.end_date || 'Not set'}</strong></span>
+                  {selectedPerson.notes && <div className="col-span-full text-muted-foreground italic border-t border-border/40 pt-1.5 mt-1">{selectedPerson.notes}</div>}
+                </div>
+              )}
+
+              {personMessage && <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">{personMessage}</p>}
+
+              <div className="space-y-1.5">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Status Breakdown</h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {statusOptions.map(status => {
+                    const count = selectedPersonBreakdown[status] || 0;
+                    return (
+                      <span
+                        key={status}
+                        className={`px-2.5 py-1 rounded-full border text-[11px] font-medium flex items-center gap-1.5 ${statusClass(status)}`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${getStatusBadgeStyles(status).dot}`} />
+                        {status}: <strong className="font-extrabold">{count}</strong>
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
             </div>
-            <div className="border-t border-border pt-4 space-y-2 text-xs">
-              <h3 className="text-sm font-extrabold">Competency Records</h3>
-              {selectedPersonRows.length === 0 ? <p className="text-muted-foreground">No competency types are available yet.</p> : selectedPersonRows.map(row => {
-                const rowKey = row.record?.id || row.type.id;
-                const isEditing = personRecordEditId === rowKey;
-                const openActions = row.actions.filter(action => action.status === 'Open' || action.status === 'In Progress');
-                return (
-                  <div key={rowKey} className="p-3 bg-muted/30 border border-border rounded-lg space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                      <button onClick={() => openCell(selectedPerson, row.type)} className="text-left min-w-0">
-                        <span className="font-bold block truncate">{row.type.title}</span>
-                        <span className="text-[10px] text-muted-foreground block">
-                          {row.type.category} | Completed {row.record?.completed_date || 'Not dated'} | Expiry {row.record?.expiry_date || 'Not dated'}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground block">
-                          Trainer {row.record?.trainer || 'Not set'} | Provider {row.record?.provider || 'Not set'} | Cert {row.record?.certificate_number || 'Not set'}
+
+            {/* Scrollable Body */}
+            <div className="flex-1 overflow-y-auto p-6 pt-4 space-y-6">
+              {/* Search & Filter Controls */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-foreground">Competency Records</h3>
+                  <span className="text-xs bg-muted border border-border px-2 py-0.5 rounded-full text-muted-foreground font-semibold">
+                    {drawerFilteredRows.length} shown
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-muted/20 p-2.5 rounded-xl border border-border">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="Search competencies..."
+                      value={drawerSearch}
+                      onChange={e => setDrawerSearch(e.target.value)}
+                      className="w-full pl-8 pr-2.5 py-1.5 bg-card border border-border rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <select
+                    value={drawerCategoryFilter}
+                    onChange={e => setDrawerCategoryFilter(e.target.value)}
+                    className="w-full px-2 py-1.5 bg-card border border-border rounded-lg text-xs outline-none focus:border-indigo-500"
+                  >
+                    <option value="All">All Categories</option>
+                    {categories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={drawerStatusFilter}
+                    onChange={e => setDrawerStatusFilter(e.target.value)}
+                    className="w-full px-2 py-1.5 bg-card border border-border rounded-lg text-xs outline-none focus:border-indigo-500"
+                  >
+                    <option value="All">All Statuses</option>
+                    {statusOptions.map(status => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Grouped List */}
+              <div className="space-y-4">
+                {Object.keys(groupedDrawerRows).length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground border border-dashed border-border rounded-xl">
+                    <p className="text-xs font-medium">No competencies match your search/filters.</p>
+                  </div>
+                ) : (
+                  (categories.filter(cat => groupedDrawerRows[cat]?.length > 0) as CompetencyCategory[]).map(category => {
+                    const isCollapsed = collapsedCategories.has(category);
+                    const categoryRows = groupedDrawerRows[category];
+
+                    return (
+                      <div key={category} className="space-y-2">
+                        <button
+                          onClick={() => toggleCategoryCollapsed(category)}
+                          className="w-full flex items-center justify-between py-1 px-2 hover:bg-muted/50 rounded-lg text-xs font-bold text-indigo-950 dark:text-indigo-200 transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Folder className="w-3.5 h-3.5 text-indigo-650 dark:text-indigo-400" />
+                            <span>{category}</span>
+                            <span className="text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/10 px-1.5 py-0.5 rounded-full font-extrabold">
+                              {categoryRows.length}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground">
+                            {isCollapsed ? 'Show' : 'Hide'}
+                          </span>
+                        </button>
+
+                        {!isCollapsed && (
+                          <div className="space-y-2 pl-1 border-l-2 border-indigo-500/10 ml-2">
+                            {categoryRows.map(row => {
+                              const rowKey = row.record?.id || row.type.id;
+                              const isExpanded = expandedRecords.has(rowKey);
+                              const isEditing = personRecordEditId === rowKey;
+                              const openActions = row.actions.filter(action => action.status === 'Open' || action.status === 'In Progress');
+
+                              return (
+                                <div
+                                  key={rowKey}
+                                  className={`bg-card border rounded-xl overflow-hidden transition-all duration-200 ${
+                                    isExpanded
+                                      ? 'border-indigo-500/30 ring-1 ring-indigo-500/10 shadow-sm'
+                                      : 'border-border hover:border-border-hover shadow-xs'
+                                  }`}
+                                >
+                                  <div
+                                    onClick={() => toggleRecordExpanded(rowKey)}
+                                    className="p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 cursor-pointer hover:bg-muted/10 transition-colors"
+                                  >
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-bold text-xs text-foreground block truncate">{row.type.title}</span>
+                                        <span className="text-[9px] text-muted-foreground uppercase px-1.5 py-0.5 bg-muted rounded border border-border">
+                                          {row.type.default_risk_level || 'Medium'}
+                                        </span>
+                                      </div>
+                                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground mt-1">
+                                        <span>Completed: <strong className="text-foreground">{row.record?.completed_date || 'N/A'}</strong></span>
+                                        <span className="text-muted-foreground/30">•</span>
+                                        <span>Expiry: <strong className={row.status === 'Expired' ? 'text-rose-605 dark:text-rose-400 font-semibold' : 'text-foreground'}>{row.record?.expiry_date || 'N/A'}</strong></span>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                                      <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${statusClass(row.status)}`}>
+                                        {row.status}
+                                      </span>
+                                      {row.evidenceDocuments.length > 0 && (
+                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold border border-border bg-muted/50 text-muted-foreground flex items-center gap-1">
+                                          <LinkIcon className="w-2.5 h-2.5" /> {row.evidenceDocuments.length}
+                                        </span>
+                                      )}
+                                      {openActions.length > 0 && (
+                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold border border-rose-500/20 bg-rose-500/5 text-rose-650 dark:text-rose-400 flex items-center gap-1">
+                                          <AlertTriangle className="w-2.5 h-2.5 text-rose-500" /> {openActions.length}
+                                        </span>
+                                      )}
+                                      <button
+                                        type="button"
+                                        className="p-1 hover:bg-muted rounded text-muted-foreground ml-1"
+                                      >
+                                        <ChevronDown className={`w-3.5 h-3.5 transform transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {isExpanded && (
+                                    <div className="border-t border-border/80 bg-muted/10 p-3.5 space-y-4 text-xs">
+                                      {isEditing ? (
+                                        <form onSubmit={async event => {
+                                          event.preventDefault();
+                                          await savePersonRecord(selectedPerson, row.type, row.record);
+                                        }} className="space-y-3 bg-card p-3 rounded-lg border border-border shadow-inner">
+                                          <h4 className="font-bold text-xs text-foreground">Edit Competency Record</h4>
+                                          <div className="grid grid-cols-2 gap-3">
+                                            <label className="space-y-1">
+                                              <span className="text-[10px] font-bold uppercase text-muted-foreground">Completed</span>
+                                              <input type="date" value={personRecordForm.completed_date} onChange={event => setPersonRecordForm({ ...personRecordForm, completed_date: event.target.value })} className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none" />
+                                            </label>
+                                            <label className="space-y-1">
+                                              <span className="text-[10px] font-bold uppercase text-muted-foreground">Expiry</span>
+                                              <input type="date" value={personRecordForm.expiry_date} onChange={event => setPersonRecordForm({ ...personRecordForm, expiry_date: event.target.value })} className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none" />
+                                            </label>
+                                          </div>
+                                          <div className="grid grid-cols-2 gap-3">
+                                            <input placeholder="Trainer" value={personRecordForm.trainer} onChange={event => setPersonRecordForm({ ...personRecordForm, trainer: event.target.value })} className="px-3 py-2 bg-muted border border-border rounded-lg outline-none" />
+                                            <input placeholder="Provider" value={personRecordForm.provider} onChange={event => setPersonRecordForm({ ...personRecordForm, provider: event.target.value })} className="px-3 py-2 bg-muted border border-border rounded-lg outline-none" />
+                                          </div>
+                                          <div className="grid grid-cols-2 gap-3">
+                                            <input placeholder="Certificate number" value={personRecordForm.certificate_number} onChange={event => setPersonRecordForm({ ...personRecordForm, certificate_number: event.target.value })} className="px-3 py-2 bg-muted border border-border rounded-lg outline-none" />
+                                            <select value={personRecordForm.status} onChange={event => setPersonRecordForm({ ...personRecordForm, status: event.target.value as CompetencyStatus })} className="px-3 py-2 bg-muted border border-border rounded-lg outline-none">
+                                              {statusOptions.map(status => <option key={status} value={status}>{status}</option>)}
+                                            </select>
+                                          </div>
+                                          <textarea placeholder="Notes" value={personRecordForm.notes} onChange={event => setPersonRecordForm({ ...personRecordForm, notes: event.target.value })} rows={2} className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none resize-none" />
+                                          <div className="flex gap-2">
+                                            <button type="button" onClick={() => setPersonRecordEditId(null)} className="flex-1 py-2 bg-muted border border-border rounded-lg font-bold">Cancel</button>
+                                            <button type="submit" className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold">Save Competency</button>
+                                          </div>
+                                        </form>
+                                      ) : (
+                                        <div className="space-y-3">
+                                          {row.record && (
+                                            <div className="grid grid-cols-2 gap-y-1 text-[11px] bg-card/60 p-2.5 rounded-lg border border-border">
+                                              <span>Trainer: <strong className="text-foreground">{row.record.trainer || 'Not set'}</strong></span>
+                                              <span>Provider: <strong className="text-foreground">{row.record.provider || 'Not set'}</strong></span>
+                                              <span>Cert #: <strong className="text-foreground">{row.record.certificate_number || 'Not set'}</strong></span>
+                                              {row.record.notes && <span className="col-span-2 text-muted-foreground mt-1 block">Notes: {row.record.notes}</span>}
+                                            </div>
+                                          )}
+
+                                          <div className="flex flex-wrap gap-2">
+                                            <button
+                                              onClick={() => startPersonRecordEdit(rowKey, row.record, row.status)}
+                                              className="px-3 py-1.5 bg-card border border-border hover:bg-muted/50 rounded-lg font-bold text-foreground transition-all"
+                                            >
+                                              Edit Competency
+                                            </button>
+                                            <button
+                                              onClick={() => {
+                                                setNotRequiredConfirmCell({ person: selectedPerson, competencyType: row.type, record: row.record });
+                                                setNotRequiredNote('');
+                                              }}
+                                              className="px-3 py-1.5 bg-card border border-border hover:bg-muted/50 rounded-lg font-bold text-foreground transition-all"
+                                            >
+                                              Mark Not Required
+                                            </button>
+                                            <button
+                                              onClick={() => {
+                                                setRemoveConfirmCell({
+                                                  person: selectedPerson,
+                                                  competencyType: row.type,
+                                                  record: row.record,
+                                                  hasEvidence: row.evidenceDocuments.length > 0,
+                                                  hasActions: row.actions.length > 0
+                                                });
+                                              }}
+                                              className="px-3 py-1.5 bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/15 text-rose-600 dark:text-rose-400 rounded-lg font-bold flex items-center gap-1.5 transition-all"
+                                            >
+                                              <Trash2 className="w-3.5 h-3.5" /> Remove from person
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-border/80 pt-3">
+                                        <div className="space-y-2.5">
+                                          <div className="flex items-center justify-between gap-2">
+                                            <h4 className="font-bold text-foreground flex items-center gap-1">
+                                              <LinkIcon className="w-3 h-3 text-indigo-600 dark:text-indigo-400" /> Evidence
+                                            </h4>
+                                            <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded border border-border">Vault Sec</span>
+                                          </div>
+
+                                          {row.evidenceDocuments.length === 0 ? (
+                                            <p className="text-[11px] text-muted-foreground italic bg-muted/10 p-2 rounded-lg border border-border/60">No linked evidence documents.</p>
+                                          ) : (
+                                            <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                                              {row.evidenceDocuments.map(document => (
+                                                <div key={document.id} className="flex items-center justify-between gap-2 p-1.5 bg-card border border-border rounded-lg">
+                                                  <span className="font-semibold text-[11px] truncate text-foreground flex-1">{document.title}</span>
+                                                  <div className="flex gap-1 shrink-0">
+                                                    <button
+                                                      onClick={async () => window.open(await getDocumentSignedUrl(document.id), '_blank')}
+                                                      className="px-2 py-0.5 bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 rounded font-bold text-[10px] transition-all"
+                                                    >
+                                                      Open
+                                                    </button>
+                                                    {row.record && (
+                                                      <button
+                                                        onClick={() => unlinkDocumentFromCompetencyRecord(row.record!.id, document.id)}
+                                                        className="px-2 py-0.5 bg-muted hover:bg-muted-hover border border-border rounded font-bold text-[10px] text-muted-foreground transition-all"
+                                                      >
+                                                        Unlink
+                                                      </button>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+
+                                          <div className="space-y-2 bg-card p-2 rounded-lg border border-border">
+                                            <select
+                                              value={personRecordLinkIds[rowKey] || ''}
+                                              onChange={event => setPersonRecordLinkIds({ ...personRecordLinkIds, [rowKey]: event.target.value })}
+                                              className="w-full px-2.5 py-1.5 bg-muted border border-border rounded-lg text-xs outline-none focus:border-indigo-500"
+                                            >
+                                              <option value="">Link existing evidence...</option>
+                                              {documents.map(document => (
+                                                <option key={document.id} value={document.id}>{document.title}</option>
+                                              ))}
+                                            </select>
+                                            <div className="grid grid-cols-2 gap-2">
+                                              <button
+                                                disabled={!row.record || !personRecordLinkIds[rowKey]}
+                                                onClick={() => linkEvidenceFromPerson(row.record, rowKey)}
+                                                className="py-1.5 bg-muted hover:bg-muted-hover border border-border disabled:opacity-50 disabled:cursor-not-allowed rounded-lg font-bold text-[11px] text-foreground flex items-center justify-center gap-1 transition-all"
+                                              >
+                                                <LinkIcon className="w-3.5 h-3.5" /> Link
+                                              </button>
+                                              <label className={`py-1.5 bg-muted hover:bg-muted-hover border border-border rounded-lg font-bold text-[11px] text-foreground flex items-center justify-center gap-1 text-center transition-all ${row.record ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
+                                                <Upload className="w-3.5 h-3.5" /> {personRecordUploadingId === row.record?.id ? 'Uploading...' : 'Upload'}
+                                                <input disabled={!row.record} type="file" accept={evidenceAcceptAttribute} className="hidden" onChange={event => uploadEvidenceFromPerson(row.record, event.target.files?.[0] || null)} />
+                                              </label>
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        <div className="space-y-2.5">
+                                          <div className="flex items-center justify-between gap-2">
+                                            <h4 className="font-bold text-foreground flex items-center gap-1">
+                                              <AlertTriangle className="w-3 h-3 text-rose-500" /> Actions
+                                            </h4>
+                                            <button
+                                              onClick={() => createGapActionFromPerson(selectedPerson, row.type, row.record)}
+                                              className="px-2 py-1 bg-indigo-600 hover:bg-indigo-705 text-white rounded font-bold text-[10px] flex items-center gap-1 transition-all"
+                                            >
+                                              <Plus className="w-2.5 h-2.5" /> Create action
+                                            </button>
+                                          </div>
+
+                                          {row.actions.length === 0 ? (
+                                            <p className="text-[11px] text-muted-foreground italic bg-muted/10 p-2 rounded-lg border border-border/60">No linked actions.</p>
+                                          ) : (
+                                            <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                                              {row.actions.map(action => (
+                                                <button
+                                                  key={action.id}
+                                                  onClick={() => setSelectedAction(action)}
+                                                  className="w-full text-left p-2 bg-card border border-border rounded-lg hover:bg-muted/40 hover:border-border-hover transition-colors"
+                                                >
+                                                  <span className="font-bold text-[11px] block truncate text-foreground">{action.title}</span>
+                                                  <span className="text-[10px] text-muted-foreground">
+                                                    {action.status}
+                                                    {action.target_due_date || action.due_date ? ` | Due ${action.target_due_date || action.due_date}` : ''}
+                                                  </span>
+                                                </button>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* General Person Actions */}
+              <div className="border-t border-border pt-4 space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Open Related Actions</h3>
+                {selectedPersonActions.filter(action => action.status === 'Open' || action.status === 'In Progress').length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">No other open actions related to this person.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {selectedPersonActions.filter(action => action.status === 'Open' || action.status === 'In Progress').map(action => (
+                      <button
+                        key={action.id}
+                        onClick={() => setSelectedAction(action)}
+                        className="w-full text-left p-3 bg-muted/20 hover:bg-muted/40 border border-border rounded-xl transition-all"
+                      >
+                        <span className="font-bold text-xs text-foreground block">{action.title}</span>
+                        <span className="text-[10px] text-muted-foreground mt-0.5 block">
+                          {action.status}
+                          {action.target_due_date || action.due_date ? ` | Due ${action.target_due_date || action.due_date}` : ''}
                         </span>
                       </button>
-                      <div className="flex flex-wrap gap-2 shrink-0">
-                        <span className={`px-2 py-1 rounded border ${statusClass(row.status)}`}>{row.status}</span>
-                        <span className="px-2 py-1 rounded border border-border bg-card">Evidence {row.evidenceDocuments.length}</span>
-                        <span className="px-2 py-1 rounded border border-border bg-card">Open actions {openActions.length}</span>
-                      </div>
-                    </div>
-
-                    {isEditing ? (
-                      <form onSubmit={async event => {
-                        event.preventDefault();
-                        await savePersonRecord(selectedPerson, row.type, row.record);
-                      }} className="space-y-3 border-t border-border pt-3">
-                        <div className="grid grid-cols-2 gap-3">
-                          <label className="space-y-1">
-                            <span className="text-[10px] font-bold uppercase text-muted-foreground">Completed</span>
-                            <input type="date" value={personRecordForm.completed_date} onChange={event => setPersonRecordForm({ ...personRecordForm, completed_date: event.target.value })} className="w-full px-3 py-2 bg-card border border-border rounded-lg outline-none" />
-                          </label>
-                          <label className="space-y-1">
-                            <span className="text-[10px] font-bold uppercase text-muted-foreground">Expiry</span>
-                            <input type="date" value={personRecordForm.expiry_date} onChange={event => setPersonRecordForm({ ...personRecordForm, expiry_date: event.target.value })} className="w-full px-3 py-2 bg-card border border-border rounded-lg outline-none" />
-                          </label>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <input placeholder="Trainer" value={personRecordForm.trainer} onChange={event => setPersonRecordForm({ ...personRecordForm, trainer: event.target.value })} className="px-3 py-2 bg-card border border-border rounded-lg outline-none" />
-                          <input placeholder="Provider" value={personRecordForm.provider} onChange={event => setPersonRecordForm({ ...personRecordForm, provider: event.target.value })} className="px-3 py-2 bg-card border border-border rounded-lg outline-none" />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <input placeholder="Certificate number" value={personRecordForm.certificate_number} onChange={event => setPersonRecordForm({ ...personRecordForm, certificate_number: event.target.value })} className="px-3 py-2 bg-card border border-border rounded-lg outline-none" />
-                          <select value={personRecordForm.status} onChange={event => setPersonRecordForm({ ...personRecordForm, status: event.target.value as CompetencyStatus })} className="px-3 py-2 bg-card border border-border rounded-lg outline-none">
-                            {statusOptions.map(status => <option key={status} value={status}>{status}</option>)}
-                          </select>
-                        </div>
-                        <textarea placeholder="Notes" value={personRecordForm.notes} onChange={event => setPersonRecordForm({ ...personRecordForm, notes: event.target.value })} rows={2} className="w-full px-3 py-2 bg-card border border-border rounded-lg outline-none resize-none" />
-                        <div className="flex gap-2">
-                          <button type="button" onClick={() => setPersonRecordEditId(null)} className="flex-1 py-2 bg-card border border-border rounded-lg font-bold">Cancel</button>
-                          <button type="submit" className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold">Save Competency</button>
-                        </div>
-                      </form>
-                    ) : (
-                      <div className="flex flex-wrap gap-2">
-                        <button onClick={() => startPersonRecordEdit(rowKey, row.record, row.status)} className="px-3 py-1.5 bg-card border border-border rounded-lg font-bold">Edit Competency</button>
-                        <button onClick={() => markPersonRecordNotRequired(selectedPerson, row.type, row.record)} className="px-3 py-1.5 bg-card border border-border rounded-lg font-bold">Mark Not Required</button>
-                        <button onClick={() => removePersonRecord(selectedPerson, row.type, row.record, row.evidenceDocuments.length > 0, row.actions.length > 0)} className="px-3 py-1.5 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 rounded-lg font-bold flex items-center gap-1">
-                          <Trash2 className="w-3.5 h-3.5" /> Remove from person
-                        </button>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 border-t border-border pt-3">
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <h4 className="font-extrabold">Evidence</h4>
-                          <span className="text-[10px] text-muted-foreground">Private Evidence Vault</span>
-                        </div>
-                        {row.evidenceDocuments.length === 0 ? (
-                          <p className="text-[11px] text-muted-foreground">No evidence linked.</p>
-                        ) : row.evidenceDocuments.map(document => (
-                          <div key={document.id} className="flex items-center justify-between gap-2 p-2 bg-card border border-border rounded-lg">
-                            <span className="font-semibold truncate">{document.title}</span>
-                            <div className="flex gap-1 shrink-0">
-                              <button onClick={async () => window.open(await getDocumentSignedUrl(document.id), '_blank')} className="px-2 py-1 bg-indigo-500/10 text-indigo-500 rounded font-bold">Open</button>
-                              {row.record && <button onClick={() => unlinkDocumentFromCompetencyRecord(row.record!.id, document.id)} className="px-2 py-1 bg-muted border border-border rounded font-bold">Unlink</button>}
-                            </div>
-                          </div>
-                        ))}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <div className="space-y-2">
-                            <select value={personRecordLinkIds[rowKey] || ''} onChange={event => setPersonRecordLinkIds({ ...personRecordLinkIds, [rowKey]: event.target.value })} className="w-full px-3 py-2 bg-card border border-border rounded-lg outline-none">
-                              <option value="">Link existing evidence</option>
-                              {documents.map(document => <option key={document.id} value={document.id}>{document.title}</option>)}
-                            </select>
-                            <button disabled={!row.record || !personRecordLinkIds[rowKey]} onClick={() => linkEvidenceFromPerson(row.record, rowKey)} className="w-full py-2 bg-card border border-border disabled:opacity-50 rounded-lg font-bold flex items-center justify-center gap-2">
-                              <LinkIcon className="w-4 h-4" /> Link
-                            </button>
-                          </div>
-                          <label className={`w-full py-2 bg-card border border-border rounded-lg font-bold flex items-center justify-center gap-2 text-center ${row.record ? 'cursor-pointer' : 'opacity-50'}`}>
-                            <Upload className="w-4 h-4" /> {personRecordUploadingId === row.record?.id ? 'Uploading...' : 'Upload'}
-                            <input disabled={!row.record} type="file" accept={evidenceAcceptAttribute} className="hidden" onChange={event => uploadEvidenceFromPerson(row.record, event.target.files?.[0] || null)} />
-                          </label>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <h4 className="font-extrabold">Actions</h4>
-                          <button onClick={() => createGapActionFromPerson(selectedPerson, row.type, row.record)} className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold flex items-center gap-1">
-                            <Plus className="w-3 h-3" /> Create gap action
-                          </button>
-                        </div>
-                        {row.actions.length === 0 ? (
-                          <p className="text-[11px] text-muted-foreground">No linked actions.</p>
-                        ) : row.actions.map(action => (
-                          <button key={action.id} onClick={() => setSelectedAction(action)} className="w-full text-left p-2 bg-card border border-border rounded-lg hover:bg-muted/60">
-                            <span className="font-bold block truncate">{action.title}</span>
-                            <span className="text-[10px] text-muted-foreground">{action.status}{action.target_due_date || action.due_date ? ` | Due ${action.target_due_date || action.due_date}` : ''}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                    ))}
                   </div>
-                );
-              })}
-            </div>
-            <div className="border-t border-border pt-4 space-y-2 text-xs">
-              <h3 className="text-sm font-extrabold">Open Related Actions</h3>
-              {selectedPersonActions.filter(action => action.status === 'Open' || action.status === 'In Progress').length === 0 ? <p className="text-muted-foreground">No open actions related to this person.</p> : selectedPersonActions.filter(action => action.status === 'Open' || action.status === 'In Progress').map(action => (
-                <button key={action.id} onClick={() => setSelectedAction(action)} className="w-full text-left p-3 bg-muted/30 border border-border rounded-lg hover:bg-muted/60">
-                  <span className="font-bold block">{action.title}</span>
-                  <span className="text-[10px] text-muted-foreground">{action.status}{action.target_due_date || action.due_date ? ` | Due ${action.target_due_date || action.due_date}` : ''}</span>
-                </button>
-              ))}
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1935,6 +2235,114 @@ export default function CompetencyMatrixPage() {
                   <span className="text-[10px] text-muted-foreground">{action.status}{action.target_due_date || action.due_date ? ` | Due ${action.target_due_date || action.due_date}` : ''}</span>
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {notRequiredConfirmCell && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-card border border-border rounded-xl shadow-xl p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-lg shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-foreground">Mark as Not Required</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  This will mark <strong className="text-foreground">{notRequiredConfirmCell.competencyType.title}</strong> as not required for <strong className="text-foreground">{notRequiredConfirmCell.person.display_name}</strong>. It will no longer count as missing or overdue.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                Reason / Note (optional)
+              </label>
+              <textarea
+                placeholder="Specify why this competency is not required for this person..."
+                value={notRequiredNote}
+                onChange={e => setNotRequiredNote(e.target.value)}
+                className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none text-xs resize-none focus:border-indigo-500"
+                rows={3}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setNotRequiredConfirmCell(null)}
+                className="px-4 py-2 bg-muted border border-border hover:bg-muted/80 text-foreground rounded-lg text-xs font-bold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const { person, competencyType, record } = notRequiredConfirmCell;
+                  await markPersonRecordNotRequired(person, competencyType, record, notRequiredNote);
+                  setNotRequiredConfirmCell(null);
+                }}
+                className="px-4 py-2 bg-indigo-650 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {removeConfirmCell && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-card border border-border rounded-xl shadow-xl p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-lg shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-foreground">Remove Competency from Person</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Are you sure you want to remove <strong className="text-foreground">{removeConfirmCell.competencyType.title}</strong> from <strong className="text-foreground">{removeConfirmCell.person.display_name}</strong>?
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-muted/30 border border-border/80 rounded-lg p-3 text-xs space-y-1.5">
+              {!removeConfirmCell.record ? (
+                <p className="text-muted-foreground leading-relaxed">
+                  There is currently no saved completed record. To prevent this requirement from showing up as Missing, we will archive/mark it as <strong className="text-foreground">Not Required</strong>.
+                </p>
+              ) : (removeConfirmCell.hasEvidence || removeConfirmCell.hasActions) ? (
+                <p className="text-muted-foreground leading-relaxed">
+                  <span className="font-semibold text-amber-600 dark:text-amber-400 block mb-1">Notice: Linked Documents/Actions Found</span>
+                  This competency has linked evidence or actions. To preserve this history, the record will not be permanently deleted. Instead, it will be safely archived/marked as <strong className="text-foreground">Not Required</strong> to maintain evidence and action compliance records.
+                </p>
+              ) : (
+                <p className="text-muted-foreground leading-relaxed">
+                  <span className="font-semibold text-rose-600 dark:text-rose-400 block mb-1">Warning: Permanent Deletion</span>
+                  Since there is no linked evidence or active action tasks, confirming this will permanently delete the competency completion record for this person.
+                </p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setRemoveConfirmCell(null)}
+                className="px-4 py-2 bg-muted border border-border hover:bg-muted/80 text-foreground rounded-lg text-xs font-bold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const { person, competencyType, record, hasEvidence, hasActions } = removeConfirmCell;
+                  await removePersonRecord(person, competencyType, record, hasEvidence, hasActions);
+                  setRemoveConfirmCell(null);
+                }}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors"
+              >
+                Confirm
+              </button>
             </div>
           </div>
         </div>
