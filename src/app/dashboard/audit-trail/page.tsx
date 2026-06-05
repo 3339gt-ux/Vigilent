@@ -49,6 +49,46 @@ function maskSensitiveData(obj: any): any {
   return obj;
 }
 
+function getUndoUnavailableReason(event: AuditTrailEvent): string {
+  if (event.undone_at) {
+    return 'This action has already been undone.';
+  }
+  if (event.undo_expires_at && new Date(event.undo_expires_at) < new Date()) {
+    return 'The recovery window for this action has expired.';
+  }
+  if (event.action_type && event.action_type.includes('permanently_deleted')) {
+    return 'Permanent hard deletions cannot be undone.';
+  }
+  if (event.action_type && (event.action_type.includes('created') || event.action_type.includes('uploaded'))) {
+    return 'Resource creations must be removed manually.';
+  }
+  if (event.action_category === 'System' || event.action_type === 'undo_executed') {
+    return 'System-level transaction logs cannot be undone.';
+  }
+  return 'This action is not configuration-reversible.';
+}
+
+function getCategoryBadgeClass(category: string): string {
+  switch (category) {
+    case 'Evidence':
+      return 'bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-400';
+    case 'Requirements':
+      return 'bg-purple-500/10 border-purple-500/20 text-purple-600 dark:text-purple-400';
+    case 'Actions':
+      return 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400';
+    case 'Competency':
+      return 'bg-cyan-500/10 border-cyan-500/20 text-cyan-600 dark:text-cyan-400';
+    case 'Audit Packs':
+      return 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400';
+    case 'Users & Admin':
+      return 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400';
+    case 'System':
+      return 'bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-400';
+    default:
+      return 'bg-muted border-border/80 text-foreground';
+  }
+}
+
 export default function AuditTrailPage() {
   const { user } = useApp();
   const router = useRouter();
@@ -78,6 +118,9 @@ export default function AuditTrailPage() {
   // Selected event for drawer
   const [selectedEvent, setSelectedEvent] = useState<AuditTrailEvent | null>(null);
   
+  // Confirmation modal state for undoing
+  const [confirmUndoEvent, setConfirmUndoEvent] = useState<AuditTrailEvent | null>(null);
+
   // Operation statuses
   const [undoingEventId, setUndoingEventId] = useState<string | null>(null);
   const [operationStatus, setOperationStatus] = useState<{
@@ -144,6 +187,7 @@ export default function AuditTrailPage() {
 
   // Handle Undo
   const handleUndo = async (eventId: string) => {
+    setConfirmUndoEvent(null);
     setUndoingEventId(eventId);
     setOperationStatus({ type: null, message: null });
     try {
@@ -243,6 +287,18 @@ export default function AuditTrailPage() {
       return true;
     });
   }, [events, searchTerm, selectedCategory, selectedSeverity, selectedActor, selectedActionType, startDate, endDate, undoableOnly]);
+
+  // Check if any filters are active
+  const hasActiveFilters = useMemo(() => {
+    return searchTerm.trim() !== '' ||
+      selectedCategory !== 'All' ||
+      selectedSeverity !== 'All' ||
+      selectedActor !== 'All' ||
+      selectedActionType !== 'All' ||
+      startDate !== '' ||
+      endDate !== '' ||
+      undoableOnly;
+  }, [searchTerm, selectedCategory, selectedSeverity, selectedActor, selectedActionType, startDate, endDate, undoableOnly]);
 
   // Pagination logic
   const paginatedEvents = useMemo(() => {
@@ -372,7 +428,16 @@ export default function AuditTrailPage() {
         throw new Error('No events to export.');
       }
 
-      const content = JSON.stringify(filteredEvents, null, 2);
+      // Mask sensitive fields in JSON export
+      const maskedEvents = filteredEvents.map(e => ({
+        ...e,
+        metadata: maskSensitiveData(e.metadata),
+        before_snapshot: maskSensitiveData(e.before_snapshot),
+        after_snapshot: maskSensitiveData(e.after_snapshot),
+        changed_fields: maskSensitiveData(e.changed_fields)
+      }));
+
+      const content = JSON.stringify(maskedEvents, null, 2);
       const blob = new Blob([content], { type: 'application/json;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -396,7 +461,7 @@ export default function AuditTrailPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
         <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-        <p className="text-xs text-muted-foreground">Checking administrator permissions...</p>
+        <p className="text-xs text-muted-foreground font-semibold">Checking administrator permissions...</p>
       </div>
     );
   }
@@ -404,10 +469,22 @@ export default function AuditTrailPage() {
   // Render auth denied state
   if (isAuthorized === false) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
-        <ShieldAlert className="w-16 h-16 text-rose-500" />
-        <h2 className="text-xl font-bold text-foreground">Access Denied</h2>
-        <p className="text-sm text-muted-foreground">Only Workspace Owners or Administrators can view the Audit Trail.</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-5 text-center p-6 bg-card border border-border rounded-2xl max-w-lg mx-auto shadow-lg my-12">
+        <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-full shrink-0 select-none">
+          <ShieldAlert className="w-10 h-10" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-xl font-extrabold text-foreground">Unauthorized Access</h2>
+          <p className="text-xs text-muted-foreground leading-relaxed max-w-xs mx-auto">
+            This workspace resource is locked. Only accounts with Owner or Administrator permissions are authorized to inspect the Compliance Audit Trail.
+          </p>
+        </div>
+        <button
+          onClick={() => router.push('/dashboard')}
+          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-md transition-colors cursor-pointer"
+        >
+          Return to Dashboard
+        </button>
       </div>
     );
   }
@@ -415,42 +492,51 @@ export default function AuditTrailPage() {
   return (
     <div className="space-y-8 relative pb-12">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-extrabold tracking-tight" id="audit-trail-heading">Audit Trail</h1>
-            <span className="flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
-              <ShieldCheck className="w-3.5 h-3.5" />
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 border-b border-border/60 pb-5">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-3xl font-extrabold tracking-tight text-foreground" id="audit-trail-heading">Audit Trail</h1>
+            <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-sm select-none">
+              <ShieldCheck className="w-3 h-3 text-indigo-500 dark:text-indigo-400" />
               Owner / Admin Only
             </span>
           </div>
-          <p className="text-sm text-muted-foreground mt-1">
-            Organisation-level immutable log of user operations, configuration adjustments, and recoverable actions.
+          <p className="text-sm text-muted-foreground max-w-2xl leading-relaxed">
+            Organisation-level record of user actions, changes and recoverable events.
           </p>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground/90 font-medium bg-muted/65 border border-border/40 px-3 py-2 rounded-lg max-w-2xl select-none">
+            <Info className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+            <span>Audit entries are protected and cannot be edited after creation, except controlled undo markers.</span>
+          </div>
         </div>
 
         {/* Exports */}
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={handleExportCSV}
-            disabled={filteredEvents.length === 0}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-muted hover:bg-muted/80 text-foreground text-xs font-bold rounded-lg border border-border shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Download className="w-3.5 h-3.5" /> Export CSV
-          </button>
-          <button
-            onClick={handleExportJSON}
-            disabled={filteredEvents.length === 0}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-muted hover:bg-muted/80 text-foreground text-xs font-bold rounded-lg border border-border shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <FileText className="w-3.5 h-3.5" /> Export JSON
-          </button>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportCSV}
+              disabled={filteredEvents.length === 0}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 bg-card hover:bg-muted text-foreground text-xs font-bold rounded-lg border border-border shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Download className="w-3.5 h-3.5" /> Export CSV
+            </button>
+            <button
+              onClick={handleExportJSON}
+              disabled={filteredEvents.length === 0}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 bg-card hover:bg-muted text-foreground text-xs font-bold rounded-lg border border-border shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <FileText className="w-3.5 h-3.5" /> Export JSON
+            </button>
+          </div>
+          <span className="text-[10px] text-muted-foreground/75 text-center sm:text-left mt-0.5">
+            Exports include only the currently filtered events.
+          </span>
         </div>
       </div>
 
       {/* Operation Toast Notification */}
       {operationStatus.type && (
-        <div className={`p-4 border rounded-xl flex items-start gap-2.5 text-xs font-semibold shadow-md animate-in fade-in duration-300 ${
+        <div className={`p-4 border rounded-xl flex items-start gap-3 text-xs font-semibold shadow-md animate-in fade-in duration-300 ${
           operationStatus.type === 'success'
             ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
             : 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
@@ -458,12 +544,12 @@ export default function AuditTrailPage() {
           {operationStatus.type === 'success' ? (
             <CheckCircle2 className="w-4.5 h-4.5 shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
           ) : (
-            <ShieldAlert className="w-4.5 h-4.5 shrink-0 text-rose-655 dark:text-rose-400 mt-0.5" />
+            <ShieldAlert className="w-4.5 h-4.5 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
           )}
           <div className="flex-1">
             <span>{operationStatus.message}</span>
           </div>
-          <button onClick={() => setOperationStatus({ type: null, message: null })} className="p-1 hover:bg-muted rounded text-muted-foreground">
+          <button onClick={() => setOperationStatus({ type: null, message: null })} className="p-1 hover:bg-muted rounded text-muted-foreground cursor-pointer">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -471,30 +557,64 @@ export default function AuditTrailPage() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="bg-card border border-border rounded-xl p-4 shadow-sm">
-          <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block">Total Events</span>
-          <strong className="block text-2xl mt-1.5 font-extrabold text-foreground">{metrics.total}</strong>
-          <span className="text-[9px] text-muted-foreground mt-1 block">immutable events logged</span>
+        {/* Total Events */}
+        <div className="bg-card border border-border/80 border-l-4 border-l-indigo-500 rounded-xl p-4.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between min-h-[100px]">
+          <div className="flex justify-between items-start">
+            <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block">Total Events</span>
+            <History className="w-4 h-4 text-indigo-500 shrink-0" />
+          </div>
+          <div>
+            <strong className="block text-2xl mt-1.5 font-extrabold text-foreground tracking-tight">{metrics.total}</strong>
+            <span className="text-[9.5px] text-muted-foreground mt-1 block font-medium">immutable records logged</span>
+          </div>
         </div>
-        <div className="bg-card border border-border rounded-xl p-4 shadow-sm">
-          <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block">Logged Today</span>
-          <strong className="block text-2xl mt-1.5 font-extrabold text-foreground">{metrics.today}</strong>
-          <span className="text-[9px] text-muted-foreground mt-1 block">within the current day</span>
+
+        {/* Logged Today */}
+        <div className="bg-card border border-border/80 border-l-4 border-l-slate-400 dark:border-l-slate-650 rounded-xl p-4.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between min-h-[100px]">
+          <div className="flex justify-between items-start">
+            <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block">Logged Today</span>
+            <Calendar className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0" />
+          </div>
+          <div>
+            <strong className="block text-2xl mt-1.5 font-extrabold text-foreground tracking-tight">{metrics.today}</strong>
+            <span className="text-[9.5px] text-muted-foreground mt-1 block font-medium">within current day</span>
+          </div>
         </div>
-        <div className="bg-card border border-border rounded-xl p-4 shadow-sm">
-          <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block">Last 7 Days</span>
-          <strong className="block text-2xl mt-1.5 font-extrabold text-foreground">{metrics.last7Days}</strong>
-          <span className="text-[9px] text-muted-foreground mt-1 block">week-to-date velocity</span>
+
+        {/* Last 7 Days */}
+        <div className="bg-card border border-border/80 border-l-4 border-l-blue-450 dark:border-l-blue-600 rounded-xl p-4.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between min-h-[100px]">
+          <div className="flex justify-between items-start">
+            <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block">Last 7 Days</span>
+            <FileText className="w-4 h-4 text-blue-500 dark:text-blue-450 shrink-0" />
+          </div>
+          <div>
+            <strong className="block text-2xl mt-1.5 font-extrabold text-foreground tracking-tight">{metrics.last7Days}</strong>
+            <span className="text-[9.5px] text-muted-foreground mt-1 block font-medium">weekly event activity</span>
+          </div>
         </div>
-        <div className="bg-card border border-border rounded-xl p-4 shadow-sm">
-          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider block">Recoverable (Undo)</span>
-          <strong className="block text-2xl mt-1.5 font-extrabold text-emerald-600 dark:text-emerald-400">{metrics.recoverable}</strong>
-          <span className="text-[9px] text-muted-foreground mt-1 block">active restore snapshots</span>
+
+        {/* Recoverable */}
+        <div className="bg-card border border-border/80 border-l-4 border-l-emerald-500 rounded-xl p-4.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between min-h-[100px]">
+          <div className="flex justify-between items-start">
+            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider block font-semibold">Recoverable</span>
+            <RotateCcw className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          </div>
+          <div>
+            <strong className="block text-2xl mt-1.5 font-extrabold text-emerald-600 dark:text-emerald-400 tracking-tight">{metrics.recoverable}</strong>
+            <span className="text-[9.5px] text-muted-foreground mt-1 block font-medium">reversible changes</span>
+          </div>
         </div>
-        <div className="bg-card border border-border rounded-xl p-4 shadow-sm col-span-2 lg:col-span-1">
-          <span className="text-[10px] text-rose-500 font-bold uppercase tracking-wider block">High-Risk Changes</span>
-          <strong className="block text-2xl mt-1.5 font-extrabold text-rose-500">{metrics.highRisk}</strong>
-          <span className="text-[9px] text-muted-foreground mt-1 block">critical and warnings</span>
+
+        {/* High Risk Logs */}
+        <div className="bg-card border border-border/80 border-l-4 border-l-rose-500 rounded-xl p-4.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 col-span-2 lg:col-span-1 flex flex-col justify-between min-h-[100px]">
+          <div className="flex justify-between items-start">
+            <span className="text-[10px] text-rose-600 dark:text-rose-450 font-bold uppercase tracking-wider block font-semibold">High Risk Logs</span>
+            <ShieldAlert className="w-4 h-4 text-rose-550 shrink-0" />
+          </div>
+          <div>
+            <strong className="block text-2xl mt-1.5 font-extrabold text-rose-500 tracking-tight">{metrics.highRisk}</strong>
+            <span className="text-[9.5px] text-muted-foreground mt-1 block font-medium">critical and warnings</span>
+          </div>
         </div>
       </div>
 
@@ -505,10 +625,10 @@ export default function AuditTrailPage() {
           <h2 className="text-xs font-bold uppercase tracking-wider text-foreground">Advanced Query Filters</h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
           {/* Search bar */}
           <div className="space-y-1">
-            <label htmlFor="search-input" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Search Description / Actor / Entity</label>
+            <label htmlFor="search-input" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Search Term</label>
             <div className="relative">
               <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 transform -translate-y-1/2" />
               <input
@@ -516,20 +636,20 @@ export default function AuditTrailPage() {
                 type="text"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                placeholder="Search description, user or label..."
-                className="w-full pl-9 pr-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                placeholder="Search description, user..."
+                className="w-full pl-9 pr-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none text-foreground font-semibold transition-all duration-150"
               />
             </div>
           </div>
 
           {/* Category */}
           <div className="space-y-1">
-            <label htmlFor="category-select" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Category</label>
+            <label htmlFor="category-select" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Category</label>
             <select
               id="category-select"
               value={selectedCategory}
               onChange={e => setSelectedCategory(e.target.value)}
-              className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none font-medium"
+              className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
             >
               {categories.map(c => (
                 <option key={c} value={c}>{c}</option>
@@ -539,12 +659,12 @@ export default function AuditTrailPage() {
 
           {/* Actor */}
           <div className="space-y-1">
-            <label htmlFor="actor-select" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Actor / User</label>
+            <label htmlFor="actor-select" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Actor / User</label>
             <select
               id="actor-select"
               value={selectedActor}
               onChange={e => setSelectedActor(e.target.value)}
-              className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none font-medium"
+              className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
             >
               <option value="All">All Users</option>
               {uniqueActors.map(a => (
@@ -555,12 +675,12 @@ export default function AuditTrailPage() {
 
           {/* Action Type */}
           <div className="space-y-1">
-            <label htmlFor="action-type-select" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Action Type</label>
+            <label htmlFor="action-type-select" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Action Type</label>
             <select
               id="action-type-select"
               value={selectedActionType}
               onChange={e => setSelectedActionType(e.target.value)}
-              className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none font-medium"
+              className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
             >
               <option value="All">All Actions</option>
               {uniqueActionTypes.map(t => (
@@ -571,7 +691,7 @@ export default function AuditTrailPage() {
 
           {/* Date range start */}
           <div className="space-y-1">
-            <label htmlFor="start-date" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Start Date</label>
+            <label htmlFor="start-date" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Start Date</label>
             <div className="relative">
               <Calendar className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 transform -translate-y-1/2" />
               <input
@@ -579,14 +699,14 @@ export default function AuditTrailPage() {
                 type="date"
                 value={startDate}
                 onChange={e => setStartDate(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none font-medium"
+                className="w-full pl-9 pr-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
               />
             </div>
           </div>
 
           {/* Date range end */}
           <div className="space-y-1">
-            <label htmlFor="end-date" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wide">End Date</label>
+            <label htmlFor="end-date" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">End Date</label>
             <div className="relative">
               <Calendar className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 transform -translate-y-1/2" />
               <input
@@ -594,19 +714,19 @@ export default function AuditTrailPage() {
                 type="date"
                 value={endDate}
                 onChange={e => setEndDate(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none font-medium"
+                className="w-full pl-9 pr-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
               />
             </div>
           </div>
 
           {/* Severity */}
           <div className="space-y-1">
-            <label htmlFor="severity-select" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Severity</label>
+            <label htmlFor="severity-select" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Severity</label>
             <select
               id="severity-select"
               value={selectedSeverity}
               onChange={e => setSelectedSeverity(e.target.value)}
-              className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none font-medium"
+              className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
             >
               <option value="All">All Severities</option>
               <option value="info">Info</option>
@@ -615,22 +735,69 @@ export default function AuditTrailPage() {
             </select>
           </div>
 
-          {/* Controls toggle & clear */}
-          <div className="flex flex-col justify-end space-y-2">
-            <div className="flex items-center gap-2 select-none h-9">
+          {/* Toggle controls */}
+          <div className="flex flex-col justify-end">
+            <label htmlFor="undoable-only-toggle" className={`flex items-center gap-2 select-none h-9 px-3 bg-muted hover:bg-muted/80 border ${undoableOnly ? 'border-indigo-500/50 bg-indigo-500/5 text-indigo-600 dark:text-indigo-400' : 'border-border/80 text-foreground'} rounded-lg text-xs font-bold cursor-pointer transition-all duration-200`}>
               <input
                 id="undoable-only-toggle"
                 type="checkbox"
                 checked={undoableOnly}
                 onChange={e => setUndoableOnly(e.target.checked)}
-                className="accent-indigo-650 w-4 h-4 rounded text-indigo-600 cursor-pointer"
+                className="accent-indigo-600 w-3.5 h-3.5 rounded cursor-pointer"
               />
-              <label htmlFor="undoable-only-toggle" className="text-xs font-bold text-foreground cursor-pointer">
-                Undo Available Only
-              </label>
-            </div>
+              <span>Undoable Actions Only</span>
+            </label>
           </div>
         </div>
+
+        {/* Active Filter Badges */}
+        {hasActiveFilters && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-3.5 border-t border-border/60">
+            <span className="text-[10px] font-bold text-muted-foreground uppercase mr-1">Active filters:</span>
+            {searchTerm.trim() && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-muted border border-border/80 rounded-lg text-[10px] text-foreground font-semibold">
+                Search: "{searchTerm}"
+                <button onClick={() => setSearchTerm('')} className="p-0.5 hover:bg-border rounded-full cursor-pointer"><X className="w-2.5 h-2.5" /></button>
+              </span>
+            )}
+            {selectedCategory !== 'All' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-muted border border-border/80 rounded-lg text-[10px] text-foreground font-semibold">
+                Category: {selectedCategory}
+                <button onClick={() => setSelectedCategory('All')} className="p-0.5 hover:bg-border rounded-full cursor-pointer"><X className="w-2.5 h-2.5" /></button>
+              </span>
+            )}
+            {selectedSeverity !== 'All' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-muted border border-border/80 rounded-lg text-[10px] text-foreground font-semibold">
+                Severity: {selectedSeverity}
+                <button onClick={() => setSelectedSeverity('All')} className="p-0.5 hover:bg-border rounded-full cursor-pointer"><X className="w-2.5 h-2.5" /></button>
+              </span>
+            )}
+            {selectedActor !== 'All' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-muted border border-border/80 rounded-lg text-[10px] text-foreground font-semibold">
+                User: {selectedActor}
+                <button onClick={() => setSelectedActor('All')} className="p-0.5 hover:bg-border rounded-full cursor-pointer"><X className="w-2.5 h-2.5" /></button>
+              </span>
+            )}
+            {selectedActionType !== 'All' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-muted border border-border/80 rounded-lg text-[10px] text-foreground font-semibold">
+                Action: {selectedActionType}
+                <button onClick={() => setSelectedActionType('All')} className="p-0.5 hover:bg-border rounded-full cursor-pointer"><X className="w-2.5 h-2.5" /></button>
+              </span>
+            )}
+            {(startDate || endDate) && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-muted border border-border/80 rounded-lg text-[10px] text-foreground font-semibold">
+                Date: {startDate || '*'} to {endDate || '*'}
+                <button onClick={() => { setStartDate(''); setEndDate(''); }} className="p-0.5 hover:bg-border rounded-full cursor-pointer"><X className="w-2.5 h-2.5" /></button>
+              </span>
+            )}
+            {undoableOnly && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-muted border border-border/80 rounded-lg text-[10px] text-foreground font-semibold">
+                Undoable only
+                <button onClick={() => setUndoableOnly(false)} className="p-0.5 hover:bg-border rounded-full cursor-pointer"><X className="w-2.5 h-2.5" /></button>
+              </span>
+            )}
+          </div>
+        )}
 
         <div className="flex justify-between items-center pt-2 text-xs">
           <span className="text-[11px] text-muted-foreground font-semibold">
@@ -641,7 +808,7 @@ export default function AuditTrailPage() {
             onClick={clearFilters}
             className="flex items-center gap-1 px-3 py-1.5 bg-muted hover:bg-muted/80 text-foreground font-bold border border-border rounded-lg transition-colors cursor-pointer"
           >
-            <X className="w-3.5 h-3.5" /> Clear Filters
+            <X className="w-3.5 h-3.5" /> Reset Filters
           </button>
         </div>
       </div>
@@ -654,48 +821,54 @@ export default function AuditTrailPage() {
             <span>Loading immutable audit records...</span>
           </div>
         ) : filteredEvents.length === 0 ? (
-          <div className="text-center py-20 px-6 text-xs text-muted-foreground flex flex-col items-center justify-center gap-2.5">
-            <ShieldAlert className="w-10 h-10 text-muted-foreground/45" />
-            <span className="font-bold text-foreground text-sm">No Audit Trail Events Found</span>
-            <p className="max-w-xs leading-relaxed">
-              {events.length === 0
-                ? 'No activities have been recorded in this company organization workspace yet.'
-                : 'No logs match the selected advanced filter criteria. Try clearing them.'}
-            </p>
+          <div className="text-center py-16 px-6 text-xs text-muted-foreground flex flex-col items-center justify-center gap-3 bg-card rounded-xl">
+            <div className="p-4 bg-muted border border-border/60 text-muted-foreground/75 rounded-full shadow-inner select-none animate-pulse">
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+            <div className="space-y-1">
+              <span className="font-bold text-foreground text-sm block">No Audit Trail Events Found</span>
+              <p className="max-w-xs leading-relaxed text-[11px] text-muted-foreground/90 mx-auto">
+                {events.length === 0
+                  ? 'No compliance activities have been recorded in this organization workspace yet.'
+                  : 'No audit logs match the selected advanced query filters. Try resetting the criteria.'}
+              </p>
+            </div>
             {events.length > 0 && (
-              <button onClick={clearFilters} className="mt-2 px-3 py-1.5 bg-indigo-600 text-white font-bold rounded-lg shadow-md shadow-indigo-600/10">
-                Reset Filters
+              <button
+                onClick={clearFilters}
+                className="mt-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md shadow-indigo-600/10 transition-colors cursor-pointer"
+              >
+                Reset Search Filters
               </button>
             )}
           </div>
         ) : (
           <div className="divide-y divide-border/60">
-            {/* Table layout on medium screens, list layout on mobile */}
-            <div className="overflow-x-auto">
+            {/* Table layout on medium and up screens */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="bg-muted/50 border-b border-border text-muted-foreground font-bold uppercase tracking-wider select-none">
-                    <th className="p-3.5 pl-4">Timestamp</th>
-                    <th className="p-3.5">Actor / User</th>
-                    <th className="p-3.5">Category</th>
-                    <th className="p-3.5">Action Logged</th>
-                    <th className="p-3.5">Affected Entity</th>
-                    <th className="p-3.5">Severity</th>
-                    <th className="p-3.5 pr-4 text-center">Undo Status</th>
+                  <tr className="bg-muted/60 border-b border-border text-muted-foreground font-extrabold uppercase tracking-wider text-[9.5px] select-none">
+                    <th className="py-3 px-4 pl-5">Timestamp</th>
+                    <th className="py-3 px-4">Actor / User</th>
+                    <th className="py-3 px-4">Category</th>
+                    <th className="py-3 px-4">Action Logged</th>
+                    <th className="py-3 px-4">Affected Entity</th>
+                    <th className="py-3 px-4">Severity</th>
+                    <th className="py-3 px-4 pr-5 text-center">Undo Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border/50">
+                <tbody className="divide-y divide-border/55">
                   {paginatedEvents.map(e => {
                     const actorName = e.actor_name || e.actor_email || 'System';
                     const eventTime = new Date(e.created_at).toLocaleString();
                     
-                    // Severity classes
                     const severityClass =
                       e.severity === 'critical'
-                        ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
+                        ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-455 font-bold'
                         : e.severity === 'warning'
-                        ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400'
-                        : 'bg-indigo-500/5 border-indigo-500/10 text-indigo-600 dark:text-indigo-400';
+                        ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-455 font-bold'
+                        : 'bg-slate-500/10 border-slate-500/20 text-slate-650 dark:text-slate-400 font-medium';
 
                     return (
                       <tr
@@ -704,14 +877,14 @@ export default function AuditTrailPage() {
                           setSelectedEvent(e);
                           setOperationStatus({ type: null, message: null });
                         }}
-                        className="hover:bg-muted/20 cursor-pointer transition-colors"
+                        className="hover:bg-muted/30 cursor-pointer transition-colors group"
                       >
-                        <td className="p-3.5 pl-4 font-semibold text-muted-foreground whitespace-nowrap">
+                        <td className="py-3.5 px-4 pl-5 font-semibold text-muted-foreground whitespace-nowrap">
                           {eventTime}
                         </td>
-                        <td className="p-3.5">
+                        <td className="py-3.5 px-4">
                           <div className="flex flex-col">
-                            <span className="font-bold text-foreground truncate max-w-[140px]" title={actorName}>
+                            <span className="font-bold text-foreground truncate max-w-[140px] group-hover:text-indigo-650 dark:group-hover:text-indigo-400 transition-colors" title={actorName}>
                               {actorName}
                             </span>
                             <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
@@ -719,10 +892,12 @@ export default function AuditTrailPage() {
                             </span>
                           </div>
                         </td>
-                        <td className="p-3.5 whitespace-nowrap font-bold text-muted-foreground">
-                          {e.action_category}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <span className={`px-2 py-0.5 rounded border text-[9px] font-extrabold uppercase tracking-wider ${getCategoryBadgeClass(e.action_category)}`}>
+                            {e.action_category}
+                          </span>
                         </td>
-                        <td className="p-3.5 max-w-xs">
+                        <td className="py-3.5 px-4 max-w-xs">
                           <div className="flex flex-col">
                             <span className="font-extrabold text-foreground truncate max-w-[200px]" title={e.action_type}>
                               {e.action_type.replace(/_/g, ' ')}
@@ -732,35 +907,36 @@ export default function AuditTrailPage() {
                             </span>
                           </div>
                         </td>
-                        <td className="p-3.5">
+                        <td className="py-3.5 px-4">
                           {e.entity_label ? (
                             <div className="flex flex-col">
                               <span className="font-bold text-foreground truncate max-w-[160px]" title={e.entity_label}>
                                 {e.entity_label}
                               </span>
-                              <span className="text-[9px] uppercase tracking-wider text-muted-foreground">
+                              <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">
                                 {e.entity_type}
                               </span>
                             </div>
                           ) : (
-                            <span className="text-muted-foreground italic">None</span>
+                            <span className="text-muted-foreground italic text-[11px]">—</span>
                           )}
                         </td>
-                        <td className="p-3.5 whitespace-nowrap">
+                        <td className="py-3.5 px-4 whitespace-nowrap">
                           <span className={`px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-wider ${severityClass}`}>
                             {e.severity}
                           </span>
                         </td>
-                        <td className="p-3.5 pr-4 text-center whitespace-nowrap" onClick={opt => opt.stopPropagation()}>
+                        <td className="py-3.5 px-4 pr-5 text-center whitespace-nowrap" onClick={opt => opt.stopPropagation()}>
                           {e.undone_at ? (
-                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/25 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                              <CheckCircle2 className="w-2.5 h-2.5 text-emerald-650 dark:text-emerald-400" />
                               Undone
                             </span>
                           ) : e.undo_available ? (
                             <button
-                              onClick={() => handleUndo(e.id)}
+                              onClick={() => setConfirmUndoEvent(e)}
                               disabled={undoingEventId !== null}
-                              className="px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-650/40 text-[9px] text-white font-bold uppercase tracking-wider flex items-center gap-0.5 mx-auto transition-colors cursor-pointer"
+                              className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-650/40 text-[9px] text-white font-extrabold uppercase tracking-wider flex items-center gap-1 mx-auto transition-colors cursor-pointer shadow-sm shadow-indigo-600/10"
                               title="Undo this change"
                             >
                               {undoingEventId === e.id ? (
@@ -779,6 +955,92 @@ export default function AuditTrailPage() {
                   })}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile layout on narrow screens (hidden on md and up) */}
+            <div className="block md:hidden divide-y divide-border/40">
+              {paginatedEvents.map(e => {
+                const actorName = e.actor_name || e.actor_email || 'System';
+                const eventTime = new Date(e.created_at).toLocaleString();
+
+                const severityClass =
+                  e.severity === 'critical'
+                    ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-455 font-bold'
+                    : e.severity === 'warning'
+                    ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-455 font-bold'
+                    : 'bg-slate-500/10 border-slate-500/20 text-slate-650 dark:text-slate-450 font-medium';
+
+                return (
+                  <div
+                    key={e.id}
+                    onClick={() => {
+                      setSelectedEvent(e);
+                      setOperationStatus({ type: null, message: null });
+                    }}
+                    className="p-4.5 space-y-3 bg-card hover:bg-muted/10 cursor-pointer transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`px-2 py-0.5 rounded border text-[8px] font-extrabold uppercase tracking-wider ${getCategoryBadgeClass(e.action_category)}`}>
+                        {e.action_category}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground font-semibold">
+                        {eventTime}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <h4 className="font-extrabold text-foreground text-sm">
+                        {e.action_type.replace(/_/g, ' ')}
+                      </h4>
+                      <p className="text-xs text-muted-foreground/90 leading-relaxed font-medium">
+                        {e.description}
+                      </p>
+                    </div>
+
+                    {e.entity_label && (
+                      <div className="text-[10px] font-semibold text-foreground bg-muted/65 px-2.5 py-1.5 rounded-lg border border-border/40 inline-block max-w-full truncate shadow-sm">
+                        <span className="text-muted-foreground font-bold uppercase text-[8px] mr-1.5">{e.entity_type}:</span>
+                        {e.entity_label}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between gap-4 pt-1 border-t border-border/30">
+                      <div className="flex items-center gap-1.5 overflow-hidden">
+                        <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        <span className="text-xs font-semibold text-foreground truncate max-w-[100px]" title={actorName}>
+                          {actorName}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground uppercase tracking-wide shrink-0">
+                          ({e.actor_role || 'System'})
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`px-2 py-0.5 rounded border text-[8px] font-bold uppercase tracking-wider ${severityClass}`}>
+                          {e.severity}
+                        </span>
+                        {e.undone_at ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[8px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                            <CheckCircle2 className="w-2 h-2 text-emerald-650 dark:text-emerald-400" />
+                            Undone
+                          </span>
+                        ) : e.undo_available ? (
+                          <button
+                            onClick={(opt) => {
+                              opt.stopPropagation();
+                              setConfirmUndoEvent(e);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-[9px] text-white font-extrabold uppercase tracking-wider flex items-center gap-1 transition-colors cursor-pointer shadow-sm shadow-indigo-600/10"
+                          >
+                            <RotateCcw className="w-2.5 h-2.5" />
+                            Undo
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Pagination footer */}
@@ -808,10 +1070,8 @@ export default function AuditTrailPage() {
       {/* Details Slideout Drawer */}
       {selectedEvent && (
         <div className="fixed inset-0 z-50 bg-black/60 flex justify-end animate-in fade-in duration-200">
-          {/* Backdrop click closes drawer */}
-          <div className="absolute inset-0" onClick={() => setSelectedEvent(null)}></div>
+          <div className="absolute inset-0 animate-fade-in" onClick={() => setSelectedEvent(null)}></div>
           
-          {/* Drawer container */}
           <div className="relative bg-card solid-panel border-l border-border w-full max-w-xl h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-250 z-10">
             {/* Drawer Head */}
             <div className="p-5 border-b border-border flex items-center justify-between bg-muted/30">
@@ -824,7 +1084,7 @@ export default function AuditTrailPage() {
               </div>
               <button
                 onClick={() => setSelectedEvent(null)}
-                className="p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground rounded transition-colors"
+                className="p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground rounded transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -833,7 +1093,7 @@ export default function AuditTrailPage() {
             {/* Drawer Body */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6 text-xs leading-normal">
               {/* Event Description Panel */}
-              <div className="p-4 bg-muted/40 border border-border rounded-xl space-y-2">
+              <div className="p-4 bg-muted/45 border border-border rounded-xl space-y-2">
                 <span className="text-[9px] font-bold uppercase text-muted-foreground tracking-wider block">Operation description</span>
                 <p className="text-foreground font-bold text-sm leading-relaxed">{selectedEvent.description}</p>
                 
@@ -934,13 +1194,6 @@ export default function AuditTrailPage() {
                     </table>
                   </div>
                 </div>
-              ) : selectedEvent.action_type === 'undo_executed' && selectedEvent.metadata ? (
-                <div className="bg-card border border-border rounded-xl p-4 space-y-2">
-                  <span className="text-[9px] font-bold uppercase text-foreground tracking-wider block border-b border-border/60 pb-1.5">Undo Transaction Metadata</span>
-                  <div className="font-mono bg-muted p-3 rounded-lg text-[10px] max-h-40 overflow-y-auto">
-                    <pre className="whitespace-pre-wrap">{JSON.stringify(maskSensitiveData(selectedEvent.metadata), null, 2)}</pre>
-                  </div>
-                </div>
               ) : (
                 <div className="bg-card border border-border rounded-xl p-4 space-y-2">
                   <span className="text-[9px] font-bold uppercase text-foreground tracking-wider block border-b border-border/60 pb-1.5">Full State Snapshot</span>
@@ -959,7 +1212,7 @@ export default function AuditTrailPage() {
                     <div>
                       <span className="text-[9px] text-muted-foreground block font-bold uppercase mb-1">Before State</span>
                       {selectedEvent.before_snapshot ? (
-                        <div className="bg-muted p-2 rounded-lg font-mono text-[9px] max-h-48 overflow-y-auto border border-border/60">
+                        <div className="bg-muted p-2 rounded-lg font-mono text-[9px] max-h-48 overflow-y-auto border border-border/60 animate-fade-in">
                           <pre className="whitespace-pre-wrap">{JSON.stringify(maskSensitiveData(selectedEvent.before_snapshot), null, 2)}</pre>
                         </div>
                       ) : (
@@ -969,7 +1222,7 @@ export default function AuditTrailPage() {
                     <div>
                       <span className="text-[9px] text-muted-foreground block font-bold uppercase mb-1">After State</span>
                       {selectedEvent.after_snapshot ? (
-                        <div className="bg-muted p-2 rounded-lg font-mono text-[9px] max-h-48 overflow-y-auto border border-border/60">
+                        <div className="bg-muted p-2 rounded-lg font-mono text-[9px] max-h-48 overflow-y-auto border border-border/60 animate-fade-in">
                           <pre className="whitespace-pre-wrap">{JSON.stringify(maskSensitiveData(selectedEvent.after_snapshot), null, 2)}</pre>
                         </div>
                       ) : (
@@ -990,13 +1243,13 @@ export default function AuditTrailPage() {
               <div className="flex gap-2">
                 {selectedEvent.undone_at ? (
                   <div className="px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold rounded-lg text-xs flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4" /> Undone Action
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Undone Action
                   </div>
                 ) : selectedEvent.undo_available ? (
                   <button
-                    onClick={() => handleUndo(selectedEvent.id)}
+                    onClick={() => setConfirmUndoEvent(selectedEvent)}
                     disabled={undoingEventId !== null}
-                    className="px-4 py-2 bg-indigo-650 hover:bg-indigo-700 disabled:bg-indigo-650/40 text-white font-bold rounded-lg shadow-md flex items-center gap-1.5 transition-colors cursor-pointer text-xs"
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-650/40 text-white font-bold rounded-lg shadow-md flex items-center gap-1.5 transition-colors cursor-pointer text-xs"
                   >
                     {undoingEventId === selectedEvent.id ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -1006,9 +1259,10 @@ export default function AuditTrailPage() {
                     Undo Action Change
                   </button>
                 ) : (
-                  <span className="text-[10px] text-muted-foreground italic font-semibold border border-border/80 px-3 py-2 rounded-lg bg-card">
-                    Undo Not Available
-                  </span>
+                  <div className="text-[10.5px] text-muted-foreground/90 font-bold bg-muted border border-border/80 px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-sm" title={getUndoUnavailableReason(selectedEvent)}>
+                    <Info className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                    <span>Undo Status: {getUndoUnavailableReason(selectedEvent)}</span>
+                  </div>
                 )}
                 <button
                   onClick={() => setSelectedEvent(null)}
@@ -1017,6 +1271,65 @@ export default function AuditTrailPage() {
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmUndoEvent && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="absolute inset-0" onClick={() => setConfirmUndoEvent(null)}></div>
+          <div className="relative bg-card solid-panel border border-border rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150 z-10">
+            <div className="flex items-center gap-3 text-rose-500">
+              <RotateCcw className="w-6 h-6 shrink-0 text-indigo-500" />
+              <h3 className="text-base font-bold text-foreground">Confirm Action Reversal</h3>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Are you sure you want to revert the changes performed by this action?
+            </p>
+
+            <div className="p-3 bg-muted rounded-xl space-y-1.5 text-xs border border-border/40">
+              <div>
+                <span className="text-[10px] text-muted-foreground block font-bold uppercase">Description</span>
+                <strong className="text-foreground">{confirmUndoEvent.description}</strong>
+              </div>
+              {confirmUndoEvent.entity_label && (
+                <div className="pt-1.5 border-t border-border/40">
+                  <span className="text-[10px] text-muted-foreground block font-bold uppercase">Target Entity</span>
+                  <span className="text-foreground font-semibold">{confirmUndoEvent.entity_label}</span>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2 pt-1.5 border-t border-border/40 mt-1.5">
+                <div>
+                  <span className="text-[10px] text-muted-foreground block font-bold uppercase">Category</span>
+                  <span className="text-foreground font-semibold">{confirmUndoEvent.action_category}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-muted-foreground block font-bold uppercase">Entity Type</span>
+                  <span className="text-foreground font-semibold uppercase tracking-wider text-[10px]">{confirmUndoEvent.entity_type}</span>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-lg leading-normal">
+              Warning: This will perform database restoration actions. A new log event will be created to maintain audit integrity.
+            </p>
+
+            <div className="flex gap-2 justify-end pt-1">
+              <button
+                onClick={() => setConfirmUndoEvent(null)}
+                className="px-4 py-2 text-xs font-bold text-foreground bg-card border border-border hover:bg-muted rounded-lg transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleUndo(confirmUndoEvent.id)}
+                className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-md shadow-indigo-600/10 transition-colors cursor-pointer"
+              >
+                Confirm Undo
+              </button>
             </div>
           </div>
         </div>
