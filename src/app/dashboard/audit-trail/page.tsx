@@ -27,6 +27,28 @@ import {
 import { dbService } from '@/lib/db';
 import { AuditTrailEvent } from '@/lib/types';
 
+const sensitiveKeys = ['pin_code', 'pin', 'share_token', 'token', 'password', 'secret', 'key', 'apikey', 'api_key', 'signedurl', 'signed_url'];
+
+function maskSensitiveData(obj: any): any {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(maskSensitiveData);
+  }
+  if (typeof obj === 'object') {
+    const masked: Record<string, any> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      const lowerKey = key.toLowerCase();
+      if (sensitiveKeys.some(sk => lowerKey.includes(sk))) {
+        masked[key] = '[REDACTED]';
+      } else {
+        masked[key] = maskSensitiveData(value);
+      }
+    }
+    return masked;
+  }
+  return obj;
+}
+
 export default function AuditTrailPage() {
   const { user } = useApp();
   const router = useRouter();
@@ -892,17 +914,18 @@ export default function AuditTrailPage() {
                       </thead>
                       <tbody className="divide-y divide-border/40 font-mono">
                         {Object.keys(selectedEvent.changed_fields).map(key => {
-                          const beforeVal = selectedEvent.before_snapshot?.[key];
-                          const afterVal = selectedEvent.after_snapshot?.[key];
+                          const isSensitive = sensitiveKeys.some(sk => key.toLowerCase().includes(sk));
+                          const beforeVal = isSensitive ? '[REDACTED]' : selectedEvent.before_snapshot?.[key];
+                          const afterVal = isSensitive ? '[REDACTED]' : selectedEvent.after_snapshot?.[key];
                           
                           return (
                             <tr key={key} className="hover:bg-muted/10">
                               <td className="py-1.5 font-bold text-foreground">{key}</td>
-                              <td className="py-1.5 text-rose-500 truncate max-w-[150px]" title={JSON.stringify(beforeVal)}>
-                                {beforeVal !== undefined ? JSON.stringify(beforeVal) : 'null'}
+                              <td className="py-1.5 text-rose-500 truncate max-w-[150px]" title={isSensitive ? '[REDACTED]' : JSON.stringify(beforeVal)}>
+                                {beforeVal !== undefined ? (isSensitive ? beforeVal : JSON.stringify(beforeVal)) : 'null'}
                               </td>
-                              <td className="py-1.5 text-emerald-600 dark:text-emerald-400 truncate max-w-[150px]" title={JSON.stringify(afterVal)}>
-                                {afterVal !== undefined ? JSON.stringify(afterVal) : 'null'}
+                              <td className="py-1.5 text-emerald-600 dark:text-emerald-400 truncate max-w-[150px]" title={isSensitive ? '[REDACTED]' : JSON.stringify(afterVal)}>
+                                {afterVal !== undefined ? (isSensitive ? afterVal : JSON.stringify(afterVal)) : 'null'}
                               </td>
                             </tr>
                           );
@@ -915,7 +938,7 @@ export default function AuditTrailPage() {
                 <div className="bg-card border border-border rounded-xl p-4 space-y-2">
                   <span className="text-[9px] font-bold uppercase text-foreground tracking-wider block border-b border-border/60 pb-1.5">Undo Transaction Metadata</span>
                   <div className="font-mono bg-muted p-3 rounded-lg text-[10px] max-h-40 overflow-y-auto">
-                    <pre className="whitespace-pre-wrap">{JSON.stringify(selectedEvent.metadata, null, 2)}</pre>
+                    <pre className="whitespace-pre-wrap">{JSON.stringify(maskSensitiveData(selectedEvent.metadata), null, 2)}</pre>
                   </div>
                 </div>
               ) : (
@@ -923,7 +946,7 @@ export default function AuditTrailPage() {
                   <span className="text-[9px] font-bold uppercase text-foreground tracking-wider block border-b border-border/60 pb-1.5">Full State Snapshot</span>
                   <p className="text-muted-foreground text-[10px]">No incremental changes tracked. Displaying full metadata snapshot:</p>
                   <div className="font-mono bg-muted p-3 rounded-lg text-[10px] max-h-60 overflow-y-auto">
-                    <pre className="whitespace-pre-wrap">{JSON.stringify(selectedEvent.metadata || {}, null, 2)}</pre>
+                    <pre className="whitespace-pre-wrap">{JSON.stringify(maskSensitiveData(selectedEvent.metadata || {}), null, 2)}</pre>
                   </div>
                 </div>
               )}
@@ -937,7 +960,7 @@ export default function AuditTrailPage() {
                       <span className="text-[9px] text-muted-foreground block font-bold uppercase mb-1">Before State</span>
                       {selectedEvent.before_snapshot ? (
                         <div className="bg-muted p-2 rounded-lg font-mono text-[9px] max-h-48 overflow-y-auto border border-border/60">
-                          <pre className="whitespace-pre-wrap">{JSON.stringify(selectedEvent.before_snapshot, null, 2)}</pre>
+                          <pre className="whitespace-pre-wrap">{JSON.stringify(maskSensitiveData(selectedEvent.before_snapshot), null, 2)}</pre>
                         </div>
                       ) : (
                         <span className="text-muted-foreground italic">None (e.g. Creation Event)</span>
@@ -947,7 +970,7 @@ export default function AuditTrailPage() {
                       <span className="text-[9px] text-muted-foreground block font-bold uppercase mb-1">After State</span>
                       {selectedEvent.after_snapshot ? (
                         <div className="bg-muted p-2 rounded-lg font-mono text-[9px] max-h-48 overflow-y-auto border border-border/60">
-                          <pre className="whitespace-pre-wrap">{JSON.stringify(selectedEvent.after_snapshot, null, 2)}</pre>
+                          <pre className="whitespace-pre-wrap">{JSON.stringify(maskSensitiveData(selectedEvent.after_snapshot), null, 2)}</pre>
                         </div>
                       ) : (
                         <span className="text-muted-foreground italic">None (e.g. Deletion Event)</span>

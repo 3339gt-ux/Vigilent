@@ -75,3 +75,44 @@ create index if not exists audit_trail_events_org_action_idx
 create index if not exists audit_trail_events_undo_idx 
     on public.audit_trail_events (undo_available) 
     where undo_available = true;
+
+-- Enforce immutability of audit log columns (except undo markers) via a trigger
+create or replace function public.check_audit_trail_update()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    if (OLD.id <> NEW.id) or
+       (OLD.organization_id <> NEW.organization_id) or
+       (OLD.actor_user_id is distinct from NEW.actor_user_id) or
+       (OLD.actor_name is distinct from NEW.actor_name) or
+       (OLD.actor_email is distinct from NEW.actor_email) or
+       (OLD.actor_role is distinct from NEW.actor_role) or
+       (OLD.action_type <> NEW.action_type) or
+       (OLD.action_category <> NEW.action_category) or
+       (OLD.entity_type <> NEW.entity_type) or
+       (OLD.entity_id is distinct from NEW.entity_id) or
+       (OLD.entity_label is distinct from NEW.entity_label) or
+       (OLD.description <> NEW.description) or
+       (OLD.before_snapshot is distinct from NEW.before_snapshot) or
+       (OLD.after_snapshot is distinct from NEW.after_snapshot) or
+       (OLD.changed_fields is distinct from NEW.changed_fields) or
+       (OLD.metadata is distinct from NEW.metadata) or
+       (OLD.undo_action_type is distinct from NEW.undo_action_type) or
+       (OLD.undo_expires_at is distinct from NEW.undo_expires_at) or
+       (OLD.created_at <> NEW.created_at) or
+       (OLD.severity <> NEW.severity) or
+       (OLD.source <> NEW.source) then
+        raise exception 'Immutable columns in audit trail events cannot be modified.';
+    end if;
+    return NEW;
+end;
+$$;
+
+drop trigger if exists enforce_audit_trail_immutability on public.audit_trail_events;
+create trigger enforce_audit_trail_immutability
+before update on public.audit_trail_events
+for each row
+execute function public.check_audit_trail_update();

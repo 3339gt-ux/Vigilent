@@ -3664,7 +3664,7 @@ export const dbService = {
       const now = new Date().toISOString();
       const { data: doc, error: docError } = await supabase!
         .from('evidence_documents')
-        .select('id, storage_path')
+        .select('*')
         .eq('id', docId)
         .eq('organization_id', orgId)
         .maybeSingle();
@@ -3708,15 +3708,38 @@ export const dbService = {
         .eq('organization_id', orgId);
       if (error) throwSupabaseError('evidence_documents.mark permanently deleted', error);
       await this.logActivity('Document Permanently Deleted', `Marked evidence document ${docId} as permanently deleted.`);
+
+      await safeLogAuditEvent({
+        actionCategory: 'Evidence',
+        actionType: 'evidence_permanently_deleted',
+        entityType: 'evidence_document',
+        entityId: docId,
+        entityLabel: doc?.title || 'Unknown Document',
+        description: `Permanently deleted evidence document "${doc?.title || ''}"`,
+        beforeSnapshot: doc,
+        severity: 'critical'
+      });
       return;
     }
 
     const docs = getStorageItem('vigilen_documents', MOCK_DOCUMENTS);
+    const before = docs.find((d: EvidenceDocument) => d.id === docId);
     setStorageItem(
       'vigilen_documents',
       docs.map((doc: EvidenceDocument) => doc.id === docId ? { ...doc, permanently_deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() } : doc)
     );
     await this.logActivity('Document Permanently Deleted', `Marked evidence document ${docId} as permanently deleted.`);
+
+    await safeLogAuditEvent({
+      actionCategory: 'Evidence',
+      actionType: 'evidence_permanently_deleted',
+      entityType: 'evidence_document',
+      entityId: docId,
+      entityLabel: before?.title || 'Unknown Document',
+      description: `Permanently deleted evidence document "${before?.title || ''}"`,
+      beforeSnapshot: before,
+      severity: 'critical'
+    });
   },
 
   // Matrix Cells
