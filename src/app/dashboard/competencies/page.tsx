@@ -1282,7 +1282,7 @@ export default function CompetencyMatrixPage() {
             {/* Category Collapsers / Favourites Bar */}
             <div className="flex items-center gap-1.5 text-xs pt-1 border-t border-border/40 w-full min-w-0">
               <span className="text-muted-foreground font-bold uppercase tracking-wider text-[10px] mr-1 shrink-0">Categories:</span>
-              <div className="flex flex-row overflow-x-auto whitespace-nowrap scrollbar-thin py-1 gap-1.5 flex-1 min-w-0">
+              <div className="flex flex-row overflow-x-auto whitespace-nowrap no-scrollbar py-1 gap-1.5 flex-1 min-w-0">
                 {categories.map(cat => {
                   const isCollapsed = collapsedCategories.includes(cat);
                   const count = activeTypes.filter(t => t.category === cat).length;

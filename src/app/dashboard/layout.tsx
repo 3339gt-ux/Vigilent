@@ -22,7 +22,8 @@ import {
   X,
   UserCheck,
   UploadCloud,
-  History
+  History,
+  Star
 } from 'lucide-react';
 import { BulkUploadConfigurationPanel } from '@/components/BulkUploadConfigurationPanel';
 
@@ -186,6 +187,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const menuItems = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { name: 'Favourites', href: '/dashboard/favourites', icon: Star },
     { name: 'Requirements', href: '/dashboard/requirements', icon: ClipboardList },
     { name: 'Competency Matrix', href: '/dashboard/competencies', icon: UserCheck },
     { name: 'Evidence Vault', href: '/dashboard/vault', icon: FolderLock },

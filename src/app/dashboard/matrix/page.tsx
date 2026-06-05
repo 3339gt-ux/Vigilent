@@ -365,7 +365,6 @@ export default function EvidenceMatrix() {
     return requirements.filter(r => {
       const isHidden = hiddenMatrixRowIds.has(r.id);
       if (!showHiddenRows && isHidden) return false;
-      if (showHiddenRows && !isHidden) return false;
       const matchesCategory = selectedCategory === 'All' || r.category === selectedCategory;
       const matchesSearch = r.title.toLowerCase().includes(search.toLowerCase()) ||
                             (r.description || '').toLowerCase().includes(search.toLowerCase());
@@ -415,9 +414,9 @@ export default function EvidenceMatrix() {
   };
 
   const handleHideSelectedRows = () => {
-    const ids = Array.from(matrixRowSelection.selectedIds);
+    const ids = Array.from(matrixRowSelection.selectedIds).filter(id => !hiddenMatrixRowIds.has(id));
     if (ids.length === 0) return;
-    if (!window.confirm(`Hide ${ids.length} selected matrix row(s)? This is a personal workspace display preference and does not change readiness scoring or evidence links.`)) return;
+    if (!window.confirm(`Hide ${ids.length} selected active matrix row(s)? This is a personal workspace display preference and does not change readiness scoring or evidence links.`)) return;
     setHiddenMatrixRowIds(prev => {
       const next = new Set(prev);
       ids.forEach(id => next.add(id));
@@ -428,15 +427,25 @@ export default function EvidenceMatrix() {
   };
 
   const handleRestoreSelectedRows = () => {
-    const ids = Array.from(matrixRowSelection.selectedIds);
+    const ids = Array.from(matrixRowSelection.selectedIds).filter(id => hiddenMatrixRowIds.has(id));
     if (ids.length === 0) return;
-    if (!window.confirm(`Restore ${ids.length} hidden matrix row(s) to the normal view?`)) return;
+    if (!window.confirm(`Restore/unhide ${ids.length} hidden matrix row(s) to the normal view?`)) return;
     setHiddenMatrixRowIds(prev => {
       const next = new Set(prev);
       ids.forEach(id => next.delete(id));
       return next;
     });
     setLastHiddenRowUndo({ ids, action: 'restore' });
+    matrixRowSelection.clearSelection();
+  };
+
+  const handleRestoreAllHiddenRows = () => {
+    const count = hiddenMatrixRowIds.size;
+    if (count === 0) return;
+    if (!window.confirm(`Are you sure you want to restore all ${count} hidden row(s) to the normal view?`)) return;
+    const oldIds = Array.from(hiddenMatrixRowIds);
+    setHiddenMatrixRowIds(new Set());
+    setLastHiddenRowUndo({ ids: oldIds, action: 'restore' });
     matrixRowSelection.clearSelection();
   };
 
@@ -576,6 +585,29 @@ export default function EvidenceMatrix() {
               Filters {(filterChips.length > 0) && <span className="bg-indigo-650 text-white dark:bg-indigo-600 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold">{filterChips.length}</span>}
             </button>
 
+            <button
+              type="button"
+              disabled={hiddenMatrixRowIds.size === 0}
+              onClick={() => setShowHiddenRows(!showHiddenRows)}
+              className={`px-3 py-2 border rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                showHiddenRows
+                  ? 'bg-amber-500/10 border-amber-500/25 text-amber-700 dark:text-amber-400'
+                  : 'bg-muted hover:bg-muted/80 border-border text-foreground'
+              }`}
+            >
+              <span>Hidden rows ({hiddenMatrixRowIds.size})</span>
+            </button>
+
+            {hiddenMatrixRowIds.size > 0 && (
+              <button
+                type="button"
+                onClick={handleRestoreAllHiddenRows}
+                className="px-3 py-2 bg-muted hover:bg-rose-500/10 text-muted-foreground hover:text-rose-600 border border-border rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                Restore all hidden
+              </button>
+            )}
+
             <DensityControls
               density={density}
               onDensityChange={setDensity}
@@ -653,14 +685,27 @@ export default function EvidenceMatrix() {
                 />
                 <span>Starred Requirements only</span>
               </label>
-              <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+              <label className={`flex items-center gap-2 font-semibold text-foreground cursor-pointer ${hiddenMatrixRowIds.size === 0 ? 'opacity-40 cursor-not-allowed' : ''}`}>
                 <input
                   type="checkbox"
+                  disabled={hiddenMatrixRowIds.size === 0}
                   checked={showHiddenRows}
                   onChange={e => setShowHiddenRows(e.target.checked)}
-                  className="accent-indigo-650 w-3.5 h-3.5"
+                  className="accent-indigo-650 w-3.5 h-3.5 disabled:cursor-not-allowed"
                 />
                 <span>Show hidden rows ({hiddenMatrixRowIds.size})</span>
+                {hiddenMatrixRowIds.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRestoreAllHiddenRows();
+                    }}
+                    className="ml-2 text-[10px] font-bold text-rose-600 hover:text-rose-700 hover:underline px-2 py-0.5 bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/20 rounded-md transition-colors cursor-pointer"
+                  >
+                    Restore all hidden
+                  </button>
+                )}
               </label>
             </div>
           </div>
@@ -706,18 +751,29 @@ export default function EvidenceMatrix() {
         onClear={matrixRowSelection.clearSelection}
         message="Row visibility is a user/workspace display preference."
       >
-        <button
-          type="button"
-          onClick={showHiddenRows ? handleRestoreSelectedRows : handleHideSelectedRows}
-          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold cursor-pointer"
-        >
-          {showHiddenRows ? 'Restore selected rows' : 'Hide selected rows'}
-        </button>
+        {Array.from(matrixRowSelection.selectedIds).some(id => !hiddenMatrixRowIds.has(id)) && (
+          <button
+            type="button"
+            onClick={handleHideSelectedRows}
+            className="px-2.5 py-1 bg-indigo-650 hover:bg-indigo-700 text-white rounded-lg font-bold cursor-pointer text-[11px] shrink-0"
+          >
+            Hide selected
+          </button>
+        )}
+        {Array.from(matrixRowSelection.selectedIds).some(id => hiddenMatrixRowIds.has(id)) && (
+          <button
+            type="button"
+            onClick={handleRestoreSelectedRows}
+            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold cursor-pointer text-[11px] shrink-0"
+          >
+            Unhide selected
+          </button>
+        )}
         {lastHiddenRowUndo && (
           <button
             type="button"
             onClick={undoMatrixRowVisibility}
-            className="px-3 py-1.5 bg-card hover:bg-muted border border-border text-foreground rounded-lg font-bold cursor-pointer"
+            className="px-2.5 py-1 bg-card hover:bg-muted border border-border text-foreground rounded-lg font-bold cursor-pointer text-[11px] shrink-0"
           >
             Undo row visibility
           </button>
