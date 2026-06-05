@@ -400,6 +400,19 @@ create index if not exists competency_records_organisation_status_idx on public.
 create index if not exists competency_record_documents_organisation_idx on public.competency_record_documents (organisation_id, competency_record_id, document_id);
 create index if not exists requirement_competency_types_organisation_idx on public.requirement_competency_types (organisation_id, requirement_id, competency_type_id);
 
+-- Audit Trail Events Indexes
+create index if not exists audit_trail_events_org_created_idx on public.audit_trail_events (organization_id, created_at desc);
+
+create index if not exists audit_trail_events_org_category_idx on public.audit_trail_events (organization_id, action_category);
+
+create index if not exists audit_trail_events_org_entity_idx on public.audit_trail_events (organization_id, entity_type);
+
+create index if not exists audit_trail_events_org_actor_idx on public.audit_trail_events (organization_id, actor_user_id);
+
+create index if not exists audit_trail_events_org_action_idx on public.audit_trail_events (organization_id, action_type);
+
+create index if not exists audit_trail_events_undo_idx on public.audit_trail_events (undo_available) where undo_available = true;
+
 -- Storage bucket and storage.objects policies are managed separately in
 -- supabase/storage_setup.sql because hosted Supabase projects may reject
 -- repeated storage.objects policy drops from the core schema runner.
