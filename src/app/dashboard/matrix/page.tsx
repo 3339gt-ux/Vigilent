@@ -244,6 +244,28 @@ export default function EvidenceMatrix() {
     }
   }, [globalDensity, matrixViewStateKey]);
 
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const filterParam = params.get('filter');
+      if (filterParam) {
+        if (filterParam.startsWith('req:')) {
+          const reqId = filterParam.replace('req:', '');
+          const req = requirements.find(r => r.id === reqId);
+          if (req) {
+            setSearch(req.title);
+          }
+        } else if (filterParam.startsWith('cat:')) {
+          const catName = filterParam.replace('cat:', '');
+          setSelectedCategory(catName);
+        } else if (filterParam.startsWith('target:')) {
+          const targetName = filterParam.replace('target:', '');
+          setTargetNameFilter(targetName);
+        }
+      }
+    }
+  }, [requirements]);
+
   const filterChips = useMemo(() => {
     const chips: any[] = [];
     if (search) {

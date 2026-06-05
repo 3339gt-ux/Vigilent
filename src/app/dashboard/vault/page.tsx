@@ -252,6 +252,27 @@ export default function EvidenceVault() {
     }
   }, [globalDensity, vaultViewStateKey]);
 
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const idParam = params.get('id');
+      const filterParam = params.get('filter');
+
+      if (filterParam && filterParam.startsWith('doc:')) {
+        const docId = filterParam.replace('doc:', '');
+        const doc = documents.find(d => d.id === docId);
+        if (doc) {
+          setSelectedDoc(doc);
+        }
+      } else if (idParam) {
+        const doc = documents.find(d => d.id === idParam);
+        if (doc) {
+          setSelectedDoc(doc);
+        }
+      }
+    }
+  }, [documents]);
+
   // Upload dialog state
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [newTitle, setNewTitle] = useState('');

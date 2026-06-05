@@ -499,6 +499,25 @@ export default function CompetencyMatrixPage() {
     }
   }, [globalDensity, competenciesViewStateKey]);
 
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const filterParam = params.get('filter');
+      if (filterParam) {
+        if (filterParam.startsWith('comp:')) {
+          const compId = filterParam.replace('comp:', '');
+          const comp = competencyTypes.find(c => c.id === compId);
+          if (comp) {
+            setSearch(comp.title);
+          }
+        } else if (filterParam.startsWith('cat:')) {
+          const catName = filterParam.replace('cat:', '');
+          setTypeFilter(catName);
+        }
+      }
+    }
+  }, [competencyTypes]);
+
   const filterChips = useMemo(() => {
     const chips: any[] = [];
     if (search) {
