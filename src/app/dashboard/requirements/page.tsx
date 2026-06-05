@@ -18,6 +18,16 @@ import {
   ChevronDown,
   Archive
 } from 'lucide-react';
+import {
+  useFilterFavourites,
+  useSavedViews,
+  FilterFavouriteButton,
+  ActiveFilterChips,
+  SavedViewsBar,
+  StarredFilterSelect,
+  ColumnVisibilityControls,
+  SavedView
+} from '@/components/FilterControls';
 
 const statusClass = (status: RequirementStatus) => {
   if (status === 'GREEN') return 'bg-emerald-500/10 dark:bg-emerald-500/5 border-emerald-500/20 text-emerald-700 dark:text-emerald-400';
@@ -102,6 +112,107 @@ export default function RequirementsPage() {
   const [selectedStatus, setSelectedStatus] = useState<'All' | 'Attention' | RequirementStatus>('All');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [requirementView, setRequirementView] = useState<RequirementView>('active');
+
+  // Premium filters
+  const [ownerFilter, setOwnerFilter] = useState('All');
+  const [riskFilter, setRiskFilter] = useState('All');
+  const [radarFilter, setRadarFilter] = useState('All');
+  const [showOnlyFavourites, setShowOnlyFavourites] = useState(false);
+  const [density, setDensity] = useState<'comfortable' | 'compact'>('comfortable');
+  const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Favourites Persistence
+  const { favourites, toggleFavourite, isFavourite, clearFavourites } = useFilterFavourites(user?.id || 'guest', 'requirements');
+
+  // Saved Views System
+  const defaultViews: SavedView[] = [
+    {
+      id: 'attention-required',
+      name: 'Needs Attention',
+      filters: { selectedStatus: 'Attention' }
+    },
+    {
+      id: 'critical-high-risk',
+      name: 'High & Critical Risk',
+      filters: { riskFilter: 'High' }
+    },
+    {
+      id: 'overdue-reviews',
+      name: 'Overdue Items',
+      filters: { radarFilter: 'overdue' }
+    },
+    {
+      id: 'starred-only',
+      name: 'Starred Requirements',
+      filters: { showOnlyFavourites: true }
+    }
+  ];
+
+  const {
+    allViews,
+    activeViewId,
+    setActiveViewId,
+    saveCurrentView,
+    deleteCustomView
+  } = useSavedViews(user?.id || 'guest', 'requirements', defaultViews);
+
+  const handleResetFilters = () => {
+    setSearch('');
+    setSelectedStatus('All');
+    setSelectedCategory('All');
+    setOwnerFilter('All');
+    setRiskFilter('All');
+    setRadarFilter('All');
+    setShowOnlyFavourites(false);
+    setActiveViewId(null);
+  };
+
+  const handleSelectView = (view: SavedView | null) => {
+    if (view === null) {
+      handleResetFilters();
+      setActiveViewId(null);
+    } else {
+      const f = view.filters;
+      setSearch(f.search || '');
+      setSelectedStatus(f.selectedStatus || 'All');
+      setSelectedCategory(f.selectedCategory || 'All');
+      setOwnerFilter(f.ownerFilter || 'All');
+      setRiskFilter(f.riskFilter || 'All');
+      setRadarFilter(f.radarFilter || 'All');
+      setShowOnlyFavourites(!!f.showOnlyFavourites);
+      setActiveViewId(view.id);
+    }
+  };
+
+  const handleSaveView = (name: string) => {
+    const filters = {
+      search,
+      selectedStatus,
+      selectedCategory,
+      ownerFilter,
+      riskFilter,
+      radarFilter,
+      showOnlyFavourites
+    };
+    saveCurrentView(name, filters);
+  };
+
+  const isViewModified = useMemo(() => {
+    if (!activeViewId) return false;
+    const activeView = allViews.find(v => v.id === activeViewId);
+    if (!activeView) return false;
+    const f = activeView.filters;
+    return (
+      search !== (f.search || '') ||
+      selectedStatus !== (f.selectedStatus || 'All') ||
+      selectedCategory !== (f.selectedCategory || 'All') ||
+      ownerFilter !== (f.ownerFilter || 'All') ||
+      riskFilter !== (f.riskFilter || 'All') ||
+      radarFilter !== (f.radarFilter || 'All') ||
+      showOnlyFavourites !== (!!f.showOnlyFavourites)
+    );
+  }, [activeViewId, allViews, search, selectedStatus, selectedCategory, ownerFilter, riskFilter, radarFilter, showOnlyFavourites]);
   const [selectedRequirement, setSelectedRequirement] = useState<Requirement | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -157,6 +268,24 @@ export default function RequirementsPage() {
     ].filter(Boolean));
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [frameworkRequirements, requirementCategories]);
+
+  const sortedCategories = useMemo(() => {
+    const list = requirementCategoryOptions;
+    const starred = list.filter(c => isFavourite(`cat:${c}`));
+    const regular = list.filter(c => !isFavourite(`cat:${c}`));
+    return [...starred, ...regular];
+  }, [requirementCategoryOptions, favourites, isFavourite]);
+
+  const ownersList = useMemo(() => {
+    const names = new Set(frameworkRequirements.map(r => r.owner).filter(Boolean) as string[]);
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [frameworkRequirements]);
+
+  const sortedOwners = useMemo(() => {
+    const starred = ownersList.filter(o => isFavourite(`owner:${o}`));
+    const regular = ownersList.filter(o => !isFavourite(`owner:${o}`));
+    return ['All', ...starred, ...regular];
+  }, [ownersList, favourites, isFavourite]);
 
   const filteredCatOptions = useMemo(() => {
     const query = catSearchQuery.toLowerCase().trim();
@@ -243,24 +372,35 @@ export default function RequirementsPage() {
     }
   }, [assessedRequirements]);
 
-  const filteredRequirements = assessedRequirements.filter(requirement => {
-    const lifecycle = lifecycleLabel(requirement.lifecycle_status);
-    if (requirementView === 'active' && lifecycle !== 'ACTIVE') return false;
-    if (requirementView === 'archive' && lifecycle !== 'ARCHIVED') return false;
-    if (requirementView === 'inactive' && lifecycle !== 'DEACTIVATED') return false;
-    const matchesSearch =
-      requirement.title.toLowerCase().includes(search.toLowerCase()) ||
-      requirement.category.toLowerCase().includes(search.toLowerCase()) ||
-      (requirement.owner || '').toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = selectedStatus === 'All' ||
-      (selectedStatus === 'Attention' ? ['RED', 'AMBER', 'GREY'].includes(requirement.status) : requirement.status === selectedStatus);
-    const matchesCategory = selectedCategory === 'All' || requirement.category === selectedCategory;
-
-    // Support radar filters via query params
+  const activeRadarFilter = useMemo(() => {
+    if (radarFilter !== 'All') return radarFilter;
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      const filter = params.get('filter');
-      if (filter) {
+      return params.get('filter') || 'All';
+    }
+    return 'All';
+  }, [radarFilter]);
+
+  const filteredRequirements = useMemo(() => {
+    return assessedRequirements.filter(requirement => {
+      const lifecycle = lifecycleLabel(requirement.lifecycle_status);
+      if (requirementView === 'active' && lifecycle !== 'ACTIVE') return false;
+      if (requirementView === 'archive' && lifecycle !== 'ARCHIVED') return false;
+      if (requirementView === 'inactive' && lifecycle !== 'DEACTIVATED') return false;
+      const matchesSearch =
+        requirement.title.toLowerCase().includes(search.toLowerCase()) ||
+        requirement.category.toLowerCase().includes(search.toLowerCase()) ||
+        (requirement.owner || '').toLowerCase().includes(search.toLowerCase());
+      const matchesStatus = selectedStatus === 'All' ||
+        (selectedStatus === 'Attention' ? ['RED', 'AMBER', 'GREY'].includes(requirement.status) : requirement.status === selectedStatus);
+      const matchesCategory = selectedCategory === 'All' || requirement.category === selectedCategory;
+      const matchesOwner = ownerFilter === 'All' || requirement.owner === ownerFilter;
+      const matchesRisk = riskFilter === 'All' || requirement.risk_level === riskFilter;
+      const matchesFavourite = !showOnlyFavourites || isFavourite(`req:${requirement.id}`);
+
+      // Support radar filters
+      let matchesRadar = true;
+      if (activeRadarFilter !== 'All') {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const addDays = (d: Date, days: number) => {
@@ -269,36 +409,126 @@ export default function RequirementsPage() {
           return r;
         };
         const dStr = requirement.next_due_date;
-        if (filter === 'overdue') {
-          if (!dStr) return false;
-          return new Date(dStr) < today;
-        }
-        if (filter === 'due30') {
-          if (!dStr) return false;
-          const d = new Date(dStr);
-          return d >= today && d < addDays(today, 30);
-        }
-        if (filter === 'due60') {
-          if (!dStr) return false;
-          const d = new Date(dStr);
-          return d >= addDays(today, 30) && d < addDays(today, 60);
-        }
-        if (filter === 'due90') {
-          if (!dStr) return false;
-          const d = new Date(dStr);
-          return d >= addDays(today, 60) && d < addDays(today, 90);
-        }
-        if (filter === 'actions') {
-          return actions.some(action =>
+        if (activeRadarFilter === 'overdue') {
+          matchesRadar = !!dStr && new Date(dStr) < today;
+        } else if (activeRadarFilter === 'due30') {
+          if (!dStr) matchesRadar = false;
+          else {
+            const d = new Date(dStr);
+            matchesRadar = d >= today && d < addDays(today, 30);
+          }
+        } else if (activeRadarFilter === 'due60') {
+          if (!dStr) matchesRadar = false;
+          else {
+            const d = new Date(dStr);
+            matchesRadar = d >= addDays(today, 30) && d < addDays(today, 60);
+          }
+        } else if (activeRadarFilter === 'due90') {
+          if (!dStr) matchesRadar = false;
+          else {
+            const d = new Date(dStr);
+            matchesRadar = d >= addDays(today, 60) && d < addDays(today, 90);
+          }
+        } else if (activeRadarFilter === 'actions') {
+          matchesRadar = actions.some(action =>
             (action.status === 'Open' || action.status === 'In Progress') &&
             requirementActions.some(link => link.requirement_id === requirement.id && link.action_id === action.id)
           );
         }
       }
-    }
 
-    return matchesSearch && matchesStatus && matchesCategory;
-  });
+      return matchesSearch && matchesStatus && matchesCategory && matchesOwner && matchesRisk && matchesFavourite && matchesRadar;
+    });
+  }, [assessedRequirements, requirementView, search, selectedStatus, selectedCategory, ownerFilter, riskFilter, showOnlyFavourites, activeRadarFilter, actions, requirementActions, favourites, isFavourite]);
+
+  const filterChips = useMemo(() => {
+    const chips: { key: string; label: string; valueLabel: string; onClear: () => void }[] = [];
+    if (search) {
+      chips.push({
+        key: 'search',
+        label: 'Search',
+        valueLabel: `"${search}"`,
+        onClear: () => setSearch('')
+      });
+    }
+    if (selectedStatus !== 'All') {
+      chips.push({
+        key: 'status',
+        label: 'Status',
+        valueLabel: selectedStatus,
+        onClear: () => setSelectedStatus('All')
+      });
+    }
+    if (selectedCategory !== 'All') {
+      chips.push({
+        key: 'category',
+        label: 'Category',
+        valueLabel: selectedCategory,
+        onClear: () => setSelectedCategory('All')
+      });
+    }
+    if (ownerFilter !== 'All') {
+      chips.push({
+        key: 'owner',
+        label: 'Owner',
+        valueLabel: ownerFilter,
+        onClear: () => setOwnerFilter('All')
+      });
+    }
+    if (riskFilter !== 'All') {
+      chips.push({
+        key: 'risk',
+        label: 'Risk',
+        valueLabel: riskFilter,
+        onClear: () => setRiskFilter('All')
+      });
+    }
+    if (radarFilter !== 'All') {
+      chips.push({
+        key: 'radar',
+        label: 'Due Date Filter',
+        valueLabel: radarFilter,
+        onClear: () => setRadarFilter('All')
+      });
+    }
+    if (showOnlyFavourites) {
+      chips.push({
+        key: 'favourites',
+        label: 'Starred Only',
+        valueLabel: 'Yes',
+        onClear: () => setShowOnlyFavourites(false)
+      });
+    }
+    return chips;
+  }, [search, selectedStatus, selectedCategory, ownerFilter, riskFilter, radarFilter, showOnlyFavourites]);
+
+  const columnsOptions = useMemo(() => {
+    return [
+      { id: 'title', title: 'Title', visible: !hiddenColumns.includes('title') },
+      { id: 'category', title: 'Category', visible: !hiddenColumns.includes('category') },
+      { id: 'owner', title: 'Owner', visible: !hiddenColumns.includes('owner') },
+      { id: 'status', title: 'Status', visible: !hiddenColumns.includes('status') },
+      { id: 'due_date', title: requirementView === 'archive' ? 'Archived Date' : requirementView === 'inactive' ? 'Deactivated Date' : 'Next Due Date', visible: !hiddenColumns.includes('due_date') },
+      { id: 'coverage', title: 'Evidence Coverage', visible: !hiddenColumns.includes('coverage') },
+      { id: 'linked_docs', title: 'Linked Evidence', visible: !hiddenColumns.includes('linked_docs') },
+      { id: 'actions', title: 'Actions', visible: !hiddenColumns.includes('actions') },
+      { id: 'last_review', title: 'Last Review', visible: !hiddenColumns.includes('last_review') }
+    ];
+  }, [hiddenColumns, requirementView]);
+
+  const handleToggleColumn = (id: string) => {
+    setHiddenColumns(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleAllColumns = (visible: boolean) => {
+    if (visible) {
+      setHiddenColumns([]);
+    } else {
+      setHiddenColumns(columnsOptions.filter(c => c.id !== 'title').map(c => c.id));
+    }
+  };
 
   const selectedAssessed = selectedRequirement
     ? assessedRequirements.find(requirement => requirement.id === selectedRequirement.id) || null
@@ -676,267 +906,396 @@ export default function RequirementsPage() {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start">
         <div className="xl:col-span-2 space-y-4">
-          {/* Category Chips & Filters Bar */}
+          {/* Advanced Filter Ribbon Controls */}
           <div className="flex flex-col gap-3 mb-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-card border border-border p-3 rounded-xl">
-              <div className="flex flex-wrap items-center gap-1.5">
-                {['All', 'Safety', 'Operational', 'Quality & Compliance'].map(catName => {
-                  const isSelected = selectedCategory === catName;
-                  return (
-                    <button
-                      key={catName}
-                      type="button"
-                      onClick={() => setSelectedCategory(catName)}
-                      className={`px-3 py-1 rounded-full text-xs font-bold transition-all border ${
-                        isSelected
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                          : 'bg-muted text-muted-foreground border-border hover:bg-muted/70 hover:text-foreground'
-                      }`}
-                    >
-                      {catName}
-                    </button>
-                  );
-                })}
-                {!['All', 'Safety', 'Operational', 'Quality & Compliance'].includes(selectedCategory) && (
+            <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-4">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                {/* Search and Toggle Filter Button */}
+                <div className="flex items-center gap-2 w-full md:max-w-md">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      value={search}
+                      onChange={event => setSearch(event.target.value)}
+                      placeholder="Search requirements..."
+                      className="w-full pl-9 pr-4 py-2 bg-muted border border-border/80 rounded-lg text-xs outline-none focus:border-indigo-500"
+                    />
+                  </div>
                   <button
-                    type="button"
-                    onClick={() => setSelectedCategory(selectedCategory)}
-                    className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-600 text-white border border-indigo-600 shadow-xs flex items-center gap-1.5"
+                    onClick={() => setShowFilters(!showFilters)}
+                    className={`flex items-center gap-1.5 px-3 py-2 bg-muted hover:bg-muted/80 border border-border font-bold text-xs rounded-lg cursor-pointer transition-colors ${showFilters ? 'ring-2 ring-indigo-500/40' : ''}`}
                   >
-                    <span>{selectedCategory}</span>
-                    <span
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedCategory('All');
-                      }}
-                      className="hover:bg-indigo-700/80 rounded p-0.5"
-                    >
-                      <X className="w-2.5 h-2.5" />
-                    </span>
+                    <Filter className="w-4 h-4 text-indigo-500" />
+                    <span>Filters</span>
                   </button>
-                )}
-              </div>
 
-              {/* Custom Category Popover Trigger */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setIsCatDropdownOpen(!isCatDropdownOpen)}
-                  className="bg-muted hover:bg-muted/80 border border-border rounded-lg px-3 py-1.5 text-xs text-foreground font-semibold flex items-center gap-1.5 transition-colors"
-                >
-                  <Filter className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span>Category Filter</span>
-                  <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-                </button>
+                  {/* Category Manager Dropdown inline */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setIsCatDropdownOpen(!isCatDropdownOpen)}
+                      className="bg-muted hover:bg-muted/80 border border-border rounded-lg px-3 py-2 text-xs text-foreground font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span>Category Manager</span>
+                      <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                    </button>
 
-                {isCatDropdownOpen && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setIsCatDropdownOpen(false)} />
-                    <div className="absolute right-0 mt-1 w-64 bg-card solid-panel border border-border rounded-xl shadow-xl z-50 p-3 space-y-2.5">
-                      {categoryMessage && (
-                        <div className={`p-1.5 text-[10px] font-semibold border rounded-lg text-center animate-fade-in ${
-                          categoryMessage.toLowerCase().includes('could not') || categoryMessage.toLowerCase().includes('failed')
-                            ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-450'
-                            : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-450'
-                        }`}>
-                          {categoryMessage}
-                        </div>
-                      )}
-                      <div className="relative">
-                        <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="text"
-                          value={catSearchQuery}
-                          onChange={(e) => setCatSearchQuery(e.target.value)}
-                          placeholder="Search or add category..."
-                          className="w-full pl-8 pr-3 py-1.5 bg-muted border border-border rounded-lg text-xs outline-none focus:border-indigo-500 transition-colors"
-                          autoFocus
-                        />
-                      </div>
+                    {isCatDropdownOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setIsCatDropdownOpen(false)} />
+                        <div className="absolute right-0 mt-1 w-64 bg-card solid-panel border border-border rounded-xl shadow-xl z-50 p-3 space-y-2.5">
+                          {categoryMessage && (
+                            <div className={`p-1.5 text-[10px] font-semibold border rounded-lg text-center animate-fade-in ${
+                              categoryMessage.toLowerCase().includes('could not') || categoryMessage.toLowerCase().includes('failed')
+                                ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-450'
+                                : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-650 dark:text-emerald-450'
+                            }`}>
+                              {categoryMessage}
+                            </div>
+                          )}
+                          <div className="relative">
+                            <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+                            <input
+                              type="text"
+                              value={catSearchQuery}
+                              onChange={(e) => setCatSearchQuery(e.target.value)}
+                              placeholder="Search or add category..."
+                              className="w-full pl-8 pr-3 py-1.5 bg-muted border border-border rounded-lg text-xs outline-none focus:border-indigo-500 transition-colors"
+                              autoFocus
+                            />
+                          </div>
 
-                      <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1">
-                        {filteredCatOptions.length === 0 ? (
-                          <p className="text-[10px] text-muted-foreground italic text-center py-2">No matching categories.</p>
-                        ) : (
-                          filteredCatOptions.map(catName => {
-                            const isSelected = selectedCategory === catName;
-                            const customCatObj = requirementCategories.find(c => c.name === catName && !c.is_system && c.active);
-                            return (
-                              <div
-                                key={catName}
-                                className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
-                                  isSelected ? 'bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 font-bold' : 'hover:bg-muted text-foreground'
-                                }`}
+                          <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1">
+                            {filteredCatOptions.length === 0 ? (
+                              <p className="text-[10px] text-muted-foreground italic text-center py-2">No matching categories.</p>
+                            ) : (
+                              filteredCatOptions.map(catName => {
+                                const isSelected = selectedCategory === catName;
+                                const customCatObj = requirementCategories.find(c => c.name === catName && !c.is_system && c.active);
+                                return (
+                                  <div
+                                    key={catName}
+                                    className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+                                      isSelected ? 'bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 font-bold' : 'hover:bg-muted text-foreground'
+                                    }`}
+                                    onClick={() => {
+                                      setSelectedCategory(catName);
+                                      setIsCatDropdownOpen(false);
+                                      setCatSearchQuery('');
+                                    }}
+                                  >
+                                    <span className="truncate flex-1">{catName}</span>
+                                    {customCatObj && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          void handleArchiveRequirementCategory(customCatObj.id);
+                                        }}
+                                        className="text-muted-foreground hover:text-rose-500 p-0.5 rounded hover:bg-muted-foreground/10 transition-colors shrink-0 cursor-pointer"
+                                        title="Archive custom category"
+                                      >
+                                        <Archive className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+
+                          {catSearchQuery.trim() && !filteredCatOptions.some(c => c.toLowerCase() === catSearchQuery.trim().toLowerCase()) && (
+                            <div className="border-t border-border pt-2">
+                              <button
+                                type="button"
                                 onClick={() => {
-                                  setSelectedCategory(catName);
+                                  void handleCreateRequirementCategory(catSearchQuery.trim());
                                   setIsCatDropdownOpen(false);
                                   setCatSearchQuery('');
                                 }}
+                                className="w-full py-1.5 bg-indigo-650 hover:bg-indigo-755 text-white font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 transition-colors animate-fade-in cursor-pointer"
                               >
-                                <span className="truncate flex-1">{catName}</span>
-                                {customCatObj && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      void handleArchiveRequirementCategory(customCatObj.id);
-                                    }}
-                                    className="text-muted-foreground hover:text-rose-500 p-0.5 rounded hover:bg-muted-foreground/10 transition-colors shrink-0"
-                                    title="Archive custom category"
-                                  >
-                                    <Archive className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-
-                      {catSearchQuery.trim() && !filteredCatOptions.some(c => c.toLowerCase() === catSearchQuery.trim().toLowerCase()) && (
-                        <div className="border-t border-border pt-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void handleCreateRequirementCategory(catSearchQuery.trim());
-                              setIsCatDropdownOpen(false);
-                              setCatSearchQuery('');
-                            }}
-                            className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 transition-colors animate-fade-in"
-                          >
-                            <Plus className="w-3 h-3" /> Create Category &quot;{catSearchQuery.trim()}&quot;
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-card border border-border p-4 rounded-xl flex flex-col md:flex-row gap-4 items-center justify-between">
-              <div className="relative w-full md:max-w-xs">
-                <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  value={search}
-                  onChange={event => setSearch(event.target.value)}
-                  placeholder="Search requirements..."
-                  className="w-full pl-9 pr-4 py-2 bg-muted border border-border/80 rounded-lg text-xs outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div className="flex flex-wrap gap-2 w-full md:w-auto justify-end">
-                <select
-                  value={selectedStatus}
-                  onChange={event => setSelectedStatus(event.target.value as 'All' | 'Attention' | RequirementStatus)}
-                  className="bg-muted border border-border/80 rounded px-2 py-1 outline-none text-xs text-foreground font-semibold cursor-pointer"
-                >
-                  <option value="All">All Statuses</option>
-                  <option value="Attention">Needs Attention</option>
-                  <option value="GREEN">Green</option>
-                  <option value="AMBER">Amber</option>
-                  <option value="RED">Red</option>
-                  <option value="GREY">Grey</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-muted/50 border-b border-border/80 text-muted-foreground font-bold uppercase tracking-wider">
-                    <th className="p-4">Title</th>
-                    <th className="p-4">Category</th>
-                    <th className="p-4">Owner</th>
-                    <th className="p-4 text-center">Status</th>
-                    <th className="p-4">{requirementView === 'archive' ? 'Archived Date' : requirementView === 'inactive' ? 'Deactivated Date' : 'Next Due Date'}</th>
-                    <th className="p-4">Evidence Coverage</th>
-                    <th className="p-4">Linked Evidence</th>
-                    <th className="p-4">Actions</th>
-                    <th className="p-4">Last Review</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/60">
-                  {filteredRequirements.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="p-8 text-center text-muted-foreground">
-                        {frameworkRequirements.length === 0
-                          ? 'No requirements yet. Import a template pack to create a practical starter set for this organisation.'
-                          : 'No requirements match the current filters.'}
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredRequirements.map(requirement => {
-                      const lastReview = reviews
-                        .filter(review => review.requirement_id === requirement.id)
-                        .sort((a, b) => new Date(b.review_date).getTime() - new Date(a.review_date).getTime())[0];
-                      const actionCount = requirementActions.filter(link => link.requirement_id === requirement.id).length;
-                      const coverage = coverageChip(requirement.evidenceCoverage);
-                      return (
-                        <tr
-                          key={requirement.id}
-                          onClick={() => selectRequirement(requirement)}
-                          className={`hover:bg-muted/50 cursor-pointer transition-colors border-l-2 ${
-                            selectedRequirement?.id === requirement.id
-                              ? 'bg-indigo-500/5 border-l-indigo-600'
-                              : 'border-l-transparent'
-                          }`}
-                        >
-                          <td className="p-4 font-bold">{requirement.title}</td>
-                          <td className="p-4 text-muted-foreground font-semibold">{requirement.category}</td>
-                          <td className="p-4 text-muted-foreground font-semibold">{requirement.owner || 'Unassigned'}</td>
-                          <td className="p-4 text-center">
-                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full border leading-none shadow-xs ${statusClass(requirement.status)}`}>
-                              <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${
-                                requirement.status === 'GREEN' ? 'bg-emerald-500' :
-                                requirement.status === 'AMBER' ? 'bg-amber-500' :
-                                requirement.status === 'RED' ? 'bg-rose-500' :
-                                'bg-zinc-400 dark:bg-zinc-500'
-                              }`} />
-                              {requirement.status}
-                            </span>
-                          </td>
-                          <td className="p-4 text-muted-foreground font-semibold">
-                            {requirementView === 'archive'
-                              ? (requirement.archived_at ? new Date(requirement.archived_at).toLocaleDateString() : 'Not recorded')
-                              : requirementView === 'inactive'
-                                ? (requirement.deactivated_at ? new Date(requirement.deactivated_at).toLocaleDateString() : 'Not recorded')
-                                : (requirement.next_due_date || 'Not set')}
-                          </td>
-                          <td className="p-4 text-muted-foreground font-semibold max-w-[150px]">
-                            <span
-                              title={coverage.title}
-                              className={`inline-flex max-w-full items-center justify-center whitespace-nowrap truncate px-2 py-1 rounded border text-[10px] font-bold ${coverage.className}`}
-                            >
-                              {coverage.label}
-                            </span>
-                          </td>
-                          <td className="p-4 text-muted-foreground font-semibold">{requirement.linkedDocuments.length}</td>
-                          <td className="p-4 text-muted-foreground font-semibold">
-                            {requirementView === 'active' ? actionCount : (
-                              <button
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setSelectedRequirement(requirement);
-                                  void restoreFrameworkRequirement(requirement.id);
-                                  setRequirementView('active');
-                                }}
-                                className="px-2 py-1 rounded bg-indigo-600 text-white text-[10px] font-bold"
-                              >
-                                Restore
+                                <Plus className="w-3 h-3" /> Create Category &quot;{catSearchQuery.trim()}&quot;
                               </button>
-                            )}
-                          </td>
-                          <td className="p-4 text-muted-foreground font-semibold">{lastReview?.review_date || 'None'}</td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Density and Column Visibility Toggles */}
+                <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                  <ColumnVisibilityControls
+                    columns={columnsOptions}
+                    onToggleColumn={handleToggleColumn}
+                    onToggleAll={handleToggleAllColumns}
+                  />
+
+                  <div className="flex items-center bg-muted border border-border rounded-lg p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setDensity('comfortable')}
+                      className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                        density === 'comfortable' ? 'bg-card text-foreground shadow-xs border border-border/50' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Comfortable
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDensity('compact')}
+                      className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                        density === 'compact' ? 'bg-card text-foreground shadow-xs border border-border/50' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Compact
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Collapsible advanced filters */}
+              {showFilters && (
+                <div className="border-t border-border/60 pt-4 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                    <StarredFilterSelect
+                      label="Category"
+                      value={selectedCategory}
+                      onChange={setSelectedCategory}
+                      options={['All', ...sortedCategories]}
+                      isStarred={(opt) => isFavourite(`cat:${opt}`)}
+                      onToggleStar={(opt) => toggleFavourite(`cat:${opt}`)}
+                      allLabel="All Categories"
+                    />
+                    <StarredFilterSelect
+                      label="Owner"
+                      value={ownerFilter}
+                      onChange={setOwnerFilter}
+                      options={sortedOwners}
+                      isStarred={(opt) => isFavourite(`owner:${opt}`)}
+                      onToggleStar={(opt) => toggleFavourite(`owner:${opt}`)}
+                      allLabel="All Owners"
+                    />
+                    <StarredFilterSelect
+                      label="Status"
+                      value={selectedStatus}
+                      onChange={(val) => setSelectedStatus(val as 'All' | 'Attention' | RequirementStatus)}
+                      options={['All', 'Attention', 'GREEN', 'AMBER', 'RED', 'GREY']}
+                      isStarred={(opt) => isFavourite(`status:${opt}`)}
+                      onToggleStar={(opt) => toggleFavourite(`status:${opt}`)}
+                      allLabel="All Statuses"
+                    />
+                    <StarredFilterSelect
+                      label="Risk Level"
+                      value={riskFilter}
+                      onChange={setRiskFilter}
+                      options={['All', 'Low', 'Medium', 'High', 'Critical']}
+                      isStarred={(opt) => isFavourite(`risk:${opt}`)}
+                      onToggleStar={(opt) => toggleFavourite(`risk:${opt}`)}
+                      allLabel="All Risks"
+                    />
+                  </div>
+
+                  {/* Second Row of Filters */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                    <StarredFilterSelect
+                      label="Due Date Filter"
+                      value={radarFilter}
+                      onChange={setRadarFilter}
+                      options={['All', 'overdue', 'due30', 'due60', 'due90', 'actions']}
+                      isStarred={(opt) => isFavourite(`radar:${opt}`)}
+                      onToggleStar={(opt) => toggleFavourite(`radar:${opt}`)}
+                      allLabel="No Date Filter"
+                    />
+                  </div>
+
+                  {/* Quick Toggles */}
+                  <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-border/40 text-xs">
+                    <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={showOnlyFavourites}
+                        onChange={e => setShowOnlyFavourites(e.target.checked)}
+                        className="accent-indigo-650 w-3.5 h-3.5"
+                      />
+                      <span>Starred Requirements only</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Saved Views Bar */}
+              <SavedViewsBar
+                views={allViews}
+                activeViewId={activeViewId}
+                onSelectView={handleSelectView}
+                onSaveCurrent={handleSaveView}
+                onDeleteCustom={deleteCustomView}
+                isViewModified={isViewModified}
+              />
+
+              {/* Active filter chips */}
+              <ActiveFilterChips chips={filterChips} onClearAll={handleResetFilters} />
+
+              {/* Result Count Summary */}
+              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pt-1">
+                Filtered Results: {filteredRequirements.length} / {assessedRequirements.length} requirements
+              </div>
             </div>
           </div>
+
+        <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-muted border-b border-border/80 text-muted-foreground font-bold uppercase tracking-wider">
+                  {columnsOptions.map(col => {
+                    if (!col.visible) return null;
+                    return (
+                      <th
+                        key={col.id}
+                        className={`${density === 'compact' ? 'p-2.5 py-2' : 'p-4'} ${col.id === 'status' ? 'text-center' : ''} font-bold uppercase tracking-wider`}
+                      >
+                        {col.title}
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {filteredRequirements.length === 0 ? (
+                  <tr>
+                    <td colSpan={columnsOptions.filter(c => c.visible).length} className="p-8 text-center text-muted-foreground">
+                      {frameworkRequirements.length === 0
+                        ? 'No requirements yet. Import a template pack to create a practical starter set for this organisation.'
+                        : 'No requirements match the current filters.'}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredRequirements.map(requirement => {
+                    const lastReview = reviews
+                      .filter(review => review.requirement_id === requirement.id)
+                      .sort((a, b) => new Date(b.review_date).getTime() - new Date(a.review_date).getTime())[0];
+                    const actionCount = requirementActions.filter(link => link.requirement_id === requirement.id).length;
+                    const coverage = coverageChip(requirement.evidenceCoverage);
+                    const paddingClass = density === 'compact' ? 'p-2 py-1.5' : 'p-4';
+                    return (
+                      <tr
+                        key={requirement.id}
+                        onClick={() => selectRequirement(requirement)}
+                        className={`hover:bg-muted/50 cursor-pointer transition-colors border-l-2 ${
+                          selectedRequirement?.id === requirement.id
+                            ? 'bg-indigo-500/5 border-l-indigo-600'
+                            : 'border-l-transparent'
+                        }`}
+                      >
+                        {columnsOptions.map(col => {
+                          if (!col.visible) return null;
+                          switch (col.id) {
+                            case 'title':
+                              return (
+                                <td key="title" className={`${paddingClass} font-bold`}>
+                                  <div className="flex items-center justify-between gap-1.5">
+                                    <span className="truncate">{requirement.title}</span>
+                                    <FilterFavouriteButton
+                                      isStarred={isFavourite(`req:${requirement.id}`)}
+                                      onToggle={() => toggleFavourite(`req:${requirement.id}`)}
+                                    />
+                                  </div>
+                                </td>
+                              );
+                            case 'category':
+                              return (
+                                <td key="category" className={`${paddingClass} text-muted-foreground font-semibold`}>
+                                  {requirement.category}
+                                </td>
+                              );
+                            case 'owner':
+                              return (
+                                <td key="owner" className={`${paddingClass} text-muted-foreground font-semibold`}>
+                                  {requirement.owner || 'Unassigned'}
+                                </td>
+                              );
+                            case 'status':
+                              return (
+                                <td key="status" className={`${paddingClass} text-center`}>
+                                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full border leading-none shadow-xs ${statusClass(requirement.status)}`}>
+                                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${
+                                      requirement.status === 'GREEN' ? 'bg-emerald-500' :
+                                      requirement.status === 'AMBER' ? 'bg-amber-500' :
+                                      requirement.status === 'RED' ? 'bg-rose-500' :
+                                      'bg-zinc-400 dark:bg-zinc-500'
+                                    }`} />
+                                    {requirement.status}
+                                  </span>
+                                </td>
+                              );
+                            case 'due_date':
+                              return (
+                                <td key="due_date" className={`${paddingClass} text-muted-foreground font-semibold`}>
+                                  {requirementView === 'archive'
+                                    ? (requirement.archived_at ? new Date(requirement.archived_at).toLocaleDateString() : 'Not recorded')
+                                    : requirementView === 'inactive'
+                                      ? (requirement.deactivated_at ? new Date(requirement.deactivated_at).toLocaleDateString() : 'Not recorded')
+                                      : (requirement.next_due_date || 'Not set')}
+                                </td>
+                              );
+                            case 'coverage':
+                              return (
+                                <td key="coverage" className={`${paddingClass} text-muted-foreground font-semibold max-w-[150px]`}>
+                                  <span
+                                    title={coverage.title}
+                                    className={`inline-flex max-w-full items-center justify-center whitespace-nowrap truncate px-2 py-1 rounded border text-[10px] font-bold ${coverage.className}`}
+                                  >
+                                    {coverage.label}
+                                  </span>
+                                </td>
+                              );
+                            case 'linked_docs':
+                              return (
+                                <td key="linked_docs" className={`${paddingClass} text-muted-foreground font-semibold`}>
+                                  {requirement.linkedDocuments.length}
+                                </td>
+                              );
+                            case 'actions':
+                              return (
+                                <td key="actions" className={`${paddingClass} text-muted-foreground font-semibold`}>
+                                  {requirementView === 'active' ? actionCount : (
+                                    <button
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setSelectedRequirement(requirement);
+                                        void restoreFrameworkRequirement(requirement.id);
+                                        setRequirementView('active');
+                                      }}
+                                      className="px-2 py-1 rounded bg-indigo-650 text-white text-[10px] font-bold cursor-pointer"
+                                    >
+                                      Restore
+                                    </button>
+                                  )}
+                                </td>
+                              );
+                            case 'last_review':
+                              return (
+                                <td key="last_review" className={`${paddingClass} text-muted-foreground font-semibold`}>
+                                  {lastReview?.review_date || 'None'}
+                                </td>
+                              );
+                            default:
+                              return null;
+                          }
+                        })}
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
         </div>
 
         <div className="bg-card border border-border rounded-xl p-6 shadow-sm sticky top-24">

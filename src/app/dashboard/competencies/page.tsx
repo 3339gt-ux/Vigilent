@@ -7,7 +7,17 @@ import { buildCompetencyMatrix } from '@/lib/competencyEngine';
 import { COMPETENCY_TEMPLATE_PACKS } from '@/lib/competencyTemplates';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import type { Action, CompetencyCategory, CompetencyRecord, CompetencyStatus, CompetencyType, Person, PersonType, RequirementRiskLevel } from '@/lib/types';
-import { Link as LinkIcon, Plus, Search, Upload, UserCheck, X, ArrowLeft, Calendar, Paperclip, AlertCircle } from 'lucide-react';
+import { Link as LinkIcon, Plus, Search, Upload, UserCheck, X, ArrowLeft, Calendar, Paperclip, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import {
+  useFilterFavourites,
+  useSavedViews,
+  FilterFavouriteButton,
+  ActiveFilterChips,
+  SavedViewsBar,
+  ColumnVisibilityControls,
+  StarredFilterSelect,
+  SavedView
+} from '@/components/FilterControls';
 
 const categories: CompetencyCategory[] = [
   'Safety',
@@ -40,6 +50,7 @@ type ActiveCell = {
 
 export default function CompetencyMatrixPage() {
   const {
+    user,
     people,
     competencyTypes,
     competencyRecords,
@@ -71,6 +82,407 @@ export default function CompetencyMatrixPage() {
   const [search, setSearch] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('All');
   const [typeFilter, setTypeFilter] = useState('All');
+
+  // Premium filtering and sorting states
+  const [roleFilter, setRoleFilter] = useState('All');
+  const [personTypeFilter, setPersonTypeFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [showOnlyMissingExpired, setShowOnlyMissingExpired] = useState(false);
+  const [showOnlyExpiringSoon, setShowOnlyExpiringSoon] = useState(false);
+  const [showOnlyFavourites, setShowOnlyFavourites] = useState(false);
+  const [showOnlyPeopleWithGaps, setShowOnlyPeopleWithGaps] = useState(false);
+  const [sortBy, setSortBy] = useState('name');
+  const [density, setDensity] = useState<'comfortable' | 'compact'>('comfortable');
+  const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
+  const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Starred / favourite options persistence
+  const { favourites, toggleFavourite, isFavourite, clearFavourites } = useFilterFavourites(user?.id || 'guest', 'matrix');
+
+  // Saved Views System
+  const defaultViews: SavedView[] = [
+    {
+      id: 'missing-evidence',
+      name: 'Missing Evidence',
+      filters: { statusFilter: 'Missing' }
+    },
+    {
+      id: 'expired-training',
+      name: 'Expired Training',
+      filters: { statusFilter: 'Expired' }
+    },
+    {
+      id: 'expiring-soon',
+      name: 'Expiring Soon',
+      filters: { statusFilter: 'Expiring Soon' }
+    },
+    {
+      id: 'high-gaps',
+      name: 'High Gaps',
+      filters: { showOnlyPeopleWithGaps: true, sortBy: 'gaps' }
+    },
+    {
+      id: 'my-favourites',
+      name: 'My Favourites',
+      filters: { showOnlyFavourites: true }
+    }
+  ];
+
+  const {
+    allViews,
+    activeViewId,
+    setActiveViewId,
+    saveCurrentView,
+    deleteCustomView
+  } = useSavedViews(user?.id || 'guest', 'matrix', defaultViews);
+
+  const activePeople = useMemo(() => people.filter(person => person.active), [people]);
+  const activeTypes = useMemo(() => competencyTypes.filter(type => type.active), [competencyTypes]);
+  const departments = useMemo(() => ['All', ...Array.from(new Set(activePeople.map(person => person.department).filter(Boolean) as string[]))], [activePeople]);
+  const roles = useMemo(() => ['All', ...Array.from(new Set(activePeople.map(person => person.role).filter(Boolean) as string[]))], [activePeople]);
+  const selectedPack = COMPETENCY_TEMPLATE_PACKS.find(pack => pack.id === selectedPackId) || COMPETENCY_TEMPLATE_PACKS[0];
+
+  const matrix = useMemo(
+    () => buildCompetencyMatrix(people, competencyTypes, competencyRecords),
+    [competencyRecords, competencyTypes, people]
+  );
+
+  // Sorting and Favourites for Dropdowns
+  const sortedDepartments = useMemo(() => {
+    const list = departments.filter(d => d !== 'All');
+    const starred = list.filter(d => isFavourite(`dept:${d}`));
+    const regular = list.filter(d => !isFavourite(`dept:${d}`));
+    return ['All', ...starred, ...regular];
+  }, [departments, favourites]);
+
+  const sortedRoles = useMemo(() => {
+    const list = roles.filter(r => r !== 'All');
+    const starred = list.filter(r => isFavourite(`role:${r}`));
+    const regular = list.filter(r => !isFavourite(`role:${r}`));
+    return ['All', ...starred, ...regular];
+  }, [roles, favourites]);
+
+  const sortedCompetencyCategories = useMemo(() => {
+    const starred = categories.filter(c => isFavourite(`cat:${c}`));
+    const regular = categories.filter(c => !isFavourite(`cat:${c}`));
+    return [...starred, ...regular];
+  }, [favourites]);
+
+  // Filtering People
+  const filteredPeople = useMemo(() => {
+    return activePeople.filter(person => {
+      const text = `${person.display_name} ${person.department || ''} ${person.role || ''} ${person.person_type}`.toLowerCase();
+      const matchesSearch = text.includes(search.toLowerCase());
+      const matchesDept = departmentFilter === 'All' || person.department === departmentFilter;
+      const matchesRole = roleFilter === 'All' || person.role === roleFilter;
+      const matchesType = personTypeFilter === 'All' || person.person_type === personTypeFilter;
+
+      // Matrix cells for this person
+      const personCells = matrix.filter(item => item.person.id === person.id);
+
+      // Filter by status if selected
+      const matchesStatus = statusFilter === 'All' || personCells.some(cell => {
+        const status = cell.status || 'Missing';
+        return status === statusFilter;
+      });
+
+      // Show only missing/expired
+      const hasMissingExpired = personCells.some(cell => {
+        const status = cell.status || 'Missing';
+        return status === 'Missing' || status === 'Expired';
+      });
+      const matchesMissingExpired = !showOnlyMissingExpired || hasMissingExpired;
+
+      // Show only expiring soon
+      const hasExpiringSoon = personCells.some(cell => {
+        const status = cell.status || 'Missing';
+        return status === 'Expiring Soon';
+      });
+      const matchesExpiringSoon = !showOnlyExpiringSoon || hasExpiringSoon;
+
+      // Show only people with gaps
+      const matchesGaps = !showOnlyPeopleWithGaps || hasMissingExpired;
+
+      return matchesSearch && matchesDept && matchesRole && matchesType && matchesStatus && matchesMissingExpired && matchesExpiringSoon && matchesGaps;
+    });
+  }, [activePeople, search, departmentFilter, roleFilter, personTypeFilter, statusFilter, showOnlyMissingExpired, showOnlyExpiringSoon, showOnlyPeopleWithGaps, matrix]);
+
+  // Sorting People
+  const sortedPeople = useMemo(() => {
+    const list = [...filteredPeople];
+    if (sortBy === 'name') {
+      list.sort((a, b) => a.display_name.localeCompare(b.display_name));
+    } else if (sortBy === 'department') {
+      list.sort((a, b) => (a.department || '').localeCompare(b.department || ''));
+    } else if (sortBy === 'gaps') {
+      list.sort((a, b) => {
+        const countA = matrix.filter(cell => cell.person.id === a.id && (cell.status === 'Missing' || cell.status === 'Expired')).length;
+        const countB = matrix.filter(cell => cell.person.id === b.id && (cell.status === 'Missing' || cell.status === 'Expired')).length;
+        return countB - countA;
+      });
+    } else if (sortBy === 'expired') {
+      list.sort((a, b) => {
+        const countA = matrix.filter(cell => cell.person.id === a.id && cell.status === 'Expired').length;
+        const countB = matrix.filter(cell => cell.person.id === b.id && cell.status === 'Expired').length;
+        return countB - countA;
+      });
+    } else if (sortBy === 'expiring') {
+      list.sort((a, b) => {
+        const countA = matrix.filter(cell => cell.person.id === a.id && cell.status === 'Expiring Soon').length;
+        const countB = matrix.filter(cell => cell.person.id === b.id && cell.status === 'Expiring Soon').length;
+        return countB - countA;
+      });
+    }
+    return list;
+  }, [filteredPeople, sortBy, matrix]);
+
+  // Filtering Competency Columns
+  const filteredTypes = useMemo(() => {
+    return activeTypes.filter(type => {
+      const matchesCategory = typeFilter === 'All' || type.category === typeFilter;
+      const matchesFavourite = !showOnlyFavourites || isFavourite(`comp:${type.id}`);
+      const isNotHidden = !hiddenColumns.includes(type.id);
+      return matchesCategory && matchesFavourite && isNotHidden;
+    });
+  }, [activeTypes, typeFilter, showOnlyFavourites, hiddenColumns, favourites]);
+
+  // Group and sort visible types by category to align them visually
+  const visibleTypes = useMemo(() => {
+    const list = filteredTypes.filter(t => !collapsedCategories.includes(t.category));
+    list.sort((a, b) => a.category.localeCompare(b.category) || a.title.localeCompare(b.title));
+    return list;
+  }, [filteredTypes, collapsedCategories]);
+
+  // Calculate spans for visible categories for the table header row
+  const categorySpans = useMemo(() => {
+    const spans: { category: string; span: number }[] = [];
+    let currentCategory = '';
+    let currentSpan = 0;
+
+    visibleTypes.forEach(t => {
+      if (t.category !== currentCategory) {
+        if (currentSpan > 0) {
+          spans.push({ category: currentCategory, span: currentSpan });
+        }
+        currentCategory = t.category;
+        currentSpan = 1;
+      } else {
+        currentSpan++;
+      }
+    });
+    if (currentSpan > 0) {
+      spans.push({ category: currentCategory, span: currentSpan });
+    }
+    return spans;
+  }, [visibleTypes]);
+
+  const handleResetFilters = () => {
+    setSearch('');
+    setDepartmentFilter('All');
+    setRoleFilter('All');
+    setPersonTypeFilter('All');
+    setTypeFilter('All');
+    setStatusFilter('All');
+    setShowOnlyMissingExpired(false);
+    setShowOnlyExpiringSoon(false);
+    setShowOnlyFavourites(false);
+    setShowOnlyPeopleWithGaps(false);
+    setActiveViewId(null);
+  };
+
+  const handleSelectView = (view: SavedView | null) => {
+    if (view === null) {
+      handleResetFilters();
+      setActiveViewId(null);
+    } else {
+      const f = view.filters;
+      setSearch(f.search || '');
+      setDepartmentFilter(f.departmentFilter || 'All');
+      setRoleFilter(f.roleFilter || 'All');
+      setPersonTypeFilter(f.personTypeFilter || 'All');
+      setTypeFilter(f.typeFilter || 'All');
+      setStatusFilter(f.statusFilter || 'All');
+      setShowOnlyMissingExpired(!!f.showOnlyMissingExpired);
+      setShowOnlyExpiringSoon(!!f.showOnlyExpiringSoon);
+      setShowOnlyFavourites(!!f.showOnlyFavourites);
+      setShowOnlyPeopleWithGaps(!!f.showOnlyPeopleWithGaps);
+      if (f.sortBy) {
+        setSortBy(f.sortBy);
+      }
+      setActiveViewId(view.id);
+    }
+  };
+
+  const handleSaveView = (name: string) => {
+    const filters = {
+      search,
+      departmentFilter,
+      roleFilter,
+      personTypeFilter,
+      typeFilter,
+      statusFilter,
+      showOnlyMissingExpired,
+      showOnlyExpiringSoon,
+      showOnlyFavourites,
+      showOnlyPeopleWithGaps,
+      sortBy
+    };
+    saveCurrentView(name, filters);
+  };
+
+  const isViewModified = useMemo(() => {
+    if (!activeViewId) return false;
+    const activeView = allViews.find(v => v.id === activeViewId);
+    if (!activeView) return false;
+    const f = activeView.filters;
+
+    const searchMatch = (f.search || '') === search;
+    const deptMatch = (f.departmentFilter || 'All') === departmentFilter;
+    const roleMatch = (f.roleFilter || 'All') === roleFilter;
+    const pTypeMatch = (f.personTypeFilter || 'All') === personTypeFilter;
+    const catMatch = (f.typeFilter || 'All') === typeFilter;
+    const statusMatch = (f.statusFilter || 'All') === statusFilter;
+    const missExpMatch = (!!f.showOnlyMissingExpired) === showOnlyMissingExpired;
+    const expSoonMatch = (!!f.showOnlyExpiringSoon) === showOnlyExpiringSoon;
+    const favMatch = (!!f.showOnlyFavourites) === showOnlyFavourites;
+    const gapsMatch = (!!f.showOnlyPeopleWithGaps) === showOnlyPeopleWithGaps;
+    const sortMatch = (!f.sortBy) || f.sortBy === sortBy;
+
+    return !(searchMatch && deptMatch && roleMatch && pTypeMatch && catMatch && statusMatch && missExpMatch && expSoonMatch && favMatch && gapsMatch && sortMatch);
+  }, [
+    activeViewId,
+    allViews,
+    search,
+    departmentFilter,
+    roleFilter,
+    personTypeFilter,
+    typeFilter,
+    statusFilter,
+    showOnlyMissingExpired,
+    showOnlyExpiringSoon,
+    showOnlyFavourites,
+    showOnlyPeopleWithGaps,
+    sortBy
+  ]);
+
+  const filterChips = useMemo(() => {
+    const chips: any[] = [];
+    if (search) {
+      chips.push({
+        key: 'search',
+        label: 'Search',
+        valueLabel: search,
+        onClear: () => setSearch('')
+      });
+    }
+    if (departmentFilter !== 'All') {
+      chips.push({
+        key: 'dept',
+        label: 'Department',
+        valueLabel: departmentFilter,
+        onClear: () => setDepartmentFilter('All')
+      });
+    }
+    if (roleFilter !== 'All') {
+      chips.push({
+        key: 'role',
+        label: 'Role',
+        valueLabel: roleFilter,
+        onClear: () => setRoleFilter('All')
+      });
+    }
+    if (personTypeFilter !== 'All') {
+      chips.push({
+        key: 'personType',
+        label: 'Employment Type',
+        valueLabel: personTypeFilter,
+        onClear: () => setPersonTypeFilter('All')
+      });
+    }
+    if (typeFilter !== 'All') {
+      chips.push({
+        key: 'category',
+        label: 'Competency Category',
+        valueLabel: typeFilter,
+        onClear: () => setTypeFilter('All')
+      });
+    }
+    if (statusFilter !== 'All') {
+      chips.push({
+        key: 'status',
+        label: 'Status',
+        valueLabel: statusFilter,
+        onClear: () => setStatusFilter('All')
+      });
+    }
+    if (showOnlyMissingExpired) {
+      chips.push({
+        key: 'missingExpired',
+        label: 'Show Only',
+        valueLabel: 'Missing/Expired',
+        onClear: () => setShowOnlyMissingExpired(false)
+      });
+    }
+    if (showOnlyExpiringSoon) {
+      chips.push({
+        key: 'expiringSoon',
+        label: 'Show Only',
+        valueLabel: 'Expiring Soon',
+        onClear: () => setShowOnlyExpiringSoon(false)
+      });
+    }
+    if (showOnlyFavourites) {
+      chips.push({
+        key: 'favourites',
+        label: 'Show Only',
+        valueLabel: 'Starred Competencies',
+        onClear: () => setShowOnlyFavourites(false)
+      });
+    }
+    if (showOnlyPeopleWithGaps) {
+      chips.push({
+        key: 'gaps',
+        label: 'Show Only',
+        valueLabel: 'People with Gaps',
+        onClear: () => setShowOnlyPeopleWithGaps(false)
+      });
+    }
+    return chips;
+  }, [
+    search,
+    departmentFilter,
+    roleFilter,
+    personTypeFilter,
+    typeFilter,
+    statusFilter,
+    showOnlyMissingExpired,
+    showOnlyExpiringSoon,
+    showOnlyFavourites,
+    showOnlyPeopleWithGaps
+  ]);
+
+  const columnOptions = useMemo(() => {
+    return activeTypes.map(type => ({
+      id: type.id,
+      title: type.title,
+      visible: !hiddenColumns.includes(type.id)
+    }));
+  }, [activeTypes, hiddenColumns]);
+
+  const handleToggleColumn = (id: string) => {
+    setHiddenColumns(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleAllColumns = (visible: boolean) => {
+    if (visible) {
+      setHiddenColumns([]);
+    } else {
+      setHiddenColumns(activeTypes.map(t => t.id));
+    }
+  };
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [workspaceSearch, setWorkspaceSearch] = useState('');
@@ -177,32 +589,17 @@ export default function CompetencyMatrixPage() {
     default_risk_level: 'Medium' as RequirementRiskLevel
   });
 
-  const activePeople = useMemo(() => people.filter(person => person.active), [people]);
-  const activeTypes = useMemo(() => competencyTypes.filter(type => type.active), [competencyTypes]);
-  const departments = useMemo(() => ['All', ...Array.from(new Set(activePeople.map(person => person.department).filter(Boolean) as string[]))], [activePeople]);
-  const selectedPack = COMPETENCY_TEMPLATE_PACKS.find(pack => pack.id === selectedPackId) || COMPETENCY_TEMPLATE_PACKS[0];
 
-  const matrix = useMemo(
-    () => buildCompetencyMatrix(people, competencyTypes, competencyRecords),
-    [competencyRecords, competencyTypes, people]
-  );
-
-  const filteredPeople = useMemo(() => {
-    return activePeople.filter(person => {
-      const text = `${person.display_name} ${person.department || ''} ${person.role || ''} ${person.person_type}`.toLowerCase();
-      return text.includes(search.toLowerCase()) && (departmentFilter === 'All' || person.department === departmentFilter);
-    });
-  }, [activePeople, search, departmentFilter]);
 
   const selectedPersonIndex = selectedPerson
-    ? filteredPeople.findIndex(person => person.id === selectedPerson.id)
+    ? sortedPeople.findIndex(person => person.id === selectedPerson.id)
     : -1;
-  const canMoveBetweenPeople = selectedPersonIndex >= 0 && filteredPeople.length > 1;
+  const canMoveBetweenPeople = selectedPersonIndex >= 0 && sortedPeople.length > 1;
 
   const moveSelectedPerson = (direction: -1 | 1) => {
     if (!selectedPerson || !canMoveBetweenPeople) return;
-    const nextIndex = (selectedPersonIndex + direction + filteredPeople.length) % filteredPeople.length;
-    const nextPerson = filteredPeople[nextIndex];
+    const nextIndex = (selectedPersonIndex + direction + sortedPeople.length) % sortedPeople.length;
+    const nextPerson = sortedPeople[nextIndex];
     if (nextPerson) {
       openPersonWorkspace(nextPerson);
     }
@@ -226,11 +623,7 @@ export default function CompetencyMatrixPage() {
     }
   }, [isEditingPerson, activePeople, selectedPerson]);
 
-  const filteredTypes = useMemo(() => {
-    return activeTypes.filter(type =>
-      typeFilter === 'All' || type.category === typeFilter
-    );
-  }, [activeTypes, typeFilter]);
+  // Removed duplicate filteredTypes definition to allow hiddenColumns and showOnlyFavourites filters to work correctly.
 
   const openCell = (person: Person, competencyType: CompetencyType) => {
     const cell = matrix.find(item => item.person.id === person.id && item.competencyType.id === competencyType.id);
@@ -486,63 +879,314 @@ export default function CompetencyMatrixPage() {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
         <div className="xl:col-span-2 space-y-4">
-          <div className="bg-card border border-border p-4 rounded-xl flex flex-col md:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-              <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search people..." className="w-full pl-9 pr-3 py-2 bg-muted border border-border rounded-lg text-xs outline-none" />
+          {/* Main search and quick actions bar */}
+          <div className="bg-card border border-border p-4 rounded-xl space-y-3 shadow-xs">
+            <div className="flex flex-col md:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  value={search}
+                  onChange={event => setSearch(event.target.value)}
+                  placeholder="Search people by name, role, department..."
+                  className="w-full pl-9 pr-3 py-2 bg-muted border border-border rounded-lg text-xs outline-none text-foreground placeholder-muted-foreground"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2 items-center">
+                <button
+                  type="button"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`px-3 py-2 border rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    showFilters || filterChips.length > 0
+                      ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-950/30 dark:border-indigo-900/50 dark:text-indigo-400'
+                      : 'bg-muted hover:bg-muted/80 border-border text-foreground'
+                  }`}
+                >
+                  Filters {(filterChips.length > 0) && <span className="bg-indigo-650 text-white dark:bg-indigo-550 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold">{filterChips.length}</span>}
+                </button>
+
+                {/* Density controls */}
+                <div className="flex bg-muted p-0.5 rounded-lg border border-border">
+                  <button
+                    type="button"
+                    onClick={() => setDensity('comfortable')}
+                    className={`px-2 py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                      density === 'comfortable' ? 'bg-card text-foreground shadow-xs border border-border/50' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Comfortable
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDensity('compact')}
+                    className={`px-2 py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                      density === 'compact' ? 'bg-card text-foreground shadow-xs border border-border/50' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Compact
+                  </button>
+                </div>
+
+                <ColumnVisibilityControls
+                  columns={columnOptions}
+                  onToggleColumn={handleToggleColumn}
+                  onToggleAll={handleToggleAllColumns}
+                />
+              </div>
             </div>
-            <select value={departmentFilter} onChange={event => setDepartmentFilter(event.target.value)} className="bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold">
-              {departments.map(department => <option key={department} value={department}>{department}</option>)}
-            </select>
-            <select value={typeFilter} onChange={event => setTypeFilter(event.target.value)} className="bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold">
-              <option value="All">All Categories</option>
-              {categories.map(category => <option key={category} value={category}>{category}</option>)}
-            </select>
+
+            {/* Collapsible advanced filters */}
+            {showFilters && (
+              <div className="border-t border-border/60 pt-3.5 mt-3.5 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  <StarredFilterSelect
+                    label="Dept"
+                    value={departmentFilter}
+                    onChange={setDepartmentFilter}
+                    options={sortedDepartments}
+                    isStarred={(opt) => isFavourite(`dept:${opt}`)}
+                    onToggleStar={(opt) => toggleFavourite(`dept:${opt}`)}
+                  />
+                  <StarredFilterSelect
+                    label="Role"
+                    value={roleFilter}
+                    onChange={setRoleFilter}
+                    options={sortedRoles}
+                    isStarred={(opt) => isFavourite(`role:${opt}`)}
+                    onToggleStar={(opt) => toggleFavourite(`role:${opt}`)}
+                  />
+                  <StarredFilterSelect
+                    label="Category"
+                    value={typeFilter}
+                    onChange={setTypeFilter}
+                    options={['All', ...sortedCompetencyCategories]}
+                    isStarred={(opt) => isFavourite(`cat:${opt}`)}
+                    onToggleStar={(opt) => toggleFavourite(`cat:${opt}`)}
+                    allLabel="All Categories"
+                  />
+                  <StarredFilterSelect
+                    label="Status"
+                    value={statusFilter}
+                    onChange={setStatusFilter}
+                    options={['All', ...statusOptions]}
+                    isStarred={(opt) => isFavourite(`status:${opt}`)}
+                    onToggleStar={(opt) => toggleFavourite(`status:${opt}`)}
+                  />
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Emp Type</label>
+                    <select
+                      value={personTypeFilter}
+                      onChange={event => setPersonTypeFilter(event.target.value)}
+                      className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                    >
+                      <option value="All">All Types</option>
+                      {personTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Sort By</label>
+                    <select
+                      value={sortBy}
+                      onChange={event => setSortBy(event.target.value)}
+                      className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                    >
+                      <option value="name">Name (A-Z)</option>
+                      <option value="department">Department</option>
+                      <option value="gaps">Most Gaps (Expired + Missing)</option>
+                      <option value="expired">Most Expired</option>
+                      <option value="expiring">Expiring Soonest</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Quick Toggle Checkboxes */}
+                <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-border/40 text-xs">
+                  <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showOnlyMissingExpired}
+                      onChange={e => setShowOnlyMissingExpired(e.target.checked)}
+                      className="accent-indigo-650 w-3.5 h-3.5"
+                    />
+                    <span>Missing / Expired only</span>
+                  </label>
+                  <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showOnlyExpiringSoon}
+                      onChange={e => setShowOnlyExpiringSoon(e.target.checked)}
+                      className="accent-indigo-650 w-3.5 h-3.5"
+                    />
+                    <span>Expiring soon only</span>
+                  </label>
+                  <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showOnlyFavourites}
+                      onChange={e => setShowOnlyFavourites(e.target.checked)}
+                      className="accent-indigo-650 w-3.5 h-3.5"
+                    />
+                    <span>Starred Competencies only</span>
+                  </label>
+                  <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showOnlyPeopleWithGaps}
+                      onChange={e => setShowOnlyPeopleWithGaps(e.target.checked)}
+                      className="accent-indigo-650 w-3.5 h-3.5"
+                    />
+                    <span>People with gaps only</span>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* Saved Views Bar */}
+            <SavedViewsBar
+              views={allViews}
+              activeViewId={activeViewId}
+              onSelectView={handleSelectView}
+              onSaveCurrent={handleSaveView}
+              onDeleteCustom={deleteCustomView}
+              isViewModified={isViewModified}
+            />
+
+            {/* Category Collapsers / Favourites Bar */}
+            <div className="flex flex-wrap items-center gap-1.5 text-xs pt-1 border-t border-border/40">
+              <span className="text-muted-foreground font-bold uppercase tracking-wider text-[10px] mr-1">Categories:</span>
+              {categories.map(cat => {
+                const isCollapsed = collapsedCategories.includes(cat);
+                const count = activeTypes.filter(t => t.category === cat).length;
+                if (count === 0) return null;
+                const isStarred = isFavourite(`cat:${cat}`);
+                return (
+                  <div
+                    key={cat}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border transition-all ${
+                      isCollapsed
+                        ? 'bg-muted/30 border-border/50 text-muted-foreground'
+                        : 'bg-indigo-500/5 border-indigo-500/20 text-indigo-750 dark:text-indigo-300 font-semibold'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCollapsedCategories(prev =>
+                          isCollapsed ? prev.filter(c => c !== cat) : [...prev, cat]
+                        );
+                      }}
+                      className="hover:underline text-[11px] cursor-pointer"
+                    >
+                      {cat} ({count})
+                    </button>
+                    <FilterFavouriteButton isStarred={isStarred} onToggle={() => toggleFavourite(`cat:${cat}`)} />
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Active chips */}
+            <ActiveFilterChips chips={filterChips} onClearAll={handleResetFilters} />
+
+            {/* Row Count Info */}
+            <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground uppercase tracking-widest pt-1">
+              <span>Filtered Results: {sortedPeople.length} / {activePeople.length} people</span>
+              <span>Visible Columns: {visibleTypes.length} / {activeTypes.length} competencies</span>
+            </div>
           </div>
 
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
+          {/* Matrix table container */}
+          <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xs">
+            <div className="overflow-auto max-h-[60vh] relative">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="bg-muted/50 border-b border-border text-muted-foreground uppercase tracking-wider">
-                    <th className="p-3 sticky left-0 bg-muted/95 z-10 min-w-52">Person</th>
-                    {filteredTypes.map(type => <th key={type.id} className="p-3 min-w-40">{type.title}</th>)}
+                  <tr className="bg-muted border-b border-border text-muted-foreground uppercase tracking-wider sticky top-0 z-20">
+                    <th
+                      className="p-3 sticky left-0 top-0 z-35 border-r border-b border-border shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)] font-extrabold uppercase text-[10px] tracking-wider"
+                      style={{ backgroundColor: 'var(--muted)', left: 0, top: 0 }}
+                    >
+                      <div className="min-w-52">Person</div>
+                    </th>
+                    {visibleTypes.map(type => {
+                      const isStarred = isFavourite(`comp:${type.id}`);
+                      return (
+                        <th
+                          key={type.id}
+                          className="p-3 sticky top-0 z-20 border-b border-border text-left font-bold min-w-40"
+                          style={{ backgroundColor: 'var(--muted)', top: 0 }}
+                        >
+                          <div className="flex items-center justify-between gap-1.5">
+                            <div className="min-w-0">
+                              <span className="block text-[8px] opacity-65 uppercase font-medium tracking-wider truncate">{type.category}</span>
+                              <span className="block font-extrabold mt-0.5 text-foreground truncate max-w-[150px]" title={type.title}>{type.title}</span>
+                            </div>
+                            <FilterFavouriteButton
+                              isStarred={isStarred}
+                              onToggle={() => toggleFavourite(`comp:${type.id}`)}
+                            />
+                          </div>
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
-                  {filteredPeople.length === 0 || filteredTypes.length === 0 ? (
+                  {sortedPeople.length === 0 || visibleTypes.length === 0 ? (
                     <tr>
-                      <td colSpan={Math.max(filteredTypes.length + 1, 1)} className="p-8 text-center text-muted-foreground">
-                        Add people and competency types, or import a template pack to build the matrix.
+                      <td colSpan={Math.max(visibleTypes.length + 1, 1)} className="p-8 text-center text-muted-foreground">
+                        {sortedPeople.length === 0
+                          ? 'No people matches the active filters.'
+                          : 'No visible competency columns. Try expanding a category or toggling column visibility.'}
                       </td>
                     </tr>
-                  ) : filteredPeople.map(person => (
-                    <tr key={person.id} className="hover:bg-muted/30">
-                      <td className="p-3 sticky left-0 bg-card z-10">
-                        <button
-                          onClick={() => openPersonWorkspace(person)}
-                          className="w-full text-left rounded-lg p-1 -m-1 hover:bg-muted cursor-pointer transition-colors"
+                  ) : sortedPeople.map(person => {
+                    const personGapsCount = matrix.filter(cell => cell.person.id === person.id && (cell.status === 'Missing' || cell.status === 'Expired')).length;
+                    const paddingClass = density === 'comfortable' ? 'p-3' : 'p-1.5';
+                    const textClass = density === 'comfortable' ? 'text-xs' : 'text-[11px]';
+
+                    return (
+                      <tr key={person.id} className="hover:bg-muted/30 transition-colors">
+                        <td
+                          className={`${paddingClass} sticky left-0 z-10 border-r border-border shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)]`}
+                          style={{ backgroundColor: 'var(--card)', left: 0 }}
                         >
-                          <span className="font-extrabold block">{person.display_name}</span>
-                          <span className="text-[10px] text-muted-foreground">{person.department || 'No department'} | {person.person_type}</span>
-                        </button>
-                      </td>
-                      {filteredTypes.map(type => {
-                        const cell = matrix.find(item => item.person.id === person.id && item.competencyType.id === type.id);
-                        return (
-                          <td key={type.id} className="p-3">
-                            <button
-                              onClick={() => openCell(person, type)}
-                              className={`w-full text-left border rounded-lg px-2.5 py-2 hover:bg-muted/60 ${statusClass(cell?.status || 'Missing')}`}
-                            >
-                              <span className="font-bold block">{cell?.status || 'Missing'}</span>
-                              <span className="text-[10px] opacity-80">{cell?.record?.expiry_date ? `Until ${cell.record.expiry_date}` : 'No dated record'}</span>
-                            </button>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
+                          <button
+                            onClick={() => openPersonWorkspace(person)}
+                            className="w-full text-left rounded-lg p-1 -m-1 hover:bg-muted cursor-pointer transition-colors"
+                          >
+                            <span className={`font-extrabold block text-foreground ${textClass}`}>{person.display_name}</span>
+                            <span className="text-[9px] text-muted-foreground block truncate mt-0.5 max-w-[200px]">
+                              {person.department || 'No dept'} | {person.role || 'No role'}
+                            </span>
+                            {personGapsCount > 0 && (
+                              <span className="inline-block bg-rose-500/10 text-rose-600 dark:text-rose-400 font-extrabold text-[8px] px-1 rounded mt-0.5">
+                                {personGapsCount} gap{personGapsCount > 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </button>
+                        </td>
+                        {visibleTypes.map(type => {
+                          const cell = matrix.find(item => item.person.id === person.id && item.competencyType.id === type.id);
+                          const cellStatus = cell?.status || 'Missing';
+
+                          return (
+                            <td key={type.id} className={paddingClass}>
+                              <button
+                                onClick={() => openCell(person, type)}
+                                className={`w-full text-left border rounded-lg hover:bg-muted/60 transition-all ${
+                                  density === 'comfortable' ? 'px-2.5 py-2' : 'px-1.5 py-1'
+                                } ${statusClass(cellStatus)}`}
+                              >
+                                <span className={`font-extrabold block ${textClass}`}>{cellStatus}</span>
+                                <span className="text-[9px] opacity-75 block truncate mt-0.5">
+                                  {cell?.record?.expiry_date ? `${cell.record.expiry_date}` : 'No dated record'}
+                                </span>
+                              </button>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

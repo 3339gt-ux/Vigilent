@@ -30,9 +30,20 @@ import {
   ChevronDown,
   Archive
 } from 'lucide-react';
+import {
+  useFilterFavourites,
+  useSavedViews,
+  FilterFavouriteButton,
+  ActiveFilterChips,
+  SavedViewsBar,
+  StarredFilterSelect,
+  ColumnVisibilityControls,
+  SavedView
+} from '@/components/FilterControls';
 
 export default function EvidenceVault() {
   const {
+    user,
     documents,
     archivedDocuments,
     frameworkRequirements,
@@ -77,6 +88,107 @@ export default function EvidenceVault() {
   const [sortBy, setSortBy] = useState<'title' | 'expiry' | 'uploaded'>('uploaded');
   const [vaultView, setVaultView] = useState<'active' | 'archive'>('active');
   const [selectedArchiveIds, setSelectedArchiveIds] = useState<Set<string>>(new Set());
+
+  // Premium filters
+  const [linkFilter, setLinkFilter] = useState<'All' | 'Linked Only' | 'Unlinked Only'>('All');
+  const [docTypeFilter, setDocTypeFilter] = useState('All');
+  const [uploadedByFilter, setUploadedByFilter] = useState('All');
+  const [showOnlyStarredDocs, setShowOnlyStarredDocs] = useState(false);
+  const [density, setDensity] = useState<'comfortable' | 'compact'>('comfortable');
+  const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Favourites Persistence
+  const { favourites, toggleFavourite, isFavourite, clearFavourites } = useFilterFavourites(user?.id || 'guest', 'vault');
+
+  // Saved Views System
+  const defaultViews: SavedView[] = [
+    {
+      id: 'expiring-soon',
+      name: 'Expiring Soon',
+      filters: { selectedStatus: 'Expiring Soon' }
+    },
+    {
+      id: 'expired-evidence',
+      name: 'Expired Evidence',
+      filters: { selectedStatus: 'Expired' }
+    },
+    {
+      id: 'unlinked-evidence',
+      name: 'Unlinked Evidence',
+      filters: { linkFilter: 'Unlinked Only' }
+    },
+    {
+      id: 'pdf-documents',
+      name: 'PDF Files',
+      filters: { docTypeFilter: 'PDF' }
+    }
+  ];
+
+  const {
+    allViews,
+    activeViewId,
+    setActiveViewId,
+    saveCurrentView,
+    deleteCustomView
+  } = useSavedViews(user?.id || 'guest', 'vault', defaultViews);
+
+  const handleResetFilters = () => {
+    setSearch('');
+    setSelectedCategory('All');
+    setSelectedStatus('All');
+    setLinkFilter('All');
+    setDocTypeFilter('All');
+    setUploadedByFilter('All');
+    setShowOnlyStarredDocs(false);
+    setActiveViewId(null);
+  };
+
+  const handleSelectView = (view: SavedView | null) => {
+    if (view === null) {
+      handleResetFilters();
+      setActiveViewId(null);
+    } else {
+      const f = view.filters;
+      setSearch(f.search || '');
+      setSelectedCategory(f.selectedCategory || 'All');
+      setSelectedStatus(f.selectedStatus || 'All');
+      setLinkFilter(f.linkFilter || 'All');
+      setDocTypeFilter(f.docTypeFilter || 'All');
+      setUploadedByFilter(f.uploadedByFilter || 'All');
+      setShowOnlyStarredDocs(!!f.showOnlyStarredDocs);
+      setActiveViewId(view.id);
+    }
+  };
+
+  const handleSaveView = (name: string) => {
+    const filters = {
+      search,
+      selectedCategory,
+      selectedStatus,
+      linkFilter,
+      docTypeFilter,
+      uploadedByFilter,
+      showOnlyStarredDocs
+    };
+    saveCurrentView(name, filters);
+  };
+
+  const isViewModified = useMemo(() => {
+    if (!activeViewId) return false;
+    const activeView = allViews.find(v => v.id === activeViewId);
+    if (!activeView) return false;
+    const f = activeView.filters;
+    return (
+      search !== (f.search || '') ||
+      selectedCategory !== (f.selectedCategory || 'All') ||
+      selectedStatus !== (f.selectedStatus || 'All') ||
+      linkFilter !== (f.linkFilter || 'All') ||
+      docTypeFilter !== (f.docTypeFilter || 'All') ||
+      uploadedByFilter !== (f.uploadedByFilter || 'All') ||
+      showOnlyStarredDocs !== (!!f.showOnlyStarredDocs)
+    );
+  }, [activeViewId, allViews, search, selectedCategory, selectedStatus, linkFilter, docTypeFilter, uploadedByFilter, showOnlyStarredDocs]);
 
   // Upload dialog state
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -269,6 +381,36 @@ export default function EvidenceVault() {
     if (!query) return evidenceCategoryOptions;
     return evidenceCategoryOptions.filter(cat => cat.toLowerCase().includes(query));
   }, [evidenceCategoryOptions, catSearchQuery]);
+
+  const sortedCategories = useMemo(() => {
+    const list = evidenceCategoryOptions;
+    const starred = list.filter(c => isFavourite(`cat:${c}`));
+    const regular = list.filter(c => !isFavourite(`cat:${c}`));
+    return [...starred, ...regular];
+  }, [evidenceCategoryOptions, favourites, isFavourite]);
+
+  const uploadedByList = useMemo(() => {
+    const ids = new Set<string>([
+      ...documents.map(d => d.uploaded_by).filter(Boolean) as string[],
+      ...archivedDocuments.map(d => d.uploaded_by).filter(Boolean) as string[]
+    ]);
+    return Array.from(ids).sort((a, b) => a.localeCompare(b));
+  }, [documents, archivedDocuments]);
+
+  const getUploaderName = (uploadedBy: string | null) => {
+    if (!uploadedBy) return 'System / Guest';
+    if (uploadedBy === user?.id) return user.full_name || 'Me';
+    if (uploadedBy === 'usr-jane-doe') return 'Jane Doe';
+    const person = people.find(p => p.id === uploadedBy);
+    if (person) return person.display_name;
+    return uploadedBy;
+  };
+
+  const sortedUploaders = useMemo(() => {
+    const starred = uploadedByList.filter(u => isFavourite(`uploader:${u}`));
+    const regular = uploadedByList.filter(u => !isFavourite(`uploader:${u}`));
+    return ['All', ...starred, ...regular];
+  }, [uploadedByList, favourites, isFavourite]);
 
   const handleCreateEvidenceCategory = async (overrideName?: string) => {
     const nameToUse = (overrideName || newCustomCategory).trim();
@@ -599,26 +741,144 @@ export default function EvidenceVault() {
     setSelectedArchiveIds(new Set());
   };
 
-  const sourceDocs = vaultView === 'archive' ? archivedDocuments : documents;
-  // Filtered documents list
-  const filteredDocs = sourceDocs
-    .filter(doc => {
-      const matchesSearch = doc.title.toLowerCase().includes(search.toLowerCase()) ||
-                            doc.file_name.toLowerCase().includes(search.toLowerCase());
-      const matchesCategory = selectedCategory === 'All' || doc.category === selectedCategory;
-      const matchesStatus = selectedStatus === 'All' || doc.status === selectedStatus;
-      return matchesSearch && matchesCategory && matchesStatus;
-    })
-    .sort((a, b) => {
-      if (sortBy === 'title') return a.title.localeCompare(b.title);
-      if (sortBy === 'expiry') {
-        if (!a.expiry_date) return 1;
-        if (!b.expiry_date) return -1;
-        return new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
-      }
-      // default uploaded sorting (created_at descending)
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    });
+  const getDocType = (doc: EvidenceDocument) => {
+    const mime = (doc.mime_type || '').toLowerCase();
+    if (mime.startsWith('image/')) return 'Image';
+    if (mime === 'application/pdf') return 'PDF';
+    if (mime.includes('spreadsheet') || mime.includes('excel') || mime.includes('csv') || doc.file_name.endsWith('.csv') || doc.file_name.endsWith('.xlsx') || doc.file_name.endsWith('.xls')) return 'Spreadsheet';
+    if (mime.includes('word') || mime.includes('document') || mime.includes('text') || doc.file_name.endsWith('.docx') || doc.file_name.endsWith('.doc') || doc.file_name.endsWith('.txt')) return 'Document';
+    return 'Other';
+  };
+
+  const isDocLinked = (docId: string) => {
+    const summary = getDocumentLinkSummary(docId);
+    return summary.requirementCount > 0 || summary.criterionCount > 0 || summary.actionCount > 0 || summary.competencyCount > 0;
+  };
+
+  const sourceDocs = useMemo(() => {
+    return vaultView === 'archive' ? archivedDocuments : documents;
+  }, [vaultView, archivedDocuments, documents]);
+
+  const filteredDocs = useMemo(() => {
+    return sourceDocs
+      .filter(doc => {
+        const matchesSearch = doc.title.toLowerCase().includes(search.toLowerCase()) ||
+                              doc.file_name.toLowerCase().includes(search.toLowerCase());
+        const matchesCategory = selectedCategory === 'All' || doc.category === selectedCategory;
+        const matchesStatus = selectedStatus === 'All' || doc.status === selectedStatus;
+
+        let matchesLink = true;
+        if (linkFilter === 'Linked Only') {
+          matchesLink = isDocLinked(doc.id);
+        } else if (linkFilter === 'Unlinked Only') {
+          matchesLink = !isDocLinked(doc.id);
+        }
+
+        let matchesDocType = true;
+        if (docTypeFilter !== 'All') {
+          matchesDocType = getDocType(doc) === docTypeFilter;
+        }
+
+        const matchesUploader = uploadedByFilter === 'All' || doc.uploaded_by === uploadedByFilter;
+        const matchesStarred = !showOnlyStarredDocs || isFavourite(`doc:${doc.id}`);
+
+        return matchesSearch && matchesCategory && matchesStatus && matchesLink && matchesDocType && matchesUploader && matchesStarred;
+      })
+      .sort((a, b) => {
+        if (sortBy === 'title') return a.title.localeCompare(b.title);
+        if (sortBy === 'expiry') {
+          if (!a.expiry_date) return 1;
+          if (!b.expiry_date) return -1;
+          return new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
+        }
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+  }, [sourceDocs, search, selectedCategory, selectedStatus, linkFilter, docTypeFilter, uploadedByFilter, showOnlyStarredDocs, sortBy, favourites, isFavourite]);
+
+  const filterChips = useMemo(() => {
+    const chips: { key: string; label: string; valueLabel: string; onClear: () => void }[] = [];
+    if (search) {
+      chips.push({
+        key: 'search',
+        label: 'Search',
+        valueLabel: `"${search}"`,
+        onClear: () => setSearch('')
+      });
+    }
+    if (selectedCategory !== 'All') {
+      chips.push({
+        key: 'category',
+        label: 'Category',
+        valueLabel: selectedCategory,
+        onClear: () => setSelectedCategory('All')
+      });
+    }
+    if (selectedStatus !== 'All') {
+      chips.push({
+        key: 'status',
+        label: 'Status',
+        valueLabel: selectedStatus,
+        onClear: () => setSelectedStatus('All')
+      });
+    }
+    if (linkFilter !== 'All') {
+      chips.push({
+        key: 'link',
+        label: 'Link Status',
+        valueLabel: linkFilter,
+        onClear: () => setLinkFilter('All')
+      });
+    }
+    if (docTypeFilter !== 'All') {
+      chips.push({
+        key: 'docType',
+        label: 'Doc Type',
+        valueLabel: docTypeFilter,
+        onClear: () => setDocTypeFilter('All')
+      });
+    }
+    if (uploadedByFilter !== 'All') {
+      chips.push({
+        key: 'uploadedBy',
+        label: 'Uploader',
+        valueLabel: getUploaderName(uploadedByFilter),
+        onClear: () => setUploadedByFilter('All')
+      });
+    }
+    if (showOnlyStarredDocs) {
+      chips.push({
+        key: 'starred',
+        label: 'Starred Only',
+        valueLabel: 'Yes',
+        onClear: () => setShowOnlyStarredDocs(false)
+      });
+    }
+    return chips;
+  }, [search, selectedCategory, selectedStatus, linkFilter, docTypeFilter, uploadedByFilter, showOnlyStarredDocs]);
+
+  const columnsOptions = useMemo(() => {
+    return [
+      { id: 'name', title: 'Document Name', visible: !hiddenColumns.includes('name') },
+      { id: 'category', title: 'Category', visible: !hiddenColumns.includes('category') },
+      { id: 'date', title: vaultView === 'archive' ? 'Archived' : 'Expiry Date', visible: !hiddenColumns.includes('date') },
+      { id: 'status', title: 'Status', visible: !hiddenColumns.includes('status') },
+      { id: 'actions', title: 'Actions', visible: !hiddenColumns.includes('actions') }
+    ];
+  }, [hiddenColumns, vaultView]);
+
+  const handleToggleColumn = (id: string) => {
+    setHiddenColumns(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleAllColumns = (visible: boolean) => {
+    if (visible) {
+      setHiddenColumns([]);
+    } else {
+      setHiddenColumns(columnsOptions.filter(c => c.id !== 'name').map(c => c.id));
+    }
+  };
 
   const selectedDocumentActionLinks = selectedDoc
     ? actionDocuments.filter(link => link.document_id === selectedDoc.id)
@@ -1154,408 +1414,518 @@ export default function EvidenceVault() {
 
         {/* Main vault browser list (2 cols) */}
         <div className="xl:col-span-2 space-y-4">
-
-          {/* Category Chips Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-3 bg-card border border-border p-3.5 rounded-xl">
-            <div className="flex flex-wrap items-center gap-1.5">
-              {['All', 'General', 'Training & Competency', 'Insurance', 'Fleet'].map(catName => {
-                const isSelected = selectedCategory === catName;
-                return (
-                  <button
-                    key={catName}
-                    type="button"
-                    onClick={() => setSelectedCategory(catName)}
-                    className={`px-3 py-1 rounded-full text-xs font-bold transition-all border ${
-                      isSelected
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                        : 'bg-muted text-muted-foreground border-border hover:bg-muted/70 hover:text-foreground'
-                    }`}
-                  >
-                    {catName}
-                  </button>
-                );
-              })}
-              {!['All', 'General', 'Training & Competency', 'Insurance', 'Fleet'].includes(selectedCategory) && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedCategory(selectedCategory)}
-                  className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-650 text-white border border-indigo-650 shadow-xs flex items-center gap-1.5"
-                >
-                  <span>{selectedCategory}</span>
-                  <span
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedCategory('All');
-                    }}
-                    className="hover:bg-indigo-700/80 rounded p-0.5"
-                  >
-                    <X className="w-2.5 h-2.5" />
-                  </span>
-                </button>
-              )}
-            </div>
-
-            {/* Custom Category Popover Trigger */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setIsCatDropdownOpen(!isCatDropdownOpen)}
-                className="bg-muted hover:bg-muted/80 border border-border rounded-lg px-3 py-1.5 text-xs text-foreground font-semibold flex items-center gap-1.5 transition-colors"
-              >
-                <Filter className="w-3.5 h-3.5 text-muted-foreground" />
-                <span>Filter Category</span>
-                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-              </button>
-
-              {isCatDropdownOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setIsCatDropdownOpen(false)} />
-                  <div className="absolute right-0 mt-1 w-64 bg-card solid-panel border border-border rounded-xl shadow-xl z-50 p-3 space-y-2.5">
-                    <div className="relative">
-                      <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        value={catSearchQuery}
-                        onChange={(e) => setCatSearchQuery(e.target.value)}
-                        placeholder="Search or add category..."
-                        className="w-full pl-8 pr-3 py-1.5 bg-muted border border-border rounded-lg text-xs outline-none focus:border-indigo-500 transition-colors"
-                        autoFocus
-                      />
-                    </div>
-
-                    <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1">
-                      {filteredCatOptions.length === 0 ? (
-                        <p className="text-[10px] text-muted-foreground italic text-center py-2">No matching categories.</p>
-                      ) : (
-                        filteredCatOptions.map(catName => {
-                          const isSelected = selectedCategory === catName;
-                          const customCatObj = evidenceCategories.find(c => c.name === catName && !c.is_system && c.active);
-                          return (
-                            <div
-                              key={catName}
-                              className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
-                                isSelected ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold' : 'hover:bg-muted text-foreground'
-                              }`}
-                              onClick={() => {
-                                setSelectedCategory(catName);
-                                setIsCatDropdownOpen(false);
-                                setCatSearchQuery('');
-                              }}
-                            >
-                              <span className="truncate flex-1">{catName}</span>
-                              {customCatObj && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    void handleArchiveEvidenceCategory(customCatObj.id);
-                                  }}
-                                  className="text-muted-foreground hover:text-rose-500 p-0.5 rounded hover:bg-muted-foreground/10 transition-colors shrink-0"
-                                  title="Archive custom category"
-                                >
-                                  <Archive className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-
-                    {catSearchQuery.trim() && !filteredCatOptions.some(c => c.toLowerCase() === catSearchQuery.trim().toLowerCase()) && (
-                      <div className="border-t border-border pt-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void handleCreateEvidenceCategory(catSearchQuery.trim());
-                            setIsCatDropdownOpen(false);
-                            setCatSearchQuery('');
-                          }}
-                          className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 transition-colors animate-fade-in"
-                        >
-                          <Plus className="w-3 h-3" /> Create Category "{catSearchQuery.trim()}"
-                        </button>
-                      </div>
-                    )}
+          {/* Advanced Filter Ribbon Controls */}
+          <div className="flex flex-col gap-3 mb-4">
+            <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-4">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                {/* Search and Toggle Filter Button */}
+                <div className="flex items-center gap-2 w-full md:max-w-md">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      id="vault-search"
+                      value={search}
+                      onChange={e => setSearch(e.target.value)}
+                      placeholder="Search documents or files..."
+                      className="w-full pl-9 pr-4 py-2 bg-muted border border-border/80 rounded-lg text-xs outline-none focus:border-indigo-500 transition-colors"
+                    />
                   </div>
-                </>
-              )}
-            </div>
-          </div>
+                  <button
+                    onClick={() => setShowFilters(!showFilters)}
+                    className={`flex items-center gap-1.5 px-3 py-2 bg-muted hover:bg-muted/80 border border-border font-bold text-xs rounded-lg cursor-pointer transition-colors ${showFilters ? 'ring-2 ring-indigo-500/40' : ''}`}
+                  >
+                    <Filter className="w-4 h-4 text-indigo-500" />
+                    <span>Filters</span>
+                  </button>
 
-          {/* Controls Bar */}
-          <div className="bg-card border border-border p-4 rounded-xl flex flex-col md:flex-row gap-4 items-center justify-between">
-            <div className="relative w-full md:max-w-xs">
-              <Search className="w-4.5 h-4.5 text-muted-foreground absolute left-3 top-1/2 transform -translate-y-1/2" />
-              <input
-                id="vault-search"
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search documents or files..."
-                className="w-full pl-9 pr-4 py-2 bg-muted border border-border/80 rounded-lg text-xs outline-none focus:border-indigo-500 transition-colors"
-              />
-            </div>
+                  {/* Category Manager Dropdown inline */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setIsCatDropdownOpen(!isCatDropdownOpen)}
+                      className="bg-muted hover:bg-muted/80 border border-border rounded-lg px-3 py-2 text-xs text-foreground font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span>Category Manager</span>
+                      <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                    </button>
 
-            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-
-              {/* Status filter */}
-              <select
-                id="vault-filter-status"
-                value={selectedStatus}
-                onChange={e => setSelectedStatus(e.target.value)}
-                className="bg-muted border border-border/80 rounded px-2 py-1 outline-none text-xs text-foreground font-semibold"
-              >
-                <option value="All">All Statuses</option>
-                <option value="Active">Active</option>
-                <option value="Expiring Soon">Expiring Soon</option>
-                <option value="Expired">Expired</option>
-                <option value="Unclassified">Unclassified</option>
-              </select>
-
-              {/* Sort filter */}
-              <select
-                id="vault-sort-by"
-                value={sortBy}
-                onChange={e => setSortBy(e.target.value as 'title' | 'expiry' | 'uploaded')}
-                className="bg-muted border border-border/80 rounded px-2 py-1 outline-none text-xs text-foreground font-semibold"
-              >
-                <option value="uploaded">Sort: Upload Date</option>
-                <option value="title">Sort: Document Name</option>
-                <option value="expiry">Sort: Expiry Date</option>
-              </select>
-
-            </div>
-          </div>
-
-          {/* Documents Table */}
-          <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-muted/50 border-b border-border/80 text-muted-foreground font-bold uppercase tracking-wider">
-                    {vaultView === 'archive' && <th className="p-4 select-none w-10">Select</th>}
-                    <th className="p-4 select-none">Document Name</th>
-                    <th className="p-4 select-none">Category</th>
-                    <th className="p-4 select-none">{vaultView === 'archive' ? 'Archived' : 'Expiry Date'}</th>
-                    <th className="p-4 select-none text-center">Status</th>
-                    <th className="p-4 select-none text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/60">
-                  {filteredDocs.length === 0 ? (
-                    <tr>
-                      <td colSpan={vaultView === 'archive' ? 6 : 5} className="p-12 text-center">
-                        {sourceDocs.length === 0 ? (
-                          vaultView === 'archive' ? (
-                            <div className="max-w-sm mx-auto flex flex-col items-center justify-center space-y-3 py-6">
-                              <div className="w-12 h-12 rounded-2xl bg-muted border border-border flex items-center justify-center text-muted-foreground shadow-xs">
-                                <FolderArchive className="w-6 h-6" />
-                              </div>
-                              <div>
-                                <h4 className="text-xs font-bold text-foreground">Archive is Empty</h4>
-                                <p className="text-[11px] text-muted-foreground mt-1 max-w-[280px] leading-normal">
-                                  Archived records are hidden from normal compliance logs but remain restorable here.
-                                </p>
-                              </div>
+                    {isCatDropdownOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setIsCatDropdownOpen(false)} />
+                        <div className="absolute right-0 mt-1 w-64 bg-card solid-panel border border-border rounded-xl shadow-xl z-50 p-3 space-y-2.5">
+                          {categoryMessage && (
+                            <div className={`p-1.5 text-[10px] font-semibold border rounded-lg text-center animate-fade-in ${
+                              categoryMessage.toLowerCase().includes('could not') || categoryMessage.toLowerCase().includes('failed')
+                                ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-450'
+                                : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-650 dark:text-emerald-450'
+                            }`}>
+                              {categoryMessage}
                             </div>
-                          ) : (
-                            <div className="max-w-sm mx-auto flex flex-col items-center justify-center space-y-4.5 py-6">
-                              <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-650 flex items-center justify-center shadow-xs">
-                                <Upload className="w-6 h-6 animate-bounce" />
-                              </div>
-                              <div>
-                                <h4 className="text-xs font-bold text-foreground">Your Evidence Vault is Empty</h4>
-                                <p className="text-[11px] text-muted-foreground mt-1 max-w-[280px] leading-normal">
-                                  Upload a PDF certificate, spreadsheet log, or image to start building compliance readiness evidence.
-                                </p>
-                              </div>
-                              <button
-                                onClick={() => setShowUploadModal(true)}
-                                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-755 text-white rounded-lg text-[10px] font-bold shadow-sm transition-colors"
-                              >
-                                Upload First Document
-                              </button>
-                            </div>
-                          )
-                        ) : (
-                          <div className="max-w-sm mx-auto flex flex-col items-center justify-center space-y-3 py-6">
-                            <div className="w-12 h-12 rounded-2xl bg-muted border border-border flex items-center justify-center text-muted-foreground shadow-xs">
-                              <Inbox className="w-5 h-5 text-muted-foreground/60" />
-                            </div>
-                            <div>
-                              <h4 className="text-xs font-bold text-foreground">No matching documents</h4>
-                              <p className="text-[11px] text-muted-foreground mt-1 max-w-[280px] leading-normal">
-                                Double-check your spelling, adjust compliance categories, or clear filters.
-                              </p>
-                            </div>
-                            {(search || selectedCategory !== 'All' || selectedStatus !== 'All') && (
-                              <button
-                                onClick={() => {
-                                  setSearch('');
-                                  setSelectedCategory('All');
-                                  setSelectedStatus('All');
-                                }}
-                                className="px-3 py-1 bg-muted hover:bg-muted/80 border border-border rounded-lg text-[10px] font-bold text-foreground transition-colors"
-                              >
-                                Reset Search Filters
-                              </button>
+                          )}
+                          <div className="relative">
+                            <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+                            <input
+                              type="text"
+                              value={catSearchQuery}
+                              onChange={(e) => setCatSearchQuery(e.target.value)}
+                              placeholder="Search or add category..."
+                              className="w-full pl-8 pr-3 py-1.5 bg-muted border border-border rounded-lg text-xs outline-none focus:border-indigo-500 transition-colors"
+                              autoFocus
+                            />
+                          </div>
+
+                          <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1">
+                            {filteredCatOptions.length === 0 ? (
+                              <p className="text-[10px] text-muted-foreground italic text-center py-2">No matching categories.</p>
+                            ) : (
+                              filteredCatOptions.map(catName => {
+                                const isSelected = selectedCategory === catName;
+                                const customCatObj = evidenceCategories.find(c => c.name === catName && !c.is_system && c.active);
+                                return (
+                                  <div
+                                    key={catName}
+                                    className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+                                      isSelected ? 'bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 font-bold' : 'hover:bg-muted text-foreground font-semibold'
+                                    }`}
+                                    onClick={() => {
+                                      setSelectedCategory(catName);
+                                      setIsCatDropdownOpen(false);
+                                      setCatSearchQuery('');
+                                    }}
+                                  >
+                                    <span className="truncate flex-1">{catName}</span>
+                                    {customCatObj && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          void handleArchiveEvidenceCategory(customCatObj.id);
+                                        }}
+                                        className="text-muted-foreground hover:text-rose-500 p-0.5 rounded hover:bg-muted-foreground/10 transition-colors shrink-0 cursor-pointer"
+                                        title="Archive custom category"
+                                      >
+                                        <Archive className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              })
                             )}
                           </div>
-                        )}
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredDocs.map(doc => {
-                      const isSelected = selectedDoc?.id === doc.id;
-                      const linkSummary = getDocumentLinkSummary(doc.id);
-                      return (
-                        <tr
-                          key={doc.id}
-                          className={`hover:bg-muted/50 transition-colors cursor-pointer border-l-2 ${
-                            isSelected
-                              ? 'bg-indigo-500/5 border-l-indigo-600'
-                              : 'border-l-transparent'
-                          }`}
-                          onClick={() => handleSelectDoc(doc)}
-                        >
-                          {vaultView === 'archive' && (
-                            <td className="p-4" onClick={e => e.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                className="rounded border-border text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 bg-muted/40 cursor-pointer"
-                                checked={selectedArchiveIds.has(doc.id)}
-                                onChange={event => setSelectedArchiveIds(prev => {
-                                  const next = new Set(prev);
-                                  if (event.target.checked) next.add(doc.id);
-                                  else next.delete(doc.id);
-                                  return next;
-                                })}
-                              />
-                            </td>
+
+                          {catSearchQuery.trim() && !filteredCatOptions.some(c => c.toLowerCase() === catSearchQuery.trim().toLowerCase()) && (
+                            <div className="border-t border-border pt-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void handleCreateEvidenceCategory(catSearchQuery.trim());
+                                  setIsCatDropdownOpen(false);
+                                  setCatSearchQuery('');
+                                }}
+                                className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 transition-colors animate-fade-in cursor-pointer"
+                              >
+                                <Plus className="w-3 h-3" /> Create Category &quot;{catSearchQuery.trim()}&quot;
+                              </button>
+                            </div>
                           )}
-                          <td className="p-4">
-                            <div className="flex items-center gap-3">
-                              <button
-                                onMouseEnter={event => startPreview(doc, event.currentTarget)}
-                                onMouseLeave={stopPreview}
-                                onFocus={event => startPreview(doc, event.currentTarget)}
-                                onBlur={stopPreview}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openLargePreview(doc);
-                                }}
-                                className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg shrink-0 hover:bg-indigo-500/20"
-                                title="Preview private file"
-                              >
-                                <FileText className="w-4 h-4" />
-                              </button>
-                              <div
-                                onMouseEnter={event => startPreview(doc, event.currentTarget)}
-                                onMouseLeave={stopPreview}
-                                onFocus={event => startPreview(doc, event.currentTarget)}
-                                onBlur={stopPreview}
-                                tabIndex={0}
-                                className="overflow-hidden max-w-[180px] sm:max-w-xs outline-none"
-                              >
-                                <span className="font-bold block truncate">{doc.title}</span>
-                                <span className="text-[10px] text-muted-foreground block truncate">{doc.file_name}</span>
-                                {doc.file_hash && <span className="text-[9px] text-amber-500 font-bold">Duplicate checks enabled</span>}
-                                {vaultView === 'archive' && (
-                                  <span className="text-[9px] text-muted-foreground block">
-                                    Links: {linkSummary.requirementCount} req, {linkSummary.criterionCount} criteria, {linkSummary.actionCount} actions, {linkSummary.competencyCount} competencies
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="p-4 font-semibold text-muted-foreground">
-                            {doc.category}
-                          </td>
-                          <td className="p-4 font-semibold text-muted-foreground">
-                            {vaultView === 'archive' ? (
-                              <span className="flex items-center gap-1.5">
-                                <Calendar className="w-3.5 h-3.5 text-muted-foreground/60" />
-                                {doc.archived_at ? new Date(doc.archived_at).toLocaleDateString() : new Date(doc.updated_at || doc.created_at).toLocaleDateString()}
-                              </span>
-                            ) : doc.expiry_date ? (
-                              <span className="flex items-center gap-1.5">
-                                <Calendar className="w-3.5 h-3.5" />
-                                {doc.expiry_date}
-                              </span>
-                            ) : (
-                              <span className="text-amber-500 font-semibold italic text-[11px]">Unclassified</span>
-                            )}
-                          </td>
-                          <td className="p-4 text-center">
-                            <span className={`inline-block px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full border ${
-                              vaultView === 'archive' ? 'bg-zinc-500/10 border-zinc-500/20 text-zinc-500' :
-                              doc.status === 'Active' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400' :
-                              doc.status === 'Expiring Soon' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400' :
-                              doc.status === 'Expired' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400' :
-                              'bg-zinc-500/10 border-zinc-500/20 text-zinc-500'
-                            }`}>
-                              {vaultView === 'archive' ? 'Archived' : doc.status}
-                            </span>
-                          </td>
-                          <td className="p-4 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {vaultView === 'archive' ? (
-                                <>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleRestoreDoc(doc.id);
-                                    }}
-                                    className="px-2 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded font-bold text-[10px]"
-                                  >
-                                    Restore
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handlePermanentDeleteDoc(doc.id);
-                                    }}
-                                    className="px-2 py-1 bg-rose-500/10 text-rose-500 rounded font-bold text-[10px]"
-                                  >
-                                    Delete forever
-                                  </button>
-                                </>
-                              ) : (
-                                <>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleSelectDoc(doc);
-                                }}
-                                className="p-1.5 hover:bg-muted rounded text-muted-foreground hover:text-foreground"
-                                title="View Details"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteDoc(doc.id);
-                                }}
-                                className="p-1.5 hover:bg-rose-500/10 rounded text-muted-foreground hover:text-rose-500"
-                                title="Delete Document"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                                </>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Density and Column Visibility Toggles */}
+                <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                  <ColumnVisibilityControls
+                    columns={columnsOptions}
+                    onToggleColumn={handleToggleColumn}
+                    onToggleAll={handleToggleAllColumns}
+                  />
+
+                  <div className="flex items-center bg-muted border border-border rounded-lg p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setDensity('comfortable')}
+                      className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                        density === 'comfortable' ? 'bg-card text-foreground shadow-xs border border-border/50' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Comfortable
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDensity('compact')}
+                      className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                        density === 'compact' ? 'bg-card text-foreground shadow-xs border border-border/50' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Compact
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Collapsible advanced filters */}
+              {showFilters && (
+                <div className="border-t border-border/60 pt-4 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                    <StarredFilterSelect
+                      label="Category"
+                      value={selectedCategory}
+                      onChange={setSelectedCategory}
+                      options={['All', ...sortedCategories]}
+                      isStarred={(opt) => isFavourite(`cat:${opt}`)}
+                      onToggleStar={(opt) => toggleFavourite(`cat:${opt}`)}
+                      allLabel="All Categories"
+                    />
+                    <StarredFilterSelect
+                      label="Uploader"
+                      value={uploadedByFilter}
+                      onChange={setUploadedByFilter}
+                      options={sortedUploaders}
+                      isStarred={(opt) => isFavourite(`uploader:${opt}`)}
+                      onToggleStar={(opt) => toggleFavourite(`uploader:${opt}`)}
+                      allLabel="All Uploaders"
+                    />
+                    <StarredFilterSelect
+                      label="Status"
+                      value={selectedStatus}
+                      onChange={setSelectedStatus}
+                      options={['All', 'Active', 'Expiring Soon', 'Expired', 'Unclassified']}
+                      isStarred={(opt) => isFavourite(`status:${opt}`)}
+                      onToggleStar={(opt) => toggleFavourite(`status:${opt}`)}
+                      allLabel="All Statuses"
+                    />
+                    <StarredFilterSelect
+                      label="Link Status"
+                      value={linkFilter}
+                      onChange={(val) => setLinkFilter(val as 'All' | 'Linked Only' | 'Unlinked Only')}
+                      options={['All', 'Linked Only', 'Unlinked Only']}
+                      isStarred={(opt) => isFavourite(`link:${opt}`)}
+                      onToggleStar={(opt) => toggleFavourite(`link:${opt}`)}
+                    />
+                  </div>
+
+                  {/* Second Row of Filters */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                    <StarredFilterSelect
+                      label="Doc Type"
+                      value={docTypeFilter}
+                      onChange={setDocTypeFilter}
+                      options={['All', 'PDF', 'Image', 'Spreadsheet', 'Document', 'Other']}
+                      isStarred={(opt) => isFavourite(`doctype:${opt}`)}
+                      onToggleStar={(opt) => toggleFavourite(`doctype:${opt}`)}
+                      allLabel="All Doc Types"
+                    />
+
+                    <div className="flex flex-col gap-1">
+                      <label htmlFor="vault-sort-by" className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Sort By</label>
+                      <select
+                        id="vault-sort-by"
+                        value={sortBy}
+                        onChange={e => setSortBy(e.target.value as 'title' | 'expiry' | 'uploaded')}
+                        className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                      >
+                        <option value="uploaded">Upload Date</option>
+                        <option value="title">Document Name</option>
+                        <option value="expiry">Expiry Date</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Quick Toggles */}
+                  <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-border/40 text-xs">
+                    <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={showOnlyStarredDocs}
+                        onChange={e => setShowOnlyStarredDocs(e.target.checked)}
+                        className="accent-indigo-650 w-3.5 h-3.5"
+                      />
+                      <span>Starred Documents only</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Saved Views Bar */}
+              <SavedViewsBar
+                views={allViews}
+                activeViewId={activeViewId}
+                onSelectView={handleSelectView}
+                onSaveCurrent={handleSaveView}
+                onDeleteCustom={deleteCustomView}
+                isViewModified={isViewModified}
+              />
+
+              {/* Active filter chips */}
+              <ActiveFilterChips chips={filterChips} onClearAll={handleResetFilters} />
+
+              {/* Result Count Summary */}
+              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pt-1">
+                Filtered Documents: {filteredDocs.length} / {sourceDocs.length} documents
+              </div>
             </div>
           </div>
+        </div>
 
+        <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-muted border-b border-border/80 text-muted-foreground font-bold uppercase tracking-wider">
+                  {vaultView === 'archive' && <th className={`${density === 'compact' ? 'p-2.5' : 'p-4'} select-none w-10`}>Select</th>}
+                  {columnsOptions.map(col => {
+                    if (!col.visible) return null;
+                    return (
+                      <th
+                        key={col.id}
+                        className={`${density === 'compact' ? 'p-2.5 py-2' : 'p-4'} ${col.id === 'status' ? 'text-center' : ''} ${col.id === 'actions' ? 'text-right' : ''} select-none`}
+                      >
+                        {col.title}
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {filteredDocs.length === 0 ? (
+                  <tr>
+                    <td colSpan={(vaultView === 'archive' ? 1 : 0) + columnsOptions.filter(c => c.visible).length} className="p-12 text-center">
+                      {sourceDocs.length === 0 ? (
+                        vaultView === 'archive' ? (
+                          <div className="max-w-sm mx-auto flex flex-col items-center justify-center space-y-3 py-6">
+                            <div className="w-12 h-12 rounded-2xl bg-muted border border-border flex items-center justify-center text-muted-foreground shadow-xs">
+                              <FolderArchive className="w-6 h-6" />
+                            </div>
+                            <div>
+                              <h4 className="text-xs font-bold text-foreground">Archive is Empty</h4>
+                              <p className="text-[11px] text-muted-foreground mt-1 max-w-[280px] leading-normal">
+                                Archived records are hidden from normal compliance logs but remain restorable here.
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="max-w-sm mx-auto flex flex-col items-center justify-center space-y-4.5 py-6">
+                            <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-650 flex items-center justify-center shadow-xs">
+                              <Upload className="w-6 h-6 animate-bounce" />
+                            </div>
+                            <div>
+                              <h4 className="text-xs font-bold text-foreground">Your Evidence Vault is Empty</h4>
+                              <p className="text-[11px] text-muted-foreground mt-1 max-w-[280px] leading-normal">
+                                Upload a PDF certificate, spreadsheet log, or image to start building compliance readiness evidence.
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => setShowUploadModal(true)}
+                              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-755 text-white rounded-lg text-[10px] font-bold shadow-sm transition-colors cursor-pointer"
+                            >
+                              Upload First Document
+                            </button>
+                          </div>
+                        )
+                      ) : (
+                        <div className="max-w-sm mx-auto flex flex-col items-center justify-center space-y-3 py-6">
+                          <div className="w-12 h-12 rounded-2xl bg-muted border border-border flex items-center justify-center text-muted-foreground shadow-xs">
+                            <Inbox className="w-5 h-5 text-muted-foreground/60" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-bold text-foreground">No matching documents</h4>
+                            <p className="text-[11px] text-muted-foreground mt-1 max-w-[280px] leading-normal">
+                              Double-check your spelling, adjust compliance categories, or clear filters.
+                            </p>
+                          </div>
+                          {(search || selectedCategory !== 'All' || selectedStatus !== 'All' || linkFilter !== 'All' || docTypeFilter !== 'All' || uploadedByFilter !== 'All' || showOnlyStarredDocs) && (
+                            <button
+                              onClick={handleResetFilters}
+                              className="px-3 py-1 bg-muted hover:bg-muted/80 border border-border rounded-lg text-[10px] font-bold text-foreground transition-colors cursor-pointer"
+                            >
+                              Reset Search Filters
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredDocs.map(doc => {
+                    const isSelected = selectedDoc?.id === doc.id;
+                    const linkSummary = getDocumentLinkSummary(doc.id);
+                    const paddingClass = density === 'compact' ? 'p-2 py-1.5' : 'p-4';
+                    return (
+                      <tr
+                        key={doc.id}
+                        className={`hover:bg-muted/50 transition-colors cursor-pointer border-l-2 ${
+                          isSelected
+                            ? 'bg-indigo-500/5 border-l-indigo-600'
+                            : 'border-l-transparent'
+                        }`}
+                        onClick={() => handleSelectDoc(doc)}
+                      >
+                        {vaultView === 'archive' && (
+                          <td className={paddingClass} onClick={e => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              className="rounded border-border text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 bg-muted/40 cursor-pointer"
+                              checked={selectedArchiveIds.has(doc.id)}
+                              onChange={event => setSelectedArchiveIds(prev => {
+                                const next = new Set(prev);
+                                if (event.target.checked) next.add(doc.id);
+                                else next.delete(doc.id);
+                                return next;
+                              })}
+                            />
+                          </td>
+                        )}
+                        {columnsOptions.map(col => {
+                          if (!col.visible) return null;
+                          switch (col.id) {
+                            case 'name':
+                              return (
+                                <td key="name" className={paddingClass}>
+                                  <div className="flex items-center gap-3">
+                                    <button
+                                      onMouseEnter={event => startPreview(doc, event.currentTarget)}
+                                      onMouseLeave={stopPreview}
+                                      onFocus={event => startPreview(doc, event.currentTarget)}
+                                      onBlur={stopPreview}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        openLargePreview(doc);
+                                      }}
+                                      className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg shrink-0 hover:bg-indigo-500/20 cursor-pointer"
+                                      title="Preview private file"
+                                    >
+                                      <FileText className="w-4 h-4" />
+                                    </button>
+                                    <div
+                                      onMouseEnter={event => startPreview(doc, event.currentTarget)}
+                                      onMouseLeave={stopPreview}
+                                      onFocus={event => startPreview(doc, event.currentTarget)}
+                                      onBlur={stopPreview}
+                                      tabIndex={0}
+                                      className="overflow-hidden max-w-[180px] sm:max-w-xs outline-none"
+                                    >
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="font-bold block truncate">{doc.title}</span>
+                                        <FilterFavouriteButton
+                                          isStarred={isFavourite(`doc:${doc.id}`)}
+                                          onToggle={() => toggleFavourite(`doc:${doc.id}`)}
+                                        />
+                                      </div>
+                                      <span className="text-[10px] text-muted-foreground block truncate">{doc.file_name}</span>
+                                      {doc.file_hash && <span className="text-[9px] text-amber-500 font-bold">Duplicate checks enabled</span>}
+                                      {(vaultView === 'archive' || density === 'comfortable') && (
+                                        <span className="text-[9px] text-muted-foreground block">
+                                          Links: {linkSummary.requirementCount} req, {linkSummary.criterionCount} criteria, {linkSummary.actionCount} actions, {linkSummary.competencyCount} competencies
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                              );
+                            case 'category':
+                              return (
+                                <td key="category" className={`${paddingClass} font-semibold text-muted-foreground`}>
+                                  {doc.category}
+                                </td>
+                              );
+                            case 'date':
+                              return (
+                                <td key="date" className={`${paddingClass} font-semibold text-muted-foreground`}>
+                                  {vaultView === 'archive' ? (
+                                    <span className="flex items-center gap-1.5">
+                                      <Calendar className="w-3.5 h-3.5 text-muted-foreground/60" />
+                                      {doc.archived_at ? new Date(doc.archived_at).toLocaleDateString() : new Date(doc.updated_at || doc.created_at).toLocaleDateString()}
+                                    </span>
+                                  ) : doc.expiry_date ? (
+                                    <span className="flex items-center gap-1.5">
+                                      <Calendar className="w-3.5 h-3.5" />
+                                      {doc.expiry_date}
+                                    </span>
+                                  ) : (
+                                    <span className="text-amber-500 font-semibold italic text-[11px]">Unclassified</span>
+                                  )}
+                                </td>
+                              );
+                            case 'status':
+                              return (
+                                <td key="status" className={`${paddingClass} text-center`}>
+                                  <span className={`inline-block px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full border ${
+                                    vaultView === 'archive' ? 'bg-zinc-500/10 border-zinc-500/20 text-zinc-500' :
+                                    doc.status === 'Active' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400' :
+                                    doc.status === 'Expiring Soon' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400' :
+                                    doc.status === 'Expired' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400' :
+                                    'bg-zinc-500/10 border-zinc-500/20 text-zinc-500'
+                                  }`}>
+                                    {vaultView === 'archive' ? 'Archived' : doc.status}
+                                  </span>
+                                </td>
+                              );
+                            case 'actions':
+                              return (
+                                <td key="actions" className={`${paddingClass} text-right`}>
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    {vaultView === 'archive' ? (
+                                      <>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRestoreDoc(doc.id);
+                                          }}
+                                          className="px-2 py-1 bg-emerald-500/10 text-emerald-650 dark:text-emerald-400 rounded font-bold text-[10px] cursor-pointer"
+                                        >
+                                          Restore
+                                        </button>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handlePermanentDeleteDoc(doc.id);
+                                          }}
+                                          className="px-2 py-1 bg-rose-500/10 text-rose-500 rounded font-bold text-[10px] cursor-pointer"
+                                        >
+                                          Delete forever
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleSelectDoc(doc);
+                                          }}
+                                          className="p-1.5 hover:bg-muted rounded text-muted-foreground hover:text-foreground cursor-pointer"
+                                          title="View Details"
+                                        >
+                                          <Eye className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteDoc(doc.id);
+                                          }}
+                                          className="p-1.5 hover:bg-rose-500/10 rounded text-muted-foreground hover:text-rose-500 cursor-pointer"
+                                          title="Delete Document"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </td>
+                              );
+                            default:
+                              return null;
+                          }
+                        })}
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* Right column: Detail Drawer (1 col) */}
