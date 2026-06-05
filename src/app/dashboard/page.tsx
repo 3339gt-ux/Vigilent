@@ -127,6 +127,7 @@ export default function DashboardPage() {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [activeFlyout, setActiveFlyout] = useState<string | null>(null);
   const [activeDashboardPanel, setActiveDashboardPanel] = useState<string | null>(null);
+  const [selectedAttentionItem, setSelectedAttentionItem] = useState<string | null>(null);
   const [expandedRadarBucket, setExpandedRadarBucket] = useState<string | null>(null);
   const [activeQuickActionModal, setActiveQuickActionModal] = useState<DashboardModal>(null);
   const [quickActionMessage, setQuickActionMessage] = useState('');
@@ -337,6 +338,9 @@ export default function DashboardPage() {
 
   const openDashboardRecord = (target: DashboardRecordTarget) => {
     setActiveFlyout(null);
+    setActiveDashboardPanel(null);
+    setSelectedAttentionItem(null);
+    setExpandedRadarBucket(null);
     if (target.action) {
       setSelectedAction(target.action);
       return;
@@ -356,6 +360,14 @@ export default function DashboardPage() {
 
   const openRadarItem = (item: RadarItem) => {
     openDashboardRecord(item);
+  };
+
+  const openAttentionAction = (action: Action) => {
+    setSelectedAttentionItem(`action-${action.id}`);
+    setActiveFlyout(null);
+    setActiveDashboardPanel(null);
+    setExpandedRadarBucket(null);
+    setSelectedAction(action);
   };
 
   const radarBuckets = useMemo(() => {
@@ -674,7 +686,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" data-selected-attention-item={selectedAttentionItem || undefined}>
       {/* Header and Reset Controls */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 animate-fade-in">
         <div>
@@ -953,32 +965,6 @@ export default function DashboardPage() {
                               </span>
                             </div>
 
-                            {/* Floating Preview */}
-                            <div className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-72 p-3.5 ${flyoutPanelClass} opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200 text-xs space-y-2.5`}>
-                              <div className="flex items-center justify-between border-b border-border/80 pb-1.5 mb-1.5">
-                                <span className="font-bold text-foreground text-xs truncate max-w-[180px]">{item.requirement.title}</span>
-                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-extrabold border ${
-                                  item.status === 'GREEN' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' :
-                                  item.status === 'AMBER' ? 'bg-amber-500/10 text-amber-600 border-amber-500/20' :
-                                  'bg-rose-500/10 text-rose-600 border-rose-500/20'
-                                }`}>{item.status}</span>
-                              </div>
-                              <div className="space-y-1 text-[11px] text-muted-foreground">
-                                <div className="flex justify-between"><span className="font-medium text-muted-foreground/85">Category</span><span className="font-semibold text-foreground truncate max-w-[150px]">{item.requirement.category}</span></div>
-                                <div className="flex justify-between"><span className="font-medium text-muted-foreground/85">Owner</span><span className="font-semibold text-foreground truncate max-w-[150px]">{item.requirement.owner || 'Unassigned'}</span></div>
-                                <div className="flex justify-between"><span className="font-medium text-muted-foreground/85">Gaps</span><span className="font-semibold text-rose-600 dark:text-rose-400">
-                                  {(() => {
-                                    const missing = item.evidenceCoverage?.criteria.filter(c => c.status === 'Not Covered').length ?? 0;
-                                    const total = item.evidenceCoverage?.criteria.length ?? 0;
-                                    return total > 0 ? `${missing}/${total} criteria missing` : 'None';
-                                  })()}
-                                </span></div>
-                                <div className="flex justify-between"><span className="font-medium text-muted-foreground/85">Review Due</span><span className="font-semibold text-foreground">{item.requirement.next_due_date || 'No scheduled date'}</span></div>
-                              </div>
-                              <div className="border-t border-border/80 pt-2 text-center">
-                                <span className="text-[10px] font-bold text-indigo-650 dark:text-indigo-400">Open Requirement →</span>
-                              </div>
-                            </div>
                           </Link>
                         ))}
                       </div>
@@ -1010,32 +996,6 @@ export default function DashboardPage() {
                               </span>
                             </div>
 
-                            {/* Floating Preview */}
-                            <div className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-72 p-3.5 ${flyoutPanelClass} opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200 text-xs space-y-2.5`}>
-                              <div className="flex items-center justify-between border-b border-border/80 pb-1.5 mb-1.5">
-                                <span className="font-bold text-foreground text-xs truncate max-w-[180px]">{item.requirement.title}</span>
-                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-extrabold border ${
-                                  item.status === 'GREEN' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' :
-                                  item.status === 'AMBER' ? 'bg-amber-500/10 text-amber-600 border-amber-500/20' :
-                                  'bg-rose-500/10 text-rose-600 border-rose-500/20'
-                                }`}>{item.status}</span>
-                              </div>
-                              <div className="space-y-1 text-[11px] text-muted-foreground">
-                                <div className="flex justify-between"><span className="font-medium text-muted-foreground/85">Category</span><span className="font-semibold text-foreground truncate max-w-[150px]">{item.requirement.category}</span></div>
-                                <div className="flex justify-between"><span className="font-medium text-muted-foreground/85">Owner</span><span className="font-semibold text-foreground truncate max-w-[150px]">{item.requirement.owner || 'Unassigned'}</span></div>
-                                <div className="flex justify-between"><span className="font-medium text-muted-foreground/85">Gaps</span><span className="font-semibold text-rose-600 dark:text-rose-400">
-                                  {(() => {
-                                    const missing = item.evidenceCoverage?.criteria.filter(c => c.status === 'Not Covered').length ?? 0;
-                                    const total = item.evidenceCoverage?.criteria.length ?? 0;
-                                    return total > 0 ? `${missing}/${total} criteria missing` : 'None';
-                                  })()}
-                                </span></div>
-                                <div className="flex justify-between"><span className="font-medium text-muted-foreground/85">Review Due</span><span className="font-semibold text-foreground">{item.requirement.next_due_date || 'No scheduled date'}</span></div>
-                              </div>
-                              <div className="border-t border-border/80 pt-2 text-center">
-                                <span className="text-[10px] font-bold text-indigo-650 dark:text-indigo-400">Open Requirement →</span>
-                              </div>
-                            </div>
                           </Link>
                         ))}
                       </div>
@@ -1053,7 +1013,7 @@ export default function DashboardPage() {
                         {readinessReport.openActionItems.slice(0, 4).map(item => (
                           <button
                             key={item.action.id}
-                            onClick={() => setSelectedAction(item.action)}
+                            onClick={() => openAttentionAction(item.action)}
                             className="relative group w-full text-left p-3.5 bg-muted/40 hover:bg-muted/65 border border-border/80 rounded-xl flex gap-2.5 items-start text-xs transition-colors cursor-pointer"
                           >
                             <FileSpreadsheet className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
@@ -1065,24 +1025,6 @@ export default function DashboardPage() {
                               {item.action.due_date && <span className="text-[8px] text-indigo-600 dark:text-indigo-400 font-bold block mt-1">Due: {item.action.due_date}</span>}
                             </div>
 
-                            {/* Floating Preview */}
-                            <div className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-72 p-3.5 ${flyoutPanelClass} opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200 text-xs space-y-2.5`}>
-                              <div className="flex items-center justify-between border-b border-border/80 pb-1.5 mb-1.5">
-                                <span className="font-bold text-foreground text-xs truncate max-w-[180px]">{item.action.title}</span>
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-extrabold border bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20">
-                                  {item.action.status}
-                                </span>
-                              </div>
-                              <div className="space-y-1 text-[11px] text-muted-foreground">
-                                <div className="flex justify-between"><span className="font-medium text-muted-foreground/85">Owner</span><span className="font-semibold text-foreground truncate max-w-[150px]">{item.action.owner || 'Unassigned'}</span></div>
-                                <div className="flex justify-between"><span className="font-medium text-muted-foreground/85">Due Date</span><span className="font-semibold text-foreground">{item.action.due_date || 'No due date'}</span></div>
-                                <div className="flex justify-between"><span className="font-medium text-muted-foreground/85">Linked Req</span><span className="font-semibold text-foreground truncate max-w-[150px]">{item.requirements.map(r => r.title).join(', ') || 'None'}</span></div>
-                                <div className="flex justify-between"><span className="font-medium text-muted-foreground/85">Priority</span><span className="font-semibold text-foreground">Normal</span></div>
-                              </div>
-                              <div className="border-t border-border/80 pt-2 text-center">
-                                <span className="text-[10px] font-bold text-indigo-650 dark:text-indigo-400">Open Action →</span>
-                              </div>
-                            </div>
                           </button>
                         ))}
                       </div>
@@ -1181,37 +1123,6 @@ export default function DashboardPage() {
                               </span>
                             </div>
 
-                            {/* Floating Preview */}
-                            <div className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-72 p-4 ${flyoutPanelClass} opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200 text-xs space-y-2`}>
-                              <div className="font-extrabold text-foreground">{item.requirement.title}</div>
-                              <div className="grid grid-cols-2 gap-1 text-[10px] text-muted-foreground">
-                                <div>Category:</div>
-                                <div className="font-semibold text-foreground truncate">{item.requirement.category}</div>
-                                <div>Owner:</div>
-                                <div className="font-semibold text-foreground truncate">{item.requirement.owner || 'No owner'}</div>
-                                <div>Status:</div>
-                                <div>
-                                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-extrabold border ${
-                                    item.status === 'GREEN' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' :
-                                    item.status === 'AMBER' ? 'bg-amber-500/10 text-amber-600 border-amber-500/20' :
-                                    'bg-rose-500/10 text-rose-600 border-rose-500/20'
-                                  }`}>{item.status}</span>
-                                </div>
-                                <div>Missing Evidence:</div>
-                                <div className="font-semibold text-foreground truncate">
-                                  {(() => {
-                                    const missing = item.evidenceCoverage?.criteria.filter(c => c.status === 'Not Covered').length ?? 0;
-                                    const total = item.evidenceCoverage?.criteria.length ?? 0;
-                                    return total > 0 ? `${missing} of ${total} criteria missing` : 'None';
-                                  })()}
-                                </div>
-                                <div>Review Due:</div>
-                                <div className="font-semibold text-foreground truncate">{item.requirement.next_due_date || 'No scheduled date'}</div>
-                              </div>
-                              <div className="border-t border-border pt-1.5 text-center">
-                                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">Open Requirement →</span>
-                              </div>
-                            </div>
                           </Link>
                         ))
                       )}
@@ -1245,37 +1156,6 @@ export default function DashboardPage() {
                               </span>
                             </div>
 
-                            {/* Floating Preview */}
-                            <div className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-72 p-4 ${flyoutPanelClass} opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200 text-xs space-y-2`}>
-                              <div className="font-extrabold text-foreground">{item.requirement.title}</div>
-                              <div className="grid grid-cols-2 gap-1 text-[10px] text-muted-foreground">
-                                <div>Category:</div>
-                                <div className="font-semibold text-foreground truncate">{item.requirement.category}</div>
-                                <div>Owner:</div>
-                                <div className="font-semibold text-foreground truncate">{item.requirement.owner || 'No owner'}</div>
-                                <div>Status:</div>
-                                <div>
-                                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-extrabold border ${
-                                    item.status === 'GREEN' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' :
-                                    item.status === 'AMBER' ? 'bg-amber-500/10 text-amber-600 border-amber-500/20' :
-                                    'bg-rose-500/10 text-rose-600 border-rose-500/20'
-                                  }`}>{item.status}</span>
-                                </div>
-                                <div>Missing Evidence:</div>
-                                <div className="font-semibold text-foreground truncate">
-                                  {(() => {
-                                    const missing = item.evidenceCoverage?.criteria.filter(c => c.status === 'Not Covered').length ?? 0;
-                                    const total = item.evidenceCoverage?.criteria.length ?? 0;
-                                    return total > 0 ? `${missing} of ${total} criteria missing` : 'None';
-                                  })()}
-                                </div>
-                                <div>Review Due:</div>
-                                <div className="font-semibold text-foreground truncate">{item.requirement.next_due_date || 'No scheduled date'}</div>
-                              </div>
-                              <div className="border-t border-border pt-1.5 text-center">
-                                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">Open Requirement →</span>
-                              </div>
-                            </div>
                           </Link>
                         ))
                       )}
@@ -1295,7 +1175,7 @@ export default function DashboardPage() {
                         readinessReport.openActionItems.slice(0, 3).map(item => (
                           <button
                             key={item.action.id}
-                            onClick={() => setSelectedAction(item.action)}
+                            onClick={() => openAttentionAction(item.action)}
                             className="relative group w-full text-left p-3 bg-muted/40 hover:bg-muted/65 border border-border/80 rounded-xl flex gap-2 items-start text-xs transition-colors cursor-pointer"
                           >
                             <FileSpreadsheet className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
@@ -1307,29 +1187,6 @@ export default function DashboardPage() {
                               {item.action.due_date && <span className="text-[8px] text-indigo-600 dark:text-indigo-400 font-bold block mt-1">Due: {item.action.due_date}</span>}
                             </div>
 
-                            {/* Floating Preview */}
-                            <div className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-72 p-4 ${flyoutPanelClass} opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200 text-xs space-y-2`}>
-                              <div className="font-extrabold text-foreground">{item.action.title}</div>
-                              <div className="grid grid-cols-2 gap-1 text-[10px] text-muted-foreground">
-                                <div>Owner:</div>
-                                <div className="font-semibold text-foreground truncate">{item.action.owner || 'Unassigned'}</div>
-                                <div>Due Date:</div>
-                                <div className="font-semibold text-foreground truncate">{item.action.due_date || 'No due date'}</div>
-                                <div>Linked Req:</div>
-                                <div className="font-semibold text-foreground truncate">{item.requirements.map(r => r.title).join(', ') || 'None'}</div>
-                                <div>Priority:</div>
-                                <div className="font-semibold text-foreground">Normal</div>
-                                <div>Status:</div>
-                                <div>
-                                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-extrabold border bg-indigo-500/10 text-indigo-600 border-indigo-500/20`}>
-                                    {item.action.status}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="border-t border-border pt-1.5 text-center">
-                                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">Open Action →</span>
-                              </div>
-                            </div>
                           </button>
                         ))
                       )}
