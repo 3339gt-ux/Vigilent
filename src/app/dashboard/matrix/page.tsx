@@ -80,7 +80,7 @@ export default function EvidenceMatrix() {
   const [newReqCategory, setNewReqCategory] = useState<'Vehicle' | 'Driver' | 'Facility' | 'General'>('Vehicle');
 
   // Starred / favourite options persistence
-  const { favourites, toggleFavourite, isFavourite, clearFavourites } = useFilterFavourites(user?.id || 'guest', 'evidence-matrix', organization?.id);
+  const { favourites, toggleFavourite, isFavourite, clearFavourites, FavouritesConfirmModal } = useFilterFavourites(user?.id || 'guest', 'evidence-matrix', organization?.id);
 
   // Saved Views System
   const defaultViews: SavedView[] = [
@@ -652,7 +652,7 @@ export default function EvidenceMatrix() {
                 onChange={setSelectedCategory}
                 options={['All', ...sortedCategories]}
                 isStarred={(opt) => isFavourite(`cat:${opt}`)}
-                onToggleStar={(opt) => toggleFavourite(`cat:${opt}`)}
+                onToggleStar={(opt) => toggleFavourite(`cat:${opt}`, opt, 'Category')}
                 allLabel="All Categories"
               />
               <StarredFilterSelect
@@ -661,7 +661,7 @@ export default function EvidenceMatrix() {
                 onChange={setTargetNameFilter}
                 options={['All', ...sortedTargets]}
                 isStarred={(opt) => isFavourite(`target:${opt}`)}
-                onToggleStar={(opt) => toggleFavourite(`target:${opt}`)}
+                onToggleStar={(opt) => toggleFavourite(`target:${opt}`, opt, 'Target Asset')}
                 allLabel="All Assets"
               />
               <StarredFilterSelect
@@ -670,7 +670,7 @@ export default function EvidenceMatrix() {
                 onChange={setStatusFilter}
                 options={['All', 'Compliant', 'Expiring Soon', 'Expired', 'Missing']}
                 isStarred={(opt) => isFavourite(`status:${opt}`)}
-                onToggleStar={(opt) => toggleFavourite(`status:${opt}`)}
+                onToggleStar={(opt) => toggleFavourite(`status:${opt}`, opt, 'Status')}
               />
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Asset Type</label>
@@ -900,7 +900,7 @@ export default function EvidenceMatrix() {
                           </div>
                           <FilterFavouriteButton
                             isStarred={isStarred}
-                            onToggle={() => toggleFavourite(`req:${req.id}`)}
+                            onToggle={() => toggleFavourite(`req:${req.id}`, req.title, 'Requirement')}
                           />
                         </div>
                       </td>
@@ -1200,6 +1200,8 @@ export default function EvidenceMatrix() {
           </div>
         </div>
       )}
+
+      <FavouritesConfirmModal />
 
     </div>
   );

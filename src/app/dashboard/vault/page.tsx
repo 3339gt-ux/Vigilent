@@ -115,7 +115,7 @@ export default function EvidenceVault() {
   }>(null);
 
   // Favourites Persistence
-  const { favourites, toggleFavourite, isFavourite, clearFavourites } = useFilterFavourites(user?.id || 'guest', 'vault', organization?.id);
+  const { favourites, toggleFavourite, isFavourite, clearFavourites, FavouritesConfirmModal } = useFilterFavourites(user?.id || 'guest', 'vault', organization?.id);
 
   // Saved Views System
   const defaultViews: SavedView[] = [
@@ -242,6 +242,32 @@ export default function EvidenceVault() {
     [search, selectedCategory, selectedStatus, sortBy, vaultView, linkFilter, docTypeFilter, uploadedByFilter, showOnlyStarredDocs, density, hiddenColumns, activeViewId]
   );
 
+  // Upload dialog state
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newCategory, setNewCategory] = useState('General');
+  const [newFileName, setNewFileName] = useState('');
+  const [newFile, setNewFile] = useState<File | null>(null);
+  const [newExpiry, setNewExpiry] = useState('');
+  const [newIssue, setNewIssue] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [uploadSuccess, setUploadSuccess] = useState('');
+
+  // Side-drawer / Editing state
+  const [selectedDoc, setSelectedDoc] = useState<EvidenceDocument | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [editExpiry, setEditExpiry] = useState('');
+  const [editIssue, setEditIssue] = useState('');
+  const [editReview, setEditReview] = useState('');
+  const [editTraining, setEditTraining] = useState('');
+  const [editCalibration, setEditCalibration] = useState('');
+  const [editTags, setEditTags] = useState('');
+  const [metaKey, setMetaKey] = useState('');
+  const [metaVal, setMetaVal] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
@@ -272,32 +298,6 @@ export default function EvidenceVault() {
       }
     }
   }, [documents]);
-
-  // Upload dialog state
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
-  const [newCategory, setNewCategory] = useState('General');
-  const [newFileName, setNewFileName] = useState('');
-  const [newFile, setNewFile] = useState<File | null>(null);
-  const [newExpiry, setNewExpiry] = useState('');
-  const [newIssue, setNewIssue] = useState('');
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadError, setUploadError] = useState('');
-  const [uploadSuccess, setUploadSuccess] = useState('');
-
-  // Side-drawer / Editing state
-  const [selectedDoc, setSelectedDoc] = useState<EvidenceDocument | null>(null);
-  const [editTitle, setEditTitle] = useState('');
-  const [editCategory, setEditCategory] = useState('');
-  const [editExpiry, setEditExpiry] = useState('');
-  const [editIssue, setEditIssue] = useState('');
-  const [editReview, setEditReview] = useState('');
-  const [editTraining, setEditTraining] = useState('');
-  const [editCalibration, setEditCalibration] = useState('');
-  const [editTags, setEditTags] = useState('');
-  const [metaKey, setMetaKey] = useState('');
-  const [metaVal, setMetaVal] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState('');
   const [isOpeningFile, setIsOpeningFile] = useState(false);
@@ -905,6 +905,14 @@ export default function EvidenceVault() {
     }
   };
 
+  const getDocumentLinkSummary = (docId: string) => {
+    const requirementCount = requirementDocuments.filter(link => link.document_id === docId).length;
+    const criterionCount = requirementEvidenceCriterionMatches.filter(match => match.document_id === docId && match.match_status !== 'Rejected').length;
+    const actionCount = actionDocuments.filter(link => link.document_id === docId).length;
+    const competencyCount = competencyRecordDocuments.filter(link => link.document_id === docId).length;
+    return { requirementCount, criterionCount, actionCount, competencyCount };
+  };
+
   const getDocType = (doc: EvidenceDocument) => {
     const mime = (doc.mime_type || '').toLowerCase();
     if (mime.startsWith('image/')) return 'Image';
@@ -1085,14 +1093,6 @@ export default function EvidenceVault() {
         requirementActions.some(link => link.action_id === currentSelectedAction.id && link.requirement_id === requirement.id)
       )
     : [];
-
-  const getDocumentLinkSummary = (docId: string) => {
-    const requirementCount = requirementDocuments.filter(link => link.document_id === docId).length;
-    const criterionCount = requirementEvidenceCriterionMatches.filter(match => match.document_id === docId && match.match_status !== 'Rejected').length;
-    const actionCount = actionDocuments.filter(link => link.document_id === docId).length;
-    const competencyCount = competencyRecordDocuments.filter(link => link.document_id === docId).length;
-    return { requirementCount, criterionCount, actionCount, competencyCount };
-  };
 
   const formatBytes = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -1750,7 +1750,7 @@ export default function EvidenceVault() {
                       onChange={setSelectedCategory}
                       options={['All', ...sortedCategories]}
                       isStarred={(opt) => isFavourite(`cat:${opt}`)}
-                      onToggleStar={(opt) => toggleFavourite(`cat:${opt}`)}
+                      onToggleStar={(opt) => toggleFavourite(`cat:${opt}`, opt, 'Category')}
                       allLabel="All Categories"
                     />
                     <StarredFilterSelect
@@ -1759,7 +1759,7 @@ export default function EvidenceVault() {
                       onChange={setUploadedByFilter}
                       options={sortedUploaders}
                       isStarred={(opt) => isFavourite(`uploader:${opt}`)}
-                      onToggleStar={(opt) => toggleFavourite(`uploader:${opt}`)}
+                      onToggleStar={(opt) => toggleFavourite(`uploader:${opt}`, getUploaderName(opt), 'Uploader')}
                       allLabel="All Uploaders"
                     />
                     <StarredFilterSelect
@@ -1768,7 +1768,7 @@ export default function EvidenceVault() {
                       onChange={setSelectedStatus}
                       options={['All', 'Active', 'Expiring Soon', 'Expired', 'Unclassified']}
                       isStarred={(opt) => isFavourite(`status:${opt}`)}
-                      onToggleStar={(opt) => toggleFavourite(`status:${opt}`)}
+                      onToggleStar={(opt) => toggleFavourite(`status:${opt}`, opt, 'Status')}
                       allLabel="All Statuses"
                     />
                     <StarredFilterSelect
@@ -1777,7 +1777,7 @@ export default function EvidenceVault() {
                       onChange={(val) => setLinkFilter(val as 'All' | 'Linked Only' | 'Unlinked Only')}
                       options={['All', 'Linked Only', 'Unlinked Only']}
                       isStarred={(opt) => isFavourite(`link:${opt}`)}
-                      onToggleStar={(opt) => toggleFavourite(`link:${opt}`)}
+                      onToggleStar={(opt) => toggleFavourite(`link:${opt}`, opt, 'Link Status')}
                     />
                   </div>
 
@@ -1789,7 +1789,7 @@ export default function EvidenceVault() {
                       onChange={setDocTypeFilter}
                       options={['All', 'PDF', 'Image', 'Spreadsheet', 'Document', 'Other']}
                       isStarred={(opt) => isFavourite(`doctype:${opt}`)}
-                      onToggleStar={(opt) => toggleFavourite(`doctype:${opt}`)}
+                      onToggleStar={(opt) => toggleFavourite(`doctype:${opt}`, opt, 'Doc Type')}
                       allLabel="All Doc Types"
                     />
 
@@ -2076,7 +2076,7 @@ export default function EvidenceVault() {
                                         <span className="font-bold block truncate">{doc.title}</span>
                                         <FilterFavouriteButton
                                           isStarred={isFavourite(`doc:${doc.id}`)}
-                                          onToggle={() => toggleFavourite(`doc:${doc.id}`)}
+                                          onToggle={() => toggleFavourite(`doc:${doc.id}`, doc.title, 'Evidence Document')}
                                         />
                                       </div>
                                       <span className="text-[10px] text-muted-foreground block truncate">{doc.file_name}</span>
@@ -2865,6 +2865,8 @@ export default function EvidenceVault() {
         onLinkAction={linkDocumentToAction}
         onLinkCompetencyRecord={linkDocumentToCompetencyRecord}
       />
+
+      <FavouritesConfirmModal />
 
     </div>
   );

@@ -153,7 +153,7 @@ export default function CompetencyMatrixPage() {
   }>(null);
 
   // Starred / favourite options persistence
-  const { favourites, toggleFavourite, isFavourite, clearFavourites } = useFilterFavourites(user?.id || 'guest', 'matrix', organization?.id);
+  const { favourites, toggleFavourite, isFavourite, clearFavourites, FavouritesConfirmModal } = useFilterFavourites(user?.id || 'guest', 'matrix', organization?.id);
 
   // Saved Views System
   const defaultViews: SavedView[] = [
@@ -1192,7 +1192,7 @@ export default function CompetencyMatrixPage() {
                     onChange={setDepartmentFilter}
                     options={sortedDepartments}
                     isStarred={(opt) => isFavourite(`dept:${opt}`)}
-                    onToggleStar={(opt) => toggleFavourite(`dept:${opt}`)}
+                    onToggleStar={(opt) => toggleFavourite(`dept:${opt}`, opt, 'Department')}
                   />
                   <StarredFilterSelect
                     label="Role"
@@ -1200,7 +1200,7 @@ export default function CompetencyMatrixPage() {
                     onChange={setRoleFilter}
                     options={sortedRoles}
                     isStarred={(opt) => isFavourite(`role:${opt}`)}
-                    onToggleStar={(opt) => toggleFavourite(`role:${opt}`)}
+                    onToggleStar={(opt) => toggleFavourite(`role:${opt}`, opt, 'Role')}
                   />
                   <StarredFilterSelect
                     label="Category"
@@ -1208,7 +1208,7 @@ export default function CompetencyMatrixPage() {
                     onChange={setTypeFilter}
                     options={['All', ...sortedCompetencyCategories]}
                     isStarred={(opt) => isFavourite(`cat:${opt}`)}
-                    onToggleStar={(opt) => toggleFavourite(`cat:${opt}`)}
+                    onToggleStar={(opt) => toggleFavourite(`cat:${opt}`, opt, 'Category')}
                     allLabel="All Categories"
                   />
                   <StarredFilterSelect
@@ -1217,7 +1217,7 @@ export default function CompetencyMatrixPage() {
                     onChange={setStatusFilter}
                     options={['All', ...statusOptions]}
                     isStarred={(opt) => isFavourite(`status:${opt}`)}
-                    onToggleStar={(opt) => toggleFavourite(`status:${opt}`)}
+                    onToggleStar={(opt) => toggleFavourite(`status:${opt}`, opt, 'Status')}
                   />
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Emp Type</label>
@@ -1327,7 +1327,7 @@ export default function CompetencyMatrixPage() {
                       >
                         {cat} ({count})
                       </button>
-                      <FilterFavouriteButton isStarred={isStarred} onToggle={() => toggleFavourite(`cat:${cat}`)} />
+                      <FilterFavouriteButton isStarred={isStarred} onToggle={() => toggleFavourite(`cat:${cat}`, cat, 'Category')} />
                     </div>
                   );
                 })}
@@ -1442,7 +1442,7 @@ export default function CompetencyMatrixPage() {
                             </div>
                             <FilterFavouriteButton
                               isStarred={isStarred}
-                              onToggle={() => toggleFavourite(`comp:${type.id}`)}
+                              onToggle={() => toggleFavourite(`comp:${type.id}`, type.title, 'Competency')}
                             />
                           </div>
                         </th>
@@ -2230,6 +2230,7 @@ export default function CompetencyMatrixPage() {
         onOpenDocument={getDocumentSignedUrl}
         onFindDuplicates={findPossibleDuplicateDocuments}
       />
+      <FavouritesConfirmModal />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Star, X, Eye, EyeOff, Save, Trash2, Check, ChevronDown } from 'lucide-react';
+import { Star, X, Eye, EyeOff, Save, Trash2, Check, ChevronDown, AlertCircle } from 'lucide-react';
 
 export type PageSize = 20 | 25 | 50 | 75 | 100 | 'All';
 export const PAGE_SIZE_OPTIONS: PageSize[] = [20, 25, 50, 75, 100, 'All'];
@@ -23,6 +23,10 @@ const safeJsonParse = <T,>(value: string | null, fallback: T): T => {
 // ==========================================
 export function useFilterFavourites(userId: string, module: string, organisationId?: string | null) {
   const [favourites, setFavourites] = useState<string[]>([]);
+  const [pendingUnstar, setPendingUnstar] = useState<{ key: string; name: string; type: string } | null>(null);
+  const [pendingClear, setPendingClear] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
   const localStorageKey = `vygilence_filter_favourites_${storageScope(userId, module, organisationId)}`;
 
   useEffect(() => {
@@ -38,26 +42,195 @@ export function useFilterFavourites(userId: string, module: string, organisation
     }
   }, [localStorageKey]);
 
-  const toggleFavourite = (key: string) => {
-    const next = favourites.includes(key)
-      ? favourites.filter(x => x !== key)
-      : [...favourites, key];
-    setFavourites(next);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(localStorageKey, JSON.stringify(next));
+  const toggleFavourite = (key: string, name?: string, type?: string) => {
+    if (favourites.includes(key)) {
+      setPendingUnstar({ key, name: name || key, type: type || 'Favourite Item' });
+    } else {
+      const next = [...favourites, key];
+      setFavourites(next);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(localStorageKey, JSON.stringify(next));
+      }
     }
   };
 
   const isFavourite = (key: string) => favourites.includes(key);
 
   const clearFavourites = () => {
-    setFavourites([]);
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(localStorageKey);
+    if (favourites.length > 0) {
+      setPendingClear(true);
     }
   };
 
-  return { favourites, toggleFavourite, isFavourite, clearFavourites };
+  const FavouritesConfirmModal = () => {
+    useEffect(() => {
+      if (toastMessage) {
+        const timer = setTimeout(() => setToastMessage(null), 3000);
+        return () => clearTimeout(timer);
+      }
+    }, [toastMessage]);
+
+    const moduleLabel =
+      module === 'matrix' ? 'Competency Matrix' :
+      module === 'evidence-matrix' ? 'Evidence Matrix' :
+      module === 'vault' ? 'Evidence Vault' : 'Requirements';
+
+    return (
+      <>
+        {/* Toast Notification */}
+        {toastMessage && (
+          <div className={`fixed bottom-6 right-6 z-[100] border text-xs font-bold px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2 animate-in slide-in-from-bottom-4 duration-150 ${
+            toastType === 'error'
+              ? 'bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400 dark:bg-rose-950/20'
+              : 'bg-zinc-900 border-zinc-800 text-white dark:bg-card dark:border-border dark:text-foreground'
+          }`}>
+            {toastType === 'error' ? (
+              <AlertCircle className="w-4 h-4 text-rose-550 shrink-0" />
+            ) : (
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+            )}
+            <span>{toastMessage}</span>
+          </div>
+        )}
+
+        {/* Unstar Confirmation Modal */}
+        {pendingUnstar && (
+          <div className="fixed inset-0 bg-background/80 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+            <div className="bg-card solid-panel border border-border w-full max-w-md rounded-2xl p-6 relative shadow-2xl space-y-4">
+              <div className="flex items-start justify-between">
+                <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-xl">
+                  <AlertCircle className="w-6 h-6" />
+                </div>
+                <button
+                  onClick={() => setPendingUnstar(null)}
+                  className="p-1 hover:bg-muted rounded-lg text-muted-foreground transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-1">
+                <h3 className="text-base font-extrabold text-foreground">
+                  Remove this from Favourites?
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  This will unstar it in the original module as well.
+                </p>
+              </div>
+
+              <div className="bg-muted/40 border border-border/50 rounded-xl p-3.5 space-y-1 text-xs">
+                <span className="font-extrabold uppercase text-[9px] text-indigo-650 dark:text-indigo-400 tracking-wider">
+                  {pendingUnstar.type}
+                </span>
+                <p className="font-bold text-foreground truncate">{pendingUnstar.name}</p>
+                <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest block mt-1">
+                  Module: {moduleLabel}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 justify-end pt-2">
+                <button
+                  onClick={() => setPendingUnstar(null)}
+                  className="px-4 py-2 border border-border bg-card hover:bg-muted text-xs font-bold rounded-lg cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    try {
+                      const next = favourites.filter(x => x !== pendingUnstar.key);
+                      setFavourites(next);
+                      if (typeof window !== 'undefined') {
+                        localStorage.setItem(localStorageKey, JSON.stringify(next));
+                      }
+                      setToastType('success');
+                      setToastMessage('Removed from Favourites.');
+                    } catch (e) {
+                      console.error(e);
+                      setToastType('error');
+                      setToastMessage('Failed to remove from Favourites.');
+                    }
+                    setPendingUnstar(null);
+                  }}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg cursor-pointer"
+                >
+                  Remove from Favourites
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Clear Favourites Confirmation Modal */}
+        {pendingClear && (
+          <div className="fixed inset-0 bg-background/80 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+            <div className="bg-card solid-panel border border-border w-full max-w-md rounded-2xl p-6 relative shadow-2xl space-y-4">
+              <div className="flex items-start justify-between">
+                <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-xl">
+                  <AlertCircle className="w-6 h-6" />
+                </div>
+                <button
+                  onClick={() => setPendingClear(false)}
+                  className="p-1 hover:bg-muted rounded-lg text-muted-foreground transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-1">
+                <h3 className="text-base font-extrabold text-foreground">
+                  Clear favourites for this module?
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  This does not clear filters or saved views.
+                </p>
+              </div>
+
+              <div className="bg-muted/40 border border-border/50 rounded-xl p-3.5 space-y-1 text-xs">
+                <span className="font-extrabold uppercase text-[9px] text-indigo-650 dark:text-indigo-400 tracking-wider">
+                  Bulk Action
+                </span>
+                <p className="font-bold text-foreground">
+                  Clear all ({favourites.length}) favourites for {moduleLabel}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 justify-end pt-2">
+                <button
+                  onClick={() => setPendingClear(false)}
+                  className="px-4 py-2 border border-border bg-card hover:bg-muted text-xs font-bold rounded-lg cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    try {
+                      setFavourites([]);
+                      if (typeof window !== 'undefined') {
+                        localStorage.removeItem(localStorageKey);
+                      }
+                      setToastType('success');
+                      setToastMessage('Removed from Favourites.');
+                    } catch (e) {
+                      console.error(e);
+                      setToastType('error');
+                      setToastMessage('Failed to clear Favourites.');
+                    }
+                    setPendingClear(false);
+                  }}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg cursor-pointer"
+                >
+                  Clear Favourites
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  };
+
+  return { favourites, toggleFavourite, isFavourite, clearFavourites, FavouritesConfirmModal };
 }
 
 // ==========================================

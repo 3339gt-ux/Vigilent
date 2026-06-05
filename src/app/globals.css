@@ -18,7 +18,7 @@
   --secondary-foreground: 220 40% 12%;
   
   --muted: 220 15% 94%;
-  --muted-foreground: 220 12% 45%;
+  --muted-foreground: 220 12% 35%;
   
   --accent: 220 15% 94%;
   --accent-foreground: 220 40% 12%;
@@ -549,6 +549,13 @@ body {
 }
 
 /* Custom native select option styling for dark-mode dropdown readability */
+select {
+  color-scheme: dark light;
+}
+.dark select {
+  color-scheme: dark;
+}
+
 select, option {
   background-color: hsl(var(--card));
   color: hsl(var(--foreground));

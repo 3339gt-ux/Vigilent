@@ -141,7 +141,7 @@ export default function RequirementsPage() {
   const [lastActionUndo, setLastActionUndo] = useState<null | { label: string; actions: Action[] }>(null);
 
   // Favourites Persistence
-  const { favourites, toggleFavourite, isFavourite, clearFavourites } = useFilterFavourites(user?.id || 'guest', 'requirements', organization?.id);
+  const { favourites, toggleFavourite, isFavourite, clearFavourites, FavouritesConfirmModal } = useFilterFavourites(user?.id || 'guest', 'requirements', organization?.id);
 
   // Saved Views System
   const defaultViews: SavedView[] = [
@@ -1339,7 +1339,7 @@ export default function RequirementsPage() {
                       onChange={setSelectedCategory}
                       options={['All', ...sortedCategories]}
                       isStarred={(opt) => isFavourite(`cat:${opt}`)}
-                      onToggleStar={(opt) => toggleFavourite(`cat:${opt}`)}
+                      onToggleStar={(opt) => toggleFavourite(`cat:${opt}`, opt, 'Category')}
                       allLabel="All Categories"
                     />
                     <StarredFilterSelect
@@ -1348,7 +1348,7 @@ export default function RequirementsPage() {
                       onChange={setOwnerFilter}
                       options={sortedOwners}
                       isStarred={(opt) => isFavourite(`owner:${opt}`)}
-                      onToggleStar={(opt) => toggleFavourite(`owner:${opt}`)}
+                      onToggleStar={(opt) => toggleFavourite(`owner:${opt}`, opt, 'Owner')}
                       allLabel="All Owners"
                     />
                     <StarredFilterSelect
@@ -1357,7 +1357,7 @@ export default function RequirementsPage() {
                       onChange={(val) => setSelectedStatus(val as 'All' | 'Attention' | RequirementStatus)}
                       options={['All', 'Attention', 'GREEN', 'AMBER', 'RED', 'GREY']}
                       isStarred={(opt) => isFavourite(`status:${opt}`)}
-                      onToggleStar={(opt) => toggleFavourite(`status:${opt}`)}
+                      onToggleStar={(opt) => toggleFavourite(`status:${opt}`, opt, 'Status')}
                       allLabel="All Statuses"
                     />
                     <StarredFilterSelect
@@ -1366,7 +1366,7 @@ export default function RequirementsPage() {
                       onChange={setRiskFilter}
                       options={['All', 'Low', 'Medium', 'High', 'Critical']}
                       isStarred={(opt) => isFavourite(`risk:${opt}`)}
-                      onToggleStar={(opt) => toggleFavourite(`risk:${opt}`)}
+                      onToggleStar={(opt) => toggleFavourite(`risk:${opt}`, opt, 'Risk Level')}
                       allLabel="All Risks"
                     />
                   </div>
@@ -1379,7 +1379,7 @@ export default function RequirementsPage() {
                       onChange={setRadarFilter}
                       options={['All', 'overdue', 'due-week', 'due30', 'due60', 'due90', 'actions']}
                       isStarred={(opt) => isFavourite(`radar:${opt}`)}
-                      onToggleStar={(opt) => toggleFavourite(`radar:${opt}`)}
+                      onToggleStar={(opt) => toggleFavourite(`radar:${opt}`, opt, 'Due Date Filter')}
                       allLabel="No Date Filter"
                     />
                   </div>
@@ -1738,7 +1738,7 @@ export default function RequirementsPage() {
                                       <span className="truncate">{requirement.title}</span>
                                       <FilterFavouriteButton
                                         isStarred={isFavourite(`req:${requirement.id}`)}
-                                        onToggle={() => toggleFavourite(`req:${requirement.id}`)}
+                                        onToggle={() => toggleFavourite(`req:${requirement.id}`, requirement.title, 'Requirement')}
                                       />
                                     </div>
                                   </td>
@@ -2590,6 +2590,7 @@ export default function RequirementsPage() {
         onOpenDocument={getDocumentSignedUrl}
         onFindDuplicates={findPossibleDuplicateDocuments}
       />
+      <FavouritesConfirmModal />
     </div>
   );
 }
