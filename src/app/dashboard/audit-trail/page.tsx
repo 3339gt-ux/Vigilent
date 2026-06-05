@@ -18,9 +18,7 @@ import {
   RotateCcw,
   FileText,
   CheckCircle2,
-  AlertTriangle,
   Info,
-  ExternalLink,
   Loader2,
   ShieldCheck
 } from 'lucide-react';
@@ -99,7 +97,6 @@ export default function AuditTrailPage() {
   // States
   const [events, setEvents] = useState<AuditTrailEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   // Filters state
   const [searchTerm, setSearchTerm] = useState('');
@@ -142,7 +139,7 @@ export default function AuditTrailPage() {
   // Fetch audit events
   const fetchEvents = async () => {
     setIsLoading(true);
-    setError(null);
+    setOperationStatus({ type: null, message: null });
     try {
       const data = await dbService.getAuditTrailEvents();
       // Ensure sorted by created_at desc
@@ -152,7 +149,10 @@ export default function AuditTrailPage() {
       setEvents(sorted);
     } catch (err) {
       console.error('Error fetching audit trail events:', err);
-      setError(err instanceof Error ? err.message : 'Failed to retrieve audit trail events.');
+      setOperationStatus({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Failed to retrieve audit trail events.'
+      });
     } finally {
       setIsLoading(false);
     }
@@ -315,7 +315,7 @@ export default function AuditTrailPage() {
   // Metrics calculation
   const metrics = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = new Date(new Date().getTime() - 7 * 24 * 60 * 60 * 1000);
 
     let todayCount = 0;
     let sevenDaysCount = 0;
@@ -542,9 +542,9 @@ export default function AuditTrailPage() {
             : 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
         }`}>
           {operationStatus.type === 'success' ? (
-            <CheckCircle2 className="w-4.5 h-4.5 shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
           ) : (
-            <ShieldAlert className="w-4.5 h-4.5 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
+            <ShieldAlert className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
           )}
           <div className="flex-1">
             <span>{operationStatus.message}</span>
@@ -558,7 +558,7 @@ export default function AuditTrailPage() {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Total Events */}
-        <div className="bg-card border border-border/80 border-l-4 border-l-indigo-500 rounded-xl p-4.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between min-h-[100px]">
+        <div className="bg-card border border-border/80 border-l-4 border-l-indigo-500 rounded-xl p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between min-h-[100px]">
           <div className="flex justify-between items-start">
             <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block">Total Events</span>
             <History className="w-4 h-4 text-indigo-500 shrink-0" />
@@ -570,7 +570,7 @@ export default function AuditTrailPage() {
         </div>
 
         {/* Logged Today */}
-        <div className="bg-card border border-border/80 border-l-4 border-l-slate-400 dark:border-l-slate-650 rounded-xl p-4.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between min-h-[100px]">
+        <div className="bg-card border border-border/80 border-l-4 border-l-slate-400 dark:border-l-slate-600 rounded-xl p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between min-h-[100px]">
           <div className="flex justify-between items-start">
             <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block">Logged Today</span>
             <Calendar className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0" />
@@ -582,10 +582,10 @@ export default function AuditTrailPage() {
         </div>
 
         {/* Last 7 Days */}
-        <div className="bg-card border border-border/80 border-l-4 border-l-blue-450 dark:border-l-blue-600 rounded-xl p-4.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between min-h-[100px]">
+        <div className="bg-card border border-border/80 border-l-4 border-l-blue-500 dark:border-l-blue-600 rounded-xl p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between min-h-[100px]">
           <div className="flex justify-between items-start">
             <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block">Last 7 Days</span>
-            <FileText className="w-4 h-4 text-blue-500 dark:text-blue-450 shrink-0" />
+            <FileText className="w-4 h-4 text-blue-500 dark:text-blue-400 shrink-0" />
           </div>
           <div>
             <strong className="block text-2xl mt-1.5 font-extrabold text-foreground tracking-tight">{metrics.last7Days}</strong>
@@ -594,7 +594,7 @@ export default function AuditTrailPage() {
         </div>
 
         {/* Recoverable */}
-        <div className="bg-card border border-border/80 border-l-4 border-l-emerald-500 rounded-xl p-4.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between min-h-[100px]">
+        <div className="bg-card border border-border/80 border-l-4 border-l-emerald-500 rounded-xl p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between min-h-[100px]">
           <div className="flex justify-between items-start">
             <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider block font-semibold">Recoverable</span>
             <RotateCcw className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -606,10 +606,10 @@ export default function AuditTrailPage() {
         </div>
 
         {/* High Risk Logs */}
-        <div className="bg-card border border-border/80 border-l-4 border-l-rose-500 rounded-xl p-4.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 col-span-2 lg:col-span-1 flex flex-col justify-between min-h-[100px]">
+        <div className="bg-card border border-border/80 border-l-4 border-l-rose-500 rounded-xl p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 col-span-2 lg:col-span-1 flex flex-col justify-between min-h-[100px]">
           <div className="flex justify-between items-start">
-            <span className="text-[10px] text-rose-600 dark:text-rose-450 font-bold uppercase tracking-wider block font-semibold">High Risk Logs</span>
-            <ShieldAlert className="w-4 h-4 text-rose-550 shrink-0" />
+            <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold uppercase tracking-wider block font-semibold">High Risk Logs</span>
+            <ShieldAlert className="w-4 h-4 text-rose-500 shrink-0" />
           </div>
           <div>
             <strong className="block text-2xl mt-1.5 font-extrabold text-rose-500 tracking-tight">{metrics.highRisk}</strong>
@@ -621,7 +621,7 @@ export default function AuditTrailPage() {
       {/* Filtering Section */}
       <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
         <div className="flex items-center gap-1.5 pb-2.5 border-b border-border/70">
-          <Filter className="w-4.5 h-4.5 text-indigo-500" />
+          <Filter className="w-4 h-4 text-indigo-500" />
           <h2 className="text-xs font-bold uppercase tracking-wider text-foreground">Advanced Query Filters</h2>
         </div>
 
@@ -756,7 +756,7 @@ export default function AuditTrailPage() {
             <span className="text-[10px] font-bold text-muted-foreground uppercase mr-1">Active filters:</span>
             {searchTerm.trim() && (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-muted border border-border/80 rounded-lg text-[10px] text-foreground font-semibold">
-                Search: "{searchTerm}"
+                Search: &quot;{searchTerm}&quot;
                 <button onClick={() => setSearchTerm('')} className="p-0.5 hover:bg-border rounded-full cursor-pointer"><X className="w-2.5 h-2.5" /></button>
               </span>
             )}
@@ -865,10 +865,10 @@ export default function AuditTrailPage() {
                     
                     const severityClass =
                       e.severity === 'critical'
-                        ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-455 font-bold'
+                        ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400 font-bold'
                         : e.severity === 'warning'
-                        ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-455 font-bold'
-                        : 'bg-slate-500/10 border-slate-500/20 text-slate-650 dark:text-slate-400 font-medium';
+                        ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400 font-bold'
+                        : 'bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-400 font-medium';
 
                     return (
                       <tr
@@ -929,7 +929,7 @@ export default function AuditTrailPage() {
                         <td className="py-3.5 px-4 pr-5 text-center whitespace-nowrap" onClick={opt => opt.stopPropagation()}>
                           {e.undone_at ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-                              <CheckCircle2 className="w-2.5 h-2.5 text-emerald-650 dark:text-emerald-400" />
+                              <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" />
                               Undone
                             </span>
                           ) : e.undo_available ? (
@@ -965,10 +965,10 @@ export default function AuditTrailPage() {
 
                 const severityClass =
                   e.severity === 'critical'
-                    ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-455 font-bold'
+                    ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400 font-bold'
                     : e.severity === 'warning'
-                    ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-455 font-bold'
-                    : 'bg-slate-500/10 border-slate-500/20 text-slate-650 dark:text-slate-450 font-medium';
+                    ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400 font-bold'
+                    : 'bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-400 font-medium';
 
                 return (
                   <div
@@ -977,7 +977,7 @@ export default function AuditTrailPage() {
                       setSelectedEvent(e);
                       setOperationStatus({ type: null, message: null });
                     }}
-                    className="p-4.5 space-y-3 bg-card hover:bg-muted/10 cursor-pointer transition-colors"
+                    className="p-4 space-y-3 bg-card hover:bg-muted/10 cursor-pointer transition-colors"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className={`px-2 py-0.5 rounded border text-[8px] font-extrabold uppercase tracking-wider ${getCategoryBadgeClass(e.action_category)}`}>
@@ -1021,7 +1021,7 @@ export default function AuditTrailPage() {
                         </span>
                         {e.undone_at ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[8px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-                            <CheckCircle2 className="w-2 h-2 text-emerald-650 dark:text-emerald-400" />
+                            <CheckCircle2 className="w-2 h-2 text-emerald-600 dark:text-emerald-400" />
                             Undone
                           </span>
                         ) : e.undo_available ? (

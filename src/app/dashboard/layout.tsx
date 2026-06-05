@@ -334,7 +334,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                           : 'text-muted-foreground hover:bg-muted/50'
                       }`}
                     >
-                      <Icon className="w-4.5 h-4.5" />
+                      <Icon className="w-4 h-4" />
                       {item.name}
                     </Link>
                   );
