@@ -551,7 +551,7 @@ export default function EvidenceMatrix() {
       </div>
 
       {/* Filter Ribbon */}
-      <div className="bg-card border border-border p-4 rounded-xl space-y-3 shadow-xs">
+      <div className="bg-card border border-border p-3 rounded-xl space-y-2.5 shadow-xs">
         <div className="flex flex-col md:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
@@ -794,6 +794,11 @@ export default function EvidenceMatrix() {
                       <td
                         className={`${paddingClass} font-semibold text-foreground sticky left-0 z-10 border-r border-border min-w-[260px] shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)]`}
                         style={{ backgroundColor: 'hsl(var(--card))', left: 0 }}
+                        onClick={(event) => {
+                          if (event.ctrlKey || event.metaKey) {
+                            matrixRowSelection.toggleSelected(req.id);
+                          }
+                        }}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-start gap-2 min-w-0">

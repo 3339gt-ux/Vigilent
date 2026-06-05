@@ -1121,7 +1121,7 @@ export default function CompetencyMatrixPage() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
         <div className="xl:col-span-2 space-y-4">
           {/* Main search and quick actions bar */}
-          <div className="bg-card border border-border p-4 rounded-xl space-y-3 shadow-xs">
+          <div className="bg-card border border-border p-3 rounded-xl space-y-2.5 shadow-xs">
             <div className="flex flex-col md:flex-row gap-3">
               <div className="relative flex-1">
                 <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1280,37 +1280,39 @@ export default function CompetencyMatrixPage() {
             />
 
             {/* Category Collapsers / Favourites Bar */}
-            <div className="flex flex-wrap items-center gap-1.5 text-xs pt-1 border-t border-border/40">
-              <span className="text-muted-foreground font-bold uppercase tracking-wider text-[10px] mr-1">Categories:</span>
-              {categories.map(cat => {
-                const isCollapsed = collapsedCategories.includes(cat);
-                const count = activeTypes.filter(t => t.category === cat).length;
-                if (count === 0) return null;
-                const isStarred = isFavourite(`cat:${cat}`);
-                return (
-                  <div
-                    key={cat}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border transition-all ${
-                      isCollapsed
-                        ? 'bg-muted/30 border-border/50 text-muted-foreground'
-                        : 'bg-indigo-500/5 border-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-semibold'
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCollapsedCategories(prev =>
-                          isCollapsed ? prev.filter(c => c !== cat) : [...prev, cat]
-                        );
-                      }}
-                      className="hover:underline text-[11px] cursor-pointer"
+            <div className="flex items-center gap-1.5 text-xs pt-1 border-t border-border/40 w-full min-w-0">
+              <span className="text-muted-foreground font-bold uppercase tracking-wider text-[10px] mr-1 shrink-0">Categories:</span>
+              <div className="flex flex-row overflow-x-auto whitespace-nowrap scrollbar-thin py-1 gap-1.5 flex-1 min-w-0">
+                {categories.map(cat => {
+                  const isCollapsed = collapsedCategories.includes(cat);
+                  const count = activeTypes.filter(t => t.category === cat).length;
+                  if (count === 0) return null;
+                  const isStarred = isFavourite(`cat:${cat}`);
+                  return (
+                    <div
+                      key={cat}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border transition-all shrink-0 ${
+                        isCollapsed
+                          ? 'bg-muted/30 border-border/50 text-muted-foreground'
+                          : 'bg-indigo-500/5 border-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-semibold'
+                      }`}
                     >
-                      {cat} ({count})
-                    </button>
-                    <FilterFavouriteButton isStarred={isStarred} onToggle={() => toggleFavourite(`cat:${cat}`)} />
-                  </div>
-                );
-              })}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCollapsedCategories(prev =>
+                            isCollapsed ? prev.filter(c => c !== cat) : [...prev, cat]
+                          );
+                        }}
+                        className="hover:underline text-[10px] cursor-pointer"
+                      >
+                        {cat} ({count})
+                      </button>
+                      <FilterFavouriteButton isStarred={isStarred} onToggle={() => toggleFavourite(`cat:${cat}`)} />
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Active chips */}
@@ -1449,6 +1451,11 @@ export default function CompetencyMatrixPage() {
                         <td
                           className={`${paddingClass} sticky left-0 z-10 border-r border-border shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)]`}
                           style={{ backgroundColor: 'hsl(var(--card))', left: 0 }}
+                          onClick={(event) => {
+                            if (event.ctrlKey || event.metaKey) {
+                              peopleSelection.toggleSelected(person.id);
+                            }
+                          }}
                         >
                           <div className="flex items-start gap-2">
                             <input
@@ -1460,7 +1467,14 @@ export default function CompetencyMatrixPage() {
                               aria-label={`Select ${person.display_name}`}
                             />
                             <button
-                              onClick={() => openPersonWorkspace(person)}
+                              onClick={(event) => {
+                                if (event.ctrlKey || event.metaKey) {
+                                  event.stopPropagation();
+                                  peopleSelection.toggleSelected(person.id);
+                                } else {
+                                  openPersonWorkspace(person);
+                                }
+                              }}
                               className="w-full text-left rounded-lg p-1 -m-1 hover:bg-muted cursor-pointer transition-colors"
                             >
                               <span className={`font-extrabold block text-foreground ${textClass}`}>{person.display_name}</span>
@@ -1948,6 +1962,11 @@ export default function CompetencyMatrixPage() {
                                     ? 'border-indigo-400 bg-indigo-500/5'
                                   : 'border-border/80 bg-card hover:border-border'
                               } flex items-start justify-between gap-3 group`}
+                              onClick={(event) => {
+                                if (event.ctrlKey || event.metaKey) {
+                                  workspaceSelection.toggleSelected(type.id);
+                                }
+                              }}
                             >
                               <input
                                 type="checkbox"
@@ -1958,7 +1977,14 @@ export default function CompetencyMatrixPage() {
                               />
                               <button
                                 type="button"
-                                onClick={() => openCell(selectedPerson, type)}
+                                onClick={(event) => {
+                                  if (event.ctrlKey || event.metaKey) {
+                                    event.stopPropagation();
+                                    workspaceSelection.toggleSelected(type.id);
+                                  } else {
+                                    openCell(selectedPerson, type);
+                                  }
+                                }}
                                 className="min-w-0 flex-1 text-left cursor-pointer"
                               >
                                 <div className="flex items-center gap-2">

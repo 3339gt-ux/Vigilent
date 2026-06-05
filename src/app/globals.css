@@ -548,6 +548,17 @@ body {
   overflow-x: hidden;
 }
 
+/* Custom native select option styling for dark-mode dropdown readability */
+select, option {
+  background-color: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+
+.dark select, .dark option {
+  background-color: hsl(var(--card)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
 /* Premium custom styling classes */
 .glass-panel {
   background: rgba(255, 255, 255, 0.03);

@@ -1191,7 +1191,7 @@ export default function RequirementsPage() {
         <div className="xl:col-span-2 space-y-4">
           {/* Advanced Filter Ribbon Controls */}
           <div className="flex flex-col gap-3 mb-4">
-            <div className="bg-card border border-border rounded-xl p-3 shadow-xs space-y-3">
+            <div className="bg-card border border-border rounded-xl p-2.5 shadow-xs space-y-2.5">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 {/* Search and Toggle Filter Button */}
                 <div className="flex items-center gap-2 w-full md:max-w-md">
@@ -1577,7 +1577,13 @@ export default function RequirementsPage() {
                       return (
                         <tr
                           key={action.id}
-                          onClick={() => setSelectedAction(action)}
+                          onClick={(event) => {
+                            if (event.ctrlKey || event.metaKey) {
+                              actionSelection.toggleSelected(action.id);
+                            } else {
+                              setSelectedAction(action);
+                            }
+                          }}
                           className={`hover:bg-muted/50 cursor-pointer transition-colors border-l-2 ${
                             selectedAction?.id === action.id
                               ? 'bg-indigo-500/5 border-l-indigo-600'
@@ -1698,7 +1704,13 @@ export default function RequirementsPage() {
                       return (
                         <tr
                           key={requirement.id}
-                          onClick={() => selectRequirement(requirement)}
+                          onClick={(event) => {
+                            if (event.ctrlKey || event.metaKey) {
+                              requirementSelection.toggleSelected(requirement.id);
+                            } else {
+                              selectRequirement(requirement);
+                            }
+                          }}
                           className={`hover:bg-muted/50 cursor-pointer transition-colors border-l-2 ${
                             selectedRequirement?.id === requirement.id
                               ? 'bg-indigo-500/5 border-l-indigo-600'
