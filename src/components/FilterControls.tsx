@@ -114,7 +114,7 @@ export function useFilterFavourites(userId: string, module: string, organisation
                   Remove this from Favourites?
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  This will unstar it in the original module as well.
+                  This will remove it from favourites in the original module as well.
                 </p>
               </div>
 
@@ -676,7 +676,7 @@ interface FilterFavouriteButtonProps {
   title?: string;
 }
 
-export function FilterFavouriteButton({ isStarred, onToggle, title = "Star filter option" }: FilterFavouriteButtonProps) {
+export function FilterFavouriteButton({ isStarred, onToggle, title = "Favourite filter option" }: FilterFavouriteButtonProps) {
   return (
     <button
       type="button"
@@ -954,7 +954,7 @@ export function ColumnVisibilityControls({
 }
 
 // ==========================================
-// 7. Component: StarredFilterSelect
+// 7. Component: Favourite-capable filter select
 // ==========================================
 interface StarredFilterSelectProps {
   label: string;
@@ -977,7 +977,7 @@ export function StarredFilterSelect({
 }: StarredFilterSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
 
-  // Group options: starred vs regular
+  // Group options: favourite vs regular
   const starredOptions = options.filter(opt => opt !== allLabel && isStarred(opt));
   const regularOptions = options.filter(opt => opt !== allLabel && !isStarred(opt));
 
@@ -1010,10 +1010,10 @@ export function StarredFilterSelect({
               <span>{allLabel}</span>
             </button>
 
-            {/* Starred options */}
+            {/* Favourite options */}
             {starredOptions.length > 0 && (
               <div className="border-t border-border/60 pt-1 mt-1">
-                <div className="px-2 py-0.5 text-[9px] font-bold text-muted-foreground uppercase tracking-widest">Starred</div>
+                <div className="px-2 py-0.5 text-[9px] font-bold text-muted-foreground uppercase tracking-widest">Favourites</div>
                 {starredOptions.map(opt => (
                   <div
                     key={opt}

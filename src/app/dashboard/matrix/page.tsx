@@ -4,8 +4,11 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { MatrixCell, ComplianceRequirement, EvidenceDocument, CellStatus } from '@/lib/types';
 import { isDemoMode } from '@/lib/env';
+import { exportCsv, exportDateStamp, ExportRow } from '@/lib/exportData';
+import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
 import {
   Grid,
+  Download,
   Plus,
   HelpCircle,
   CheckCircle2,
@@ -58,6 +61,8 @@ export default function EvidenceMatrix() {
   const [showHiddenRows, setShowHiddenRows] = useState(false);
   const [hiddenMatrixRowIds, setHiddenMatrixRowIds] = useState<Set<string>>(new Set());
   const [lastHiddenRowUndo, setLastHiddenRowUndo] = useState<null | { ids: string[]; action: 'hide' | 'restore' }>(null);
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>(null);
+  const [toast, setToast] = useState<ToastState>(null);
   const hiddenRowsStorageKey = `vygilence_hidden_matrix_rows_${user?.id || 'guest'}_${organization?.id || 'workspace'}`;
 
   // Layout states
@@ -320,7 +325,7 @@ export default function EvidenceMatrix() {
       chips.push({
         key: 'starred',
         label: 'Show Only',
-        valueLabel: 'Starred Requirements',
+        valueLabel: 'Favourite Requirements',
         onClear: () => setShowOnlyStarredReqs(false)
       });
     }
@@ -411,6 +416,34 @@ export default function EvidenceMatrix() {
   );
   const matrixRowSelection = useBulkSelection(matrixPagination.paginatedItems);
 
+  const matrixExportRows = (rows: ComplianceRequirement[]): ExportRow[] => {
+    const result: ExportRow[] = [];
+    rows.forEach(requirement => {
+      filteredTargets.forEach(target => {
+        const cell = matrixCells.find(item => item.requirement_id === requirement.id && item.target_name === target.name);
+        const doc = cell?.document_id ? documents.find(item => item.id === cell.document_id) : null;
+        result.push({
+          requirement_title: requirement.title,
+          requirement_category: requirement.category,
+          target_name: target.name,
+          target_type: target.type,
+          status: cell?.status || 'N/A',
+          linked_document_title: doc?.title || '',
+          linked_document_category: doc?.category || '',
+          linked_document_expiry: doc?.expiry_date || ''
+        });
+      });
+    });
+    return result;
+  };
+
+  const exportMatrix = (scope: 'selected' | 'filtered') => {
+    const rows = scope === 'selected'
+      ? filteredRequirements.filter(requirement => matrixRowSelection.selectedIds.has(requirement.id))
+      : filteredRequirements;
+    exportCsv(`vygilence-evidence-matrix-${scope}-export-${exportDateStamp()}.csv`, matrixExportRows(rows));
+  };
+
   // Handle cell click
   const handleCellClick = (cell: MatrixCell) => {
     setActiveCell(cell);
@@ -438,37 +471,61 @@ export default function EvidenceMatrix() {
   const handleHideSelectedRows = () => {
     const ids = Array.from(matrixRowSelection.selectedIds).filter(id => !hiddenMatrixRowIds.has(id));
     if (ids.length === 0) return;
-    if (!window.confirm(`Hide ${ids.length} selected active matrix row(s)? This is a personal workspace display preference and does not change readiness scoring or evidence links.`)) return;
-    setHiddenMatrixRowIds(prev => {
-      const next = new Set(prev);
-      ids.forEach(id => next.add(id));
-      return next;
+    setConfirmRequest({
+      title: 'Hide selected matrix rows?',
+      description: `Hide ${ids.length} selected active matrix row(s). This is a personal workspace display preference and does not change readiness scoring or evidence links.`,
+      confirmLabel: 'Hide rows',
+      tone: 'warning',
+      onConfirm: () => {
+        setHiddenMatrixRowIds(prev => {
+          const next = new Set(prev);
+          ids.forEach(id => next.add(id));
+          return next;
+        });
+        setLastHiddenRowUndo({ ids, action: 'hide' });
+        matrixRowSelection.clearSelection();
+        setToast({ type: 'success', message: `${ids.length} matrix row(s) hidden from your active view.` });
+      }
     });
-    setLastHiddenRowUndo({ ids, action: 'hide' });
-    matrixRowSelection.clearSelection();
   };
 
   const handleRestoreSelectedRows = () => {
     const ids = Array.from(matrixRowSelection.selectedIds).filter(id => hiddenMatrixRowIds.has(id));
     if (ids.length === 0) return;
-    if (!window.confirm(`Restore/unhide ${ids.length} hidden matrix row(s) to the normal view?`)) return;
-    setHiddenMatrixRowIds(prev => {
-      const next = new Set(prev);
-      ids.forEach(id => next.delete(id));
-      return next;
+    setConfirmRequest({
+      title: 'Restore selected matrix rows?',
+      description: `Restore ${ids.length} hidden matrix row(s) to the normal view.`,
+      confirmLabel: 'Restore rows',
+      tone: 'primary',
+      onConfirm: () => {
+        setHiddenMatrixRowIds(prev => {
+          const next = new Set(prev);
+          ids.forEach(id => next.delete(id));
+          return next;
+        });
+        setLastHiddenRowUndo({ ids, action: 'restore' });
+        matrixRowSelection.clearSelection();
+        setToast({ type: 'success', message: `${ids.length} matrix row(s) restored to the normal view.` });
+      }
     });
-    setLastHiddenRowUndo({ ids, action: 'restore' });
-    matrixRowSelection.clearSelection();
   };
 
   const handleRestoreAllHiddenRows = () => {
     const count = hiddenMatrixRowIds.size;
     if (count === 0) return;
-    if (!window.confirm(`Are you sure you want to restore all ${count} hidden row(s) to the normal view?`)) return;
     const oldIds = Array.from(hiddenMatrixRowIds);
-    setHiddenMatrixRowIds(new Set());
-    setLastHiddenRowUndo({ ids: oldIds, action: 'restore' });
-    matrixRowSelection.clearSelection();
+    setConfirmRequest({
+      title: 'Restore all hidden matrix rows?',
+      description: `Restore all ${count} hidden row(s) to the normal view.`,
+      confirmLabel: 'Restore all',
+      tone: 'primary',
+      onConfirm: () => {
+        setHiddenMatrixRowIds(new Set());
+        setLastHiddenRowUndo({ ids: oldIds, action: 'restore' });
+        matrixRowSelection.clearSelection();
+        setToast({ type: 'success', message: `${count} matrix row(s) restored to the normal view.` });
+      }
+    });
   };
 
   const undoMatrixRowVisibility = () => {
@@ -482,6 +539,7 @@ export default function EvidenceMatrix() {
       return next;
     });
     setLastHiddenRowUndo(null);
+    setToast({ type: 'success', message: 'Matrix row visibility change undone.' });
   };
 
   // Add a new target entity
@@ -489,7 +547,7 @@ export default function EvidenceMatrix() {
     e.preventDefault();
     if (!newTargetName) return;
     if (!isDemoMode) {
-      alert('Asset registration requires a production database mutation path before it can be enabled.');
+      setToast({ type: 'info', message: 'Asset registration requires a production database mutation path before it can be enabled.' });
       return;
     }
 
@@ -552,6 +610,7 @@ export default function EvidenceMatrix() {
 
   return (
     <div className="space-y-6">
+      <InlineToast toast={toast} onDismiss={() => setToast(null)} />
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -705,7 +764,7 @@ export default function EvidenceMatrix() {
                   onChange={e => setShowOnlyStarredReqs(e.target.checked)}
                   className="accent-indigo-650 w-3.5 h-3.5"
                 />
-                <span>Starred Requirements only</span>
+                <span>Favourite Requirements only</span>
               </label>
               <label className={`flex items-center gap-2 font-semibold text-foreground cursor-pointer ${hiddenMatrixRowIds.size === 0 ? 'opacity-40 cursor-not-allowed' : ''}`}>
                 <input
@@ -764,6 +823,15 @@ export default function EvidenceMatrix() {
           <span>Filtered Rows: {filteredRequirements.length} / {requirements.length} requirements</span>
           <span>Filtered Columns: {filteredTargets.length} / {uniqueTargets.length} assets</span>
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
+        <button type="button" onClick={() => exportMatrix('filtered')} className="px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
+          <Download className="w-3.5 h-3.5" /> Export filtered
+        </button>
+        <button type="button" disabled={matrixRowSelection.selectedCount === 0} onClick={() => exportMatrix('selected')} className="px-3 py-1.5 bg-card hover:bg-muted disabled:opacity-40 border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
+          <Download className="w-3.5 h-3.5" /> Export selected
+        </button>
       </div>
 
       <BulkSelectionToolbar
@@ -1202,6 +1270,7 @@ export default function EvidenceMatrix() {
       )}
 
       <FavouritesConfirmModal />
+      <ConfirmDialog request={confirmRequest} onCancel={() => setConfirmRequest(null)} />
 
     </div>
   );

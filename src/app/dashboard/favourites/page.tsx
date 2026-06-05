@@ -196,7 +196,7 @@ export default function FavouritesPage() {
           type: 'Category',
           title: cat,
           subtitle: 'Competency Category',
-          details: 'Starred category filter',
+          details: 'Favourite category filter',
           link: `/dashboard/competencies?filter=cat:${cat}`,
           status: null,
           category: cat,
@@ -212,7 +212,7 @@ export default function FavouritesPage() {
           type: 'Filter',
           title: dept,
           subtitle: 'Department Filter',
-          details: 'Starred department filter bookmark',
+          details: 'Favourite department filter bookmark',
           link: `/dashboard/competencies`,
           status: null,
           category: 'Filters',
@@ -228,7 +228,7 @@ export default function FavouritesPage() {
           type: 'Filter',
           title: role,
           subtitle: 'Role Filter',
-          details: 'Starred role filter bookmark',
+          details: 'Favourite role filter bookmark',
           link: `/dashboard/competencies`,
           status: null,
           category: 'Filters',
@@ -272,7 +272,7 @@ export default function FavouritesPage() {
           type: 'Category',
           title: cat,
           subtitle: 'Requirement Category',
-          details: 'Starred category filter',
+          details: 'Favourite category filter',
           link: `/dashboard/matrix?filter=cat:${cat}`,
           status: null,
           category: cat,
@@ -288,7 +288,7 @@ export default function FavouritesPage() {
           type: 'Filter',
           title: target,
           subtitle: 'Asset Filter',
-          details: 'Starred compliance target asset filter bookmark',
+          details: 'Favourite compliance target asset filter bookmark',
           link: `/dashboard/matrix?filter=target:${target}`,
           status: null,
           category: 'Filters',
@@ -332,7 +332,7 @@ export default function FavouritesPage() {
           type: 'Category',
           title: cat,
           subtitle: 'Requirement Category',
-          details: 'Starred category filter',
+          details: 'Favourite category filter',
           link: `/dashboard/requirements?category=${cat}`,
           status: null,
           category: cat,
@@ -348,7 +348,7 @@ export default function FavouritesPage() {
           type: 'Filter',
           title: owner,
           subtitle: 'Owner Filter',
-          details: 'Starred owner filter',
+          details: 'Favourite owner filter',
           link: `/dashboard/requirements`,
           status: null,
           category: 'Filters',
@@ -364,7 +364,7 @@ export default function FavouritesPage() {
           type: 'Filter',
           title: statusVal,
           subtitle: 'Status Filter',
-          details: 'Starred status filter bookmark',
+          details: 'Favourite status filter bookmark',
           link: `/dashboard/requirements?status=${statusVal}`,
           status: null,
           category: 'Filters',
@@ -404,7 +404,7 @@ export default function FavouritesPage() {
           type: 'Category',
           title: cat,
           subtitle: 'Evidence Category',
-          details: 'Starred category filter',
+          details: 'Favourite category filter',
           link: `/dashboard/vault`,
           status: null,
           category: cat,
@@ -701,7 +701,7 @@ export default function FavouritesPage() {
               <p className="text-xs text-muted-foreground">
                 {confirmItem.type === 'Saved View'
                   ? 'This will delete the saved view from the original module as well.'
-                  : 'This will unstar the item in the original module as well.'}
+                  : 'This will remove the item from favourites in the original module as well.'}
               </p>
             </div>
 
@@ -740,7 +740,7 @@ export default function FavouritesPage() {
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight">Favourites</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Starred records, categories, filters and saved views across your workspace.
+              Favourite records, categories, filters and saved views across your workspace.
             </p>
           </div>
         </div>

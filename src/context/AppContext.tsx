@@ -26,6 +26,7 @@ import {
   MatrixCell,
   AuditPack,
   AuditLog,
+  WorkspaceNotification,
   CellStatus,
   DocumentStatus,
   EvidenceUploadInput,
@@ -105,6 +106,7 @@ interface AppContextType {
   matrixCells: MatrixCell[];
   auditPacks: AuditPack[];
   auditLogs: AuditLog[];
+  notifications: WorkspaceNotification[];
 
   uploadDocument: (input: EvidenceUploadInput) => Promise<EvidenceDocument>;
   updateDocumentMetadata: (docId: string, updates: Partial<EvidenceDocument>) => Promise<EvidenceDocument>;
@@ -175,6 +177,8 @@ interface AppContextType {
   createPack: (name: string, description: string, requirementIds: string[], docIds: string[]) => Promise<AuditPack>;
   updatePackStatus: (packId: string, status: 'Draft' | 'Ready' | 'Sent' | 'Archived') => Promise<void>;
   updateCellMapping: (cellId: string, docId: string | null, status: CellStatus) => Promise<void>;
+  markNotificationRead: (notificationId: string, read?: boolean) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
 
   readinessReport: ReadinessReport;
   competencySummary: CompetencySummary;
@@ -217,7 +221,8 @@ const emptyCollections = {
   evidenceCategories: [] as ManagedCategory[],
   matrixCells: [] as MatrixCell[],
   auditPacks: [] as AuditPack[],
-  auditLogs: [] as AuditLog[]
+  auditLogs: [] as AuditLog[],
+  notifications: [] as WorkspaceNotification[]
 };
 
 const emptyReadinessReport = buildReadinessReport({
@@ -285,6 +290,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [matrixCells, setMatrixCells] = useState<MatrixCell[]>([]);
   const [auditPacks, setAuditPacks] = useState<AuditPack[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [notifications, setNotifications] = useState<WorkspaceNotification[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -346,6 +352,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setMatrixCells([]);
     setAuditPacks([]);
     setAuditLogs([]);
+    setNotifications([]);
   };
 
   // Load preferences per user
@@ -426,7 +433,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       evidenceCategoryRows,
       cells,
       packs,
-      logs
+      logs,
+      notificationRows
     ] = await Promise.all([
       dbService.getRequirements(),
       dbService.getDocuments(),
@@ -451,7 +459,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dbService.getEvidenceCategories(),
       dbService.getMatrixCells(),
       dbService.getAuditPacks(),
-      dbService.getAuditLogs()
+      dbService.getAuditLogs(),
+      dbService.getWorkspaceNotifications()
     ]);
 
     setRequirements(reqs);
@@ -478,6 +487,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setMatrixCells(cells);
     setAuditPacks(packs);
     setAuditLogs(logs);
+    setNotifications(notificationRows);
   };
 
   const loadDemoData = async () => {
@@ -553,6 +563,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setMatrixCells(emptyCollections.matrixCells);
       setAuditPacks(emptyCollections.auditPacks);
       setAuditLogs(emptyCollections.auditLogs);
+      setNotifications(emptyCollections.notifications);
       return;
     }
 
@@ -1164,6 +1175,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return action;
   };
 
+  const markNotificationRead: AppContextType['markNotificationRead'] = async (notificationId, read = true) => {
+    await dbService.markNotificationRead(notificationId, read);
+    setNotifications(await dbService.getWorkspaceNotifications());
+  };
+
+  const markAllNotificationsRead: AppContextType['markAllNotificationsRead'] = async () => {
+    await dbService.markAllNotificationsRead();
+    setNotifications(await dbService.getWorkspaceNotifications());
+  };
+
   const createRequirement = async (
     title: string,
     description: string,
@@ -1302,6 +1323,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         matrixCells,
         auditPacks,
         auditLogs,
+        notifications,
         uploadDocument,
         updateDocumentMetadata,
         getDocumentSignedUrl,
@@ -1347,6 +1369,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createPack,
         updatePackStatus,
         updateCellMapping,
+        markNotificationRead,
+        markAllNotificationsRead,
         readinessReport: readinessReport || emptyReadinessReport,
         competencySummary,
         readinessScore,

@@ -5,6 +5,7 @@ import { useApp } from '@/context/AppContext';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
 import { REQUIREMENT_CATEGORY_GROUPS, flattenCategoryGroups } from '@/lib/categoryPresets';
+import { exportCsv, exportDateStamp, ExportRow } from '@/lib/exportData';
 import type { Action, ActionStatus, Requirement, RequirementEvidenceCoverage, RequirementLifecycleStatus, RequirementStatus } from '@/lib/types';
 import { REQUIREMENT_TEMPLATE_PACKS } from '@/lib/requirementTemplatePacks';
 import {
@@ -162,7 +163,7 @@ export default function RequirementsPage() {
     },
     {
       id: 'starred-only',
-      name: 'Starred Requirements',
+      name: 'Favourite Requirements',
       filters: { showOnlyFavourites: true }
     }
   ];
@@ -575,6 +576,45 @@ export default function RequirementsPage() {
   const selectedBulkRequirements = filteredRequirements.filter(requirement => requirementSelection.selectedIds.has(requirement.id));
   const selectedBulkActions = filteredActions.filter(action => actionSelection.selectedIds.has(action.id));
 
+  const requirementExportRows = (rows: typeof filteredRequirements): ExportRow[] => rows.map(requirement => ({
+    title: requirement.title,
+    category: requirement.category,
+    owner: requirement.owner || '',
+    status: requirement.status,
+    lifecycle_status: requirement.lifecycle_status || 'ACTIVE',
+    risk_level: requirement.risk_level,
+    review_frequency: requirement.review_frequency,
+    last_review_date: requirement.review_date || '',
+    next_due_date: requirement.next_due_date || '',
+    linked_evidence_count: requirement.linkedDocuments.length,
+    open_actions_count: requirementActions
+      .filter(link => link.requirement_id === requirement.id)
+      .map(link => actions.find(action => action.id === link.action_id))
+      .filter(action => action ? action.status !== 'Complete' && action.status !== 'Cancelled' : false)
+      .length,
+    evidence_coverage: requirement.evidenceCoverage?.summary || 'Not assessed'
+  }));
+
+  const actionExportRows = (rows: Action[]): ExportRow[] => rows.map(action => ({
+    title: action.title,
+    status: action.status,
+    owner: action.owner || '',
+    due_date: action.due_date || action.target_due_date || '',
+    opened_at: action.opened_at || action.created_at,
+    closed_at: action.closed_at || '',
+    description: action.description || ''
+  }));
+
+  const exportRequirements = (scope: 'selected' | 'filtered') => {
+    const rows = scope === 'selected' ? selectedBulkRequirements : filteredRequirements;
+    exportCsv(`vygilence-requirements-${scope}-export-${exportDateStamp()}.csv`, requirementExportRows(rows));
+  };
+
+  const exportActions = (scope: 'selected' | 'filtered') => {
+    const rows = scope === 'selected' ? selectedBulkActions : filteredActions;
+    exportCsv(`vygilence-actions-${scope}-export-${exportDateStamp()}.csv`, actionExportRows(rows));
+  };
+
   const filterChips = useMemo(() => {
     const chips: { key: string; label: string; valueLabel: string; onClear: () => void }[] = [];
     if (search) {
@@ -628,7 +668,7 @@ export default function RequirementsPage() {
     if (showOnlyFavourites) {
       chips.push({
         key: 'favourites',
-        label: 'Starred Only',
+        label: 'Favourites Only',
         valueLabel: 'Yes',
         onClear: () => setShowOnlyFavourites(false)
       });
@@ -1393,7 +1433,7 @@ export default function RequirementsPage() {
                         onChange={e => setShowOnlyFavourites(e.target.checked)}
                         className="accent-indigo-650 w-3.5 h-3.5"
                       />
-                      <span>Starred Requirements only</span>
+                      <span>Favourite Requirements only</span>
                     </label>
                   </div>
                 </div>
@@ -1441,6 +1481,28 @@ export default function RequirementsPage() {
               {bulkMessage}
             </div>
           )}
+
+          <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
+            {requirementView === 'actions' ? (
+              <>
+                <button type="button" onClick={() => exportActions('filtered')} className="px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
+                  <Download className="w-3.5 h-3.5" /> Export filtered
+                </button>
+                <button type="button" disabled={selectedBulkActions.length === 0} onClick={() => exportActions('selected')} className="px-3 py-1.5 bg-card hover:bg-muted disabled:opacity-40 border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
+                  <Download className="w-3.5 h-3.5" /> Export selected
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" onClick={() => exportRequirements('filtered')} className="px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
+                  <Download className="w-3.5 h-3.5" /> Export filtered
+                </button>
+                <button type="button" disabled={selectedBulkRequirements.length === 0} onClick={() => exportRequirements('selected')} className="px-3 py-1.5 bg-card hover:bg-muted disabled:opacity-40 border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
+                  <Download className="w-3.5 h-3.5" /> Export selected
+                </button>
+              </>
+            )}
+          </div>
 
           {requirementView === 'actions' ? (
             <>

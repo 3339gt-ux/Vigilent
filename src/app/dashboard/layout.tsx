@@ -26,6 +26,7 @@ import {
   Star
 } from 'lucide-react';
 import { BulkUploadConfigurationPanel } from '@/components/BulkUploadConfigurationPanel';
+import { NotificationBell } from '@/components/NotificationBell';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -268,6 +269,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
 
             <div className="flex items-center justify-between gap-2">
+              <NotificationBell />
+
               <button
                 onClick={toggleTheme}
                 className="flex items-center justify-center p-2 rounded-lg bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
@@ -308,14 +311,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <span className="font-extrabold text-xs">{organization.name}</span>
             </div>
 
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="Toggle menu"
-              id="mobile-menu-toggle"
-            >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
+            <div className="flex items-center gap-1.5">
+              <NotificationBell />
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Toggle menu"
+                id="mobile-menu-toggle"
+              >
+                {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </button>
+            </div>
           </header>
 
           {/* Mobile Dropdown Panel */}

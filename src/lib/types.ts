@@ -480,3 +480,33 @@ export interface AuditTrailEvent {
   severity: 'info' | 'warning' | 'critical' | string;
   source: string;
 }
+
+export type WorkspaceNotificationType =
+  | 'action'
+  | 'requirement'
+  | 'competency'
+  | 'evidence'
+  | 'audit_pack'
+  | 'system'
+  | string;
+
+export type WorkspaceNotificationSeverity = 'info' | 'warning' | 'critical' | string;
+
+export interface WorkspaceNotification {
+  id: string;
+  organisation_id: string;
+  recipient_user_id: string | null;
+  recipient_role: string | null;
+  actor_user_id: string | null;
+  title: string;
+  body: string | null;
+  type: WorkspaceNotificationType;
+  severity: WorkspaceNotificationSeverity;
+  entity_type: string | null;
+  entity_id: string | null;
+  entity_label: string | null;
+  action_url: string | null;
+  metadata: Record<string, any> | null;
+  read_at: string | null;
+  created_at: string;
+}

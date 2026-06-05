@@ -7,6 +7,7 @@ import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { BulkUploadConfigurationPanel } from '@/components/BulkUploadConfigurationPanel';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
 import { EVIDENCE_CATEGORY_GROUPS, flattenCategoryGroups } from '@/lib/categoryPresets';
+import { exportCsv, exportDateStamp, ExportRow } from '@/lib/exportData';
 import { Action, EvidenceDocument } from '@/lib/types';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import { calculateEvidenceFileHash } from '@/lib/evidenceStorage';
@@ -27,6 +28,7 @@ import {
   Inbox,
   AlertCircle,
   ChevronDown,
+  Download,
   Archive
 } from 'lucide-react';
 import {
@@ -988,6 +990,28 @@ export default function EvidenceVault() {
   const documentSelection = useBulkSelection(paginatedDocs);
   const selectedDocs = sourceDocs.filter(doc => documentSelection.selectedIds.has(doc.id));
 
+  const documentExportRows = (rows: EvidenceDocument[]): ExportRow[] => rows.map(doc => ({
+    title: doc.title,
+    category: doc.category,
+    status: doc.status,
+    original_filename: doc.original_file_name || '',
+    safe_filename: doc.safe_file_name || doc.file_name,
+    mime_type: doc.mime_type || '',
+    file_size_bytes: doc.file_size_bytes,
+    issue_date: doc.issue_date || '',
+    expiry_date: doc.expiry_date || '',
+    review_date: doc.review_date || '',
+    training_date: doc.training_date || '',
+    calibration_date: doc.calibration_date || '',
+    uploaded_by: doc.uploaded_by || '',
+    created_at: doc.created_at
+  }));
+
+  const exportDocuments = (scope: 'selected' | 'filtered') => {
+    const rows = scope === 'selected' ? selectedDocs : filteredDocs;
+    exportCsv(`vygilence-evidence-vault-${scope}-export-${exportDateStamp()}.csv`, documentExportRows(rows));
+  };
+
   const filterChips = useMemo(() => {
     const chips: { key: string; label: string; valueLabel: string; onClear: () => void }[] = [];
     if (search) {
@@ -1041,7 +1065,7 @@ export default function EvidenceVault() {
     if (showOnlyStarredDocs) {
       chips.push({
         key: 'starred',
-        label: 'Starred Only',
+        label: 'Favourites Only',
         valueLabel: 'Yes',
         onClear: () => setShowOnlyStarredDocs(false)
       });
@@ -1817,7 +1841,7 @@ export default function EvidenceVault() {
                         onChange={e => setShowOnlyStarredDocs(e.target.checked)}
                         className="accent-indigo-650 w-3.5 h-3.5"
                       />
-                      <span>Starred Documents only</span>
+                      <span>Favourite Documents only</span>
                     </label>
                   </div>
                 </div>
@@ -1861,6 +1885,15 @@ export default function EvidenceVault() {
               {bulkMessage}
             </div>
           )}
+
+          <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
+            <button type="button" onClick={() => exportDocuments('filtered')} className="px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
+              <Download className="w-3.5 h-3.5" /> Export filtered
+            </button>
+            <button type="button" disabled={selectedDocs.length === 0} onClick={() => exportDocuments('selected')} className="px-3 py-1.5 bg-card hover:bg-muted disabled:opacity-40 border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
+              <Download className="w-3.5 h-3.5" /> Export selected
+            </button>
+          </div>
 
           <BulkSelectionToolbar
             selectedCount={documentSelection.selectedCount}

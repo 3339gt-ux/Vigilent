@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -52,6 +52,7 @@ type RadarItem = {
 };
 
 type DashboardModal = 'requirement' | 'competency' | 'action' | 'audit-pack' | null;
+type DashboardTab = 'overview' | 'upcoming-history';
 
 type DashboardRecordTarget = {
   type: RadarItem['type'];
@@ -109,7 +110,9 @@ export default function DashboardPage() {
   } = useApp();
 
   const router = useRouter();
+  const dashboardTabStorageKey = `vygilence_dashboard_tab_${organization?.id || 'workspace'}`;
   const [isFocusMode, setIsFocusMode] = useState(false);
+  const [dashboardTab, setDashboardTab] = useState<DashboardTab>('overview');
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
 
   const [uploadTitle, setUploadTitle] = useState('');
@@ -161,6 +164,21 @@ export default function DashboardPage() {
     description: '',
     requirementIds: [] as string[]
   });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const stored = localStorage.getItem(dashboardTabStorageKey);
+    if (stored === 'overview' || stored === 'upcoming-history') {
+      setDashboardTab(stored);
+    }
+  }, [dashboardTabStorageKey]);
+
+  const updateDashboardTab = (tab: DashboardTab) => {
+    setDashboardTab(tab);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(dashboardTabStorageKey, tab);
+    }
+  };
 
   // Status counters for Requirements
   const reqGreen = useMemo(() => readinessReport.requirements.filter(r => r.status === 'GREEN').length, [readinessReport.requirements]);
@@ -501,19 +519,19 @@ export default function DashboardPage() {
   ];
 
   const renderQuickActions = () => (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-2.5">
       {quickActions.map(action => (
         <button
           key={action.label}
           onClick={action.onClick}
-          className="w-full p-4 bg-muted/40 hover:bg-muted/70 hover:border-indigo-500/30 border border-border rounded-xl text-left transition-all duration-200 group flex items-start gap-3.5 shadow-sm"
+          className="w-full p-3 bg-muted/40 hover:bg-muted/70 hover:border-indigo-500/30 border border-border rounded-xl text-left transition-all duration-200 group flex items-start gap-3 shadow-sm min-h-[78px]"
         >
-          <div className="p-2.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg group-hover:scale-110 group-hover:bg-indigo-500 group-hover:text-white transition-all duration-200 shrink-0">
+          <div className="p-2 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg group-hover:scale-105 group-hover:bg-indigo-500 group-hover:text-white transition-all duration-200 shrink-0">
             {action.icon}
           </div>
           <div className="space-y-1 min-w-0 flex-1">
             <span className="font-extrabold text-foreground text-xs block leading-none">{action.label}</span>
-            <p className="text-[10px] text-muted-foreground leading-normal font-medium">{action.description}</p>
+            <p className="text-[10px] text-muted-foreground leading-normal font-medium line-clamp-2">{action.description}</p>
           </div>
         </button>
       ))}
@@ -744,8 +762,38 @@ export default function DashboardPage() {
         </div>
       )}
 
+      <section className="bg-card border border-border rounded-xl p-4 space-y-3 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Quick Actions</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">High-frequency compliance operations without leaving the dashboard.</p>
+          </div>
+          <div className="flex bg-muted border border-border rounded-lg p-0.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => updateDashboardTab('overview')}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                dashboardTab === 'overview' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Main Overview
+            </button>
+            <button
+              type="button"
+              onClick={() => updateDashboardTab('upcoming-history')}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                dashboardTab === 'upcoming-history' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Upcoming / History
+            </button>
+          </div>
+        </div>
+        {renderQuickActions()}
+      </section>
+
       {/* Setup walkthrough bar (hidden in Focus mode) */}
-      {!isFocusMode && (
+      {!isFocusMode && dashboardTab === 'overview' && (
         <div className="bg-card border border-border rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <div className="space-y-0.5">
             <h2 className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Setup Walkthrough</h2>
@@ -760,7 +808,7 @@ export default function DashboardPage() {
       )}
 
       {/* SECTION 1 — EXECUTIVE SUMMARY (hidden in Focus mode) */}
-      {!isFocusMode && (
+      {!isFocusMode && dashboardTab === 'overview' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Card 1: Overall Readiness */}
           <div className="bg-card border border-border p-5 rounded-xl flex items-center justify-between hover:shadow-md transition-all">
@@ -1037,14 +1085,6 @@ export default function DashboardPage() {
 
           {/* Right Column: Timeline in Focus Mode */}
           <div className="space-y-6">
-            <div className="bg-card border border-border rounded-xl p-6 space-y-4 shadow-sm">
-              <div>
-                <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Quick Actions</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">Start today&apos;s operational work without leaving focus mode.</p>
-              </div>
-              {renderQuickActions()}
-            </div>
-
             <div className="bg-card border border-border rounded-xl p-6 space-y-6 shadow-sm">
               <div>
                 <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Compliance Timeline</h2>
@@ -1080,9 +1120,9 @@ export default function DashboardPage() {
         </div>
       ) : (
         /* Overview Mode (Regular 3-Column Split Layout) */
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in">
+        <div className="grid grid-cols-1 gap-8 animate-fade-in">
           {/* Left Side: Attention Centre, Readiness Breakdown, Timeline */}
-          <div className="lg:col-span-2 space-y-8">
+          <div className={`space-y-8 ${dashboardTab === 'overview' ? '' : 'hidden'}`}>
             {/* Attention Centre */}
             <div className="bg-card border border-border rounded-xl p-6 space-y-6">
               <div>
@@ -1343,16 +1383,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Right Column: Quick Actions, Compliance Radar, Upcoming, Recent Activity */}
-          <div className="space-y-8">
-            {/* Quick Actions */}
-            <div className="bg-card border border-border rounded-xl p-6 space-y-4">
-              <div>
-                <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Quick Actions</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">High-frequency compliance operations.</p>
-              </div>
-              {renderQuickActions()}
-            </div>
-
+          <div className={`space-y-8 ${dashboardTab === 'upcoming-history' ? '' : 'hidden'}`}>
             {/* Compliance Radar Panel */}
             <div className="bg-card border border-border rounded-xl p-6 space-y-4 shadow-sm">
               <div>

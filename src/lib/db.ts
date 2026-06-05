@@ -35,6 +35,7 @@ import {
   AuditPack,
   AuditLog,
   AuditTrailEvent,
+  WorkspaceNotification,
   Person,
   ManagedCategory,
   CellStatus,
@@ -61,6 +62,27 @@ export const MOCK_PROFILE: Profile = {
   created_at: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString(),
   updated_at: new Date().toISOString()
 };
+
+const MOCK_WORKSPACE_NOTIFICATIONS: WorkspaceNotification[] = [
+  {
+    id: 'notif-demo-action',
+    organisation_id: MOCK_ORG.id,
+    recipient_user_id: MOCK_PROFILE.id,
+    recipient_role: null,
+    actor_user_id: null,
+    title: 'Welcome to Vygilence notifications',
+    body: 'Workspace updates, action changes and evidence link activity will appear here.',
+    type: 'system',
+    severity: 'info',
+    entity_type: null,
+    entity_id: null,
+    entity_label: null,
+    action_url: '/dashboard',
+    metadata: { source: 'demo_seed' },
+    read_at: null,
+    created_at: new Date().toISOString()
+  }
+];
 
 const MOCK_REQUIREMENTS: ComplianceRequirement[] = [
   {
@@ -1054,6 +1076,7 @@ export const initMockDb = () => {
     localStorage.setItem('vigilen_competency_record_documents', JSON.stringify(MOCK_COMPETENCY_RECORD_DOCUMENTS));
     localStorage.setItem('vigilen_requirement_competency_types', JSON.stringify(MOCK_REQUIREMENT_COMPETENCY_TYPES));
     localStorage.setItem('vigilen_audit_trail_events', JSON.stringify(MOCK_AUDIT_TRAIL_EVENTS));
+    localStorage.setItem('vygilence_workspace_notifications', JSON.stringify(MOCK_WORKSPACE_NOTIFICATIONS));
     localStorage.setItem('vigilen_initialized', 'true');
   }
 };
@@ -1636,6 +1659,19 @@ export const dbService = {
       severity
     });
 
+    void this.createWorkspaceNotification({
+      recipient_role: 'Owner',
+      title: `Requirement updated: ${after.title}`,
+      body: description,
+      type: 'requirement',
+      severity,
+      entity_type: 'requirement',
+      entity_id: requirementId,
+      entity_label: after.title,
+      action_url: `/dashboard/requirements?id=${requirementId}`,
+      metadata: { action_type: actionType, changed_fields: getChangedFields(before, after) }
+    }).catch(error => console.warn('Notification creation failed after requirement update.', error));
+
     return after;
   },
 
@@ -1830,6 +1866,19 @@ export const dbService = {
       severity: 'info'
     });
 
+    void this.createWorkspaceNotification({
+      recipient_role: 'Owner',
+      title: `Evidence linked: ${doc?.title || 'Document'}`,
+      body: `Linked to requirement "${req?.title || 'Unknown requirement'}".`,
+      type: 'evidence',
+      severity: 'info',
+      entity_type: 'evidence_document',
+      entity_id: documentId,
+      entity_label: doc?.title || 'Unknown Document',
+      action_url: `/dashboard/vault?id=${documentId}`,
+      metadata: { requirement_id: requirementId, requirement_title: req?.title }
+    }).catch(error => console.warn('Notification creation failed after evidence link.', error));
+
     return data;
   },
 
@@ -1867,6 +1916,19 @@ export const dbService = {
       },
       severity: 'info'
     });
+
+    void this.createWorkspaceNotification({
+      recipient_role: 'Owner',
+      title: `Evidence unlinked: ${doc?.title || 'Document'}`,
+      body: `Removed from requirement "${req?.title || 'Unknown requirement'}".`,
+      type: 'evidence',
+      severity: 'warning',
+      entity_type: 'evidence_document',
+      entity_id: documentId,
+      entity_label: doc?.title || 'Unknown Document',
+      action_url: `/dashboard/requirements?id=${requirementId}`,
+      metadata: { requirement_id: requirementId, requirement_title: req?.title }
+    }).catch(error => console.warn('Notification creation failed after evidence unlink.', error));
   },
 
   async getRequirementEvidenceCriteria(): Promise<RequirementEvidenceCriterion[]> {
@@ -2085,6 +2147,19 @@ export const dbService = {
       severity: 'info'
     });
 
+    void this.createWorkspaceNotification({
+      recipient_role: 'Owner',
+      title: `Evidence matched to criterion: ${crit?.title || 'Evidence Criterion'}`,
+      body: doc?.title ? `Linked document "${doc.title}".` : 'Evidence was linked to an evidence criterion.',
+      type: 'evidence',
+      severity: 'info',
+      entity_type: 'evidence_criterion',
+      entity_id: criterionId,
+      entity_label: crit?.title || 'Unknown Evidence Criterion',
+      action_url: `/dashboard/requirements?filter=criteria`,
+      metadata: { document_id: documentId, document_title: doc?.title, requirement_id: crit?.requirement_id }
+    }).catch(error => console.warn('Notification creation failed after criterion evidence match.', error));
+
     return data;
   },
 
@@ -2125,6 +2200,19 @@ export const dbService = {
       },
       severity: 'info'
     });
+
+    void this.createWorkspaceNotification({
+      recipient_role: 'Owner',
+      title: `Evidence removed from criterion: ${crit?.title || 'Evidence Criterion'}`,
+      body: doc?.title ? `Unlinked document "${doc.title}".` : 'Evidence was unlinked from an evidence criterion.',
+      type: 'evidence',
+      severity: 'warning',
+      entity_type: 'evidence_criterion',
+      entity_id: criterionId,
+      entity_label: crit?.title || 'Unknown Evidence Criterion',
+      action_url: `/dashboard/requirements?filter=criteria`,
+      metadata: { document_id: documentId, document_title: doc?.title, requirement_id: crit?.requirement_id }
+    }).catch(error => console.warn('Notification creation failed after criterion evidence unlink.', error));
   },
 
   async uploadEvidenceForCriterion(criterionId: string, file: File, category: string = 'Evidence'): Promise<EvidenceDocument> {
@@ -2221,6 +2309,109 @@ export const dbService = {
     return getStorageItem('vigilen_action_object_links', MOCK_ACTION_OBJECT_LINKS);
   },
 
+  async getWorkspaceNotifications(): Promise<WorkspaceNotification[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('workspace_notifications')
+        .select('*')
+        .eq('organisation_id', orgId)
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (error) throwSupabaseError('workspace_notifications.select active organisation', error);
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vygilence_workspace_notifications', MOCK_WORKSPACE_NOTIFICATIONS);
+  },
+
+  async createWorkspaceNotification(input: Partial<WorkspaceNotification> & Pick<WorkspaceNotification, 'title' | 'type'>): Promise<WorkspaceNotification> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const actorUserId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+    const payload = {
+      organisation_id: orgId,
+      recipient_user_id: input.recipient_user_id ?? null,
+      recipient_role: input.recipient_role ?? null,
+      actor_user_id: input.actor_user_id ?? actorUserId,
+      title: input.title,
+      body: input.body ?? null,
+      type: input.type,
+      severity: input.severity ?? 'info',
+      entity_type: input.entity_type ?? null,
+      entity_id: input.entity_id ?? null,
+      entity_label: input.entity_label ?? null,
+      action_url: input.action_url ?? null,
+      metadata: input.metadata ?? {}
+    };
+
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('workspace_notifications')
+        .insert([payload])
+        .select()
+        .single();
+      if (error) throwSupabaseError('workspace_notifications.insert active organisation', error);
+      return data;
+    }
+
+    const notifications = getStorageItem('vygilence_workspace_notifications', MOCK_WORKSPACE_NOTIFICATIONS);
+    const notification: WorkspaceNotification = {
+      ...payload,
+      id: `notif-${Math.random().toString(36).slice(2, 10)}`,
+      read_at: null,
+      created_at: nowIso()
+    };
+    notifications.unshift(notification);
+    setStorageItem('vygilence_workspace_notifications', notifications);
+    return notification;
+  },
+
+  async markNotificationRead(notificationId: string, read = true): Promise<WorkspaceNotification> {
+    const readAt = read ? nowIso() : null;
+
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('workspace_notifications')
+        .update({ read_at: readAt })
+        .eq('id', notificationId)
+        .eq('organisation_id', orgId)
+        .select()
+        .single();
+      if (error) throwSupabaseError('workspace_notifications.update read state', error);
+      return data;
+    }
+
+    const notifications = getStorageItem('vygilence_workspace_notifications', MOCK_WORKSPACE_NOTIFICATIONS);
+    const idx = notifications.findIndex((notification: WorkspaceNotification) => notification.id === notificationId);
+    if (idx === -1) throw new Error('Notification not found.');
+    notifications[idx] = { ...notifications[idx], read_at: readAt };
+    setStorageItem('vygilence_workspace_notifications', notifications);
+    return notifications[idx];
+  },
+
+  async markAllNotificationsRead(): Promise<void> {
+    const readAt = nowIso();
+
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { error } = await supabase!
+        .from('workspace_notifications')
+        .update({ read_at: readAt })
+        .eq('organisation_id', orgId)
+        .is('read_at', null);
+      if (error) throwSupabaseError('workspace_notifications.update all read', error);
+      return;
+    }
+
+    const notifications = getStorageItem('vygilence_workspace_notifications', MOCK_WORKSPACE_NOTIFICATIONS);
+    setStorageItem(
+      'vygilence_workspace_notifications',
+      notifications.map((notification: WorkspaceNotification) => ({ ...notification, read_at: notification.read_at || readAt }))
+    );
+  },
+
   async getRequirementActions(): Promise<RequirementAction[]> {
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
@@ -2281,6 +2472,19 @@ export const dbService = {
       afterSnapshot: newAction,
       severity: 'info'
     });
+
+    void this.createWorkspaceNotification({
+      recipient_role: 'Owner',
+      title: `Action opened: ${newAction.title}`,
+      body: newAction.owner ? `Owner/assignee: ${newAction.owner}` : 'A new action record was opened.',
+      type: 'action',
+      severity: newAction.due_date ? 'warning' : 'info',
+      entity_type: 'action',
+      entity_id: newAction.id,
+      entity_label: newAction.title,
+      action_url: `/dashboard/requirements?filter=actions`,
+      metadata: { status: newAction.status, due_date: newAction.due_date }
+    }).catch(error => console.warn('Notification creation failed after action create.', error));
 
     return newAction;
   },
@@ -2372,6 +2576,21 @@ export const dbService = {
       undoExpiresAt,
       severity
     });
+
+    void this.createWorkspaceNotification({
+      recipient_role: 'Owner',
+      title: updates.status && updates.status !== before?.status ? `Action status changed: ${after.title}` : `Action updated: ${after.title}`,
+      body: updates.status && updates.status !== before?.status
+        ? `Status changed from ${before?.status || 'Unknown'} to ${after.status}.`
+        : 'An action record was updated.',
+      type: 'action',
+      severity: after.status === 'Complete' || after.status === 'Cancelled' ? 'info' : 'warning',
+      entity_type: 'action',
+      entity_id: actionId,
+      entity_label: after.title,
+      action_url: `/dashboard/requirements?filter=actions`,
+      metadata: { previous_status: before?.status, status: after.status, changed_fields: getChangedFields(before, after) }
+    }).catch(error => console.warn('Notification creation failed after action update.', error));
 
     return after;
   },
@@ -2942,6 +3161,19 @@ export const dbService = {
       changedFields: before ? getChangedFields(before, after) : null,
       severity: 'info'
     });
+
+    void this.createWorkspaceNotification({
+      recipient_role: 'Owner',
+      title: !before ? 'Competency record created' : 'Competency record updated',
+      body: `Status: ${after.status}.`,
+      type: 'competency',
+      severity: after.status === 'Expired' || after.status === 'Missing' ? 'warning' : 'info',
+      entity_type: 'competency_record',
+      entity_id: after.id,
+      entity_label: 'Competency Record',
+      action_url: `/dashboard/competencies`,
+      metadata: { person_id: after.person_id, competency_type_id: after.competency_type_id, status: after.status }
+    }).catch(error => console.warn('Notification creation failed after competency record save.', error));
 
     return after;
   },

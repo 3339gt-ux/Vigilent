@@ -6,8 +6,9 @@ import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { buildCompetencyMatrix } from '@/lib/competencyEngine';
 import { COMPETENCY_TEMPLATE_PACKS } from '@/lib/competencyTemplates';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
+import { exportCsv, exportDateStamp, ExportRow } from '@/lib/exportData';
 import type { Action, CompetencyCategory, CompetencyRecord, CompetencyStatus, CompetencyType, Person, PersonType, RequirementRiskLevel } from '@/lib/types';
-import { Link as LinkIcon, Plus, Search, Upload, UserCheck, X, ArrowLeft, Calendar, Paperclip, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { Link as LinkIcon, Plus, Search, Upload, UserCheck, X, ArrowLeft, Calendar, Paperclip, AlertCircle, Eye, EyeOff, Download } from 'lucide-react';
 import {
   useFilterFavourites,
   useSavedViews,
@@ -303,6 +304,41 @@ export default function CompetencyMatrixPage() {
   const peopleSelection = useBulkSelection(peoplePagination.paginatedItems);
   const selectedBulkPeople = sortedPeople.filter(person => peopleSelection.selectedIds.has(person.id));
 
+  const peopleExportRows = (rows: Person[]): ExportRow[] => rows.map(person => {
+    const personCells = matrix.filter(cell => cell.person.id === person.id);
+    return {
+      display_name: person.display_name,
+      employee_number: person.employee_number || '',
+      email: person.email || '',
+      department: person.department || '',
+      role: person.role || '',
+      person_type: person.person_type,
+      active: person.active,
+      valid_competencies: personCells.filter(cell => cell.status === 'Valid').length,
+      missing_competencies: personCells.filter(cell => cell.status === 'Missing').length,
+      expired_competencies: personCells.filter(cell => cell.status === 'Expired').length,
+      expiring_soon_competencies: personCells.filter(cell => cell.status === 'Expiring Soon').length
+    };
+  });
+
+  const competencyRecordExportRows = (rows: Array<{ type: CompetencyType; cell?: { record?: CompetencyRecord | null; status: CompetencyStatus } | null }>): ExportRow[] =>
+    rows.map(row => ({
+      competency_title: row.type.title,
+      category: row.type.category,
+      status: row.cell?.status || 'Missing',
+      completed_date: row.cell?.record?.completed_date || '',
+      expiry_date: row.cell?.record?.expiry_date || '',
+      trainer: row.cell?.record?.trainer || '',
+      provider: row.cell?.record?.provider || '',
+      certificate_number: row.cell?.record?.certificate_number || '',
+      notes: row.cell?.record?.notes || ''
+    }));
+
+  const exportPeople = (scope: 'selected' | 'filtered') => {
+    const rows = scope === 'selected' ? selectedBulkPeople : sortedPeople;
+    exportCsv(`vygilence-people-${scope}-export-${exportDateStamp()}.csv`, peopleExportRows(rows));
+  };
+
   // Filtering Competency Columns
   const filteredTypes = useMemo(() => {
     return activeTypes.filter(type => {
@@ -588,7 +624,7 @@ export default function CompetencyMatrixPage() {
       chips.push({
         key: 'favourites',
         label: 'Show Only',
-        valueLabel: 'Starred Competencies',
+        valueLabel: 'Favourite Competencies',
         onClear: () => setShowOnlyFavourites(false)
       });
     }
@@ -1273,7 +1309,7 @@ export default function CompetencyMatrixPage() {
                       onChange={e => setShowOnlyFavourites(e.target.checked)}
                       className="accent-indigo-650 w-3.5 h-3.5"
                     />
-                    <span>Starred Competencies only</span>
+                    <span>Favourite Competencies only</span>
                   </label>
                   <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
                     <input
@@ -1362,6 +1398,15 @@ export default function CompetencyMatrixPage() {
               {bulkMessage}
             </div>
           )}
+
+          <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
+            <button type="button" onClick={() => exportPeople('filtered')} className="px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
+              <Download className="w-3.5 h-3.5" /> Export filtered people
+            </button>
+            <button type="button" disabled={selectedBulkPeople.length === 0} onClick={() => exportPeople('selected')} className="px-3 py-1.5 bg-card hover:bg-muted disabled:opacity-40 border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
+              <Download className="w-3.5 h-3.5" /> Export selected people
+            </button>
+          </div>
 
           <BulkSelectionToolbar
             selectedCount={peopleSelection.selectedCount}
@@ -1901,6 +1946,13 @@ export default function CompetencyMatrixPage() {
                       Selected: {activeCell.competencyType.title}
                     </span>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => exportCsv(`vygilence-competency-records-${selectedPerson.id}-${exportDateStamp()}.csv`, competencyRecordExportRows(filteredPersonRows))}
+                    className="px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground text-xs flex items-center gap-1.5 w-fit"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Export records
+                  </button>
                 </div>
 
                 {/* Workspace Search & Filter */}

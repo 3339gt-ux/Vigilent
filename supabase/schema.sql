@@ -488,6 +488,31 @@ create index if not exists audit_trail_events_org_action_idx on public.audit_tra
 
 create index if not exists audit_trail_events_undo_idx on public.audit_trail_events (undo_available) where undo_available = true;
 
+-- 7c. In-app Workspace Notifications
+create table if not exists public.workspace_notifications (
+    id uuid primary key default uuid_generate_v4(),
+    organisation_id uuid not null references public.organizations(id) on delete cascade,
+    recipient_user_id uuid references public.profiles(id) on delete cascade,
+    recipient_role text,
+    actor_user_id uuid references public.profiles(id) on delete set null,
+    title text not null,
+    body text,
+    type text not null,
+    severity text default 'info' not null,
+    entity_type text,
+    entity_id uuid,
+    entity_label text,
+    action_url text,
+    metadata jsonb default '{}'::jsonb,
+    read_at timestamp with time zone,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create index if not exists workspace_notifications_org_created_idx on public.workspace_notifications (organisation_id, created_at desc);
+create index if not exists workspace_notifications_recipient_created_idx on public.workspace_notifications (recipient_user_id, created_at desc);
+create index if not exists workspace_notifications_role_created_idx on public.workspace_notifications (organisation_id, recipient_role, created_at desc);
+create index if not exists workspace_notifications_unread_idx on public.workspace_notifications (organisation_id, read_at) where read_at is null;
+
 -- Enable RLS on all tables
 alter table public.organizations enable row level security;
 alter table public.profiles enable row level security;
@@ -498,6 +523,7 @@ alter table public.matrix_cells enable row level security;
 alter table public.audit_packs enable row level security;
 alter table public.audit_logs enable row level security;
 alter table public.audit_trail_events enable row level security;
+alter table public.workspace_notifications enable row level security;
 alter table public.requirements enable row level security;
 alter table public.requirement_categories enable row level security;
 alter table public.evidence_categories enable row level security;
@@ -858,6 +884,46 @@ create policy "Owners/Admins can update undo fields in audit trail" on public.au
         public.can_admin_organization(organization_id)
     ) with check (
         public.can_admin_organization(organization_id)
+    );
+
+-- Workspace Notifications
+drop policy if exists "Users can read own workspace notifications" on public.workspace_notifications;
+create policy "Users can read own workspace notifications" on public.workspace_notifications
+    for select using (
+        public.is_organization_member(organisation_id)
+        and (
+            recipient_user_id = auth.uid()
+            or recipient_role is null
+            or public.has_organization_role(organisation_id, array[recipient_role])
+            or public.can_admin_organization(organisation_id)
+        )
+    );
+
+drop policy if exists "Members can insert workspace notifications" on public.workspace_notifications;
+create policy "Members can insert workspace notifications" on public.workspace_notifications
+    for insert with check (
+        public.is_organization_member(organisation_id)
+        and actor_user_id = auth.uid()
+    );
+
+drop policy if exists "Users can update own notification read state" on public.workspace_notifications;
+create policy "Users can update own notification read state" on public.workspace_notifications
+    for update using (
+        public.is_organization_member(organisation_id)
+        and (
+            recipient_user_id = auth.uid()
+            or recipient_role is null
+            or public.has_organization_role(organisation_id, array[recipient_role])
+            or public.can_admin_organization(organisation_id)
+        )
+    ) with check (
+        public.is_organization_member(organisation_id)
+        and (
+            recipient_user_id = auth.uid()
+            or recipient_role is null
+            or public.has_organization_role(organisation_id, array[recipient_role])
+            or public.can_admin_organization(organisation_id)
+        )
     );
 
 -- Requirements Framework
