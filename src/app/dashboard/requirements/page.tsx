@@ -26,7 +26,12 @@ import {
   SavedViewsBar,
   StarredFilterSelect,
   ColumnVisibilityControls,
-  SavedView
+  SavedView,
+  PaginationControls,
+  BulkSelectionToolbar,
+  useBulkSelection,
+  usePagination,
+  usePersistentViewState
 } from '@/components/FilterControls';
 
 const statusClass = (status: RequirementStatus) => {
@@ -68,6 +73,7 @@ const coverageChip = (coverage?: RequirementEvidenceCoverage) => {
 export default function RequirementsPage() {
   const {
     user,
+    organization,
     documents,
     frameworkRequirements,
     requirementDocuments,
@@ -121,9 +127,19 @@ export default function RequirementsPage() {
   const [density, setDensity] = useState<'comfortable' | 'compact'>('comfortable');
   const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
+  const [bulkRequirementCategory, setBulkRequirementCategory] = useState('');
+  const [bulkRequirementOwner, setBulkRequirementOwner] = useState('');
+  const [bulkRequirementStatus, setBulkRequirementStatus] = useState('');
+  const [bulkRequirementRisk, setBulkRequirementRisk] = useState('');
+  const [bulkRequirementReviewDate, setBulkRequirementReviewDate] = useState('');
+  const [bulkActionStatus, setBulkActionStatus] = useState('');
+  const [bulkActionDueDate, setBulkActionDueDate] = useState('');
+  const [bulkMessage, setBulkMessage] = useState('');
+  const [lastRequirementUndo, setLastRequirementUndo] = useState<null | { label: string; requirements: Requirement[] }>(null);
+  const [lastActionUndo, setLastActionUndo] = useState<null | { label: string; actions: Action[] }>(null);
 
   // Favourites Persistence
-  const { favourites, toggleFavourite, isFavourite, clearFavourites } = useFilterFavourites(user?.id || 'guest', 'requirements');
+  const { favourites, toggleFavourite, isFavourite, clearFavourites } = useFilterFavourites(user?.id || 'guest', 'requirements', organization?.id);
 
   // Saved Views System
   const defaultViews: SavedView[] = [
@@ -155,7 +171,7 @@ export default function RequirementsPage() {
     setActiveViewId,
     saveCurrentView,
     deleteCustomView
-  } = useSavedViews(user?.id || 'guest', 'requirements', defaultViews);
+  } = useSavedViews(user?.id || 'guest', 'requirements', defaultViews, organization?.id);
 
   const handleResetFilters = () => {
     setSearch('');
@@ -213,6 +229,39 @@ export default function RequirementsPage() {
       showOnlyFavourites !== (!!f.showOnlyFavourites)
     );
   }, [activeViewId, allViews, search, selectedStatus, selectedCategory, ownerFilter, riskFilter, radarFilter, showOnlyFavourites]);
+
+  usePersistentViewState(
+    user?.id || 'guest',
+    organization?.id,
+    'requirements',
+    {
+      search,
+      selectedStatus,
+      selectedCategory,
+      requirementView,
+      ownerFilter,
+      riskFilter,
+      radarFilter,
+      showOnlyFavourites,
+      density,
+      hiddenColumns,
+      activeViewId
+    },
+    stored => {
+      if (typeof stored.search === 'string') setSearch(stored.search);
+      if (typeof stored.selectedStatus === 'string') setSelectedStatus(stored.selectedStatus as 'All' | 'Attention' | RequirementStatus);
+      if (typeof stored.selectedCategory === 'string') setSelectedCategory(stored.selectedCategory);
+      if (stored.requirementView === 'active' || stored.requirementView === 'archive' || stored.requirementView === 'inactive' || stored.requirementView === 'actions') setRequirementView(stored.requirementView);
+      if (typeof stored.ownerFilter === 'string') setOwnerFilter(stored.ownerFilter);
+      if (typeof stored.riskFilter === 'string') setRiskFilter(stored.riskFilter);
+      if (typeof stored.radarFilter === 'string') setRadarFilter(stored.radarFilter);
+      if (typeof stored.showOnlyFavourites === 'boolean') setShowOnlyFavourites(stored.showOnlyFavourites);
+      if (stored.density === 'comfortable' || stored.density === 'compact') setDensity(stored.density);
+      if (Array.isArray(stored.hiddenColumns)) setHiddenColumns(stored.hiddenColumns.filter((item): item is string => typeof item === 'string'));
+      if (typeof stored.activeViewId === 'string' || stored.activeViewId === null) setActiveViewId(stored.activeViewId);
+    },
+    [search, selectedStatus, selectedCategory, requirementView, ownerFilter, riskFilter, radarFilter, showOnlyFavourites, density, hiddenColumns, activeViewId]
+  );
   const [selectedRequirement, setSelectedRequirement] = useState<Requirement | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -493,6 +542,25 @@ export default function RequirementsPage() {
       return matchesSearch && matchesStatus && matchesCategory && matchesOwner && matchesRisk && matchesFavourite && matchesRadar;
     });
   }, [assessedRequirements, requirementView, search, selectedStatus, selectedCategory, ownerFilter, riskFilter, showOnlyFavourites, activeRadarFilter, actions, requirementActions, favourites, isFavourite]);
+
+  const requirementPagination = usePagination(
+    filteredRequirements,
+    user?.id || 'guest',
+    organization?.id,
+    'requirements-list',
+    [search, selectedStatus, selectedCategory, ownerFilter, riskFilter, showOnlyFavourites, activeRadarFilter, requirementView]
+  );
+  const actionPagination = usePagination(
+    filteredActions,
+    user?.id || 'guest',
+    organization?.id,
+    'actions-registry',
+    [search, selectedStatus, ownerFilter, radarFilter, activeRadarFilter, requirementView]
+  );
+  const requirementSelection = useBulkSelection(requirementPagination.paginatedItems);
+  const actionSelection = useBulkSelection(actionPagination.paginatedItems);
+  const selectedBulkRequirements = filteredRequirements.filter(requirement => requirementSelection.selectedIds.has(requirement.id));
+  const selectedBulkActions = filteredActions.filter(action => actionSelection.selectedIds.has(action.id));
 
   const filterChips = useMemo(() => {
     const chips: { key: string; label: string; valueLabel: string; onClear: () => void }[] = [];
@@ -892,6 +960,139 @@ export default function RequirementsPage() {
     setImportMessage('');
   };
 
+  const applyRequirementBulkMetadata = async () => {
+    if (selectedBulkRequirements.length === 0) return;
+    const updates: Partial<Requirement> = {};
+    if (bulkRequirementCategory) updates.category = bulkRequirementCategory;
+    if (bulkRequirementOwner.trim()) updates.owner = bulkRequirementOwner.trim();
+    if (bulkRequirementStatus) updates.status = bulkRequirementStatus as RequirementStatus;
+    if (bulkRequirementRisk) updates.risk_level = bulkRequirementRisk as Requirement['risk_level'];
+    if (bulkRequirementReviewDate) updates.next_due_date = bulkRequirementReviewDate;
+    if (Object.keys(updates).length === 0) {
+      setBulkMessage('Choose at least one requirement bulk edit value before applying.');
+      return;
+    }
+    if (!window.confirm(`Apply changes to ${selectedBulkRequirements.length} requirement(s)? Existing requirement update logging will be used.`)) return;
+    setLastRequirementUndo({ label: 'Undo requirement bulk edit', requirements: selectedBulkRequirements });
+    try {
+      for (const requirement of selectedBulkRequirements) {
+        await updateFrameworkRequirement(requirement.id, updates);
+      }
+      requirementSelection.clearSelection();
+      setBulkRequirementCategory('');
+      setBulkRequirementOwner('');
+      setBulkRequirementStatus('');
+      setBulkRequirementRisk('');
+      setBulkRequirementReviewDate('');
+      setBulkMessage(`Updated ${selectedBulkRequirements.length} requirement(s).`);
+    } catch (error) {
+      setBulkMessage(error instanceof Error ? error.message : 'Bulk requirement update failed.');
+    }
+  };
+
+  const applyRequirementBulkLifecycle = async () => {
+    if (selectedBulkRequirements.length === 0) return;
+    const action = requirementView === 'archive' || requirementView === 'inactive' ? 'restore' : 'archive';
+    if (!window.confirm(`${action === 'restore' ? 'Restore' : 'Archive'} ${selectedBulkRequirements.length} selected requirement(s)?`)) return;
+    setLastRequirementUndo({ label: 'Undo requirement lifecycle bulk action', requirements: selectedBulkRequirements });
+    try {
+      for (const requirement of selectedBulkRequirements) {
+        if (action === 'restore') await restoreFrameworkRequirement(requirement.id);
+        else await archiveFrameworkRequirement(requirement.id);
+      }
+      requirementSelection.clearSelection();
+      setBulkMessage(action === 'restore' ? `Restored ${selectedBulkRequirements.length} requirement(s).` : `Archived ${selectedBulkRequirements.length} requirement(s).`);
+    } catch (error) {
+      setBulkMessage(error instanceof Error ? error.message : 'Bulk requirement lifecycle action failed.');
+    }
+  };
+
+  const undoRequirementBulkAction = async () => {
+    if (!lastRequirementUndo) return;
+    if (!window.confirm(`Restore previous values for ${lastRequirementUndo.requirements.length} requirement(s)?`)) return;
+    try {
+      for (const requirement of lastRequirementUndo.requirements) {
+        await updateFrameworkRequirement(requirement.id, {
+          title: requirement.title,
+          description: requirement.description || null,
+          category: requirement.category,
+          owner: requirement.owner || null,
+          risk_level: requirement.risk_level,
+          status: requirement.status,
+          review_frequency: requirement.review_frequency,
+          review_date: requirement.review_date || null,
+          next_due_date: requirement.next_due_date || null,
+          notes: requirement.notes || null,
+          lifecycle_status: requirement.lifecycle_status || 'ACTIVE',
+          archived_at: requirement.archived_at || null,
+          archived_by: requirement.archived_by || null,
+          deactivated_at: requirement.deactivated_at || null,
+          deactivated_by: requirement.deactivated_by || null
+        });
+      }
+      setLastRequirementUndo(null);
+      setBulkMessage('Previous requirement values restored.');
+    } catch (error) {
+      setBulkMessage(error instanceof Error ? error.message : 'Requirement undo failed.');
+    }
+  };
+
+  const applyActionBulkUpdate = async () => {
+    if (selectedBulkActions.length === 0) return;
+    const updates: Partial<Action> = {};
+    if (bulkActionStatus) {
+      updates.status = bulkActionStatus as ActionStatus;
+      if (bulkActionStatus === 'Complete') updates.completion_note = 'Completed by bulk action.';
+      if (bulkActionStatus === 'Cancelled') updates.cancellation_note = 'Cancelled by bulk action.';
+    }
+    if (bulkActionDueDate) {
+      updates.due_date = bulkActionDueDate;
+      updates.target_due_date = bulkActionDueDate;
+    }
+    if (Object.keys(updates).length === 0) {
+      setBulkMessage('Choose at least one action bulk edit value before applying.');
+      return;
+    }
+    if (!window.confirm(`Apply changes to ${selectedBulkActions.length} action(s)? Existing action history and audit logging will be used.`)) return;
+    setLastActionUndo({ label: 'Undo action bulk edit', actions: selectedBulkActions });
+    try {
+      for (const action of selectedBulkActions) {
+        await updateAction(action.id, updates);
+      }
+      actionSelection.clearSelection();
+      setBulkActionStatus('');
+      setBulkActionDueDate('');
+      setBulkMessage(`Updated ${selectedBulkActions.length} action(s).`);
+    } catch (error) {
+      setBulkMessage(error instanceof Error ? error.message : 'Bulk action update failed.');
+    }
+  };
+
+  const undoActionBulkAction = async () => {
+    if (!lastActionUndo) return;
+    if (!window.confirm(`Restore previous values for ${lastActionUndo.actions.length} action(s)?`)) return;
+    try {
+      for (const action of lastActionUndo.actions) {
+        await updateAction(action.id, {
+          status: action.status,
+          owner: action.owner || null,
+          due_date: action.due_date || null,
+          target_due_date: action.target_due_date || null,
+          status_changed_at: action.status_changed_at || null,
+          status_changed_by: action.status_changed_by || null,
+          closed_at: action.closed_at || null,
+          closed_by: action.closed_by || null,
+          completion_note: action.completion_note || null,
+          cancellation_note: action.cancellation_note || null
+        });
+      }
+      setLastActionUndo(null);
+      setBulkMessage('Previous action values restored.');
+    } catch (error) {
+      setBulkMessage(error instanceof Error ? error.message : 'Action undo failed.');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -1233,12 +1434,120 @@ export default function RequirementsPage() {
             </div>
           </div>
 
+          {bulkMessage && (
+            <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-3 text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+              {bulkMessage}
+            </div>
+          )}
+
+          {requirementView === 'actions' ? (
+            <>
+              <BulkSelectionToolbar
+                selectedCount={actionSelection.selectedCount}
+                recordLabel="action(s)"
+                onSelectVisible={actionSelection.selectVisible}
+                onClear={actionSelection.clearSelection}
+                message="Bulk status changes create normal action history entries."
+              >
+                <select value={bulkActionStatus} onChange={event => setBulkActionStatus(event.target.value)} className="px-2.5 py-1.5 bg-card border border-border rounded-lg font-bold text-foreground outline-none">
+                  <option value="">Status...</option>
+                  {(['Open', 'In Progress', 'Complete', 'Cancelled'] as ActionStatus[]).map(status => <option key={status} value={status}>{status}</option>)}
+                </select>
+                <label className="flex items-center gap-1 font-bold text-foreground">
+                  Due
+                  <input type="date" value={bulkActionDueDate} onChange={event => setBulkActionDueDate(event.target.value)} className="px-2 py-1.5 bg-card border border-border rounded-lg outline-none" />
+                </label>
+                <button type="button" onClick={applyActionBulkUpdate} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold cursor-pointer">
+                  Apply action edit
+                </button>
+                {lastActionUndo && (
+                  <button type="button" onClick={undoActionBulkAction} className="px-3 py-1.5 bg-card hover:bg-muted border border-border text-foreground rounded-lg font-bold cursor-pointer">
+                    {lastActionUndo.label}
+                  </button>
+                )}
+              </BulkSelectionToolbar>
+              <PaginationControls
+                pageSize={actionPagination.pageSize}
+                onPageSizeChange={actionPagination.setPageSize}
+                currentPage={actionPagination.currentPage}
+                totalPages={actionPagination.totalPages}
+                totalItems={actionPagination.totalItems}
+                startItem={actionPagination.startItem}
+                endItem={actionPagination.endItem}
+                onPageChange={actionPagination.setCurrentPage}
+                itemLabel="actions"
+              />
+            </>
+          ) : (
+            <>
+              <BulkSelectionToolbar
+                selectedCount={requirementSelection.selectedCount}
+                recordLabel="requirement(s)"
+                onSelectVisible={requirementSelection.selectVisible}
+                onClear={requirementSelection.clearSelection}
+                message="Permanent deletion is not available in bulk; archive is the safe lifecycle action."
+              >
+                <select value={bulkRequirementCategory} onChange={event => setBulkRequirementCategory(event.target.value)} className="px-2.5 py-1.5 bg-card border border-border rounded-lg font-bold text-foreground outline-none">
+                  <option value="">Category...</option>
+                  {requirementCategoryOptions.map(category => <option key={category} value={category}>{category}</option>)}
+                </select>
+                <input value={bulkRequirementOwner} onChange={event => setBulkRequirementOwner(event.target.value)} placeholder="Owner..." className="px-2.5 py-1.5 bg-card border border-border rounded-lg font-bold text-foreground outline-none w-28" />
+                <select value={bulkRequirementStatus} onChange={event => setBulkRequirementStatus(event.target.value)} className="px-2.5 py-1.5 bg-card border border-border rounded-lg font-bold text-foreground outline-none">
+                  <option value="">RAG...</option>
+                  {requirementStatusOptions.map(status => <option key={status} value={status}>{status}</option>)}
+                </select>
+                <select value={bulkRequirementRisk} onChange={event => setBulkRequirementRisk(event.target.value)} className="px-2.5 py-1.5 bg-card border border-border rounded-lg font-bold text-foreground outline-none">
+                  <option value="">Risk...</option>
+                  {riskOptions.map(risk => <option key={risk} value={risk}>{risk}</option>)}
+                </select>
+                <label className="flex items-center gap-1 font-bold text-foreground">
+                  Next review
+                  <input type="date" value={bulkRequirementReviewDate} onChange={event => setBulkRequirementReviewDate(event.target.value)} className="px-2 py-1.5 bg-card border border-border rounded-lg outline-none" />
+                </label>
+                <button type="button" onClick={applyRequirementBulkMetadata} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold cursor-pointer">
+                  Apply requirement edit
+                </button>
+                <button type="button" onClick={applyRequirementBulkLifecycle} className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold cursor-pointer">
+                  {requirementView === 'archive' || requirementView === 'inactive' ? 'Restore selected' : 'Archive selected'}
+                </button>
+                {lastRequirementUndo && (
+                  <button type="button" onClick={undoRequirementBulkAction} className="px-3 py-1.5 bg-card hover:bg-muted border border-border text-foreground rounded-lg font-bold cursor-pointer">
+                    {lastRequirementUndo.label}
+                  </button>
+                )}
+              </BulkSelectionToolbar>
+              <PaginationControls
+                pageSize={requirementPagination.pageSize}
+                onPageSizeChange={requirementPagination.setPageSize}
+                currentPage={requirementPagination.currentPage}
+                totalPages={requirementPagination.totalPages}
+                totalItems={requirementPagination.totalItems}
+                startItem={requirementPagination.startItem}
+                endItem={requirementPagination.endItem}
+                onPageChange={requirementPagination.setCurrentPage}
+                itemLabel="requirements"
+              />
+            </>
+          )}
+
         <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             {requirementView === 'actions' ? (
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-muted border-b border-border/80 text-muted-foreground font-bold uppercase tracking-wider">
+                    <th className={`${density === 'compact' ? 'p-2.5 py-2' : 'p-4'} w-10`}>
+                      <input
+                        type="checkbox"
+                        checked={actionSelection.allVisibleSelected}
+                        onChange={event => {
+                          if (event.target.checked) actionSelection.selectVisible();
+                          else actionSelection.clearSelection();
+                        }}
+                        className="rounded border-border text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 bg-muted/40 cursor-pointer"
+                        aria-label="Select visible actions"
+                      />
+                    </th>
                     <th className={`${density === 'compact' ? 'p-2.5 py-2' : 'p-4'} font-bold uppercase tracking-wider`}>Action Item</th>
                     <th className={`${density === 'compact' ? 'p-2.5 py-2' : 'p-4'} font-bold uppercase tracking-wider`}>Linked Requirement</th>
                     <th className={`${density === 'compact' ? 'p-2.5 py-2' : 'p-4'} font-bold uppercase tracking-wider`}>Owner</th>
@@ -1250,12 +1559,12 @@ export default function RequirementsPage() {
                 <tbody className="divide-y divide-border/60">
                   {filteredActions.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                      <td colSpan={7} className="p-8 text-center text-muted-foreground">
                         No actions match the active filters.
                       </td>
                     </tr>
                   ) : (
-                    filteredActions.map(action => {
+                    actionPagination.paginatedItems.map(action => {
                       const linkedReqs = frameworkRequirements.filter(req =>
                         requirementActions.some(link => link.action_id === action.id && link.requirement_id === req.id)
                       );
@@ -1268,9 +1577,22 @@ export default function RequirementsPage() {
                           key={action.id}
                           onClick={() => setSelectedAction(action)}
                           className={`hover:bg-muted/50 cursor-pointer transition-colors border-l-2 ${
-                            selectedAction?.id === action.id ? 'bg-indigo-500/5 border-l-indigo-600' : 'border-l-transparent'
+                            selectedAction?.id === action.id
+                              ? 'bg-indigo-500/5 border-l-indigo-600'
+                              : actionSelection.isSelected(action.id)
+                                ? 'bg-indigo-500/5 border-l-indigo-400'
+                                : 'border-l-transparent'
                           }`}
                         >
+                          <td className={paddingClass} onClick={event => event.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={actionSelection.isSelected(action.id)}
+                              onChange={() => actionSelection.toggleSelected(action.id)}
+                              className="rounded border-border text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 bg-muted/40 cursor-pointer"
+                              aria-label={`Select ${action.title}`}
+                            />
+                          </td>
                           <td className={`${paddingClass} font-bold`}>
                             <div>
                               <span className="block text-foreground text-xs">{action.title}</span>
@@ -1329,6 +1651,18 @@ export default function RequirementsPage() {
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-muted border-b border-border/80 text-muted-foreground font-bold uppercase tracking-wider">
+                    <th className={`${density === 'compact' ? 'p-2.5 py-2' : 'p-4'} w-10`}>
+                      <input
+                        type="checkbox"
+                        checked={requirementSelection.allVisibleSelected}
+                        onChange={event => {
+                          if (event.target.checked) requirementSelection.selectVisible();
+                          else requirementSelection.clearSelection();
+                        }}
+                        className="rounded border-border text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 bg-muted/40 cursor-pointer"
+                        aria-label="Select visible requirements"
+                      />
+                    </th>
                     {columnsOptions.map(col => {
                       if (!col.visible) return null;
                       return (
@@ -1345,14 +1679,14 @@ export default function RequirementsPage() {
                 <tbody className="divide-y divide-border/60">
                   {filteredRequirements.length === 0 ? (
                     <tr>
-                      <td colSpan={columnsOptions.filter(c => c.visible).length} className="p-8 text-center text-muted-foreground">
+                      <td colSpan={1 + columnsOptions.filter(c => c.visible).length} className="p-8 text-center text-muted-foreground">
                         {frameworkRequirements.length === 0
                           ? 'No requirements yet. Import a template pack to create a practical starter set for this organisation.'
                           : 'No requirements match the current filters.'}
                       </td>
                     </tr>
                   ) : (
-                    filteredRequirements.map(requirement => {
+                    requirementPagination.paginatedItems.map(requirement => {
                       const lastReview = reviews
                         .filter(review => review.requirement_id === requirement.id)
                         .sort((a, b) => new Date(b.review_date).getTime() - new Date(a.review_date).getTime())[0];
@@ -1366,9 +1700,20 @@ export default function RequirementsPage() {
                           className={`hover:bg-muted/50 cursor-pointer transition-colors border-l-2 ${
                             selectedRequirement?.id === requirement.id
                               ? 'bg-indigo-500/5 border-l-indigo-600'
+                              : requirementSelection.isSelected(requirement.id)
+                                ? 'bg-indigo-500/5 border-l-indigo-400'
                               : 'border-l-transparent'
                           }`}
                         >
+                          <td className={paddingClass} onClick={event => event.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={requirementSelection.isSelected(requirement.id)}
+                              onChange={() => requirementSelection.toggleSelected(requirement.id)}
+                              className="rounded border-border text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 bg-muted/40 cursor-pointer"
+                              aria-label={`Select ${requirement.title}`}
+                            />
+                          </td>
                           {columnsOptions.map(col => {
                             if (!col.visible) return null;
                             switch (col.id) {

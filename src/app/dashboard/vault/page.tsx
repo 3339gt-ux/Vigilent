@@ -11,7 +11,6 @@ import { Action, EvidenceDocument } from '@/lib/types';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import { calculateEvidenceFileHash } from '@/lib/evidenceStorage';
 import {
-  FolderLock,
   Search,
   Filter,
   Upload,
@@ -38,12 +37,18 @@ import {
   SavedViewsBar,
   StarredFilterSelect,
   ColumnVisibilityControls,
-  SavedView
+  SavedView,
+  PaginationControls,
+  BulkSelectionToolbar,
+  useBulkSelection,
+  usePagination,
+  usePersistentViewState
 } from '@/components/FilterControls';
 
 export default function EvidenceVault() {
   const {
     user,
+    organization,
     documents,
     archivedDocuments,
     frameworkRequirements,
@@ -97,9 +102,18 @@ export default function EvidenceVault() {
   const [density, setDensity] = useState<'comfortable' | 'compact'>('comfortable');
   const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
+  const [bulkCategory, setBulkCategory] = useState('');
+  const [bulkStatus, setBulkStatus] = useState('');
+  const [bulkReviewDate, setBulkReviewDate] = useState('');
+  const [bulkExpiryDate, setBulkExpiryDate] = useState('');
+  const [bulkMessage, setBulkMessage] = useState('');
+  const [lastBulkUndo, setLastBulkUndo] = useState<null | {
+    label: string;
+    documents: EvidenceDocument[];
+  }>(null);
 
   // Favourites Persistence
-  const { favourites, toggleFavourite, isFavourite, clearFavourites } = useFilterFavourites(user?.id || 'guest', 'vault');
+  const { favourites, toggleFavourite, isFavourite, clearFavourites } = useFilterFavourites(user?.id || 'guest', 'vault', organization?.id);
 
   // Saved Views System
   const defaultViews: SavedView[] = [
@@ -131,7 +145,7 @@ export default function EvidenceVault() {
     setActiveViewId,
     saveCurrentView,
     deleteCustomView
-  } = useSavedViews(user?.id || 'guest', 'vault', defaultViews);
+  } = useSavedViews(user?.id || 'guest', 'vault', defaultViews, organization?.id);
 
   const handleResetFilters = () => {
     setSearch('');
@@ -189,6 +203,41 @@ export default function EvidenceVault() {
       showOnlyStarredDocs !== (!!f.showOnlyStarredDocs)
     );
   }, [activeViewId, allViews, search, selectedCategory, selectedStatus, linkFilter, docTypeFilter, uploadedByFilter, showOnlyStarredDocs]);
+
+  usePersistentViewState(
+    user?.id || 'guest',
+    organization?.id,
+    'vault',
+    {
+      search,
+      selectedCategory,
+      selectedStatus,
+      sortBy,
+      vaultView,
+      linkFilter,
+      docTypeFilter,
+      uploadedByFilter,
+      showOnlyStarredDocs,
+      density,
+      hiddenColumns,
+      activeViewId
+    },
+    stored => {
+      if (typeof stored.search === 'string') setSearch(stored.search);
+      if (typeof stored.selectedCategory === 'string') setSelectedCategory(stored.selectedCategory);
+      if (typeof stored.selectedStatus === 'string') setSelectedStatus(stored.selectedStatus);
+      if (stored.sortBy === 'title' || stored.sortBy === 'expiry' || stored.sortBy === 'uploaded') setSortBy(stored.sortBy);
+      if (stored.vaultView === 'active' || stored.vaultView === 'archive') setVaultView(stored.vaultView);
+      if (stored.linkFilter === 'All' || stored.linkFilter === 'Linked Only' || stored.linkFilter === 'Unlinked Only') setLinkFilter(stored.linkFilter);
+      if (typeof stored.docTypeFilter === 'string') setDocTypeFilter(stored.docTypeFilter);
+      if (typeof stored.uploadedByFilter === 'string') setUploadedByFilter(stored.uploadedByFilter);
+      if (typeof stored.showOnlyStarredDocs === 'boolean') setShowOnlyStarredDocs(stored.showOnlyStarredDocs);
+      if (stored.density === 'comfortable' || stored.density === 'compact') setDensity(stored.density);
+      if (Array.isArray(stored.hiddenColumns)) setHiddenColumns(stored.hiddenColumns.filter((item): item is string => typeof item === 'string'));
+      if (typeof stored.activeViewId === 'string' || stored.activeViewId === null) setActiveViewId(stored.activeViewId);
+    },
+    [search, selectedCategory, selectedStatus, sortBy, vaultView, linkFilter, docTypeFilter, uploadedByFilter, showOnlyStarredDocs, density, hiddenColumns, activeViewId]
+  );
 
   // Upload dialog state
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -741,6 +790,87 @@ export default function EvidenceVault() {
     setSelectedArchiveIds(new Set());
   };
 
+  const resetBulkInputs = () => {
+    setBulkCategory('');
+    setBulkStatus('');
+    setBulkReviewDate('');
+    setBulkExpiryDate('');
+  };
+
+  const applyDocumentBulkMetadata = async () => {
+    if (selectedDocs.length === 0) return;
+    const updates: Partial<EvidenceDocument> = {};
+    if (bulkCategory) updates.category = bulkCategory;
+    if (bulkStatus) updates.status = bulkStatus as EvidenceDocument['status'];
+    if (bulkReviewDate) updates.review_date = bulkReviewDate;
+    if (bulkExpiryDate) updates.expiry_date = bulkExpiryDate;
+    if (Object.keys(updates).length === 0) {
+      setBulkMessage('Choose at least one bulk edit value before applying.');
+      return;
+    }
+    if (!confirm(`Apply metadata changes to ${selectedDocs.length} evidence record(s)? This operation will be audit logged through the normal document update path.`)) return;
+    setBulkMessage('');
+    setLastBulkUndo({ label: 'Undo evidence metadata bulk edit', documents: selectedDocs });
+    try {
+      for (const doc of selectedDocs) {
+        await updateDocumentMetadata(doc.id, updates);
+      }
+      documentSelection.clearSelection();
+      resetBulkInputs();
+      setBulkMessage(`Updated ${selectedDocs.length} evidence record(s).`);
+    } catch (error) {
+      setBulkMessage(error instanceof Error ? error.message : 'Bulk evidence update failed.');
+    }
+  };
+
+  const applyDocumentBulkArchive = async () => {
+    if (selectedDocs.length === 0) return;
+    if (!confirm(`Archive ${selectedDocs.length} selected evidence record(s)? Files remain private and restorable from the archive.`)) return;
+    setBulkMessage('');
+    setLastBulkUndo({ label: 'Undo evidence archive', documents: selectedDocs });
+    try {
+      for (const doc of selectedDocs) {
+        if (vaultView === 'archive') await restoreDocument(doc.id);
+        else await deleteDocument(doc.id);
+      }
+      documentSelection.clearSelection();
+      setSelectedDoc(null);
+      setBulkMessage(vaultView === 'archive' ? `Restored ${selectedDocs.length} evidence record(s).` : `Archived ${selectedDocs.length} evidence record(s).`);
+    } catch (error) {
+      setBulkMessage(error instanceof Error ? error.message : 'Bulk archive/restore failed.');
+    }
+  };
+
+  const undoDocumentBulkAction = async () => {
+    if (!lastBulkUndo) return;
+    if (!confirm(`Restore previous values for ${lastBulkUndo.documents.length} evidence record(s)?`)) return;
+    try {
+      for (const doc of lastBulkUndo.documents) {
+        const restorePayload: Partial<EvidenceDocument> = {
+          title: doc.title,
+          category: doc.category,
+          status: doc.status,
+          issue_date: doc.issue_date || null,
+          expiry_date: doc.expiry_date || null,
+          review_date: doc.review_date || null,
+          training_date: doc.training_date || null,
+          calibration_date: doc.calibration_date || null,
+          tags: doc.tags || [],
+          metadata: doc.metadata || {}
+        };
+        if (doc.status === 'deleted') await deleteDocument(doc.id);
+        else {
+          if (vaultView === 'archive') await restoreDocument(doc.id);
+          await updateDocumentMetadata(doc.id, restorePayload);
+        }
+      }
+      setBulkMessage('Previous evidence values restored.');
+      setLastBulkUndo(null);
+    } catch (error) {
+      setBulkMessage(error instanceof Error ? error.message : 'Undo failed.');
+    }
+  };
+
   const getDocType = (doc: EvidenceDocument) => {
     const mime = (doc.mime_type || '').toLowerCase();
     if (mime.startsWith('image/')) return 'Image';
@@ -794,6 +924,27 @@ export default function EvidenceVault() {
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
   }, [sourceDocs, search, selectedCategory, selectedStatus, linkFilter, docTypeFilter, uploadedByFilter, showOnlyStarredDocs, sortBy, favourites, isFavourite]);
+
+  const {
+    pageSize,
+    setPageSize,
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    totalItems,
+    startItem,
+    endItem,
+    paginatedItems: paginatedDocs
+  } = usePagination(
+    filteredDocs,
+    user?.id || 'guest',
+    organization?.id,
+    'vault',
+    [search, selectedCategory, selectedStatus, linkFilter, docTypeFilter, uploadedByFilter, showOnlyStarredDocs, sortBy, vaultView]
+  );
+
+  const documentSelection = useBulkSelection(paginatedDocs);
+  const selectedDocs = sourceDocs.filter(doc => documentSelection.selectedIds.has(doc.id));
 
   const filterChips = useMemo(() => {
     const chips: { key: string; label: string; valueLabel: string; onClear: () => void }[] = [];
@@ -1409,11 +1560,11 @@ export default function EvidenceVault() {
         )}
       </div>
 
-      {/* Grid: Search, Filters, and Table */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start">
+      {/* Vault browser: Search, Filters, and Table */}
+      <div className="space-y-4">
 
-        {/* Main vault browser list (2 cols) */}
-        <div className="xl:col-span-2 space-y-4">
+        {/* Main vault browser list */}
+        <div className="space-y-4">
           {/* Advanced Filter Ribbon Controls */}
           <div className="flex flex-col gap-3 mb-4">
             <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-4">
@@ -1681,6 +1832,70 @@ export default function EvidenceVault() {
               </div>
             </div>
           </div>
+
+          {bulkMessage && (
+            <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-3 text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+              {bulkMessage}
+            </div>
+          )}
+
+          <BulkSelectionToolbar
+            selectedCount={documentSelection.selectedCount}
+            recordLabel="evidence record(s)"
+            onSelectVisible={documentSelection.selectVisible}
+            onClear={documentSelection.clearSelection}
+            message="Selection is not persisted after refresh."
+          >
+            <select
+              value={bulkCategory}
+              onChange={event => setBulkCategory(event.target.value)}
+              className="px-2.5 py-1.5 bg-card border border-border rounded-lg font-bold text-foreground outline-none"
+            >
+              <option value="">Category...</option>
+              {evidenceCategoryOptions.map(category => <option key={category} value={category}>{category}</option>)}
+            </select>
+            {vaultView === 'active' && (
+              <select
+                value={bulkStatus}
+                onChange={event => setBulkStatus(event.target.value)}
+                className="px-2.5 py-1.5 bg-card border border-border rounded-lg font-bold text-foreground outline-none"
+              >
+                <option value="">Status...</option>
+                {['Active', 'Expiring Soon', 'Expired', 'Unclassified'].map(status => <option key={status} value={status}>{status}</option>)}
+              </select>
+            )}
+            <label className="flex items-center gap-1 font-bold text-foreground">
+              Review
+              <input type="date" value={bulkReviewDate} onChange={event => setBulkReviewDate(event.target.value)} className="px-2 py-1.5 bg-card border border-border rounded-lg outline-none" />
+            </label>
+            <label className="flex items-center gap-1 font-bold text-foreground">
+              Expiry
+              <input type="date" value={bulkExpiryDate} onChange={event => setBulkExpiryDate(event.target.value)} className="px-2 py-1.5 bg-card border border-border rounded-lg outline-none" />
+            </label>
+            <button type="button" onClick={applyDocumentBulkMetadata} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold cursor-pointer">
+              Apply metadata
+            </button>
+            <button type="button" onClick={applyDocumentBulkArchive} className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold cursor-pointer">
+              {vaultView === 'archive' ? 'Restore selected' : 'Archive selected'}
+            </button>
+            {lastBulkUndo && (
+              <button type="button" onClick={undoDocumentBulkAction} className="px-3 py-1.5 bg-card hover:bg-muted border border-border text-foreground rounded-lg font-bold cursor-pointer">
+                {lastBulkUndo.label}
+              </button>
+            )}
+          </BulkSelectionToolbar>
+
+          <PaginationControls
+            pageSize={pageSize}
+            onPageSizeChange={setPageSize}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            startItem={startItem}
+            endItem={endItem}
+            onPageChange={setCurrentPage}
+            itemLabel="documents"
+          />
         </div>
 
         <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
@@ -1688,7 +1903,18 @@ export default function EvidenceVault() {
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-muted border-b border-border/80 text-muted-foreground font-bold uppercase tracking-wider">
-                  {vaultView === 'archive' && <th className={`${density === 'compact' ? 'p-2.5' : 'p-4'} select-none w-10`}>Select</th>}
+                  <th className={`${density === 'compact' ? 'p-2.5' : 'p-4'} select-none w-10`}>
+                    <input
+                      type="checkbox"
+                      checked={documentSelection.allVisibleSelected}
+                      onChange={event => {
+                        if (event.target.checked) documentSelection.selectVisible();
+                        else documentSelection.clearSelection();
+                      }}
+                      className="rounded border-border text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 bg-muted/40 cursor-pointer"
+                      aria-label="Select visible evidence records"
+                    />
+                  </th>
                   {columnsOptions.map(col => {
                     if (!col.visible) return null;
                     return (
@@ -1705,7 +1931,7 @@ export default function EvidenceVault() {
               <tbody className="divide-y divide-border/60">
                 {filteredDocs.length === 0 ? (
                   <tr>
-                    <td colSpan={(vaultView === 'archive' ? 1 : 0) + columnsOptions.filter(c => c.visible).length} className="p-12 text-center">
+                    <td colSpan={1 + columnsOptions.filter(c => c.visible).length} className="p-12 text-center">
                       {sourceDocs.length === 0 ? (
                         vaultView === 'archive' ? (
                           <div className="max-w-sm mx-auto flex flex-col items-center justify-center space-y-3 py-6">
@@ -1762,8 +1988,9 @@ export default function EvidenceVault() {
                     </td>
                   </tr>
                 ) : (
-                  filteredDocs.map(doc => {
+                  paginatedDocs.map(doc => {
                     const isSelected = selectedDoc?.id === doc.id;
+                    const isBulkSelected = documentSelection.isSelected(doc.id);
                     const linkSummary = getDocumentLinkSummary(doc.id);
                     const paddingClass = density === 'compact' ? 'p-2 py-1.5' : 'p-4';
                     return (
@@ -1772,25 +1999,21 @@ export default function EvidenceVault() {
                         className={`hover:bg-muted/50 transition-colors cursor-pointer border-l-2 ${
                           isSelected
                             ? 'bg-indigo-500/5 border-l-indigo-600'
+                            : isBulkSelected
+                              ? 'bg-indigo-500/5 border-l-indigo-400'
                             : 'border-l-transparent'
                         }`}
                         onClick={() => handleSelectDoc(doc)}
                       >
-                        {vaultView === 'archive' && (
-                          <td className={paddingClass} onClick={e => e.stopPropagation()}>
-                            <input
-                              type="checkbox"
-                              className="rounded border-border text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 bg-muted/40 cursor-pointer"
-                              checked={selectedArchiveIds.has(doc.id)}
-                              onChange={event => setSelectedArchiveIds(prev => {
-                                const next = new Set(prev);
-                                if (event.target.checked) next.add(doc.id);
-                                else next.delete(doc.id);
-                                return next;
-                              })}
-                            />
-                          </td>
-                        )}
+                        <td className={paddingClass} onClick={e => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            className="rounded border-border text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 bg-muted/40 cursor-pointer"
+                            checked={isBulkSelected}
+                            onChange={() => documentSelection.toggleSelected(doc.id)}
+                            aria-label={`Select ${doc.title}`}
+                          />
+                        </td>
                         {columnsOptions.map(col => {
                           if (!col.visible) return null;
                           switch (col.id) {
@@ -1941,9 +2164,9 @@ export default function EvidenceVault() {
           </div>
         </div>
 
-        {/* Right column: Detail Drawer (1 col) */}
-        <div className="bg-card border border-border rounded-xl p-6 shadow-sm sticky top-24">
-          {selectedDoc ? (
+        {/* Detail panel mounts only after selection so the table keeps the full central width by default. */}
+        {selectedDoc && (
+        <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
             <div className="space-y-6">
 
               {/* Drawer Header */}
@@ -2293,20 +2516,9 @@ export default function EvidenceVault() {
                   <span className="text-foreground font-bold">{new Date(selectedDoc.created_at).toLocaleDateString()}</span>
                 </div>
               </div>
-
             </div>
-          ) : (
-            <div className="h-96 flex flex-col items-center justify-center text-center text-muted-foreground gap-3 border border-dashed border-border rounded-xl bg-muted/10 p-6">
-              <FolderLock className="w-10 h-10 text-muted-foreground/30" />
-              <div className="space-y-1">
-                <span className="text-xs font-bold text-foreground block">No Document Selected</span>
-                <p className="text-[10px] max-w-[180px] leading-normal mx-auto">
-                  Select a document from the registry list to view properties, manage linked requirements, or edit tags.
-                </p>
-              </div>
-            </div>
-          )}
         </div>
+        )}
 
       </div>
 

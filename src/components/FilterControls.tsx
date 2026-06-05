@@ -1,12 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Star, X, Eye, EyeOff, Save, Trash2, Check, ChevronDown } from 'lucide-react';
+
+export type PageSize = 20 | 25 | 50 | 75 | 100 | 'All';
+export const PAGE_SIZE_OPTIONS: PageSize[] = [20, 25, 50, 75, 100, 'All'];
+
+const storageScope = (userId: string, module: string, organisationId?: string | null) =>
+  `${userId || 'guest'}_${organisationId || 'workspace'}_${module}`;
+
+const safeJsonParse = <T,>(value: string | null, fallback: T): T => {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch (error) {
+    console.warn('Ignoring corrupt Vygilence view state.', error);
+    return fallback;
+  }
+};
 
 // ==========================================
 // 1. Hook: useFilterFavourites
 // ==========================================
-export function useFilterFavourites(userId: string, module: string) {
+export function useFilterFavourites(userId: string, module: string, organisationId?: string | null) {
   const [favourites, setFavourites] = useState<string[]>([]);
-  const localStorageKey = `vygilence_filter_favourites_${userId || 'guest'}_${module}`;
+  const localStorageKey = `vygilence_filter_favourites_${storageScope(userId, module, organisationId)}`;
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -53,10 +69,10 @@ export interface SavedView {
   isCustom?: boolean;
 }
 
-export function useSavedViews(userId: string, module: string, defaultViews: SavedView[]) {
+export function useSavedViews(userId: string, module: string, defaultViews: SavedView[], organisationId?: string | null) {
   const [customViews, setCustomViews] = useState<SavedView[]>([]);
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
-  const localStorageKey = `vygilence_saved_views_${userId || 'guest'}_${module}`;
+  const localStorageKey = `vygilence_saved_views_${storageScope(userId, module, organisationId)}`;
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -107,6 +123,303 @@ export function useSavedViews(userId: string, module: string, defaultViews: Save
     saveCurrentView,
     deleteCustomView
   };
+}
+
+// ==========================================
+// 2a. Hook: usePersistentViewState
+// ==========================================
+export function usePersistentViewState<T extends Record<string, unknown>>(
+  userId: string,
+  organisationId: string | null | undefined,
+  module: string,
+  state: T,
+  applyState: (state: Partial<T>) => void,
+  deps: React.DependencyList,
+  enabled = true
+) {
+  const key = `vygilence_view_state_${storageScope(userId, module, organisationId)}`;
+  const hydratedRef = useRef(false);
+  const previousRef = useRef('');
+
+  useEffect(() => {
+    hydratedRef.current = false;
+    previousRef.current = '';
+    if (!enabled || typeof window === 'undefined') return;
+    const stored = safeJsonParse<Partial<T>>(localStorage.getItem(key), {});
+    if (Object.keys(stored).length > 0) {
+      applyState(stored);
+    }
+    hydratedRef.current = true;
+    // applyState is intentionally supplied by page components and may be recreated
+    // with setters; loading should happen only when the storage scope changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, enabled]);
+
+  useEffect(() => {
+    if (!enabled || typeof window === 'undefined' || !hydratedRef.current) return;
+    const serialized = JSON.stringify(state);
+    if (serialized === previousRef.current) return;
+    previousRef.current = serialized;
+    localStorage.setItem(key, serialized);
+    // Page components pass the values that should trigger persistence through deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, enabled, ...deps]);
+
+  const resetStoredViewState = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(key);
+    }
+  };
+
+  return { storageKey: key, resetStoredViewState };
+}
+
+// ==========================================
+// 2b. Hook: usePagination
+// ==========================================
+export function usePagination<T>(
+  items: T[],
+  userId: string,
+  organisationId: string | null | undefined,
+  module: string,
+  resetDeps: React.DependencyList = []
+) {
+  const storageKey = `vygilence_page_size_${storageScope(userId, module, organisationId)}`;
+  const [pageSize, setPageSizeState] = useState<PageSize>(25);
+  const [currentPage, setCurrentPage] = useState(1);
+  const hydratedRef = useRef(false);
+
+  useEffect(() => {
+    hydratedRef.current = false;
+    if (typeof window === 'undefined') return;
+    const stored = localStorage.getItem(storageKey);
+    if (stored === 'All') {
+      setPageSizeState('All');
+    } else if (stored && PAGE_SIZE_OPTIONS.includes(Number(stored) as PageSize)) {
+      setPageSizeState(Number(stored) as PageSize);
+    } else {
+      setPageSizeState(25);
+    }
+    setCurrentPage(1);
+    hydratedRef.current = true;
+  }, [storageKey]);
+
+  const setPageSize = (value: PageSize) => {
+    setPageSizeState(value);
+    setCurrentPage(1);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(storageKey, String(value));
+    }
+  };
+
+  useEffect(() => {
+    setCurrentPage(1);
+    // resetDeps are owned by each page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, resetDeps);
+
+  const totalItems = items.length;
+  const totalPages = pageSize === 'All' ? 1 : Math.max(1, Math.ceil(totalItems / pageSize));
+
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    setCurrentPage(page => Math.min(Math.max(1, page), totalPages));
+  }, [totalPages]);
+
+  const paginatedItems = useMemo(() => {
+    if (pageSize === 'All') return items;
+    const startIndex = (currentPage - 1) * pageSize;
+    return items.slice(startIndex, startIndex + pageSize);
+  }, [items, currentPage, pageSize]);
+
+  const startItem = totalItems === 0 ? 0 : pageSize === 'All' ? 1 : (currentPage - 1) * pageSize + 1;
+  const endItem = totalItems === 0 ? 0 : pageSize === 'All' ? totalItems : Math.min(totalItems, currentPage * pageSize);
+
+  return {
+    pageSize,
+    setPageSize,
+    currentPage,
+    setCurrentPage,
+    totalItems,
+    totalPages,
+    startItem,
+    endItem,
+    paginatedItems
+  };
+}
+
+interface PaginationControlsProps {
+  pageSize: PageSize;
+  onPageSizeChange: (size: PageSize) => void;
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  startItem: number;
+  endItem: number;
+  onPageChange: (page: number) => void;
+  itemLabel?: string;
+}
+
+export function PaginationControls({
+  pageSize,
+  onPageSizeChange,
+  currentPage,
+  totalPages,
+  totalItems,
+  startItem,
+  endItem,
+  onPageChange,
+  itemLabel = 'records'
+}: PaginationControlsProps) {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 text-xs shadow-xs">
+      <div className="font-bold text-muted-foreground">
+        Showing <span className="text-foreground">{startItem}-{endItem}</span> of <span className="text-foreground">{totalItems}</span> {itemLabel}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-2 font-semibold text-muted-foreground">
+          Page size
+          <select
+            value={String(pageSize)}
+            onChange={event => onPageSizeChange(event.target.value === 'All' ? 'All' : Number(event.target.value) as PageSize)}
+            className="bg-muted border border-border rounded-lg px-2.5 py-1.5 text-xs font-bold text-foreground outline-none cursor-pointer"
+          >
+            {PAGE_SIZE_OPTIONS.map(size => (
+              <option key={String(size)} value={String(size)}>{size === 'All' ? 'All' : size}</option>
+            ))}
+          </select>
+        </label>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => onPageChange(1)}
+            disabled={currentPage <= 1}
+            className="px-2.5 py-1.5 bg-muted hover:bg-muted/80 disabled:opacity-40 disabled:cursor-not-allowed border border-border rounded-lg font-bold cursor-pointer"
+          >
+            First
+          </button>
+          <button
+            type="button"
+            onClick={() => onPageChange(currentPage - 1)}
+            disabled={currentPage <= 1}
+            className="px-2.5 py-1.5 bg-muted hover:bg-muted/80 disabled:opacity-40 disabled:cursor-not-allowed border border-border rounded-lg font-bold cursor-pointer"
+          >
+            Previous
+          </button>
+          <span className="px-2.5 py-1.5 font-extrabold text-foreground">
+            {currentPage} / {totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() => onPageChange(currentPage + 1)}
+            disabled={currentPage >= totalPages}
+            className="px-2.5 py-1.5 bg-muted hover:bg-muted/80 disabled:opacity-40 disabled:cursor-not-allowed border border-border rounded-lg font-bold cursor-pointer"
+          >
+            Next
+          </button>
+          <button
+            type="button"
+            onClick={() => onPageChange(totalPages)}
+            disabled={currentPage >= totalPages}
+            className="px-2.5 py-1.5 bg-muted hover:bg-muted/80 disabled:opacity-40 disabled:cursor-not-allowed border border-border rounded-lg font-bold cursor-pointer"
+          >
+            Last
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// 2c. Hook: useBulkSelection
+// ==========================================
+export function useBulkSelection<T extends { id: string }>(visibleItems: T[]) {
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const visibleIds = useMemo(() => visibleItems.map(item => item.id), [visibleItems]);
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const selectVisible = () => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      visibleIds.forEach(id => next.add(id));
+      return next;
+    });
+  };
+
+  const selectedVisibleCount = visibleIds.filter(id => selectedIds.has(id)).length;
+  const allVisibleSelected = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
+
+  return {
+    selectedIds,
+    selectedCount: selectedIds.size,
+    selectedVisibleCount,
+    allVisibleSelected,
+    isSelected: (id: string) => selectedIds.has(id),
+    toggleSelected,
+    setSelectedIds,
+    clearSelection,
+    selectVisible
+  };
+}
+
+interface BulkSelectionToolbarProps {
+  selectedCount: number;
+  recordLabel: string;
+  onSelectVisible?: () => void;
+  onClear: () => void;
+  children?: React.ReactNode;
+  message?: string;
+}
+
+export function BulkSelectionToolbar({
+  selectedCount,
+  recordLabel,
+  onSelectVisible,
+  onClear,
+  children,
+  message
+}: BulkSelectionToolbarProps) {
+  if (selectedCount === 0 && !onSelectVisible) return null;
+
+  return (
+    <div className="sticky top-2 z-30 flex flex-col lg:flex-row lg:items-center justify-between gap-3 rounded-xl border border-indigo-500/20 bg-indigo-50 dark:bg-indigo-950/30 p-3 text-xs shadow-lg solid-panel">
+      <div className="font-bold text-indigo-950 dark:text-indigo-50">
+        {selectedCount > 0 ? `${selectedCount} ${recordLabel} selected` : `Select ${recordLabel}`}
+        {message && <span className="ml-2 font-medium text-indigo-700 dark:text-indigo-300">{message}</span>}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {onSelectVisible && (
+          <button
+            type="button"
+            onClick={onSelectVisible}
+            className="px-3 py-1.5 rounded-lg bg-card hover:bg-muted border border-border font-bold text-foreground cursor-pointer"
+          >
+            Select visible
+          </button>
+        )}
+        {children}
+        <button
+          type="button"
+          onClick={onClear}
+          disabled={selectedCount === 0}
+          className="px-3 py-1.5 rounded-lg bg-card hover:bg-muted disabled:opacity-40 border border-border font-bold text-foreground cursor-pointer disabled:cursor-not-allowed"
+        >
+          Clear selection
+        </button>
+      </div>
+    </div>
+  );
 }
 
 // ==========================================
@@ -436,7 +749,7 @@ export function StarredFilterSelect({
 
       {isOpen && (
         <>
-          <div className="fixed inset-0 z-45" onClick={() => setIsOpen(false)} />
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
           <div className="absolute left-0 mt-1.5 w-56 bg-card border border-border rounded-xl shadow-lg z-50 p-2 space-y-1 solid-panel">
             {/* All option */}
             <button
@@ -513,4 +826,3 @@ export function StarredFilterSelect({
     </div>
   );
 }
-

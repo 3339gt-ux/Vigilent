@@ -16,7 +16,12 @@ import {
   SavedViewsBar,
   ColumnVisibilityControls,
   StarredFilterSelect,
-  SavedView
+  SavedView,
+  PaginationControls,
+  BulkSelectionToolbar,
+  useBulkSelection,
+  usePagination,
+  usePersistentViewState
 } from '@/components/FilterControls';
 
 const categories: CompetencyCategory[] = [
@@ -51,6 +56,7 @@ type ActiveCell = {
 export default function CompetencyMatrixPage() {
   const {
     user,
+    organization,
     people,
     competencyTypes,
     competencyRecords,
@@ -132,9 +138,20 @@ export default function CompetencyMatrixPage() {
   const [linkDocumentId, setLinkDocumentId] = useState('');
   const [uploading, setUploading] = useState(false);
   const [isEvidenceDragging, setIsEvidenceDragging] = useState(false);
+  const [bulkPersonActive, setBulkPersonActive] = useState('');
+  const [bulkPersonDepartment, setBulkPersonDepartment] = useState('');
+  const [bulkPersonRole, setBulkPersonRole] = useState('');
+  const [bulkPersonType, setBulkPersonType] = useState('');
+  const [bulkWorkspaceStatus, setBulkWorkspaceStatus] = useState('');
+  const [bulkMessage, setBulkMessage] = useState('');
+  const [lastPeopleUndo, setLastPeopleUndo] = useState<null | { label: string; people: Person[] }>(null);
+  const [lastCompetencyUndo, setLastCompetencyUndo] = useState<null | {
+    label: string;
+    rows: Array<{ typeId: string; record: CompetencyRecord | null }>;
+  }>(null);
 
   // Starred / favourite options persistence
-  const { favourites, toggleFavourite, isFavourite, clearFavourites } = useFilterFavourites(user?.id || 'guest', 'matrix');
+  const { favourites, toggleFavourite, isFavourite, clearFavourites } = useFilterFavourites(user?.id || 'guest', 'matrix', organization?.id);
 
   // Saved Views System
   const defaultViews: SavedView[] = [
@@ -171,7 +188,7 @@ export default function CompetencyMatrixPage() {
     setActiveViewId,
     saveCurrentView,
     deleteCustomView
-  } = useSavedViews(user?.id || 'guest', 'matrix', defaultViews);
+  } = useSavedViews(user?.id || 'guest', 'matrix', defaultViews, organization?.id);
 
   const activePeople = useMemo(() => people.filter(person => person.active), [people]);
   const activeTypes = useMemo(() => competencyTypes.filter(type => type.active), [competencyTypes]);
@@ -272,6 +289,16 @@ export default function CompetencyMatrixPage() {
     }
     return list;
   }, [filteredPeople, sortBy, matrix]);
+
+  const peoplePagination = usePagination(
+    sortedPeople,
+    user?.id || 'guest',
+    organization?.id,
+    'competency-people',
+    [search, departmentFilter, roleFilter, personTypeFilter, statusFilter, showOnlyMissingExpired, showOnlyExpiringSoon, showOnlyPeopleWithGaps, sortBy]
+  );
+  const peopleSelection = useBulkSelection(peoplePagination.paginatedItems);
+  const selectedBulkPeople = sortedPeople.filter(person => peopleSelection.selectedIds.has(person.id));
 
   // Filtering Competency Columns
   const filteredTypes = useMemo(() => {
@@ -401,6 +428,63 @@ export default function CompetencyMatrixPage() {
     showOnlyPeopleWithGaps,
     sortBy
   ]);
+
+  usePersistentViewState(
+    user?.id || 'guest',
+    organization?.id,
+    'competency-matrix',
+    {
+      search,
+      departmentFilter,
+      roleFilter,
+      personTypeFilter,
+      typeFilter,
+      statusFilter,
+      showOnlyMissingExpired,
+      showOnlyExpiringSoon,
+      showOnlyFavourites,
+      showOnlyPeopleWithGaps,
+      sortBy,
+      density,
+      collapsedCategories,
+      hiddenColumns,
+      activeViewId
+    },
+    stored => {
+      if (typeof stored.search === 'string') setSearch(stored.search);
+      if (typeof stored.departmentFilter === 'string') setDepartmentFilter(stored.departmentFilter);
+      if (typeof stored.roleFilter === 'string') setRoleFilter(stored.roleFilter);
+      if (typeof stored.personTypeFilter === 'string') setPersonTypeFilter(stored.personTypeFilter);
+      if (typeof stored.typeFilter === 'string') setTypeFilter(stored.typeFilter);
+      if (typeof stored.statusFilter === 'string') setStatusFilter(stored.statusFilter);
+      if (typeof stored.showOnlyMissingExpired === 'boolean') setShowOnlyMissingExpired(stored.showOnlyMissingExpired);
+      if (typeof stored.showOnlyExpiringSoon === 'boolean') setShowOnlyExpiringSoon(stored.showOnlyExpiringSoon);
+      if (typeof stored.showOnlyFavourites === 'boolean') setShowOnlyFavourites(stored.showOnlyFavourites);
+      if (typeof stored.showOnlyPeopleWithGaps === 'boolean') setShowOnlyPeopleWithGaps(stored.showOnlyPeopleWithGaps);
+      if (typeof stored.sortBy === 'string') setSortBy(stored.sortBy);
+      if (stored.density === 'comfortable' || stored.density === 'compact') setDensity(stored.density);
+      if (Array.isArray(stored.collapsedCategories)) setCollapsedCategories(stored.collapsedCategories.filter((item): item is string => typeof item === 'string'));
+      if (Array.isArray(stored.hiddenColumns)) setHiddenColumns(stored.hiddenColumns.filter((item): item is string => typeof item === 'string'));
+      if (typeof stored.activeViewId === 'string' || stored.activeViewId === null) setActiveViewId(stored.activeViewId);
+    },
+    [
+      search,
+      departmentFilter,
+      roleFilter,
+      personTypeFilter,
+      typeFilter,
+      statusFilter,
+      showOnlyMissingExpired,
+      showOnlyExpiringSoon,
+      showOnlyFavourites,
+      showOnlyPeopleWithGaps,
+      sortBy,
+      density,
+      collapsedCategories,
+      hiddenColumns,
+      activeViewId
+    ]
+  );
 
   const filterChips = useMemo(() => {
     const chips: any[] = [];
@@ -569,6 +653,141 @@ export default function CompetencyMatrixPage() {
     }
   };
 
+  const applyPeopleBulkUpdate = async () => {
+    if (selectedBulkPeople.length === 0) return;
+    const updates: Partial<Person> = {};
+    if (bulkPersonActive === 'active') updates.active = true;
+    if (bulkPersonActive === 'inactive') updates.active = false;
+    if (bulkPersonDepartment.trim()) updates.department = bulkPersonDepartment.trim();
+    if (bulkPersonRole.trim()) updates.role = bulkPersonRole.trim();
+    if (bulkPersonType) updates.person_type = bulkPersonType as PersonType;
+    if (Object.keys(updates).length === 0) {
+      setBulkMessage('Choose at least one people bulk edit value before applying.');
+      return;
+    }
+    if (!window.confirm(`Apply changes to ${selectedBulkPeople.length} people? Existing person update logging will be used.`)) return;
+    setLastPeopleUndo({ label: 'Undo people bulk edit', people: selectedBulkPeople });
+    try {
+      for (const person of selectedBulkPeople) {
+        await upsertPerson({
+          id: person.id,
+          first_name: person.first_name,
+          last_name: person.last_name,
+          display_name: person.display_name,
+          employee_number: person.employee_number || null,
+          email: person.email || null,
+          department: person.department || null,
+          role: person.role || null,
+          person_type: person.person_type,
+          active: person.active,
+          start_date: person.start_date || null,
+          end_date: person.end_date || null,
+          notes: person.notes || null,
+          ...updates
+        });
+      }
+      peopleSelection.clearSelection();
+      setBulkPersonActive('');
+      setBulkPersonDepartment('');
+      setBulkPersonRole('');
+      setBulkPersonType('');
+      setBulkMessage(`Updated ${selectedBulkPeople.length} people.`);
+    } catch (error) {
+      setBulkMessage(error instanceof Error ? error.message : 'Bulk people update failed.');
+    }
+  };
+
+  const undoPeopleBulkUpdate = async () => {
+    if (!lastPeopleUndo) return;
+    if (!window.confirm(`Restore previous values for ${lastPeopleUndo.people.length} people?`)) return;
+    try {
+      for (const person of lastPeopleUndo.people) {
+        await upsertPerson({
+          id: person.id,
+          first_name: person.first_name,
+          last_name: person.last_name,
+          display_name: person.display_name,
+          employee_number: person.employee_number || null,
+          email: person.email || null,
+          department: person.department || null,
+          role: person.role || null,
+          person_type: person.person_type,
+          active: person.active,
+          start_date: person.start_date || null,
+          end_date: person.end_date || null,
+          notes: person.notes || null
+        });
+      }
+      setLastPeopleUndo(null);
+      setBulkMessage('Previous people values restored.');
+    } catch (error) {
+      setBulkMessage(error instanceof Error ? error.message : 'People undo failed.');
+    }
+  };
+
+  const applyWorkspaceCompetencyStatus = async () => {
+    if (!selectedPerson || selectedWorkspaceRows.length === 0 || !bulkWorkspaceStatus) return;
+    if (!window.confirm(`Mark ${selectedWorkspaceRows.length} competency record(s) as ${bulkWorkspaceStatus} for ${selectedPerson.display_name}?`)) return;
+    setLastCompetencyUndo({
+      label: 'Undo person competency bulk edit',
+      rows: selectedWorkspaceRows.map(row => ({ typeId: row.type.id, record: row.cell?.record || null }))
+    });
+    try {
+      for (const row of selectedWorkspaceRows) {
+        await upsertCompetencyRecord({
+          id: row.cell?.record?.id,
+          person_id: selectedPerson.id,
+          competency_type_id: row.type.id,
+          status: bulkWorkspaceStatus as CompetencyStatus,
+          completed_date: row.cell?.record?.completed_date || null,
+          expiry_date: row.cell?.record?.expiry_date || null,
+          trainer: row.cell?.record?.trainer || null,
+          provider: row.cell?.record?.provider || null,
+          certificate_number: row.cell?.record?.certificate_number || null,
+          notes: row.cell?.record?.notes || null
+        });
+      }
+      workspaceSelection.clearSelection();
+      setBulkWorkspaceStatus('');
+      setBulkMessage(`Updated ${selectedWorkspaceRows.length} competency record(s).`);
+    } catch (error) {
+      setBulkMessage(error instanceof Error ? error.message : 'Bulk competency status update failed.');
+    }
+  };
+
+  const undoWorkspaceCompetencyStatus = async () => {
+    if (!selectedPerson || !lastCompetencyUndo) return;
+    if (!window.confirm(`Restore previous competency values for ${lastCompetencyUndo.rows.length} row(s)?`)) return;
+    try {
+      for (const row of lastCompetencyUndo.rows) {
+        if (row.record) {
+          await upsertCompetencyRecord({
+            id: row.record.id,
+            person_id: row.record.person_id,
+            competency_type_id: row.record.competency_type_id,
+            status: row.record.status,
+            completed_date: row.record.completed_date || null,
+            expiry_date: row.record.expiry_date || null,
+            trainer: row.record.trainer || null,
+            provider: row.record.provider || null,
+            certificate_number: row.record.certificate_number || null,
+            notes: row.record.notes || null
+          });
+        } else {
+          await upsertCompetencyRecord({
+            person_id: selectedPerson.id,
+            competency_type_id: row.typeId,
+            status: 'Missing'
+          });
+        }
+      }
+      setLastCompetencyUndo(null);
+      setBulkMessage('Previous competency values restored.');
+    } catch (error) {
+      setBulkMessage(error instanceof Error ? error.message : 'Competency undo failed.');
+    }
+  };
+
   const [newPerson, setNewPerson] = useState({
     first_name: '',
     last_name: '',
@@ -703,6 +922,13 @@ export default function CompetencyMatrixPage() {
       return matchesSearch && matchesStatus;
     });
   }, [selectedPersonRows, workspaceSearch, workspaceStatusFilter]);
+
+  const workspaceSelectableRows = useMemo(
+    () => filteredPersonRows.map(row => ({ ...row, id: row.type.id })),
+    [filteredPersonRows]
+  );
+  const workspaceSelection = useBulkSelection(workspaceSelectableRows);
+  const selectedWorkspaceRows = workspaceSelectableRows.filter(row => workspaceSelection.selectedIds.has(row.id));
 
   const selectedPersonGroupedRows = useMemo(() => {
     return selectedPerson
@@ -1109,6 +1335,52 @@ export default function CompetencyMatrixPage() {
             </div>
           </div>
 
+          {bulkMessage && (
+            <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-3 text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+              {bulkMessage}
+            </div>
+          )}
+
+          <BulkSelectionToolbar
+            selectedCount={peopleSelection.selectedCount}
+            recordLabel="people"
+            onSelectVisible={peopleSelection.selectVisible}
+            onClear={peopleSelection.clearSelection}
+            message="Selection can span pages in this session."
+          >
+            <select value={bulkPersonActive} onChange={event => setBulkPersonActive(event.target.value)} className="px-2.5 py-1.5 bg-card border border-border rounded-lg font-bold text-foreground outline-none">
+              <option value="">Active state...</option>
+              <option value="active">Mark Active</option>
+              <option value="inactive">Mark Inactive</option>
+            </select>
+            <input value={bulkPersonDepartment} onChange={event => setBulkPersonDepartment(event.target.value)} placeholder="Department..." className="px-2.5 py-1.5 bg-card border border-border rounded-lg font-bold text-foreground outline-none w-32" />
+            <input value={bulkPersonRole} onChange={event => setBulkPersonRole(event.target.value)} placeholder="Role..." className="px-2.5 py-1.5 bg-card border border-border rounded-lg font-bold text-foreground outline-none w-28" />
+            <select value={bulkPersonType} onChange={event => setBulkPersonType(event.target.value)} className="px-2.5 py-1.5 bg-card border border-border rounded-lg font-bold text-foreground outline-none">
+              <option value="">Type...</option>
+              {personTypes.map(type => <option key={type} value={type}>{type}</option>)}
+            </select>
+            <button type="button" onClick={applyPeopleBulkUpdate} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold cursor-pointer">
+              Apply people edit
+            </button>
+            {lastPeopleUndo && (
+              <button type="button" onClick={undoPeopleBulkUpdate} className="px-3 py-1.5 bg-card hover:bg-muted border border-border text-foreground rounded-lg font-bold cursor-pointer">
+                {lastPeopleUndo.label}
+              </button>
+            )}
+          </BulkSelectionToolbar>
+
+          <PaginationControls
+            pageSize={peoplePagination.pageSize}
+            onPageSizeChange={peoplePagination.setPageSize}
+            currentPage={peoplePagination.currentPage}
+            totalPages={peoplePagination.totalPages}
+            totalItems={peoplePagination.totalItems}
+            startItem={peoplePagination.startItem}
+            endItem={peoplePagination.endItem}
+            onPageChange={peoplePagination.setCurrentPage}
+            itemLabel="people"
+          />
+
           {/* Matrix table container */}
           <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xs">
             <div className="overflow-auto max-h-[60vh] relative">
@@ -1119,7 +1391,19 @@ export default function CompetencyMatrixPage() {
                       className="p-3 sticky left-0 top-0 z-30 border-r border-b border-border shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)] font-extrabold uppercase text-[10px] tracking-wider"
                       style={{ backgroundColor: 'hsl(var(--muted))', left: 0, top: 0 }}
                     >
-                      <div className="min-w-52">Person</div>
+                      <div className="min-w-56 flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={peopleSelection.allVisibleSelected}
+                          onChange={event => {
+                            if (event.target.checked) peopleSelection.selectVisible();
+                            else peopleSelection.clearSelection();
+                          }}
+                          className="rounded border-border text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 bg-muted/40 cursor-pointer"
+                          aria-label="Select visible people"
+                        />
+                        <span>Person</span>
+                      </div>
                     </th>
                     {visibleTypes.map(type => {
                       const isStarred = isFavourite(`comp:${type.id}`);
@@ -1153,31 +1437,42 @@ export default function CompetencyMatrixPage() {
                           : 'No visible competency columns. Try expanding a category or toggling column visibility.'}
                       </td>
                     </tr>
-                  ) : sortedPeople.map(person => {
+                  ) : peoplePagination.paginatedItems.map(person => {
                     const personGapsCount = matrix.filter(cell => cell.person.id === person.id && (cell.status === 'Missing' || cell.status === 'Expired')).length;
                     const paddingClass = density === 'comfortable' ? 'p-3' : 'p-1.5';
                     const textClass = density === 'comfortable' ? 'text-xs' : 'text-[11px]';
+                    const isPersonSelected = peopleSelection.isSelected(person.id);
 
                     return (
-                      <tr key={person.id} className="hover:bg-muted/30 transition-colors">
+                      <tr key={person.id} className={`hover:bg-muted/30 transition-colors ${isPersonSelected ? 'bg-indigo-500/5' : ''}`}>
                         <td
                           className={`${paddingClass} sticky left-0 z-10 border-r border-border shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)]`}
                           style={{ backgroundColor: 'hsl(var(--card))', left: 0 }}
                         >
-                          <button
-                            onClick={() => openPersonWorkspace(person)}
-                            className="w-full text-left rounded-lg p-1 -m-1 hover:bg-muted cursor-pointer transition-colors"
-                          >
-                            <span className={`font-extrabold block text-foreground ${textClass}`}>{person.display_name}</span>
-                            <span className="text-[9px] text-muted-foreground block truncate mt-0.5 max-w-[200px]">
-                              {person.department || 'No dept'} | {person.role || 'No role'}
-                            </span>
-                            {personGapsCount > 0 && (
-                              <span className="inline-block bg-rose-500/10 text-rose-600 dark:text-rose-400 font-extrabold text-[8px] px-1 rounded mt-0.5">
-                                {personGapsCount} gap{personGapsCount > 1 ? 's' : ''}
+                          <div className="flex items-start gap-2">
+                            <input
+                              type="checkbox"
+                              checked={isPersonSelected}
+                              onChange={() => peopleSelection.toggleSelected(person.id)}
+                              onClick={event => event.stopPropagation()}
+                              className="mt-1 rounded border-border text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 bg-muted/40 cursor-pointer shrink-0"
+                              aria-label={`Select ${person.display_name}`}
+                            />
+                            <button
+                              onClick={() => openPersonWorkspace(person)}
+                              className="w-full text-left rounded-lg p-1 -m-1 hover:bg-muted cursor-pointer transition-colors"
+                            >
+                              <span className={`font-extrabold block text-foreground ${textClass}`}>{person.display_name}</span>
+                              <span className="text-[9px] text-muted-foreground block truncate mt-0.5 max-w-[200px]">
+                                {person.department || 'No dept'} | {person.role || 'No role'}
                               </span>
-                            )}
-                          </button>
+                              {personGapsCount > 0 && (
+                                <span className="inline-block bg-rose-500/10 text-rose-600 dark:text-rose-400 font-extrabold text-[8px] px-1 rounded mt-0.5">
+                                  {personGapsCount} gap{personGapsCount > 1 ? 's' : ''}
+                                </span>
+                              )}
+                            </button>
+                          </div>
                         </td>
                         {visibleTypes.map(type => {
                           const cell = matrix.find(item => item.person.id === person.id && item.competencyType.id === type.id);
@@ -1607,6 +1902,27 @@ export default function CompetencyMatrixPage() {
                   </select>
                 </div>
 
+                <BulkSelectionToolbar
+                  selectedCount={workspaceSelection.selectedCount}
+                  recordLabel="competencies for this person"
+                  onSelectVisible={workspaceSelection.selectVisible}
+                  onClear={workspaceSelection.clearSelection}
+                  message="Bulk status changes affect this person only."
+                >
+                  <select value={bulkWorkspaceStatus} onChange={event => setBulkWorkspaceStatus(event.target.value)} className="px-2.5 py-1.5 bg-card border border-border rounded-lg font-bold text-foreground outline-none">
+                    <option value="">Status...</option>
+                    {statusOptions.map(status => <option key={status} value={status}>{status}</option>)}
+                  </select>
+                  <button type="button" onClick={applyWorkspaceCompetencyStatus} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold cursor-pointer">
+                    Apply competency status
+                  </button>
+                  {lastCompetencyUndo && (
+                    <button type="button" onClick={undoWorkspaceCompetencyStatus} className="px-3 py-1.5 bg-card hover:bg-muted border border-border text-foreground rounded-lg font-bold cursor-pointer">
+                      {lastCompetencyUndo.label}
+                    </button>
+                  )}
+                </BulkSelectionToolbar>
+
                 {/* Competency Group List */}
                 <div className="flex-1 min-h-0 overflow-y-auto space-y-5 pr-1">
                   {selectedPersonGroupedRows.map(group => (
@@ -1620,17 +1936,30 @@ export default function CompetencyMatrixPage() {
                       <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
                         {group.rows.map(({ type, cell, evidenceCount, openActionCount }) => {
                           const isActive = activeCell && activeCell.person.id === selectedPerson.id && activeCell.competencyType.id === type.id;
+                          const isBulkSelected = workspaceSelection.isSelected(type.id);
                           return (
-                            <button
+                            <div
                               key={type.id}
-                              onClick={() => openCell(selectedPerson, type)}
-                              className={`w-full text-left px-3.5 py-2.5 border rounded-xl hover:bg-muted/50 transition-all ${
+                              className={`w-full px-3.5 py-2.5 border rounded-xl hover:bg-muted/50 transition-all ${
                                 isActive
                                   ? 'border-indigo-500 bg-indigo-500/10 dark:bg-indigo-500/15 shadow-sm ring-1 ring-indigo-500/30'
+                                  : isBulkSelected
+                                    ? 'border-indigo-400 bg-indigo-500/5'
                                   : 'border-border/80 bg-card hover:border-border'
-                              } flex items-center justify-between gap-3 cursor-pointer group`}
+                              } flex items-start justify-between gap-3 group`}
                             >
-                              <div className="min-w-0 flex-1">
+                              <input
+                                type="checkbox"
+                                checked={isBulkSelected}
+                                onChange={() => workspaceSelection.toggleSelected(type.id)}
+                                className="mt-1 rounded border-border text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 bg-muted/40 cursor-pointer shrink-0"
+                                aria-label={`Select ${type.title}`}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => openCell(selectedPerson, type)}
+                                className="min-w-0 flex-1 text-left cursor-pointer"
+                              >
                                 <div className="flex items-center gap-2">
                                   <span className="font-bold text-xs truncate block text-foreground group-hover:text-indigo-650 dark:group-hover:text-indigo-400 transition-colors">{type.title}</span>
                                   {type.validity_period_months && (
@@ -1659,11 +1988,11 @@ export default function CompetencyMatrixPage() {
                                     </span>
                                   )}
                                 </div>
-                              </div>
+                              </button>
                               <span className={`px-2 py-0.5 rounded-full border text-[9px] font-bold shrink-0 ${statusClass(cell?.status || 'Missing')}`}>
                                 {cell?.status || 'Missing'}
                               </span>
-                            </button>
+                            </div>
                           );
                         })}
                       </div>

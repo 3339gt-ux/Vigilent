@@ -26,12 +26,18 @@ import {
   ActiveFilterChips,
   SavedViewsBar,
   StarredFilterSelect,
-  SavedView
+  SavedView,
+  PaginationControls,
+  BulkSelectionToolbar,
+  useBulkSelection,
+  usePagination,
+  usePersistentViewState
 } from '@/components/FilterControls';
 
 export default function EvidenceMatrix() {
   const {
     user,
+    organization,
     requirements,
     matrixCells,
     documents,
@@ -68,7 +74,7 @@ export default function EvidenceMatrix() {
   const [newReqCategory, setNewReqCategory] = useState<'Vehicle' | 'Driver' | 'Facility' | 'General'>('Vehicle');
 
   // Starred / favourite options persistence
-  const { favourites, toggleFavourite, isFavourite, clearFavourites } = useFilterFavourites(user?.id || 'guest', 'evidence-matrix');
+  const { favourites, toggleFavourite, isFavourite, clearFavourites } = useFilterFavourites(user?.id || 'guest', 'evidence-matrix', organization?.id);
 
   // Saved Views System
   const defaultViews: SavedView[] = [
@@ -100,7 +106,7 @@ export default function EvidenceMatrix() {
     setActiveViewId,
     saveCurrentView,
     deleteCustomView
-  } = useSavedViews(user?.id || 'guest', 'evidence-matrix', defaultViews);
+  } = useSavedViews(user?.id || 'guest', 'evidence-matrix', defaultViews, organization?.id);
 
   const handleResetFilters = () => {
     setSearch('');
@@ -169,6 +175,35 @@ export default function EvidenceMatrix() {
     showOnlyGaps,
     showOnlyStarredReqs
   ]);
+
+  usePersistentViewState(
+    user?.id || 'guest',
+    organization?.id,
+    'evidence-matrix',
+    {
+      search,
+      selectedCategory,
+      selectedTargetType,
+      statusFilter,
+      targetNameFilter,
+      showOnlyGaps,
+      showOnlyStarredReqs,
+      density,
+      activeViewId
+    },
+    stored => {
+      if (typeof stored.search === 'string') setSearch(stored.search);
+      if (typeof stored.selectedCategory === 'string') setSelectedCategory(stored.selectedCategory);
+      if (typeof stored.selectedTargetType === 'string') setSelectedTargetType(stored.selectedTargetType);
+      if (typeof stored.statusFilter === 'string') setStatusFilter(stored.statusFilter);
+      if (typeof stored.targetNameFilter === 'string') setTargetNameFilter(stored.targetNameFilter);
+      if (typeof stored.showOnlyGaps === 'boolean') setShowOnlyGaps(stored.showOnlyGaps);
+      if (typeof stored.showOnlyStarredReqs === 'boolean') setShowOnlyStarredReqs(stored.showOnlyStarredReqs);
+      if (stored.density === 'comfortable' || stored.density === 'compact') setDensity(stored.density);
+      if (typeof stored.activeViewId === 'string' || stored.activeViewId === null) setActiveViewId(stored.activeViewId);
+    },
+    [search, selectedCategory, selectedTargetType, statusFilter, targetNameFilter, showOnlyGaps, showOnlyStarredReqs, density, activeViewId]
+  );
 
   const filterChips = useMemo(() => {
     const chips: any[] = [];
@@ -294,6 +329,15 @@ export default function EvidenceMatrix() {
       return matchesCategory && matchesSearch && matchesStarred && matchesStatus && matchesGaps;
     });
   }, [requirements, selectedCategory, search, showOnlyStarredReqs, statusFilter, showOnlyGaps, matrixCells, favourites]);
+
+  const matrixPagination = usePagination(
+    filteredRequirements,
+    user?.id || 'guest',
+    organization?.id,
+    'evidence-matrix-rows',
+    [search, selectedCategory, selectedTargetType, statusFilter, targetNameFilter, showOnlyGaps, showOnlyStarredReqs]
+  );
+  const matrixRowSelection = useBulkSelection(matrixPagination.paginatedItems);
 
   // Handle cell click
   const handleCellClick = (cell: MatrixCell) => {
@@ -568,6 +612,26 @@ export default function EvidenceMatrix() {
         </div>
       </div>
 
+      <BulkSelectionToolbar
+        selectedCount={matrixRowSelection.selectedCount}
+        recordLabel="matrix row(s)"
+        onSelectVisible={matrixRowSelection.selectVisible}
+        onClear={matrixRowSelection.clearSelection}
+        message="Row-level selection is available; cell-level bulk edits are deferred to avoid unsafe evidence link changes."
+      />
+
+      <PaginationControls
+        pageSize={matrixPagination.pageSize}
+        onPageSizeChange={matrixPagination.setPageSize}
+        currentPage={matrixPagination.currentPage}
+        totalPages={matrixPagination.totalPages}
+        totalItems={matrixPagination.totalItems}
+        startItem={matrixPagination.startItem}
+        endItem={matrixPagination.endItem}
+        onPageChange={matrixPagination.setCurrentPage}
+        itemLabel="requirements"
+      />
+
       {/* Matrix Table */}
       <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-auto max-h-[62vh] relative">
@@ -578,7 +642,19 @@ export default function EvidenceMatrix() {
                   className="p-4 min-w-[260px] sticky left-0 top-0 z-30 border-r border-b border-border shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)] font-extrabold text-[10px]"
                   style={{ backgroundColor: 'hsl(var(--muted))', left: 0, top: 0 }}
                 >
-                  Compliance Requirement
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={matrixRowSelection.allVisibleSelected}
+                      onChange={event => {
+                        if (event.target.checked) matrixRowSelection.selectVisible();
+                        else matrixRowSelection.clearSelection();
+                      }}
+                      className="rounded border-border text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 bg-muted/40 cursor-pointer"
+                      aria-label="Select visible matrix rows"
+                    />
+                    <span>Compliance Requirement</span>
+                  </div>
                 </th>
                 {filteredTargets.length === 0 ? (
                   <th className="p-4 text-center">No assets found</th>
@@ -604,24 +680,34 @@ export default function EvidenceMatrix() {
                   </td>
                 </tr>
               ) : (
-                filteredRequirements.map(req => {
+                matrixPagination.paginatedItems.map(req => {
                   const isStarred = isFavourite(`req:${req.id}`);
+                  const isBulkSelected = matrixRowSelection.isSelected(req.id);
                   return (
-                    <tr key={req.id} className="hover:bg-muted/10 transition-colors">
+                    <tr key={req.id} className={`hover:bg-muted/10 transition-colors ${isBulkSelected ? 'bg-indigo-500/5' : ''}`}>
                       {/* Sticky Row Title */}
                       <td
                         className={`${paddingClass} font-semibold text-foreground sticky left-0 z-10 border-r border-border min-w-[260px] shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)]`}
                         style={{ backgroundColor: 'hsl(var(--card))', left: 0 }}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <span className={`block font-bold text-foreground ${textClass}`}>{req.title}</span>
-                            <span className="text-[9px] text-muted-foreground font-medium uppercase mt-0.5 block">{req.category}</span>
-                            {density === 'comfortable' && req.description && (
-                              <span className="text-[10px] text-muted-foreground font-normal leading-relaxed block mt-1 line-clamp-2" title={req.description}>
-                                {req.description}
-                              </span>
-                            )}
+                          <div className="flex items-start gap-2 min-w-0">
+                            <input
+                              type="checkbox"
+                              checked={isBulkSelected}
+                              onChange={() => matrixRowSelection.toggleSelected(req.id)}
+                              className="mt-0.5 rounded border-border text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 bg-muted/40 cursor-pointer shrink-0"
+                              aria-label={`Select ${req.title}`}
+                            />
+                            <div className="min-w-0">
+                              <span className={`block font-bold text-foreground ${textClass}`}>{req.title}</span>
+                              <span className="text-[9px] text-muted-foreground font-medium uppercase mt-0.5 block">{req.category}</span>
+                              {density === 'comfortable' && req.description && (
+                                <span className="text-[10px] text-muted-foreground font-normal leading-relaxed block mt-1 line-clamp-2" title={req.description}>
+                                  {req.description}
+                                </span>
+                              )}
+                            </div>
                           </div>
                           <FilterFavouriteButton
                             isStarred={isStarred}
