@@ -5,7 +5,7 @@ import { useApp } from '@/context/AppContext';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
 import { REQUIREMENT_CATEGORY_GROUPS, flattenCategoryGroups } from '@/lib/categoryPresets';
-import type { Action, Requirement, RequirementEvidenceCoverage, RequirementLifecycleStatus, RequirementStatus } from '@/lib/types';
+import type { Action, ActionStatus, Requirement, RequirementEvidenceCoverage, RequirementLifecycleStatus, RequirementStatus } from '@/lib/types';
 import { REQUIREMENT_TEMPLATE_PACKS } from '@/lib/requirementTemplatePacks';
 import {
   ClipboardList,
@@ -39,7 +39,7 @@ const statusClass = (status: RequirementStatus) => {
 const riskOptions: Requirement['risk_level'][] = ['Low', 'Medium', 'High', 'Critical'];
 const frequencyOptions: Requirement['review_frequency'][] = ['Weekly', 'Monthly', 'Quarterly', 'Annually', 'Custom'];
 const requirementStatusOptions: RequirementStatus[] = ['GREEN', 'AMBER', 'RED', 'GREY'];
-type RequirementView = 'active' | 'archive' | 'inactive';
+type RequirementView = 'active' | 'archive' | 'inactive' | 'actions';
 
 const lifecycleLabel = (status?: RequirementLifecycleStatus) => status || 'ACTIVE';
 
@@ -348,6 +348,17 @@ export default function RequirementsPage() {
       const categoryParam = params.get('category');
       const idParam = params.get('id');
       const actionParam = params.get('action');
+      const filterParam = params.get('filter');
+      if (filterParam === 'actions' || filterParam === 'overdue' || filterParam === 'due-week') {
+        setRequirementView('actions');
+        if (filterParam === 'overdue') {
+          setRadarFilter('overdue');
+        } else if (filterParam === 'due-week') {
+          setRadarFilter('due-week');
+        } else {
+          setRadarFilter('All');
+        }
+      }
       if (statusParam) {
         setSelectedStatus(statusParam as any);
       }
@@ -380,6 +391,48 @@ export default function RequirementsPage() {
     }
     return 'All';
   }, [radarFilter]);
+
+  const filteredActions = useMemo(() => {
+    return actions.filter(action => {
+      const matchesSearch =
+        !search ||
+        action.title.toLowerCase().includes(search.toLowerCase()) ||
+        (action.description || '').toLowerCase().includes(search.toLowerCase()) ||
+        (action.owner || '').toLowerCase().includes(search.toLowerCase());
+
+      let matchesStatus = true;
+      if (selectedStatus !== 'All') {
+        if (['Open', 'In Progress', 'Complete', 'Cancelled'].includes(selectedStatus as any)) {
+          matchesStatus = action.status === (selectedStatus as any);
+        } else if (selectedStatus === 'Attention') {
+          matchesStatus = action.status === 'Open' || action.status === 'In Progress';
+        }
+      }
+
+      const matchesOwner = ownerFilter === 'All' || action.owner === ownerFilter;
+
+      let matchesRadar = true;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const actionDueDate = action.target_due_date || action.due_date;
+
+      const activeFilter = radarFilter !== 'All' ? radarFilter : (activeRadarFilter || 'All');
+
+      if (activeFilter === 'overdue') {
+        matchesRadar = (action.status === 'Open' || action.status === 'In Progress') && !!actionDueDate && new Date(actionDueDate) < today;
+      } else if (activeFilter === 'due-week' || activeFilter === 'due-week') {
+        if (!actionDueDate) matchesRadar = false;
+        else {
+          const dVal = new Date(actionDueDate);
+          const endOfWeek = new Date(today);
+          endOfWeek.setDate(today.getDate() + 7);
+          matchesRadar = (action.status === 'Open' || action.status === 'In Progress') && dVal >= today && dVal <= endOfWeek;
+        }
+      }
+
+      return matchesSearch && matchesStatus && matchesOwner && matchesRadar;
+    });
+  }, [actions, search, selectedStatus, ownerFilter, radarFilter, activeRadarFilter]);
 
   const filteredRequirements = useMemo(() => {
     return assessedRequirements.filter(requirement => {
@@ -869,9 +922,10 @@ export default function RequirementsPage() {
         </div>
       </div>
 
-      <div className="flex bg-muted p-1 border border-border rounded-xl w-full sm:max-w-md shadow-xs">
+      <div className="flex bg-muted p-1 border border-border rounded-xl w-full sm:max-w-xl shadow-xs">
         {([
           ['active', `Active (${frameworkRequirements.filter(requirement => lifecycleLabel(requirement.lifecycle_status) === 'ACTIVE').length})`],
+          ['actions', `Actions Registry (${actions.filter(a => a.status === 'Open' || a.status === 'In Progress').length} Open)`],
           ['archive', `Archive (${frameworkRequirements.filter(requirement => requirement.lifecycle_status === 'ARCHIVED').length})`],
           ['inactive', `Inactive (${frameworkRequirements.filter(requirement => requirement.lifecycle_status === 'DEACTIVATED').length})`]
         ] as [RequirementView, string][]).map(([view, label]) => (
@@ -890,18 +944,33 @@ export default function RequirementsPage() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {(['GREEN', 'AMBER', 'RED', 'GREY'] as RequirementStatus[]).map(status => (
-          <button
-            key={status}
-            onClick={() => setSelectedStatus(status)}
-            className={`text-left bg-card border border-border rounded-xl p-4 hover:bg-muted/30 transition-colors ${selectedStatus === status ? 'ring-2 ring-indigo-500/40' : ''}`}
-          >
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{status} Requirements</span>
-            <span className="block text-3xl font-extrabold mt-1">
-              {assessedRequirements.filter(requirement => requirement.status === status).length}
-            </span>
-          </button>
-        ))}
+        {requirementView === 'actions' ? (
+          (['Open', 'In Progress', 'Complete', 'Cancelled'] as ActionStatus[]).map(status => (
+            <button
+              key={status}
+              onClick={() => setSelectedStatus(status as any)}
+              className={`text-left bg-card border border-border rounded-xl p-4 hover:bg-muted/30 transition-colors ${(selectedStatus as any) === status ? 'ring-2 ring-indigo-500/40' : ''}`}
+            >
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{status} Actions</span>
+              <span className="block text-3xl font-extrabold mt-1">
+                {actions.filter(action => action.status === status).length}
+              </span>
+            </button>
+          ))
+        ) : (
+          (['GREEN', 'AMBER', 'RED', 'GREY'] as RequirementStatus[]).map(status => (
+            <button
+              key={status}
+              onClick={() => setSelectedStatus(status)}
+              className={`text-left bg-card border border-border rounded-xl p-4 hover:bg-muted/30 transition-colors ${selectedStatus === status ? 'ring-2 ring-indigo-500/40' : ''}`}
+            >
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{status} Requirements</span>
+              <span className="block text-3xl font-extrabold mt-1">
+                {assessedRequirements.filter(requirement => requirement.status === status).length}
+              </span>
+            </button>
+          ))
+        )}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start">
@@ -1138,162 +1207,271 @@ export default function RequirementsPage() {
               />
 
               {/* Active filter chips */}
-              <ActiveFilterChips chips={filterChips} onClearAll={handleResetFilters} />
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <ActiveFilterChips chips={filterChips} onClearAll={handleResetFilters} />
+                {favourites.length > 0 && (
+                  <button
+                    onClick={clearFavourites}
+                    className="text-[10px] font-bold text-amber-600 hover:text-amber-700 hover:underline px-2.5 py-1 bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/20 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 self-start sm:self-center shrink-0"
+                  >
+                    <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                    </svg>
+                    Clear Favourites ({favourites.length})
+                  </button>
+                )}
+              </div>
 
               {/* Result Count Summary */}
               <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pt-1">
-                Filtered Results: {filteredRequirements.length} / {assessedRequirements.length} requirements
+                {requirementView === 'actions' ? (
+                  `Filtered Results: ${filteredActions.length} / ${actions.length} actions`
+                ) : (
+                  `Filtered Results: ${filteredRequirements.length} / ${assessedRequirements.length} requirements`
+                )}
               </div>
             </div>
           </div>
 
         <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-muted border-b border-border/80 text-muted-foreground font-bold uppercase tracking-wider">
-                  {columnsOptions.map(col => {
-                    if (!col.visible) return null;
-                    return (
-                      <th
-                        key={col.id}
-                        className={`${density === 'compact' ? 'p-2.5 py-2' : 'p-4'} ${col.id === 'status' ? 'text-center' : ''} font-bold uppercase tracking-wider`}
-                      >
-                        {col.title}
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
-                {filteredRequirements.length === 0 ? (
-                  <tr>
-                    <td colSpan={columnsOptions.filter(c => c.visible).length} className="p-8 text-center text-muted-foreground">
-                      {frameworkRequirements.length === 0
-                        ? 'No requirements yet. Import a template pack to create a practical starter set for this organisation.'
-                        : 'No requirements match the current filters.'}
-                    </td>
+            {requirementView === 'actions' ? (
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-muted border-b border-border/80 text-muted-foreground font-bold uppercase tracking-wider">
+                    <th className={`${density === 'compact' ? 'p-2.5 py-2' : 'p-4'} font-bold uppercase tracking-wider`}>Action Item</th>
+                    <th className={`${density === 'compact' ? 'p-2.5 py-2' : 'p-4'} font-bold uppercase tracking-wider`}>Linked Requirement</th>
+                    <th className={`${density === 'compact' ? 'p-2.5 py-2' : 'p-4'} font-bold uppercase tracking-wider`}>Owner</th>
+                    <th className={`${density === 'compact' ? 'p-2.5 py-2' : 'p-4'} font-bold uppercase tracking-wider`}>Due Date</th>
+                    <th className={`${density === 'compact' ? 'p-2.5 py-2' : 'p-4'} text-center font-bold uppercase tracking-wider`}>Status</th>
+                    <th className={`${density === 'compact' ? 'p-2.5 py-2' : 'p-4'} font-bold uppercase tracking-wider`}>Actions</th>
                   </tr>
-                ) : (
-                  filteredRequirements.map(requirement => {
-                    const lastReview = reviews
-                      .filter(review => review.requirement_id === requirement.id)
-                      .sort((a, b) => new Date(b.review_date).getTime() - new Date(a.review_date).getTime())[0];
-                    const actionCount = requirementActions.filter(link => link.requirement_id === requirement.id).length;
-                    const coverage = coverageChip(requirement.evidenceCoverage);
-                    const paddingClass = density === 'compact' ? 'p-2 py-1.5' : 'p-4';
-                    return (
-                      <tr
-                        key={requirement.id}
-                        onClick={() => selectRequirement(requirement)}
-                        className={`hover:bg-muted/50 cursor-pointer transition-colors border-l-2 ${
-                          selectedRequirement?.id === requirement.id
-                            ? 'bg-indigo-500/5 border-l-indigo-600'
-                            : 'border-l-transparent'
-                        }`}
-                      >
-                        {columnsOptions.map(col => {
-                          if (!col.visible) return null;
-                          switch (col.id) {
-                            case 'title':
-                              return (
-                                <td key="title" className={`${paddingClass} font-bold`}>
-                                  <div className="flex items-center justify-between gap-1.5">
-                                    <span className="truncate">{requirement.title}</span>
-                                    <FilterFavouriteButton
-                                      isStarred={isFavourite(`req:${requirement.id}`)}
-                                      onToggle={() => toggleFavourite(`req:${requirement.id}`)}
-                                    />
-                                  </div>
-                                </td>
-                              );
-                            case 'category':
-                              return (
-                                <td key="category" className={`${paddingClass} text-muted-foreground font-semibold`}>
-                                  {requirement.category}
-                                </td>
-                              );
-                            case 'owner':
-                              return (
-                                <td key="owner" className={`${paddingClass} text-muted-foreground font-semibold`}>
-                                  {requirement.owner || 'Unassigned'}
-                                </td>
-                              );
-                            case 'status':
-                              return (
-                                <td key="status" className={`${paddingClass} text-center`}>
-                                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full border leading-none shadow-xs ${statusClass(requirement.status)}`}>
-                                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${
-                                      requirement.status === 'GREEN' ? 'bg-emerald-500' :
-                                      requirement.status === 'AMBER' ? 'bg-amber-500' :
-                                      requirement.status === 'RED' ? 'bg-rose-500' :
-                                      'bg-zinc-400 dark:bg-zinc-500'
-                                    }`} />
-                                    {requirement.status}
-                                  </span>
-                                </td>
-                              );
-                            case 'due_date':
-                              return (
-                                <td key="due_date" className={`${paddingClass} text-muted-foreground font-semibold`}>
-                                  {requirementView === 'archive'
-                                    ? (requirement.archived_at ? new Date(requirement.archived_at).toLocaleDateString() : 'Not recorded')
-                                    : requirementView === 'inactive'
-                                      ? (requirement.deactivated_at ? new Date(requirement.deactivated_at).toLocaleDateString() : 'Not recorded')
-                                      : (requirement.next_due_date || 'Not set')}
-                                </td>
-                              );
-                            case 'coverage':
-                              return (
-                                <td key="coverage" className={`${paddingClass} text-muted-foreground font-semibold max-w-[150px]`}>
-                                  <span
-                                    title={coverage.title}
-                                    className={`inline-flex max-w-full items-center justify-center whitespace-nowrap truncate px-2 py-1 rounded border text-[10px] font-bold ${coverage.className}`}
-                                  >
-                                    {coverage.label}
-                                  </span>
-                                </td>
-                              );
-                            case 'linked_docs':
-                              return (
-                                <td key="linked_docs" className={`${paddingClass} text-muted-foreground font-semibold`}>
-                                  {requirement.linkedDocuments.length}
-                                </td>
-                              );
-                            case 'actions':
-                              return (
-                                <td key="actions" className={`${paddingClass} text-muted-foreground font-semibold`}>
-                                  {requirementView === 'active' ? actionCount : (
-                                    <button
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        setSelectedRequirement(requirement);
-                                        void restoreFrameworkRequirement(requirement.id);
-                                        setRequirementView('active');
-                                      }}
-                                      className="px-2 py-1 rounded bg-indigo-650 text-white text-[10px] font-bold cursor-pointer"
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {filteredActions.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                        No actions match the active filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredActions.map(action => {
+                      const linkedReqs = frameworkRequirements.filter(req =>
+                        requirementActions.some(link => link.action_id === action.id && link.requirement_id === req.id)
+                      );
+                      const actionDueDate = action.target_due_date || action.due_date;
+                      const isOverdue = actionDueDate && new Date(actionDueDate) < new Date() && (action.status === 'Open' || action.status === 'In Progress');
+                      const paddingClass = density === 'compact' ? 'p-2 py-1.5' : 'p-4';
+
+                      return (
+                        <tr
+                          key={action.id}
+                          onClick={() => setSelectedAction(action)}
+                          className={`hover:bg-muted/50 cursor-pointer transition-colors border-l-2 ${
+                            selectedAction?.id === action.id ? 'bg-indigo-500/5 border-l-indigo-600' : 'border-l-transparent'
+                          }`}
+                        >
+                          <td className={`${paddingClass} font-bold`}>
+                            <div>
+                              <span className="block text-foreground text-xs">{action.title}</span>
+                              {action.description && <span className="block text-[10px] text-muted-foreground font-normal line-clamp-1 mt-0.5">{action.description}</span>}
+                            </div>
+                          </td>
+                          <td className={`${paddingClass} text-muted-foreground font-semibold max-w-[200px] truncate`}>
+                            {linkedReqs.length === 0 ? (
+                              <span className="text-muted-foreground/60 italic text-[10px]">No linked requirement</span>
+                            ) : (
+                              linkedReqs.map(r => r.title).join(', ')
+                            )}
+                          </td>
+                          <td className={`${paddingClass} text-muted-foreground font-semibold`}>
+                            {action.owner || 'Unassigned'}
+                          </td>
+                          <td className={`${paddingClass} text-muted-foreground font-semibold`}>
+                            <span className={isOverdue ? 'text-rose-500 font-bold' : ''}>
+                              {actionDueDate || 'Not set'}
+                            </span>
+                          </td>
+                          <td className={`${paddingClass} text-center`}>
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full border leading-none shadow-xs ${
+                              action.status === 'Complete' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400' :
+                              action.status === 'Cancelled' ? 'bg-zinc-500/10 border-zinc-500/20 text-zinc-650 dark:text-zinc-400' :
+                              action.status === 'In Progress' ? 'bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-400' :
+                              'bg-indigo-500/10 border-indigo-500/20 text-indigo-750 dark:text-indigo-400'
+                            }`}>
+                              <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${
+                                action.status === 'Complete' ? 'bg-emerald-500' :
+                                action.status === 'Cancelled' ? 'bg-zinc-400' :
+                                action.status === 'In Progress' ? 'bg-amber-500' :
+                                'bg-indigo-500'
+                              }`} />
+                              {action.status}
+                            </span>
+                          </td>
+                          <td className={paddingClass}>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedAction(action);
+                              }}
+                              className="px-2 py-1 rounded bg-indigo-650 hover:bg-indigo-700 text-white text-[10px] font-bold cursor-pointer"
+                            >
+                              Edit/Update
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            ) : (
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-muted border-b border-border/80 text-muted-foreground font-bold uppercase tracking-wider">
+                    {columnsOptions.map(col => {
+                      if (!col.visible) return null;
+                      return (
+                        <th
+                          key={col.id}
+                          className={`${density === 'compact' ? 'p-2.5 py-2' : 'p-4'} ${col.id === 'status' ? 'text-center' : ''} font-bold uppercase tracking-wider`}
+                        >
+                          {col.title}
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {filteredRequirements.length === 0 ? (
+                    <tr>
+                      <td colSpan={columnsOptions.filter(c => c.visible).length} className="p-8 text-center text-muted-foreground">
+                        {frameworkRequirements.length === 0
+                          ? 'No requirements yet. Import a template pack to create a practical starter set for this organisation.'
+                          : 'No requirements match the current filters.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredRequirements.map(requirement => {
+                      const lastReview = reviews
+                        .filter(review => review.requirement_id === requirement.id)
+                        .sort((a, b) => new Date(b.review_date).getTime() - new Date(a.review_date).getTime())[0];
+                      const actionCount = requirementActions.filter(link => link.requirement_id === requirement.id).length;
+                      const coverage = coverageChip(requirement.evidenceCoverage);
+                      const paddingClass = density === 'compact' ? 'p-2 py-1.5' : 'p-4';
+                      return (
+                        <tr
+                          key={requirement.id}
+                          onClick={() => selectRequirement(requirement)}
+                          className={`hover:bg-muted/50 cursor-pointer transition-colors border-l-2 ${
+                            selectedRequirement?.id === requirement.id
+                              ? 'bg-indigo-500/5 border-l-indigo-600'
+                              : 'border-l-transparent'
+                          }`}
+                        >
+                          {columnsOptions.map(col => {
+                            if (!col.visible) return null;
+                            switch (col.id) {
+                              case 'title':
+                                return (
+                                  <td key="title" className={`${paddingClass} font-bold`}>
+                                    <div className="flex items-center justify-between gap-1.5">
+                                      <span className="truncate">{requirement.title}</span>
+                                      <FilterFavouriteButton
+                                        isStarred={isFavourite(`req:${requirement.id}`)}
+                                        onToggle={() => toggleFavourite(`req:${requirement.id}`)}
+                                      />
+                                    </div>
+                                  </td>
+                                );
+                              case 'category':
+                                return (
+                                  <td key="category" className={`${paddingClass} text-muted-foreground font-semibold`}>
+                                    {requirement.category}
+                                  </td>
+                                );
+                              case 'owner':
+                                return (
+                                  <td key="owner" className={`${paddingClass} text-muted-foreground font-semibold`}>
+                                    {requirement.owner || 'Unassigned'}
+                                  </td>
+                                );
+                              case 'status':
+                                return (
+                                  <td key="status" className={`${paddingClass} text-center`}>
+                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full border leading-none shadow-xs ${statusClass(requirement.status)}`}>
+                                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${
+                                        requirement.status === 'GREEN' ? 'bg-emerald-500' :
+                                        requirement.status === 'AMBER' ? 'bg-amber-500' :
+                                        requirement.status === 'RED' ? 'bg-rose-500' :
+                                        'bg-zinc-400 dark:bg-zinc-500'
+                                      }`} />
+                                      {requirement.status}
+                                    </span>
+                                  </td>
+                                );
+                              case 'due_date':
+                                return (
+                                  <td key="due_date" className={`${paddingClass} text-muted-foreground font-semibold`}>
+                                    {requirementView === 'archive'
+                                      ? (requirement.archived_at ? new Date(requirement.archived_at).toLocaleDateString() : 'Not recorded')
+                                      : requirementView === 'inactive'
+                                        ? (requirement.deactivated_at ? new Date(requirement.deactivated_at).toLocaleDateString() : 'Not recorded')
+                                        : (requirement.next_due_date || 'Not set')}
+                                  </td>
+                                );
+                              case 'coverage':
+                                return (
+                                  <td key="coverage" className={`${paddingClass} text-muted-foreground font-semibold max-w-[150px]`}>
+                                    <span
+                                      title={coverage.title}
+                                      className={`inline-flex max-w-full items-center justify-center whitespace-nowrap truncate px-2 py-1 rounded border text-[10px] font-bold ${coverage.className}`}
                                     >
-                                      Restore
-                                    </button>
-                                  )}
-                                </td>
-                              );
-                            case 'last_review':
-                              return (
-                                <td key="last_review" className={`${paddingClass} text-muted-foreground font-semibold`}>
-                                  {lastReview?.review_date || 'None'}
-                                </td>
-                              );
-                            default:
-                              return null;
-                          }
-                        })}
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                                      {coverage.label}
+                                    </span>
+                                  </td>
+                                );
+                              case 'linked_docs':
+                                return (
+                                  <td key="linked_docs" className={`${paddingClass} text-muted-foreground font-semibold`}>
+                                    {requirement.linkedDocuments.length}
+                                  </td>
+                                );
+                              case 'actions':
+                                return (
+                                  <td key="actions" className={`${paddingClass} text-muted-foreground font-semibold`}>
+                                    {requirementView === 'active' ? actionCount : (
+                                      <button
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          setSelectedRequirement(requirement);
+                                          void restoreFrameworkRequirement(requirement.id);
+                                          setRequirementView('active');
+                                        }}
+                                        className="px-2 py-1 rounded bg-indigo-650 text-white text-[10px] font-bold cursor-pointer"
+                                      >
+                                        Restore
+                                      </button>
+                                    )}
+                                  </td>
+                                );
+                              case 'last_review':
+                                return (
+                                  <td key="last_review" className={`${paddingClass} text-muted-foreground font-semibold`}>
+                                    {lastReview?.review_date || 'None'}
+                                  </td>
+                                );
+                              default:
+                                return null;
+                            }
+                          })}
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
         </div>

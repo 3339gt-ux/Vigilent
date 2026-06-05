@@ -1660,7 +1660,20 @@ export default function EvidenceVault() {
               />
 
               {/* Active filter chips */}
-              <ActiveFilterChips chips={filterChips} onClearAll={handleResetFilters} />
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <ActiveFilterChips chips={filterChips} onClearAll={handleResetFilters} />
+                {favourites.length > 0 && (
+                  <button
+                    onClick={clearFavourites}
+                    className="text-[10px] font-bold text-amber-600 hover:text-amber-700 hover:underline px-2.5 py-1 bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/20 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 self-start sm:self-center shrink-0"
+                  >
+                    <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                    </svg>
+                    Clear Favourites ({favourites.length})
+                  </button>
+                )}
+              </div>
 
               {/* Result Count Summary */}
               <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pt-1">

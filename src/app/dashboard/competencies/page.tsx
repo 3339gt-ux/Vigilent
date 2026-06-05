@@ -96,6 +96,42 @@ export default function CompetencyMatrixPage() {
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
   const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
+  const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
+  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
+  const [workspaceSearch, setWorkspaceSearch] = useState('');
+  const [workspaceStatusFilter, setWorkspaceStatusFilter] = useState<'All' | CompetencyStatus>('All');
+  const [isEditingPerson, setIsEditingPerson] = useState(false);
+  const [isSavingPerson, setIsSavingPerson] = useState(false);
+  const [personFormMessage, setPersonFormMessage] = useState('');
+  const [personForm, setPersonForm] = useState({
+    first_name: '',
+    last_name: '',
+    employee_number: '',
+    email: '',
+    department: '',
+    role: '',
+    person_type: 'Employee' as PersonType,
+    active: true,
+    start_date: '',
+    end_date: '',
+    notes: ''
+  });
+  const [selectedAction, setSelectedAction] = useState<Action | null>(null);
+  const [selectedPackId, setSelectedPackId] = useState(COMPETENCY_TEMPLATE_PACKS[0]?.id || '');
+  const [importMessage, setImportMessage] = useState('');
+  const [formMessage, setFormMessage] = useState('');
+  const [recordForm, setRecordForm] = useState({
+    completed_date: '',
+    expiry_date: '',
+    trainer: '',
+    provider: '',
+    certificate_number: '',
+    status: 'Valid' as CompetencyStatus,
+    notes: ''
+  });
+  const [linkDocumentId, setLinkDocumentId] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [isEvidenceDragging, setIsEvidenceDragging] = useState(false);
 
   // Starred / favourite options persistence
   const { favourites, toggleFavourite, isFavourite, clearFavourites } = useFilterFavourites(user?.id || 'guest', 'matrix');
@@ -483,42 +519,7 @@ export default function CompetencyMatrixPage() {
       setHiddenColumns(activeTypes.map(t => t.id));
     }
   };
-  const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
-  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
-  const [workspaceSearch, setWorkspaceSearch] = useState('');
-  const [workspaceStatusFilter, setWorkspaceStatusFilter] = useState<'All' | CompetencyStatus>('All');
-  const [isEditingPerson, setIsEditingPerson] = useState(false);
-  const [isSavingPerson, setIsSavingPerson] = useState(false);
-  const [personFormMessage, setPersonFormMessage] = useState('');
-  const [personForm, setPersonForm] = useState({
-    first_name: '',
-    last_name: '',
-    employee_number: '',
-    email: '',
-    department: '',
-    role: '',
-    person_type: 'Employee' as PersonType,
-    active: true,
-    start_date: '',
-    end_date: '',
-    notes: ''
-  });
-  const [selectedAction, setSelectedAction] = useState<Action | null>(null);
-  const [selectedPackId, setSelectedPackId] = useState(COMPETENCY_TEMPLATE_PACKS[0]?.id || '');
-  const [importMessage, setImportMessage] = useState('');
-  const [formMessage, setFormMessage] = useState('');
-  const [recordForm, setRecordForm] = useState({
-    completed_date: '',
-    expiry_date: '',
-    trainer: '',
-    provider: '',
-    certificate_number: '',
-    status: 'Valid' as CompetencyStatus,
-    notes: ''
-  });
-  const [linkDocumentId, setLinkDocumentId] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const [isEvidenceDragging, setIsEvidenceDragging] = useState(false);
+
 
   const syncPersonForm = (person: Person) => {
     setPersonForm({
@@ -626,6 +627,7 @@ export default function CompetencyMatrixPage() {
   // Removed duplicate filteredTypes definition to allow hiddenColumns and showOnlyFavourites filters to work correctly.
 
   const openCell = (person: Person, competencyType: CompetencyType) => {
+    setSelectedPerson(person);
     const cell = matrix.find(item => item.person.id === person.id && item.competencyType.id === competencyType.id);
     setActiveCell({ person, competencyType, record: cell?.record || null });
     setRecordForm({
@@ -1085,7 +1087,20 @@ export default function CompetencyMatrixPage() {
             </div>
 
             {/* Active chips */}
-            <ActiveFilterChips chips={filterChips} onClearAll={handleResetFilters} />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <ActiveFilterChips chips={filterChips} onClearAll={handleResetFilters} />
+              {favourites.length > 0 && (
+                <button
+                  onClick={clearFavourites}
+                  className="text-[10px] font-bold text-amber-600 hover:text-amber-700 hover:underline px-2.5 py-1 bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/20 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 self-start sm:self-center shrink-0"
+                >
+                  <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                  </svg>
+                  Clear Favourites ({favourites.length})
+                </button>
+              )}
+            </div>
 
             {/* Row Count Info */}
             <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground uppercase tracking-widest pt-1">
@@ -1102,7 +1117,7 @@ export default function CompetencyMatrixPage() {
                   <tr className="bg-muted border-b border-border text-muted-foreground uppercase tracking-wider sticky top-0 z-20">
                     <th
                       className="p-3 sticky left-0 top-0 z-35 border-r border-b border-border shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)] font-extrabold uppercase text-[10px] tracking-wider"
-                      style={{ backgroundColor: 'var(--muted)', left: 0, top: 0 }}
+                      style={{ backgroundColor: 'hsl(var(--muted))', left: 0, top: 0 }}
                     >
                       <div className="min-w-52">Person</div>
                     </th>
@@ -1112,7 +1127,7 @@ export default function CompetencyMatrixPage() {
                         <th
                           key={type.id}
                           className="p-3 sticky top-0 z-20 border-b border-border text-left font-bold min-w-40"
-                          style={{ backgroundColor: 'var(--muted)', top: 0 }}
+                          style={{ backgroundColor: 'hsl(var(--muted))', top: 0 }}
                         >
                           <div className="flex items-center justify-between gap-1.5">
                             <div className="min-w-0">
@@ -1147,7 +1162,7 @@ export default function CompetencyMatrixPage() {
                       <tr key={person.id} className="hover:bg-muted/30 transition-colors">
                         <td
                           className={`${paddingClass} sticky left-0 z-10 border-r border-border shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)]`}
-                          style={{ backgroundColor: 'var(--card)', left: 0 }}
+                          style={{ backgroundColor: 'hsl(var(--card))', left: 0 }}
                         >
                           <button
                             onClick={() => openPersonWorkspace(person)}
@@ -1665,7 +1680,7 @@ export default function CompetencyMatrixPage() {
 
               {/* Column 3: Integrated Competency Detail Panel */}
               {activeCell && activeCell.person.id === selectedPerson.id && (
-                <div className="absolute lg:relative inset-y-0 right-0 w-full lg:w-auto bg-card border-l border-border z-30 flex flex-col h-full overflow-y-auto p-5 space-y-4.5 shadow-xl lg:shadow-none">
+                <div className="absolute lg:relative inset-y-0 right-0 w-full lg:w-[380px] bg-card solid-panel border-l border-border z-30 flex flex-col h-full overflow-y-auto p-5 space-y-4.5 shadow-xl lg:shadow-none">
                   <div className="flex justify-between items-start gap-3 border-b border-border pb-3 shrink-0">
                     <div>
                       <h3 className="text-sm font-extrabold text-foreground leading-tight">{activeCell.competencyType.title}</h3>

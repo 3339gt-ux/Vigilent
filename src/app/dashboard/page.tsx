@@ -907,7 +907,7 @@ export default function DashboardPage() {
                   <span className="text-rose-500">Overdue</span>
                   <span className="font-bold text-rose-600 dark:text-rose-400">{overdueActionsCount}</span>
                 </Link>
-                <Link href="/dashboard/requirements?filter=actions" className="flex justify-between hover:bg-muted/50 p-1.5 rounded transition-colors">
+                <Link href="/dashboard/requirements?filter=due-week" className="flex justify-between hover:bg-muted/50 p-1.5 rounded transition-colors">
                   <span className="text-amber-500 font-medium">Due This Week</span>
                   <span className="font-bold text-amber-600 dark:text-amber-400">{dueThisWeekCount}</span>
                 </Link>

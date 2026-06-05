@@ -68,7 +68,7 @@ export default function EvidenceMatrix() {
   const [newReqCategory, setNewReqCategory] = useState<'Vehicle' | 'Driver' | 'Facility' | 'General'>('Vehicle');
 
   // Starred / favourite options persistence
-  const { favourites, toggleFavourite, isFavourite } = useFilterFavourites(user?.id || 'guest', 'evidence-matrix');
+  const { favourites, toggleFavourite, isFavourite, clearFavourites } = useFilterFavourites(user?.id || 'guest', 'evidence-matrix');
 
   // Saved Views System
   const defaultViews: SavedView[] = [
@@ -546,7 +546,20 @@ export default function EvidenceMatrix() {
         />
 
         {/* Active chips */}
-        <ActiveFilterChips chips={filterChips} onClearAll={handleResetFilters} />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <ActiveFilterChips chips={filterChips} onClearAll={handleResetFilters} />
+          {favourites.length > 0 && (
+            <button
+              onClick={clearFavourites}
+              className="text-[10px] font-bold text-amber-600 hover:text-amber-700 hover:underline px-2.5 py-1 bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/20 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 self-start sm:self-center shrink-0"
+            >
+              <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+              </svg>
+              Clear Favourites ({favourites.length})
+            </button>
+          )}
+        </div>
 
         {/* Results Counter Info */}
         <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground uppercase tracking-widest pt-1">
@@ -563,7 +576,7 @@ export default function EvidenceMatrix() {
               <tr className="bg-muted border-b border-border/80 text-muted-foreground font-bold uppercase tracking-wider sticky top-0 z-20">
                 <th
                   className="p-4 min-w-[260px] sticky left-0 top-0 z-35 border-r border-b border-border shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)] font-extrabold text-[10px]"
-                  style={{ backgroundColor: 'var(--muted)', left: 0, top: 0 }}
+                  style={{ backgroundColor: 'hsl(var(--muted))', left: 0, top: 0 }}
                 >
                   Compliance Requirement
                 </th>
@@ -574,7 +587,7 @@ export default function EvidenceMatrix() {
                     <th
                       key={t.name}
                       className="p-4 text-center min-w-[130px] whitespace-nowrap sticky top-0 border-b border-border"
-                      style={{ backgroundColor: 'var(--muted)', top: 0 }}
+                      style={{ backgroundColor: 'hsl(var(--muted))', top: 0 }}
                     >
                       <span className="block font-extrabold text-foreground">{t.name}</span>
                       <span className="text-[9px] text-muted-foreground font-semibold uppercase mt-0.5">{t.type}</span>
@@ -598,7 +611,7 @@ export default function EvidenceMatrix() {
                       {/* Sticky Row Title */}
                       <td
                         className={`${paddingClass} font-semibold text-foreground sticky left-0 z-10 border-r border-border min-w-[260px] shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)]`}
-                        style={{ backgroundColor: 'var(--card)', left: 0 }}
+                        style={{ backgroundColor: 'hsl(var(--card))', left: 0 }}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
