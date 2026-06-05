@@ -29,6 +29,7 @@ import {
   getLinkedDocumentsForRequirement,
   getRequirementStatusLabel
 } from '@/lib/requirementsEngine';
+import { logAuditEvent } from '@/lib/auditTrail';
 
 type PackStatus = 'Draft' | 'Ready' | 'Sent' | 'Archived';
 
@@ -281,6 +282,19 @@ export default function AuditPackBuilder() {
     const content = [headers, ...csvRows].map(row => row.map(csvEscape).join(',')).join('\r\n');
     const filename = `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'audit-pack'}.csv`;
     downloadTextFile(filename, content, 'text/csv;charset=utf-8');
+
+    // Log the export event
+    const pack = auditPacks.find(p => p.name === name);
+    void logAuditEvent({
+      actionCategory: 'Audit Packs',
+      actionType: 'audit_pack_exported',
+      entityType: 'audit_pack',
+      entityId: pack?.id || null,
+      entityLabel: name,
+      description: `Exported audit pack "${name}" as CSV.`,
+      severity: 'info',
+      metadata: { format: 'CSV', rowCount: rows.length }
+    });
   };
 
   const exportPrintPdf = (name: string, rows: AssessedRequirement[]) => {
@@ -345,6 +359,19 @@ export default function AuditPackBuilder() {
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
+
+    // Log the export event
+    const pack = auditPacks.find(p => p.name === name);
+    void logAuditEvent({
+      actionCategory: 'Audit Packs',
+      actionType: 'audit_pack_exported',
+      entityType: 'audit_pack',
+      entityId: pack?.id || null,
+      entityLabel: name,
+      description: `Exported audit pack "${name}" as PDF / Printed.`,
+      severity: 'info',
+      metadata: { format: 'PDF', rowCount: rows.length }
+    });
   };
 
   const selectedPackRows = newlyCreatedPack ? buildRowsForRequirements(newlyCreatedPack.requirements) : selectedRows;

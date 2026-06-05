@@ -447,6 +447,34 @@ create table if not exists public.audit_logs (
     created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
+-- 7b. Rich Audit Trail Events
+create table if not exists public.audit_trail_events (
+    id uuid primary key default uuid_generate_v4(),
+    organization_id uuid not null references public.organizations(id) on delete cascade,
+    actor_user_id uuid references public.profiles(id) on delete set null,
+    actor_name text,
+    actor_email text,
+    actor_role text,
+    action_type text not null,
+    action_category text not null,
+    entity_type text not null,
+    entity_id uuid,
+    entity_label text,
+    description text not null,
+    before_snapshot jsonb,
+    after_snapshot jsonb,
+    changed_fields jsonb,
+    metadata jsonb default '{}'::jsonb not null,
+    undo_available boolean default false not null,
+    undo_action_type text,
+    undo_expires_at timestamp with time zone,
+    undone_at timestamp with time zone,
+    undone_by uuid references public.profiles(id) on delete set null,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    severity text default 'info' not null,
+    source text default 'app' not null
+);
+
 -- Enable RLS on all tables
 alter table public.organizations enable row level security;
 alter table public.profiles enable row level security;
@@ -456,6 +484,7 @@ alter table public.evidence_documents enable row level security;
 alter table public.matrix_cells enable row level security;
 alter table public.audit_packs enable row level security;
 alter table public.audit_logs enable row level security;
+alter table public.audit_trail_events enable row level security;
 alter table public.requirements enable row level security;
 alter table public.requirement_categories enable row level security;
 alter table public.evidence_categories enable row level security;
@@ -795,6 +824,27 @@ drop policy if exists "Users can insert logs in own organization" on public.audi
 create policy "Users can insert logs in own organization" on public.audit_logs
     for insert with check (
         organization_id = public.current_organization_id()
+    );
+
+-- Audit Trail Events
+drop policy if exists "Owners/Admins can read organization audit trail" on public.audit_trail_events;
+create policy "Owners/Admins can read organization audit trail" on public.audit_trail_events
+    for select using (
+        public.can_admin_organization(organization_id)
+    );
+
+drop policy if exists "Members can insert organization audit trail" on public.audit_trail_events;
+create policy "Members can insert organization audit trail" on public.audit_trail_events
+    for insert with check (
+        public.is_organization_member(organization_id)
+    );
+
+drop policy if exists "Owners/Admins can update undo fields in audit trail" on public.audit_trail_events;
+create policy "Owners/Admins can update undo fields in audit trail" on public.audit_trail_events
+    for update using (
+        public.can_admin_organization(organization_id)
+    ) with check (
+        public.can_admin_organization(organization_id)
     );
 
 -- Requirements Framework

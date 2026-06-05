@@ -34,6 +34,7 @@ import {
   MatrixCell,
   AuditPack,
   AuditLog,
+  AuditTrailEvent,
   Person,
   ManagedCategory,
   CellStatus,
@@ -348,6 +349,87 @@ const MOCK_LOGS: AuditLog[] = [
     action: 'LOLER Check Expired',
     details: 'System flagged Forklift #03 LOLER certification as expired.',
     created_at: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString()
+  }
+];
+
+export const MOCK_AUDIT_TRAIL_EVENTS: AuditTrailEvent[] = [
+  {
+    id: 'evt-1',
+    organization_id: 'org-apex-101',
+    actor_user_id: 'usr-jane-doe',
+    actor_name: 'Jane Doe',
+    actor_email: 'jane.doe@apexlogistics.com',
+    actor_role: 'Admin',
+    action_type: 'evidence_uploaded',
+    action_category: 'Evidence',
+    entity_type: 'evidence_document',
+    entity_id: 'doc-mot-998',
+    entity_label: 'MOT Test Cert - HGV-998',
+    description: 'Uploaded evidence document "MOT Test Cert - HGV-998"',
+    before_snapshot: null,
+    after_snapshot: { id: 'doc-mot-998', title: 'MOT Test Cert - HGV-998', category: 'Vehicle', status: 'Active' },
+    changed_fields: null,
+    metadata: { vehicle_reg: 'HGV-998' },
+    undo_available: false,
+    undo_action_type: null,
+    undo_expires_at: null,
+    undone_at: null,
+    undone_by: null,
+    created_at: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
+    severity: 'info',
+    source: 'app'
+  },
+  {
+    id: 'evt-2',
+    organization_id: 'org-apex-101',
+    actor_user_id: 'usr-jane-doe',
+    actor_name: 'Jane Doe',
+    actor_email: 'jane.doe@apexlogistics.com',
+    actor_role: 'Admin',
+    action_type: 'audit_pack_created',
+    action_category: 'Audit Packs',
+    entity_type: 'audit_pack',
+    entity_id: 'pack-q2-dvsa',
+    entity_label: 'Q2 DVSA Safety Audit Pack',
+    description: 'Created audit pack "Q2 DVSA Safety Audit Pack"',
+    before_snapshot: null,
+    after_snapshot: { id: 'pack-q2-dvsa', name: 'Q2 DVSA Safety Audit Pack', status: 'Draft' },
+    changed_fields: null,
+    metadata: {},
+    undo_available: true,
+    undo_action_type: 'restore_audit_pack',
+    undo_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    undone_at: null,
+    undone_by: null,
+    created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+    severity: 'info',
+    source: 'app'
+  },
+  {
+    id: 'evt-3',
+    organization_id: 'org-apex-101',
+    actor_user_id: 'usr-jane-doe',
+    actor_name: 'Jane Doe',
+    actor_email: 'jane.doe@apexlogistics.com',
+    actor_role: 'Admin',
+    action_type: 'requirement_edited',
+    action_category: 'Requirements',
+    entity_type: 'requirement',
+    entity_id: 'fw-req-forklift-training',
+    entity_label: 'Forklift Training',
+    description: 'Modified risk level to High on requirement "Forklift Training"',
+    before_snapshot: { id: 'fw-req-forklift-training', title: 'Forklift Training', risk_level: 'Medium' },
+    after_snapshot: { id: 'fw-req-forklift-training', title: 'Forklift Training', risk_level: 'High' },
+    changed_fields: { risk_level: 'High' },
+    metadata: {},
+    undo_available: false,
+    undo_action_type: null,
+    undo_expires_at: null,
+    undone_at: null,
+    undone_by: null,
+    created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+    severity: 'info',
+    source: 'app'
   }
 ];
 
@@ -971,6 +1053,7 @@ export const initMockDb = () => {
     localStorage.setItem('vigilen_competency_records', JSON.stringify(MOCK_COMPETENCY_RECORDS));
     localStorage.setItem('vigilen_competency_record_documents', JSON.stringify(MOCK_COMPETENCY_RECORD_DOCUMENTS));
     localStorage.setItem('vigilen_requirement_competency_types', JSON.stringify(MOCK_REQUIREMENT_COMPETENCY_TYPES));
+    localStorage.setItem('vigilen_audit_trail_events', JSON.stringify(MOCK_AUDIT_TRAIL_EVENTS));
     localStorage.setItem('vigilen_initialized', 'true');
   }
 };
@@ -1120,10 +1203,56 @@ export const getCurrentSupabaseOrganization = async (): Promise<Organization | n
   return data;
 };
 
-const getCurrentSupabaseOrganizationId = async (): Promise<string> => {
+export const getCurrentSupabaseOrganizationId = async (): Promise<string> => {
   const org = await getCurrentSupabaseOrganization();
   if (!org) throw new Error('Authenticated user is not linked to an organization.');
   return org.id;
+};
+
+const fetchRecordById = async (table: string, id: string): Promise<any> => {
+  if (shouldUseSupabase()) {
+    const { data } = await supabase!.from(table).select('*').eq('id', id).maybeSingle();
+    return data;
+  } else {
+    let key = '';
+    let mockList: any[] = [];
+    if (table === 'organizations') { key = 'vigilen_org'; mockList = [MOCK_ORG]; }
+    else if (table === 'evidence_documents') { key = 'vigilen_documents'; mockList = MOCK_DOCUMENTS; }
+    else if (table === 'requirements') { key = 'vigilen_framework_requirements'; mockList = MOCK_FRAMEWORK_REQUIREMENTS; }
+    else if (table === 'actions') { key = 'vigilen_actions'; mockList = MOCK_ACTIONS; }
+    else if (table === 'people') { key = 'vigilen_people'; mockList = MOCK_PEOPLE; }
+    else if (table === 'competency_types') { key = 'vigilen_competency_types'; mockList = MOCK_COMPETENCY_TYPES; }
+    else if (table === 'competency_records') { key = 'vigilen_competency_records'; mockList = MOCK_COMPETENCY_RECORDS; }
+    else if (table === 'requirement_evidence_criteria') { key = 'vigilen_requirement_evidence_criteria'; mockList = MOCK_REQUIREMENT_EVIDENCE_CRITERIA; }
+    else if (table === 'audit_packs') { key = 'vigilen_audit_packs'; mockList = MOCK_AUDIT_PACKS; }
+
+    if (!key) return null;
+    const items = getStorageItem(key, mockList);
+    return items.find((item: any) => item.id === id) || null;
+  }
+};
+
+const getChangedFields = (before: any, after: any): Record<string, any> | null => {
+  if (!before || !after) return null;
+  const changed: Record<string, any> = {};
+  let hasChanges = false;
+  for (const key of Object.keys(after)) {
+    if (key === 'updated_at') continue;
+    if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) {
+      changed[key] = after[key];
+      hasChanges = true;
+    }
+  }
+  return hasChanges ? changed : null;
+};
+
+const safeLogAuditEvent = async (input: any) => {
+  try {
+    const { logAuditEvent } = await import('./auditTrail');
+    await logAuditEvent(input);
+  } catch (err) {
+    console.error('Failed to log audit event:', err);
+  }
 };
 
 // Database Service Implementation
@@ -1152,16 +1281,30 @@ export const dbService = {
   },
 
   async updateOrganization(orgId: string, updates: Partial<Organization>): Promise<Organization> {
+    const before = await fetchRecordById('organizations', orgId);
+    let after: Organization;
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('organizations').update(updates).eq('id', orgId).select().single();
       if (error) throwSupabaseError('organizations.update by id', error);
-      return data;
+      after = data;
     } else {
       const org = getStorageItem('vigilen_org', MOCK_ORG);
-      const updated = { ...org, ...updates, updated_at: new Date().toISOString() };
-      setStorageItem('vigilen_org', updated);
-      return updated;
+      after = { ...org, ...updates, updated_at: new Date().toISOString() };
+      setStorageItem('vigilen_org', after);
     }
+    await safeLogAuditEvent({
+      actionCategory: 'Users & Admin',
+      actionType: 'organisation_settings_changed',
+      entityType: 'organisation',
+      entityId: orgId,
+      entityLabel: after.name,
+      description: `Changed organisation settings (e.g. name or compliance profile).`,
+      beforeSnapshot: before,
+      afterSnapshot: after,
+      changedFields: getChangedFields(before, after),
+      severity: 'warning'
+    });
+    return after;
   },
 
   // Compliance Requirements
@@ -1362,6 +1505,7 @@ export const dbService = {
     const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
     const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
 
+    let newRequirement: Requirement;
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('requirements')
@@ -1369,25 +1513,39 @@ export const dbService = {
         .select()
         .single();
       if (error) throwSupabaseError('requirements.insert active organisation', error);
-      return data;
+      newRequirement = data;
+    } else {
+      const requirements = getStorageItem('vigilen_framework_requirements', MOCK_FRAMEWORK_REQUIREMENTS);
+      newRequirement = {
+        ...requirement,
+        id: `fw-req-${Math.random().toString(36).substr(2, 9)}`,
+        organisation_id: orgId,
+        created_by: userId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      requirements.unshift(newRequirement);
+      setStorageItem('vigilen_framework_requirements', requirements);
+      await this.logActivity('Requirement Added', `Created requirement "${newRequirement.title}"`);
     }
 
-    const requirements = getStorageItem('vigilen_framework_requirements', MOCK_FRAMEWORK_REQUIREMENTS);
-    const newRequirement: Requirement = {
-      ...requirement,
-      id: `fw-req-${Math.random().toString(36).substr(2, 9)}`,
-      organisation_id: orgId,
-      created_by: userId,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-    requirements.unshift(newRequirement);
-    setStorageItem('vigilen_framework_requirements', requirements);
-    await this.logActivity('Requirement Added', `Created requirement "${newRequirement.title}"`);
+    await safeLogAuditEvent({
+      actionCategory: 'Requirements',
+      actionType: 'requirement_created',
+      entityType: 'requirement',
+      entityId: newRequirement.id,
+      entityLabel: newRequirement.title,
+      description: `Created requirement "${newRequirement.title}"`,
+      afterSnapshot: newRequirement,
+      severity: 'info'
+    });
+
     return newRequirement;
   },
 
   async updateFrameworkRequirement(requirementId: string, updates: Partial<Requirement>): Promise<Requirement> {
+    const before = await fetchRecordById('requirements', requirementId);
+    let after: Requirement;
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
       const userId = await getCurrentSupabaseUserId();
@@ -1408,18 +1566,77 @@ export const dbService = {
         .single();
       if (error) throwSupabaseError('requirements.update active organisation', error);
       await this.logActivity('Requirement Updated', `Updated requirement "${data.title}" by user ${userId}. ${describeChangedFields(existing, data)}`);
-      return data;
+      after = data;
+    } else {
+      const requirements = getStorageItem('vigilen_framework_requirements', MOCK_FRAMEWORK_REQUIREMENTS);
+      const idx = requirements.findIndex((item: Requirement) => item.id === requirementId);
+      if (idx === -1) throw new Error('Requirement not found');
+      const previous = requirements[idx];
+      after = { ...requirements[idx], ...updates, updated_at: new Date().toISOString() };
+      requirements[idx] = after;
+      setStorageItem('vigilen_framework_requirements', requirements);
+      await this.logActivity('Requirement Updated', `Updated requirement "${after.title}" by user ${MOCK_PROFILE.id}. ${describeChangedFields(previous, after)}`);
     }
 
-    const requirements = getStorageItem('vigilen_framework_requirements', MOCK_FRAMEWORK_REQUIREMENTS);
-    const idx = requirements.findIndex((item: Requirement) => item.id === requirementId);
-    if (idx === -1) throw new Error('Requirement not found');
-    const previous = requirements[idx];
-    const updated = { ...requirements[idx], ...updates, updated_at: new Date().toISOString() };
-    requirements[idx] = updated;
-    setStorageItem('vigilen_framework_requirements', requirements);
-    await this.logActivity('Requirement Updated', `Updated requirement "${updated.title}" by user ${MOCK_PROFILE.id}. ${describeChangedFields(previous, updated)}`);
-    return updated;
+    // Work out event type and metadata
+    let actionType = 'requirement_edited';
+    let undoAvailable = false;
+    let undoActionType: string | null = null;
+    let undoExpiresAt: string | null = null;
+    let description = `Edited requirement "${after.title}"`;
+    let severity: 'info' | 'warning' | 'critical' = 'info';
+
+    if (updates.lifecycle_status === 'ARCHIVED') {
+      actionType = 'requirement_archived';
+      undoAvailable = true;
+      undoActionType = 'restore_requirement';
+      undoExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      description = `Archived requirement "${after.title}"`;
+      severity = 'warning';
+    } else if (updates.lifecycle_status === 'DEACTIVATED') {
+      actionType = 'requirement_deactivated';
+      description = `Deactivated requirement "${after.title}"`;
+      severity = 'warning';
+    } else if (updates.lifecycle_status === 'DELETED') {
+      actionType = 'requirement_soft_deleted';
+      undoAvailable = true;
+      undoActionType = 'restore_requirement';
+      undoExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      description = `Soft-deleted requirement "${after.title}"`;
+      severity = 'critical';
+    } else if (updates.lifecycle_status === 'ACTIVE' && before?.lifecycle_status === 'ARCHIVED') {
+      actionType = 'requirement_restored';
+      description = `Restored archived requirement "${after.title}"`;
+    } else if (updates.review_date && updates.review_date !== before?.review_date) {
+      actionType = 'requirement_review_completed';
+      description = `Completed requirement review for "${after.title}". New review date: ${updates.review_date}`;
+    } else if (
+      (updates.owner && updates.owner !== before?.owner) ||
+      (updates.category && updates.category !== before?.category) ||
+      (updates.risk_level && updates.risk_level !== before?.risk_level) ||
+      (updates.review_frequency && updates.review_frequency !== before?.review_frequency)
+    ) {
+      actionType = 'requirement_settings_changed';
+      description = `Changed settings (owner/category/risk/frequency) on requirement "${after.title}"`;
+    }
+
+    await safeLogAuditEvent({
+      actionCategory: 'Requirements',
+      actionType,
+      entityType: 'requirement',
+      entityId: requirementId,
+      entityLabel: after.title,
+      description,
+      beforeSnapshot: before,
+      afterSnapshot: after,
+      changedFields: getChangedFields(before, after),
+      undoAvailable,
+      undoActionType,
+      undoExpiresAt,
+      severity
+    });
+
+    return after;
   },
 
   async requirementHasLinkedHistory(requirementId: string): Promise<boolean> {
@@ -1567,34 +1784,59 @@ export const dbService = {
     const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
     const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
 
+    const doc = await fetchRecordById('evidence_documents', documentId);
+    const req = await fetchRecordById('requirements', requirementId);
+
+    let data: RequirementDocument;
     if (shouldUseSupabase()) {
-      const { data, error } = await supabase!
+      const { data: res, error } = await supabase!
         .from('requirement_documents')
         .insert([{ requirement_id: requirementId, document_id: documentId, organisation_id: orgId, linked_by: userId }])
         .select()
         .single();
       if (error) throwSupabaseError('requirement_documents.insert active organisation', error);
-      return data;
+      data = res;
+    } else {
+      const links = getStorageItem('vigilen_requirement_documents', MOCK_REQUIREMENT_DOCUMENTS);
+      const existing = links.find((link: RequirementDocument) => link.requirement_id === requirementId && link.document_id === documentId);
+      if (existing) {
+        data = existing;
+      } else {
+        const newLink: RequirementDocument = {
+          id: `fw-link-${Math.random().toString(36).substr(2, 9)}`,
+          requirement_id: requirementId,
+          document_id: documentId,
+          organisation_id: orgId,
+          linked_by: userId,
+          created_at: new Date().toISOString()
+        };
+        links.push(newLink);
+        setStorageItem('vigilen_requirement_documents', links);
+        data = newLink;
+      }
     }
 
-    const links = getStorageItem('vigilen_requirement_documents', MOCK_REQUIREMENT_DOCUMENTS);
-    const existing = links.find((link: RequirementDocument) => link.requirement_id === requirementId && link.document_id === documentId);
-    if (existing) return existing;
-    const newLink: RequirementDocument = {
-      id: `fw-link-${Math.random().toString(36).substr(2, 9)}`,
-      requirement_id: requirementId,
-      document_id: documentId,
-      organisation_id: orgId,
-      linked_by: userId,
-      created_at: new Date().toISOString()
-    };
-    links.push(newLink);
-    setStorageItem('vigilen_requirement_documents', links);
-    return newLink;
+    await safeLogAuditEvent({
+      actionCategory: 'Evidence',
+      actionType: 'evidence_linked',
+      entityType: 'evidence_document',
+      entityId: documentId,
+      entityLabel: doc?.title || 'Unknown Document',
+      description: `Linked evidence document "${doc?.title || ''}" to requirement "${req?.title || ''}"`,
+      metadata: {
+        requirement_id: requirementId,
+        requirement_title: req?.title
+      },
+      severity: 'info'
+    });
+
+    return data;
   },
 
   async unlinkDocumentFromRequirement(requirementId: string, documentId: string): Promise<void> {
     const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const doc = await fetchRecordById('evidence_documents', documentId);
+    const req = await fetchRecordById('requirements', requirementId);
 
     if (shouldUseSupabase()) {
       const { error } = await supabase!
@@ -1604,14 +1846,27 @@ export const dbService = {
         .eq('document_id', documentId)
         .eq('organisation_id', orgId);
       if (error) throwSupabaseError('requirement_documents.delete active organisation', error);
-      return;
+    } else {
+      const links = getStorageItem('vigilen_requirement_documents', MOCK_REQUIREMENT_DOCUMENTS);
+      setStorageItem(
+        'vigilen_requirement_documents',
+        links.filter((link: RequirementDocument) => !(link.requirement_id === requirementId && link.document_id === documentId))
+      );
     }
 
-    const links = getStorageItem('vigilen_requirement_documents', MOCK_REQUIREMENT_DOCUMENTS);
-    setStorageItem(
-      'vigilen_requirement_documents',
-      links.filter((link: RequirementDocument) => !(link.requirement_id === requirementId && link.document_id === documentId))
-    );
+    await safeLogAuditEvent({
+      actionCategory: 'Evidence',
+      actionType: 'evidence_unlinked',
+      entityType: 'evidence_document',
+      entityId: documentId,
+      entityLabel: doc?.title || 'Unknown Document',
+      description: `Unlinked evidence document "${doc?.title || ''}" from requirement "${req?.title || ''}"`,
+      metadata: {
+        requirement_id: requirementId,
+        requirement_title: req?.title
+      },
+      severity: 'info'
+    });
   },
 
   async getRequirementEvidenceCriteria(): Promise<RequirementEvidenceCriterion[]> {
@@ -1650,6 +1905,9 @@ export const dbService = {
       updated_at: nowIso()
     };
 
+    const before = input.id ? await fetchRecordById('requirement_evidence_criteria', input.id) : null;
+    let after: RequirementEvidenceCriterion;
+
     if (shouldUseSupabase()) {
       const query = input.id
         ? supabase!.from('requirement_evidence_criteria').update(payload).eq('id', input.id).eq('organisation_id', orgId)
@@ -1657,45 +1915,64 @@ export const dbService = {
       const { data, error } = await query.select().single();
       if (error) throwSupabaseError('requirement_evidence_criteria.upsert active organisation', error);
       await this.logActivity('Evidence Criterion Saved', `Saved evidence criterion "${data.title}".`);
-      return data;
-    }
-
-    const criteria = getStorageItem('vigilen_requirement_evidence_criteria', MOCK_REQUIREMENT_EVIDENCE_CRITERIA);
-    if (input.id) {
-      const idx = criteria.findIndex((criterion: RequirementEvidenceCriterion) => criterion.id === input.id);
-      if (idx !== -1) {
-        const updated = { ...criteria[idx], ...payload };
-        criteria[idx] = updated;
+      after = data;
+    } else {
+      const criteria = getStorageItem('vigilen_requirement_evidence_criteria', MOCK_REQUIREMENT_EVIDENCE_CRITERIA);
+      if (input.id) {
+        const idx = criteria.findIndex((criterion: RequirementEvidenceCriterion) => criterion.id === input.id);
+        if (idx !== -1) {
+          after = { ...criteria[idx], ...payload };
+          criteria[idx] = after;
+          setStorageItem('vigilen_requirement_evidence_criteria', criteria);
+          await this.logActivity('Evidence Criterion Saved', `Saved evidence criterion "${after.title}".`);
+        } else {
+          throw new Error('Criterion not found');
+        }
+      } else {
+        after = {
+          id: `crit-${Math.random().toString(36).substr(2, 9)}`,
+          organisation_id: orgId,
+          requirement_id: input.requirement_id,
+          title: input.title,
+          description: input.description || null,
+          evidence_type: input.evidence_type || null,
+          is_required: input.is_required ?? true,
+          weight: input.weight ?? 1,
+          minimum_count: input.minimum_count ?? 1,
+          frequency: input.frequency || null,
+          coverage_period: input.coverage_period || null,
+          validity_required: input.validity_required ?? true,
+          created_by: userId,
+          created_at: nowIso(),
+          updated_at: nowIso()
+        };
+        criteria.push(after);
         setStorageItem('vigilen_requirement_evidence_criteria', criteria);
-        await this.logActivity('Evidence Criterion Saved', `Saved evidence criterion "${updated.title}".`);
-        return updated;
+        await this.logActivity('Evidence Criterion Created', `Created evidence criterion "${after.title}".`);
       }
     }
-    const created: RequirementEvidenceCriterion = {
-      id: `crit-${Math.random().toString(36).substr(2, 9)}`,
-      organisation_id: orgId,
-      requirement_id: input.requirement_id,
-      title: input.title,
-      description: input.description || null,
-      evidence_type: input.evidence_type || null,
-      is_required: input.is_required ?? true,
-      weight: input.weight ?? 1,
-      minimum_count: input.minimum_count ?? 1,
-      frequency: input.frequency || null,
-      coverage_period: input.coverage_period || null,
-      validity_required: input.validity_required ?? true,
-      created_by: userId,
-      created_at: nowIso(),
-      updated_at: nowIso()
-    };
-    criteria.push(created);
-    setStorageItem('vigilen_requirement_evidence_criteria', criteria);
-    await this.logActivity('Evidence Criterion Created', `Created evidence criterion "${created.title}".`);
-    return created;
+
+    await safeLogAuditEvent({
+      actionCategory: 'Requirements',
+      actionType: before ? 'evidence_criteria_edited' : 'evidence_criteria_created',
+      entityType: 'evidence_criterion',
+      entityId: after.id,
+      entityLabel: after.title,
+      description: before
+        ? `Edited evidence criterion "${after.title}" under requirement "${after.requirement_id}"`
+        : `Created evidence criterion "${after.title}" under requirement "${after.requirement_id}"`,
+      beforeSnapshot: before,
+      afterSnapshot: after,
+      changedFields: before ? getChangedFields(before, after) : null,
+      severity: 'info'
+    });
+
+    return after;
   },
 
   async deleteRequirementEvidenceCriterion(criterionId: string): Promise<void> {
     const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const before = await fetchRecordById('requirement_evidence_criteria', criterionId);
     if (shouldUseSupabase()) {
       const { error } = await supabase!
         .from('requirement_evidence_criteria')
@@ -1704,20 +1981,30 @@ export const dbService = {
         .eq('organisation_id', orgId);
       if (error) throwSupabaseError('requirement_evidence_criteria.delete active organisation', error);
       await this.logActivity('Evidence Criterion Deleted', `Deleted evidence criterion ${criterionId}.`);
-      return;
+    } else {
+      setStorageItem(
+        'vigilen_requirement_evidence_criteria',
+        getStorageItem('vigilen_requirement_evidence_criteria', MOCK_REQUIREMENT_EVIDENCE_CRITERIA)
+          .filter((criterion: RequirementEvidenceCriterion) => criterion.id !== criterionId)
+      );
+      setStorageItem(
+        'vigilen_requirement_evidence_criterion_matches',
+        getStorageItem('vigilen_requirement_evidence_criterion_matches', MOCK_REQUIREMENT_EVIDENCE_CRITERION_MATCHES)
+          .filter((match: RequirementEvidenceCriterionMatch) => match.criterion_id !== criterionId)
+      );
+      await this.logActivity('Evidence Criterion Deleted', `Deleted evidence criterion ${criterionId}.`);
     }
 
-    setStorageItem(
-      'vigilen_requirement_evidence_criteria',
-      getStorageItem('vigilen_requirement_evidence_criteria', MOCK_REQUIREMENT_EVIDENCE_CRITERIA)
-        .filter((criterion: RequirementEvidenceCriterion) => criterion.id !== criterionId)
-    );
-    setStorageItem(
-      'vigilen_requirement_evidence_criterion_matches',
-      getStorageItem('vigilen_requirement_evidence_criterion_matches', MOCK_REQUIREMENT_EVIDENCE_CRITERION_MATCHES)
-        .filter((match: RequirementEvidenceCriterionMatch) => match.criterion_id !== criterionId)
-    );
-    await this.logActivity('Evidence Criterion Deleted', `Deleted evidence criterion ${criterionId}.`);
+    await safeLogAuditEvent({
+      actionCategory: 'Requirements',
+      actionType: 'evidence_criteria_deleted',
+      entityType: 'evidence_criterion',
+      entityId: criterionId,
+      entityLabel: before?.title || 'Unknown Criterion',
+      description: `Deleted evidence criterion "${before?.title || ''}"`,
+      beforeSnapshot: before,
+      severity: 'info'
+    });
   },
 
   async getRequirementEvidenceCriterionMatches(): Promise<RequirementEvidenceCriterionMatch[]> {
@@ -1750,35 +2037,62 @@ export const dbService = {
       notes
     };
 
+    const doc = await fetchRecordById('evidence_documents', documentId);
+    const crit = await fetchRecordById('requirement_evidence_criteria', criterionId);
+
+    let data: RequirementEvidenceCriterionMatch;
     if (shouldUseSupabase()) {
-      const { data, error } = await supabase!
+      const { data: res, error } = await supabase!
         .from('requirement_evidence_criterion_matches')
         .upsert([payload], { onConflict: 'criterion_id,document_id' })
         .select()
         .single();
       if (error) throwSupabaseError('requirement_evidence_criterion_matches.upsert document', error);
       await this.logActivity('Evidence Criterion Matched', `Linked document ${documentId} to evidence criterion ${criterionId}.`);
-      return data;
+      data = res;
+    } else {
+      const matches = getStorageItem('vigilen_requirement_evidence_criterion_matches', MOCK_REQUIREMENT_EVIDENCE_CRITERION_MATCHES);
+      const existing = matches.find((match: RequirementEvidenceCriterionMatch) => match.criterion_id === criterionId && match.document_id === documentId);
+      if (existing) {
+        data = existing;
+      } else {
+        const created: RequirementEvidenceCriterionMatch = {
+          id: `crit-match-${Math.random().toString(36).substr(2, 9)}`,
+          ...payload,
+          match_status: 'Matched',
+          created_at: nowIso(),
+          updated_at: nowIso()
+        };
+        matches.push(created);
+        setStorageItem('vigilen_requirement_evidence_criterion_matches', matches);
+        await this.logActivity('Evidence Criterion Matched', `Linked document ${documentId} to evidence criterion ${criterionId}.`);
+        data = created;
+      }
     }
 
-    const matches = getStorageItem('vigilen_requirement_evidence_criterion_matches', MOCK_REQUIREMENT_EVIDENCE_CRITERION_MATCHES);
-    const existing = matches.find((match: RequirementEvidenceCriterionMatch) => match.criterion_id === criterionId && match.document_id === documentId);
-    if (existing) return existing;
-    const created: RequirementEvidenceCriterionMatch = {
-      id: `crit-match-${Math.random().toString(36).substr(2, 9)}`,
-      ...payload,
-      match_status: 'Matched',
-      created_at: nowIso(),
-      updated_at: nowIso()
-    };
-    matches.push(created);
-    setStorageItem('vigilen_requirement_evidence_criterion_matches', matches);
-    await this.logActivity('Evidence Criterion Matched', `Linked document ${documentId} to evidence criterion ${criterionId}.`);
-    return created;
+    await safeLogAuditEvent({
+      actionCategory: 'Evidence',
+      actionType: 'evidence_linked',
+      entityType: 'evidence_document',
+      entityId: documentId,
+      entityLabel: doc?.title || 'Unknown Document',
+      description: `Linked evidence document "${doc?.title || ''}" to evidence criterion "${crit?.title || ''}"`,
+      metadata: {
+        criterion_id: criterionId,
+        criterion_title: crit?.title,
+        requirement_id: crit?.requirement_id
+      },
+      severity: 'info'
+    });
+
+    return data;
   },
 
   async unlinkDocumentFromEvidenceCriterion(criterionId: string, documentId: string): Promise<void> {
     const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const doc = await fetchRecordById('evidence_documents', documentId);
+    const crit = await fetchRecordById('requirement_evidence_criteria', criterionId);
+
     if (shouldUseSupabase()) {
       const { error } = await supabase!
         .from('requirement_evidence_criterion_matches')
@@ -1788,15 +2102,29 @@ export const dbService = {
         .eq('organisation_id', orgId);
       if (error) throwSupabaseError('requirement_evidence_criterion_matches.delete document', error);
       await this.logActivity('Evidence Criterion Unlinked', `Unlinked document ${documentId} from evidence criterion ${criterionId}.`);
-      return;
+    } else {
+      setStorageItem(
+        'vigilen_requirement_evidence_criterion_matches',
+        getStorageItem('vigilen_requirement_evidence_criterion_matches', MOCK_REQUIREMENT_EVIDENCE_CRITERION_MATCHES)
+          .filter((match: RequirementEvidenceCriterionMatch) => !(match.criterion_id === criterionId && match.document_id === documentId))
+      );
+      await this.logActivity('Evidence Criterion Unlinked', `Unlinked document ${documentId} from evidence criterion ${criterionId}.`);
     }
 
-    setStorageItem(
-      'vigilen_requirement_evidence_criterion_matches',
-      getStorageItem('vigilen_requirement_evidence_criterion_matches', MOCK_REQUIREMENT_EVIDENCE_CRITERION_MATCHES)
-        .filter((match: RequirementEvidenceCriterionMatch) => !(match.criterion_id === criterionId && match.document_id === documentId))
-    );
-    await this.logActivity('Evidence Criterion Unlinked', `Unlinked document ${documentId} from evidence criterion ${criterionId}.`);
+    await safeLogAuditEvent({
+      actionCategory: 'Evidence',
+      actionType: 'evidence_unlinked',
+      entityType: 'evidence_document',
+      entityId: documentId,
+      entityLabel: doc?.title || 'Unknown Document',
+      description: `Unlinked evidence document "${doc?.title || ''}" from evidence criterion "${crit?.title || ''}"`,
+      metadata: {
+        criterion_id: criterionId,
+        criterion_title: crit?.title,
+        requirement_id: crit?.requirement_id
+      },
+      severity: 'info'
+    });
   },
 
   async uploadEvidenceForCriterion(criterionId: string, file: File, category: string = 'Evidence'): Promise<EvidenceDocument> {
@@ -1915,6 +2243,7 @@ export const dbService = {
     const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
     const { patch } = prepareActionLifecycleUpdate(null, action, userId);
 
+    let newAction: Action;
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('actions')
@@ -1924,28 +2253,42 @@ export const dbService = {
       if (error) throwSupabaseError('actions.insert active organisation', error);
       await this.addActionUpdate(data.id, 'Status Change', buildStatusNote(null, data.status || 'Open', 'Action opened.'));
       await this.logActivity('Action Opened', `Opened action "${data.title}"`);
-      return data;
+      newAction = data;
+    } else {
+      const actions = getStorageItem('vigilen_actions', MOCK_ACTIONS);
+      newAction = {
+        ...action,
+        ...patch,
+        id: `fw-action-${Math.random().toString(36).substr(2, 9)}`,
+        organisation_id: orgId,
+        created_by: userId,
+        created_at: nowIso(),
+        updated_at: nowIso()
+      };
+      actions.unshift(newAction);
+      setStorageItem('vigilen_actions', actions);
+      await this.addActionUpdate(newAction.id, 'Status Change', buildStatusNote(null, newAction.status, 'Action opened.'));
+      await this.logActivity('Action Opened', `Opened action "${newAction.title}"`);
     }
 
-    const actions = getStorageItem('vigilen_actions', MOCK_ACTIONS);
-    const newAction: Action = {
-      ...action,
-      ...patch,
-      id: `fw-action-${Math.random().toString(36).substr(2, 9)}`,
-      organisation_id: orgId,
-      created_by: userId,
-      created_at: nowIso(),
-      updated_at: nowIso()
-    };
-    actions.unshift(newAction);
-    setStorageItem('vigilen_actions', actions);
-    await this.addActionUpdate(newAction.id, 'Status Change', buildStatusNote(null, newAction.status, 'Action opened.'));
-    await this.logActivity('Action Opened', `Opened action "${newAction.title}"`);
+    await safeLogAuditEvent({
+      actionCategory: 'Actions',
+      actionType: 'action_created',
+      entityType: 'action',
+      entityId: newAction.id,
+      entityLabel: newAction.title,
+      description: `Created action "${newAction.title}"`,
+      afterSnapshot: newAction,
+      severity: 'info'
+    });
+
     return newAction;
   },
 
   async updateAction(actionId: string, updates: Partial<Action>): Promise<Action> {
     const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+    const before = await fetchRecordById('actions', actionId);
+    let after: Action;
 
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
@@ -1970,21 +2313,67 @@ export const dbService = {
         await this.addActionUpdate(actionId, prepared.timeline.update_type, prepared.timeline.note);
         await this.logActivity(prepared.timeline.action, prepared.timeline.details);
       }
-      return data;
+      after = data;
+    } else {
+      const actions = getStorageItem('vigilen_actions', MOCK_ACTIONS);
+      const idx = actions.findIndex((item: Action) => item.id === actionId);
+      if (idx === -1) throw new Error('Action not found');
+      const prepared = prepareActionLifecycleUpdate(actions[idx], updates, userId);
+      after = { ...actions[idx], ...prepared.patch, updated_at: nowIso() };
+      actions[idx] = after;
+      setStorageItem('vigilen_actions', actions);
+      if (prepared.timeline) {
+        await this.addActionUpdate(actionId, prepared.timeline.update_type, prepared.timeline.note);
+        await this.logActivity(prepared.timeline.action, prepared.timeline.details);
+      }
     }
 
-    const actions = getStorageItem('vigilen_actions', MOCK_ACTIONS);
-    const idx = actions.findIndex((item: Action) => item.id === actionId);
-    if (idx === -1) throw new Error('Action not found');
-    const prepared = prepareActionLifecycleUpdate(actions[idx], updates, userId);
-    const updated = { ...actions[idx], ...prepared.patch, updated_at: nowIso() };
-    actions[idx] = updated;
-    setStorageItem('vigilen_actions', actions);
-    if (prepared.timeline) {
-      await this.addActionUpdate(actionId, prepared.timeline.update_type, prepared.timeline.note);
-      await this.logActivity(prepared.timeline.action, prepared.timeline.details);
+    let actionType = 'action_updated';
+    let undoAvailable = false;
+    let undoActionType: string | null = null;
+    let undoExpiresAt: string | null = null;
+    let description = `Updated action "${after.title}"`;
+    const severity = 'info';
+
+    if (updates.status && updates.status !== before?.status) {
+      if (updates.status === 'Complete') {
+        actionType = 'action_completed';
+        description = `Completed action "${after.title}"`;
+        undoAvailable = true;
+        undoActionType = 'restore_action';
+        undoExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
+      } else if (updates.status === 'Cancelled') {
+        actionType = 'action_cancelled';
+        description = `Cancelled action "${after.title}"`;
+        undoAvailable = true;
+        undoActionType = 'restore_action';
+        undoExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      } else if (updates.status === 'Open' && (before?.status === 'Complete' || before?.status === 'Cancelled')) {
+        actionType = 'action_reopened';
+        description = `Reopened action "${after.title}"`;
+      } else {
+        actionType = 'action_status_changed';
+        description = `Changed status of action "${after.title}" to "${updates.status}"`;
+      }
     }
-    return updated;
+
+    await safeLogAuditEvent({
+      actionCategory: 'Actions',
+      actionType,
+      entityType: 'action',
+      entityId: actionId,
+      entityLabel: after.title,
+      description,
+      beforeSnapshot: before,
+      afterSnapshot: after,
+      changedFields: getChangedFields(before, after),
+      undoAvailable,
+      undoActionType,
+      undoExpiresAt,
+      severity
+    });
+
+    return after;
   },
 
   async addActionUpdate(actionId: string, updateType: ActionUpdateType, note: string): Promise<ActionUpdate> {
@@ -2023,8 +2412,12 @@ export const dbService = {
     const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
     const note = timelineNote?.trim() || `Evidence document ${documentId} linked to action.`;
 
+    const doc = await fetchRecordById('evidence_documents', documentId);
+    const action = await fetchRecordById('actions', actionId);
+
+    let data: ActionDocument;
     if (shouldUseSupabase()) {
-      const { data, error } = await supabase!
+      const { data: res, error } = await supabase!
         .from('action_documents')
         .insert([{ organisation_id: orgId, action_id: actionId, document_id: documentId, linked_by: userId }])
         .select()
@@ -2032,29 +2425,50 @@ export const dbService = {
       if (error) throwSupabaseError('action_documents.insert active organisation', error);
       await this.addActionUpdate(actionId, 'Evidence Added', note);
       await this.logActivity('Action Evidence Linked', `Linked evidence document ${documentId} to action ${actionId}.`);
-      return data;
+      data = res;
+    } else {
+      const links = getStorageItem('vigilen_action_documents', MOCK_ACTION_DOCUMENTS);
+      const existing = links.find((link: ActionDocument) => link.action_id === actionId && link.document_id === documentId);
+      if (existing) {
+        data = existing;
+      } else {
+        const newLink: ActionDocument = {
+          id: `fw-action-doc-${Math.random().toString(36).substr(2, 9)}`,
+          organisation_id: orgId,
+          action_id: actionId,
+          document_id: documentId,
+          linked_by: userId,
+          linked_at: nowIso()
+        };
+        links.push(newLink);
+        setStorageItem('vigilen_action_documents', links);
+        await this.addActionUpdate(actionId, 'Evidence Added', note);
+        await this.logActivity('Action Evidence Linked', `Linked evidence document ${documentId} to action ${actionId}.`);
+        data = newLink;
+      }
     }
 
-    const links = getStorageItem('vigilen_action_documents', MOCK_ACTION_DOCUMENTS);
-    const existing = links.find((link: ActionDocument) => link.action_id === actionId && link.document_id === documentId);
-    if (existing) return existing;
-    const newLink: ActionDocument = {
-      id: `fw-action-doc-${Math.random().toString(36).substr(2, 9)}`,
-      organisation_id: orgId,
-      action_id: actionId,
-      document_id: documentId,
-      linked_by: userId,
-      linked_at: nowIso()
-    };
-    links.push(newLink);
-    setStorageItem('vigilen_action_documents', links);
-    await this.addActionUpdate(actionId, 'Evidence Added', note);
-    await this.logActivity('Action Evidence Linked', `Linked evidence document ${documentId} to action ${actionId}.`);
-    return newLink;
+    await safeLogAuditEvent({
+      actionCategory: 'Evidence',
+      actionType: 'evidence_linked',
+      entityType: 'evidence_document',
+      entityId: documentId,
+      entityLabel: doc?.title || 'Unknown Document',
+      description: `Linked evidence document "${doc?.title || ''}" to action "${action?.title || ''}"`,
+      metadata: {
+        action_id: actionId,
+        action_title: action?.title
+      },
+      severity: 'info'
+    });
+
+    return data;
   },
 
   async unlinkDocumentFromAction(actionId: string, documentId: string): Promise<void> {
     const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const doc = await fetchRecordById('evidence_documents', documentId);
+    const action = await fetchRecordById('actions', actionId);
 
     if (shouldUseSupabase()) {
       const { error } = await supabase!
@@ -2066,16 +2480,29 @@ export const dbService = {
       if (error) throwSupabaseError('action_documents.delete active organisation', error);
       await this.addActionUpdate(actionId, 'Evidence Added', `Evidence document ${documentId} unlinked from action.`);
       await this.logActivity('Action Evidence Unlinked', `Unlinked evidence document ${documentId} from action ${actionId}.`);
-      return;
+    } else {
+      const links = getStorageItem('vigilen_action_documents', MOCK_ACTION_DOCUMENTS);
+      setStorageItem(
+        'vigilen_action_documents',
+        links.filter((link: ActionDocument) => !(link.action_id === actionId && link.document_id === documentId))
+      );
+      await this.addActionUpdate(actionId, 'Evidence Added', `Evidence document ${documentId} unlinked from action.`);
+      await this.logActivity('Action Evidence Unlinked', `Unlinked evidence document ${documentId} from action ${actionId}.`);
     }
 
-    const links = getStorageItem('vigilen_action_documents', MOCK_ACTION_DOCUMENTS);
-    setStorageItem(
-      'vigilen_action_documents',
-      links.filter((link: ActionDocument) => !(link.action_id === actionId && link.document_id === documentId))
-    );
-    await this.addActionUpdate(actionId, 'Evidence Added', `Evidence document ${documentId} unlinked from action.`);
-    await this.logActivity('Action Evidence Unlinked', `Unlinked evidence document ${documentId} from action ${actionId}.`);
+    await safeLogAuditEvent({
+      actionCategory: 'Evidence',
+      actionType: 'evidence_unlinked',
+      entityType: 'evidence_document',
+      entityId: documentId,
+      entityLabel: doc?.title || 'Unknown Document',
+      description: `Unlinked evidence document "${doc?.title || ''}" from action "${action?.title || ''}"`,
+      metadata: {
+        action_id: actionId,
+        action_title: action?.title
+      },
+      severity: 'info'
+    });
   },
 
 
@@ -2152,6 +2579,9 @@ export const dbService = {
       updated_at: nowIso()
     };
 
+    const before = input.id ? await fetchRecordById('people', input.id) : null;
+    let after: Person;
+
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('people')
@@ -2160,43 +2590,83 @@ export const dbService = {
         .single();
       if (error) throwSupabaseError('people.upsert active organisation', error);
       await this.logActivity('Person Saved', `Saved person "${data.display_name}".`);
-      return data;
-    }
-
-    const people = getStorageItem('vigilen_people', MOCK_PEOPLE);
-    if (input.id) {
-      const idx = people.findIndex((person: Person) => person.id === input.id);
-      if (idx !== -1) {
-        const updated = { ...people[idx], ...payload };
-        people[idx] = updated;
+      after = data;
+    } else {
+      const people = getStorageItem('vigilen_people', MOCK_PEOPLE);
+      if (input.id) {
+        const idx = people.findIndex((person: Person) => person.id === input.id);
+        if (idx !== -1) {
+          after = { ...people[idx], ...payload };
+          people[idx] = after;
+          setStorageItem('vigilen_people', people);
+          await this.logActivity('Person Saved', `Saved person "${after.display_name}".`);
+        } else {
+          throw new Error('Person not found');
+        }
+      } else {
+        after = {
+          id: `person-${Math.random().toString(36).substr(2, 9)}`,
+          organisation_id: orgId,
+          employee_number: input.employee_number || null,
+          first_name: input.first_name,
+          last_name: input.last_name,
+          display_name: displayName,
+          email: input.email || null,
+          department: input.department || null,
+          role: input.role || null,
+          person_type: input.person_type,
+          start_date: input.start_date || null,
+          end_date: input.end_date || null,
+          active: input.active ?? true,
+          notes: input.notes || null,
+          created_at: nowIso(),
+          updated_at: nowIso()
+        };
+        people.unshift(after);
         setStorageItem('vigilen_people', people);
-        await this.logActivity('Person Saved', `Saved person "${updated.display_name}".`);
-        return updated;
+        await this.logActivity('Person Added', `Created person "${after.display_name}".`);
       }
     }
 
-    const created: Person = {
-      id: `person-${Math.random().toString(36).substr(2, 9)}`,
-      organisation_id: orgId,
-      employee_number: input.employee_number || null,
-      first_name: input.first_name,
-      last_name: input.last_name,
-      display_name: displayName,
-      email: input.email || null,
-      department: input.department || null,
-      role: input.role || null,
-      person_type: input.person_type,
-      start_date: input.start_date || null,
-      end_date: input.end_date || null,
-      active: input.active ?? true,
-      notes: input.notes || null,
-      created_at: nowIso(),
-      updated_at: nowIso()
-    };
-    people.unshift(created);
-    setStorageItem('vigilen_people', people);
-    await this.logActivity('Person Added', `Created person "${created.display_name}".`);
-    return created;
+    let actionType = 'person_edited';
+    let undoAvailable = false;
+    let undoActionType: string | null = null;
+    let undoExpiresAt: string | null = null;
+    let description = `Edited person details for "${after.display_name}"`;
+    let severity: 'info' | 'warning' | 'critical' = 'info';
+
+    if (!before) {
+      actionType = 'person_created';
+      description = `Added person "${after.display_name}"`;
+    } else if (input.active === false && before.active === true) {
+      actionType = 'person_archived';
+      undoAvailable = true;
+      undoActionType = 'restore_person';
+      undoExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      description = `Archived person "${after.display_name}"`;
+      severity = 'warning';
+    } else if (input.active === true && before.active === false) {
+      actionType = 'person_restored';
+      description = `Restored person "${after.display_name}"`;
+    }
+
+    await safeLogAuditEvent({
+      actionCategory: 'Competency',
+      actionType,
+      entityType: 'person',
+      entityId: after.id,
+      entityLabel: after.display_name,
+      description,
+      beforeSnapshot: before,
+      afterSnapshot: after,
+      changedFields: before ? getChangedFields(before, after) : null,
+      undoAvailable,
+      undoActionType,
+      undoExpiresAt,
+      severity
+    });
+
+    return after;
   },
 
   async getCompetencyTypes(): Promise<CompetencyType[]> {
@@ -2230,6 +2700,9 @@ export const dbService = {
       updated_at: nowIso()
     };
 
+    let before: CompetencyType | null = null;
+    let after: CompetencyType;
+
     if (shouldUseSupabase()) {
       let existingId = input.id || null;
       if (!existingId) {
@@ -2243,6 +2716,9 @@ export const dbService = {
         if (existingError) throwSupabaseError('competency_types.select before upsert', existingError);
         existingId = existing?.id || null;
       }
+      if (existingId) {
+        before = await fetchRecordById('competency_types', existingId);
+      }
 
       const query = existingId
         ? supabase!.from('competency_types').update(payload).eq('id', existingId).eq('organisation_id', orgId)
@@ -2250,39 +2726,78 @@ export const dbService = {
       const { data, error } = await query.select().single();
       if (error) throwSupabaseError('competency_types.upsert active organisation', error);
       await this.logActivity('Competency Type Saved', `Saved competency type "${data.title}".`);
-      return data;
+      after = data;
+    } else {
+      const types = getStorageItem('vigilen_competency_types', MOCK_COMPETENCY_TYPES);
+      const idx = types.findIndex((type: CompetencyType) =>
+        input.id ? type.id === input.id : type.title.toLowerCase() === input.title.toLowerCase() && type.category === input.category
+      );
+      if (idx !== -1) {
+        before = types[idx];
+        after = { ...types[idx], ...payload };
+        types[idx] = after;
+        setStorageItem('vigilen_competency_types', types);
+        await this.logActivity('Competency Type Saved', `Saved competency type "${after.title}".`);
+      } else {
+        after = {
+          id: `comp-type-${Math.random().toString(36).substr(2, 9)}`,
+          organisation_id: orgId,
+          title: input.title,
+          category: input.category,
+          description: input.description || null,
+          validity_period_months: input.validity_period_months ?? null,
+          refresher_period_months: input.refresher_period_months ?? null,
+          evidence_required: input.evidence_required ?? true,
+          default_risk_level: input.default_risk_level || 'Medium',
+          active: input.active ?? true,
+          created_at: nowIso(),
+          updated_at: nowIso()
+        };
+        types.unshift(after);
+        setStorageItem('vigilen_competency_types', types);
+        await this.logActivity('Competency Type Added', `Created competency type "${after.title}".`);
+      }
     }
 
-    const types = getStorageItem('vigilen_competency_types', MOCK_COMPETENCY_TYPES);
-    const idx = types.findIndex((type: CompetencyType) =>
-      input.id ? type.id === input.id : type.title.toLowerCase() === input.title.toLowerCase() && type.category === input.category
-    );
-    if (idx !== -1) {
-      const updated = { ...types[idx], ...payload };
-      types[idx] = updated;
-      setStorageItem('vigilen_competency_types', types);
-      await this.logActivity('Competency Type Saved', `Saved competency type "${updated.title}".`);
-      return updated;
+    let actionType = 'competency_type_edited';
+    let undoAvailable = false;
+    let undoActionType: string | null = null;
+    let undoExpiresAt: string | null = null;
+    let description = `Edited competency type "${after.title}"`;
+    let severity: 'info' | 'warning' | 'critical' = 'info';
+
+    if (!before) {
+      actionType = 'competency_type_created';
+      description = `Created competency type "${after.title}"`;
+    } else if (input.active === false && before.active === true) {
+      actionType = 'competency_type_archived';
+      undoAvailable = true;
+      undoActionType = 'restore_competency_type';
+      undoExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      description = `Archived competency type "${after.title}"`;
+      severity = 'warning';
+    } else if (input.active === true && before.active === false) {
+      actionType = 'competency_type_restored';
+      description = `Restored competency type "${after.title}"`;
     }
 
-    const created: CompetencyType = {
-      id: `comp-type-${Math.random().toString(36).substr(2, 9)}`,
-      organisation_id: orgId,
-      title: input.title,
-      category: input.category,
-      description: input.description || null,
-      validity_period_months: input.validity_period_months ?? null,
-      refresher_period_months: input.refresher_period_months ?? null,
-      evidence_required: input.evidence_required ?? true,
-      default_risk_level: input.default_risk_level || 'Medium',
-      active: input.active ?? true,
-      created_at: nowIso(),
-      updated_at: nowIso()
-    };
-    types.unshift(created);
-    setStorageItem('vigilen_competency_types', types);
-    await this.logActivity('Competency Type Added', `Created competency type "${created.title}".`);
-    return created;
+    await safeLogAuditEvent({
+      actionCategory: 'Competency',
+      actionType,
+      entityType: 'competency_type',
+      entityId: after.id,
+      entityLabel: after.title,
+      description,
+      beforeSnapshot: before,
+      afterSnapshot: after,
+      changedFields: before ? getChangedFields(before, after) : null,
+      undoAvailable,
+      undoActionType,
+      undoExpiresAt,
+      severity
+    });
+
+    return after;
   },
 
   async importCompetencyTemplateItems(items: CompetencyTemplateItem[]): Promise<CompetencyType[]> {
@@ -2343,6 +2858,25 @@ export const dbService = {
     };
     const supabasePayload = recordId ? { id: recordId, ...payload } : payload;
 
+    let before: CompetencyRecord | null = null;
+    if (recordId) {
+      before = await fetchRecordById('competency_records', recordId);
+    } else {
+      if (shouldUseSupabase()) {
+        const { data } = await supabase!
+          .from('competency_records')
+          .select('*')
+          .eq('person_id', input.person_id)
+          .eq('competency_type_id', input.competency_type_id)
+          .maybeSingle();
+        before = data;
+      } else {
+        const records = getStorageItem('vigilen_competency_records', MOCK_COMPETENCY_RECORDS);
+        before = records.find((r: CompetencyRecord) => r.person_id === input.person_id && r.competency_type_id === input.competency_type_id) || null;
+      }
+    }
+
+    let after: CompetencyRecord;
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('competency_records')
@@ -2351,46 +2885,70 @@ export const dbService = {
         .single();
       if (error) throwSupabaseError('competency_records.upsert active organisation', error);
       await this.logActivity('Competency Record Saved', `Saved competency record ${data.id}.`);
-      return data;
+      after = data;
+    } else {
+      const records = getStorageItem('vigilen_competency_records', MOCK_COMPETENCY_RECORDS);
+      const idx = records.findIndex((record: CompetencyRecord) =>
+        recordId
+          ? record.id === recordId
+          : record.person_id === input.person_id && record.competency_type_id === input.competency_type_id
+      );
+      if (idx !== -1) {
+        after = { ...records[idx], ...payload };
+        records[idx] = after;
+        setStorageItem('vigilen_competency_records', records);
+        await this.logActivity('Competency Record Saved', `Saved competency record ${after.id}.`);
+      } else {
+        after = {
+          id: `comp-rec-${Math.random().toString(36).substr(2, 9)}`,
+          organisation_id: orgId,
+          person_id: input.person_id,
+          competency_type_id: input.competency_type_id,
+          completed_date: input.completed_date || null,
+          expiry_date: input.expiry_date || null,
+          trainer: input.trainer || null,
+          provider: input.provider || null,
+          certificate_number: input.certificate_number || null,
+          status,
+          notes: input.notes || null,
+          created_at: nowIso(),
+          updated_at: nowIso()
+        };
+        records.unshift(after);
+        setStorageItem('vigilen_competency_records', records);
+        await this.logActivity('Competency Record Added', `Created competency record ${after.id}.`);
+      }
     }
 
-    const records = getStorageItem('vigilen_competency_records', MOCK_COMPETENCY_RECORDS);
-    const idx = records.findIndex((record: CompetencyRecord) =>
-      recordId
-        ? record.id === recordId
-        : record.person_id === input.person_id && record.competency_type_id === input.competency_type_id
-    );
-    if (idx !== -1) {
-      const updated = { ...records[idx], ...payload };
-      records[idx] = updated;
-      setStorageItem('vigilen_competency_records', records);
-      await this.logActivity('Competency Record Saved', `Saved competency record ${updated.id}.`);
-      return updated;
+    let actionType = 'competency_record_edited';
+    let description = `Edited competency record (ID: ${after.id})`;
+    if (!before) {
+      actionType = 'competency_record_created';
+      description = `Created competency record (ID: ${after.id})`;
+    } else if (input.status && input.status !== before.status) {
+      actionType = 'competency_record_status_changed';
+      description = `Changed status of competency record (ID: ${after.id}) to "${after.status}"`;
     }
 
-    const created: CompetencyRecord = {
-      id: `comp-rec-${Math.random().toString(36).substr(2, 9)}`,
-      organisation_id: orgId,
-      person_id: input.person_id,
-      competency_type_id: input.competency_type_id,
-      completed_date: input.completed_date || null,
-      expiry_date: input.expiry_date || null,
-      trainer: input.trainer || null,
-      provider: input.provider || null,
-      certificate_number: input.certificate_number || null,
-      status,
-      notes: input.notes || null,
-      created_at: nowIso(),
-      updated_at: nowIso()
-    };
-    records.unshift(created);
-    setStorageItem('vigilen_competency_records', records);
-    await this.logActivity('Competency Record Added', `Created competency record ${created.id}.`);
-    return created;
+    await safeLogAuditEvent({
+      actionCategory: 'Competency',
+      actionType,
+      entityType: 'competency_record',
+      entityId: after.id,
+      entityLabel: 'Competency Record',
+      description,
+      beforeSnapshot: before,
+      afterSnapshot: after,
+      changedFields: before ? getChangedFields(before, after) : null,
+      severity: 'info'
+    });
+
+    return after;
   },
 
   async deleteCompetencyRecord(recordId: string): Promise<void> {
     const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const before = await fetchRecordById('competency_records', recordId);
 
     if (shouldUseSupabase()) {
       const { error } = await supabase!
@@ -2400,15 +2958,28 @@ export const dbService = {
         .eq('organisation_id', orgId);
       if (error) throwSupabaseError('competency_records.delete active organisation', error);
       await this.logActivity('Competency Record Deleted', `Deleted competency record ${recordId}.`);
-      return;
+    } else {
+      const records = getStorageItem('vigilen_competency_records', MOCK_COMPETENCY_RECORDS);
+      setStorageItem(
+        'vigilen_competency_records',
+        records.filter((record: CompetencyRecord) => record.id !== recordId)
+      );
+      await this.logActivity('Competency Record Deleted', `Deleted competency record ${recordId}.`);
     }
 
-    const records = getStorageItem('vigilen_competency_records', MOCK_COMPETENCY_RECORDS);
-    setStorageItem(
-      'vigilen_competency_records',
-      records.filter((record: CompetencyRecord) => record.id !== recordId)
-    );
-    await this.logActivity('Competency Record Deleted', `Deleted competency record ${recordId}.`);
+    await safeLogAuditEvent({
+      actionCategory: 'Competency',
+      actionType: 'competency_record_deleted',
+      entityType: 'competency_record',
+      entityId: recordId,
+      entityLabel: 'Competency Record',
+      description: `Deleted competency record (ID: ${recordId})`,
+      beforeSnapshot: before,
+      undoAvailable: true,
+      undoActionType: 'restore_competency_record',
+      undoExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      severity: 'warning'
+    });
   },
 
   async getCompetencyRecordDocuments(): Promise<CompetencyRecordDocument[]> {
@@ -2430,8 +3001,12 @@ export const dbService = {
     const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
     const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
 
+    const doc = await fetchRecordById('evidence_documents', documentId);
+    const record = await fetchRecordById('competency_records', recordId);
+
+    let data: CompetencyRecordDocument;
     if (shouldUseSupabase()) {
-      const { data, error } = await supabase!
+      const { data: res, error } = await supabase!
         .from('competency_record_documents')
         .upsert([{ organisation_id: orgId, competency_record_id: recordId, document_id: documentId, linked_by: userId }], {
           onConflict: 'competency_record_id,document_id'
@@ -2440,28 +3015,50 @@ export const dbService = {
         .single();
       if (error) throwSupabaseError('competency_record_documents.insert active organisation', error);
       await this.logActivity('Competency Evidence Linked', `Linked evidence document ${documentId} to competency record ${recordId}.`);
-      return data;
+      data = res;
+    } else {
+      const links = getStorageItem('vigilen_competency_record_documents', MOCK_COMPETENCY_RECORD_DOCUMENTS);
+      const existing = links.find((link: CompetencyRecordDocument) => link.competency_record_id === recordId && link.document_id === documentId);
+      if (existing) {
+        data = existing;
+      } else {
+        const newLink: CompetencyRecordDocument = {
+          id: `comp-doc-${Math.random().toString(36).substr(2, 9)}`,
+          organisation_id: orgId,
+          competency_record_id: recordId,
+          document_id: documentId,
+          linked_by: userId,
+          linked_at: nowIso()
+        };
+        links.push(newLink);
+        setStorageItem('vigilen_competency_record_documents', links);
+        await this.logActivity('Competency Evidence Linked', `Linked evidence document ${documentId} to competency record ${recordId}.`);
+        data = newLink;
+      }
     }
 
-    const links = getStorageItem('vigilen_competency_record_documents', MOCK_COMPETENCY_RECORD_DOCUMENTS);
-    const existing = links.find((link: CompetencyRecordDocument) => link.competency_record_id === recordId && link.document_id === documentId);
-    if (existing) return existing;
-    const newLink: CompetencyRecordDocument = {
-      id: `comp-doc-${Math.random().toString(36).substr(2, 9)}`,
-      organisation_id: orgId,
-      competency_record_id: recordId,
-      document_id: documentId,
-      linked_by: userId,
-      linked_at: nowIso()
-    };
-    links.push(newLink);
-    setStorageItem('vigilen_competency_record_documents', links);
-    await this.logActivity('Competency Evidence Linked', `Linked evidence document ${documentId} to competency record ${recordId}.`);
-    return newLink;
+    await safeLogAuditEvent({
+      actionCategory: 'Evidence',
+      actionType: 'evidence_linked',
+      entityType: 'evidence_document',
+      entityId: documentId,
+      entityLabel: doc?.title || 'Unknown Document',
+      description: `Linked evidence document "${doc?.title || ''}" to competency record (ID: ${recordId})`,
+      metadata: {
+        competency_record_id: recordId,
+        person_id: record?.person_id
+      },
+      severity: 'info'
+    });
+
+    return data;
   },
 
   async unlinkDocumentFromCompetencyRecord(recordId: string, documentId: string): Promise<void> {
     const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const doc = await fetchRecordById('evidence_documents', documentId);
+    const record = await fetchRecordById('competency_records', recordId);
+
     if (shouldUseSupabase()) {
       const { error } = await supabase!
         .from('competency_record_documents')
@@ -2471,15 +3068,28 @@ export const dbService = {
         .eq('organisation_id', orgId);
       if (error) throwSupabaseError('competency_record_documents.delete active organisation', error);
       await this.logActivity('Competency Evidence Unlinked', `Unlinked evidence document ${documentId} from competency record ${recordId}.`);
-      return;
+    } else {
+      const links = getStorageItem('vigilen_competency_record_documents', MOCK_COMPETENCY_RECORD_DOCUMENTS);
+      setStorageItem(
+        'vigilen_competency_record_documents',
+        links.filter((link: CompetencyRecordDocument) => !(link.competency_record_id === recordId && link.document_id === documentId))
+      );
+      await this.logActivity('Competency Evidence Unlinked', `Unlinked evidence document ${documentId} from competency record ${recordId}.`);
     }
 
-    const links = getStorageItem('vigilen_competency_record_documents', MOCK_COMPETENCY_RECORD_DOCUMENTS);
-    setStorageItem(
-      'vigilen_competency_record_documents',
-      links.filter((link: CompetencyRecordDocument) => !(link.competency_record_id === recordId && link.document_id === documentId))
-    );
-    await this.logActivity('Competency Evidence Unlinked', `Unlinked evidence document ${documentId} from competency record ${recordId}.`);
+    await safeLogAuditEvent({
+      actionCategory: 'Evidence',
+      actionType: 'evidence_unlinked',
+      entityType: 'evidence_document',
+      entityId: documentId,
+      entityLabel: doc?.title || 'Unknown Document',
+      description: `Unlinked evidence document "${doc?.title || ''}" from competency record (ID: ${recordId})`,
+      metadata: {
+        competency_record_id: recordId,
+        person_id: record?.person_id
+      },
+      severity: 'info'
+    });
   },
 
   async uploadCompetencyEvidence(recordId: string, file: File): Promise<EvidenceDocument> {
@@ -2719,6 +3329,17 @@ export const dbService = {
       
       // Attempt to map to Matrix cell if we find matching category/keywords
       await this.autoMapCell(newDoc);
+
+      await safeLogAuditEvent({
+        actionCategory: 'Evidence',
+        actionType: 'evidence_uploaded',
+        entityType: 'evidence_document',
+        entityId: newDoc.id,
+        entityLabel: newDoc.title,
+        description: `Uploaded evidence document "${newDoc.title}"`,
+        afterSnapshot: newDoc,
+        severity: 'info'
+      });
       
       return newDoc;
     }
@@ -2806,6 +3427,18 @@ export const dbService = {
     }
 
     await this.logActivity('Document Uploaded', `Uploaded document "${data.title}" (${data.original_file_name || data.file_name})`);
+
+    await safeLogAuditEvent({
+      actionCategory: 'Evidence',
+      actionType: 'evidence_uploaded',
+      entityType: 'evidence_document',
+      entityId: data.id,
+      entityLabel: data.title,
+      description: `Uploaded evidence document "${data.title}"`,
+      afterSnapshot: data,
+      severity: 'info'
+    });
+
     return data;
   },
 
@@ -2842,6 +3475,8 @@ export const dbService = {
   },
 
   async updateDocument(docId: string, updates: Partial<EvidenceDocument>): Promise<EvidenceDocument> {
+    const before = await fetchRecordById('evidence_documents', docId);
+    let after: EvidenceDocument;
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
       const { data, error } = await supabase!
@@ -2853,13 +3488,13 @@ export const dbService = {
         .select()
         .single();
       if (error) throwSupabaseError('evidence_documents.update active organization', error);
-      return data;
+      after = data;
     } else {
       const docs = getStorageItem('vigilen_documents', MOCK_DOCUMENTS);
       const idx = docs.findIndex((d: any) => d.id === docId);
       if (idx === -1) throw new Error('Document not found');
-      const updated = { ...docs[idx], ...updates, updated_at: new Date().toISOString() };
-      docs[idx] = updated;
+      after = { ...docs[idx], ...updates, updated_at: new Date().toISOString() };
+      docs[idx] = after;
       setStorageItem('vigilen_documents', docs);
 
       // Check if status changed, and update corresponding matrix cells
@@ -2869,8 +3504,8 @@ export const dbService = {
         if (cell.document_id === docId) {
           cellUpdated = true;
           let cellStatus: CellStatus = 'Compliant';
-          if (updated.status === 'Expired') cellStatus = 'Expired';
-          else if (updated.status === 'Expiring Soon') cellStatus = 'Expiring Soon';
+          if (after.status === 'Expired') cellStatus = 'Expired';
+          else if (after.status === 'Expiring Soon') cellStatus = 'Expiring Soon';
           return { ...cell, status: cellStatus, last_checked_at: new Date().toISOString() };
         }
         return cell;
@@ -2879,12 +3514,27 @@ export const dbService = {
         setStorageItem('vigilen_cells', updatedCells);
       }
 
-      await this.logActivity('Document Updated', `Modified metadata or status for "${updated.title}"`);
-      return updated;
+      await this.logActivity('Document Updated', `Modified metadata or status for "${after.title}"`);
     }
+
+    await safeLogAuditEvent({
+      actionCategory: 'Evidence',
+      actionType: 'evidence_metadata_edited',
+      entityType: 'evidence_document',
+      entityId: docId,
+      entityLabel: after.title,
+      description: `Updated metadata for evidence document "${after.title}"`,
+      beforeSnapshot: before,
+      afterSnapshot: after,
+      changedFields: getChangedFields(before, after),
+      severity: 'info'
+    });
+
+    return after;
   },
 
   async deleteDocument(docId: string): Promise<void> {
+    const before = await fetchRecordById('evidence_documents', docId);
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
       const userId = await getCurrentSupabaseUserId();
@@ -2951,9 +3601,25 @@ export const dbService = {
       setStorageItem('vigilen_cells', updatedCells);
       await this.logActivity('Document Removed', `Deleted document with ID ${docId}`);
     }
+
+    await safeLogAuditEvent({
+      actionCategory: 'Evidence',
+      actionType: 'evidence_archived',
+      entityType: 'evidence_document',
+      entityId: docId,
+      entityLabel: before?.title || 'Unknown Document',
+      description: `Archived/soft-deleted evidence document "${before?.title || ''}"`,
+      beforeSnapshot: before,
+      undoAvailable: true,
+      undoActionType: 'restore_evidence',
+      undoExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      severity: 'warning'
+    });
   },
 
   async restoreDocument(docId: string): Promise<EvidenceDocument> {
+    const before = await fetchRecordById('evidence_documents', docId);
+    let after: EvidenceDocument;
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
       const { data, error } = await supabase!
@@ -2966,16 +3632,30 @@ export const dbService = {
         .single();
       if (error) throwSupabaseError('evidence_documents.restore archived document', error);
       await this.logActivity('Document Restored', `Restored evidence document ${docId}.`);
-      return data;
+      after = data;
+    } else {
+      const docs = getStorageItem('vigilen_documents', MOCK_DOCUMENTS);
+      const idx = docs.findIndex((doc: EvidenceDocument) => doc.id === docId);
+      if (idx === -1) throw new Error('Document not found.');
+      after = { ...docs[idx], status: 'Active', archived_at: null, archived_by: null, deleted_at: null, deleted_by: null, updated_at: new Date().toISOString() };
+      docs[idx] = after;
+      setStorageItem('vigilen_documents', docs);
+      await this.logActivity('Document Restored', `Restored evidence document ${docId}.`);
     }
 
-    const docs = getStorageItem('vigilen_documents', MOCK_DOCUMENTS);
-    const idx = docs.findIndex((doc: EvidenceDocument) => doc.id === docId);
-    if (idx === -1) throw new Error('Document not found.');
-    docs[idx] = { ...docs[idx], status: 'Active', archived_at: null, archived_by: null, deleted_at: null, deleted_by: null, updated_at: new Date().toISOString() };
-    setStorageItem('vigilen_documents', docs);
-    await this.logActivity('Document Restored', `Restored evidence document ${docId}.`);
-    return docs[idx];
+    await safeLogAuditEvent({
+      actionCategory: 'Evidence',
+      actionType: 'evidence_restored',
+      entityType: 'evidence_document',
+      entityId: docId,
+      entityLabel: after.title,
+      description: `Restored archived/soft-deleted evidence document "${after.title}"`,
+      beforeSnapshot: before,
+      afterSnapshot: after,
+      severity: 'info'
+    });
+
+    return after;
   },
 
   async permanentlyDeleteDocument(docId: string): Promise<void> {
@@ -3092,13 +3772,14 @@ export const dbService = {
 
   async addAuditPack(pack: Omit<AuditPack, 'id' | 'created_at' | 'updated_at' | 'organization_id'>): Promise<AuditPack> {
     const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    let newPack: AuditPack;
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!.from('audit_packs').insert([{ ...pack, organization_id: orgId }]).select().single();
       if (error) throwSupabaseError('audit_packs.insert active organization', error);
-      return data;
+      newPack = data;
     } else {
       const packs = getStorageItem('vigilen_audit_packs', MOCK_AUDIT_PACKS);
-      const newPack: AuditPack = {
+      newPack = {
         ...pack,
         id: `pack-${Math.random().toString(36).substr(2, 9)}`,
         organization_id: orgId,
@@ -3110,25 +3791,77 @@ export const dbService = {
       packs.push(newPack);
       setStorageItem('vigilen_audit_packs', packs);
       await this.logActivity('Audit Pack Created', `Created audit pack "${newPack.name}"`);
-      return newPack;
     }
+
+    await safeLogAuditEvent({
+      actionCategory: 'Audit Packs',
+      actionType: 'audit_pack_created',
+      entityType: 'audit_pack',
+      entityId: newPack.id,
+      entityLabel: newPack.name,
+      description: `Created audit pack "${newPack.name}"`,
+      afterSnapshot: newPack,
+      severity: 'info'
+    });
+
+    return newPack;
   },
 
   async updateAuditPack(packId: string, updates: Partial<AuditPack>): Promise<AuditPack> {
+    const before = await fetchRecordById('audit_packs', packId);
+    let after: AuditPack;
     if (shouldUseSupabase()) {
       const orgId = await getCurrentSupabaseOrganizationId();
       const { data, error } = await supabase!.from('audit_packs').update(updates).eq('id', packId).eq('organization_id', orgId).select().single();
       if (error) throwSupabaseError('audit_packs.update active organization', error);
-      return data;
+      after = data;
     } else {
       const packs = getStorageItem('vigilen_audit_packs', MOCK_AUDIT_PACKS);
       const idx = packs.findIndex((p: any) => p.id === packId);
       if (idx === -1) throw new Error('Audit pack not found');
-      const updated = { ...packs[idx], ...updates, updated_at: new Date().toISOString() };
-      packs[idx] = updated;
+      after = { ...packs[idx], ...updates, updated_at: new Date().toISOString() };
+      packs[idx] = after;
       setStorageItem('vigilen_audit_packs', packs);
-      return updated;
     }
+
+    let actionType = 'audit_pack_updated';
+    let undoAvailable = false;
+    let undoActionType: string | null = null;
+    let undoExpiresAt: string | null = null;
+    let description = `Updated audit pack "${after.name}"`;
+    let severity: 'info' | 'warning' | 'critical' = 'info';
+
+    if (updates.status && updates.status !== before?.status) {
+      if (updates.status === 'Archived') {
+        actionType = 'audit_pack_archived';
+        undoAvailable = true;
+        undoActionType = 'restore_audit_pack';
+        undoExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        description = `Archived audit pack "${after.name}"`;
+        severity = 'warning';
+      } else {
+        actionType = 'audit_pack_status_changed';
+        description = `Changed status of audit pack "${after.name}" to "${updates.status}"`;
+      }
+    }
+
+    await safeLogAuditEvent({
+      actionCategory: 'Audit Packs',
+      actionType,
+      entityType: 'audit_pack',
+      entityId: packId,
+      entityLabel: after.name,
+      description,
+      beforeSnapshot: before,
+      afterSnapshot: after,
+      changedFields: getChangedFields(before, after),
+      undoAvailable,
+      undoActionType,
+      undoExpiresAt,
+      severity
+    });
+
+    return after;
   },
 
   // Audit Logs
@@ -3142,6 +3875,223 @@ export const dbService = {
       initMockDb();
       return getStorageItem('vigilen_logs', MOCK_LOGS).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     }
+  },
+
+  async getAuditTrailEvents(): Promise<AuditTrailEvent[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('audit_trail_events')
+        .select('*')
+        .eq('organization_id', orgId)
+        .order('created_at', { ascending: false });
+      if (error) throwSupabaseError('audit_trail_events.select active organization', error);
+      return data || [];
+    } else {
+      initMockDb();
+      return getStorageItem('vigilen_audit_trail_events', MOCK_AUDIT_TRAIL_EVENTS);
+    }
+  },
+
+  async triggerUndoAction(eventId: string): Promise<boolean> {
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const now = new Date().toISOString();
+    const { logAuditEvent } = await import('./auditTrail');
+
+    let event: AuditTrailEvent | null = null;
+
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('audit_trail_events')
+        .select('*')
+        .eq('id', eventId)
+        .eq('organization_id', orgId)
+        .maybeSingle();
+      if (error) throwSupabaseError('audit_trail_events.select for undo', error);
+      event = data;
+    } else {
+      const events = getStorageItem('vigilen_audit_trail_events', MOCK_AUDIT_TRAIL_EVENTS);
+      event = events.find((e: AuditTrailEvent) => e.id === eventId) || null;
+    }
+
+    if (!event) {
+      throw new Error('Audit trail event not found.');
+    }
+
+    if (!event.undo_available) {
+      throw new Error('Undo is not available for this event.');
+    }
+
+    if (event.undone_at) {
+      throw new Error('This action has already been undone.');
+    }
+
+    if (event.undo_expires_at && new Date(event.undo_expires_at) < new Date()) {
+      throw new Error('Undo capability for this event has expired.');
+    }
+
+    const entityId = event.entity_id;
+    if (!entityId) {
+      throw new Error('Cannot undo action without entity ID.');
+    }
+
+    const beforeSnapshot = event.before_snapshot;
+    switch (event.undo_action_type) {
+      case 'restore_evidence':
+        await this.restoreDocument(entityId);
+        break;
+      case 'restore_requirement':
+        await this.restoreFrameworkRequirement(entityId);
+        break;
+      case 'restore_action':
+        if (shouldUseSupabase()) {
+          const { error } = await supabase!
+            .from('actions')
+            .update({ status: beforeSnapshot?.status || 'Open', updated_at: now })
+            .eq('id', entityId)
+            .eq('organisation_id', orgId);
+          if (error) throwSupabaseError('actions.restore for undo', error);
+        } else {
+          const actions = getStorageItem('vigilen_actions', MOCK_ACTIONS);
+          const idx = actions.findIndex((a: any) => a.id === entityId);
+          if (idx !== -1) {
+            actions[idx] = { ...actions[idx], status: beforeSnapshot?.status || 'Open', updated_at: now };
+            setStorageItem('vigilen_actions', actions);
+          }
+        }
+        break;
+      case 'restore_person':
+        if (shouldUseSupabase()) {
+          const { error } = await supabase!
+            .from('people')
+            .update({ active: true, updated_at: now })
+            .eq('id', entityId)
+            .eq('organisation_id', orgId);
+          if (error) throwSupabaseError('people.restore for undo', error);
+        } else {
+          const people = getStorageItem('vigilen_people', MOCK_PEOPLE);
+          const idx = people.findIndex((p: any) => p.id === entityId);
+          if (idx !== -1) {
+            people[idx] = { ...people[idx], active: true, updated_at: now };
+            setStorageItem('vigilen_people', people);
+          }
+        }
+        break;
+      case 'restore_competency_type':
+        if (shouldUseSupabase()) {
+          const { error } = await supabase!
+            .from('competency_types')
+            .update({ active: true, updated_at: now })
+            .eq('id', entityId)
+            .eq('organisation_id', orgId);
+          if (error) throwSupabaseError('competency_types.restore for undo', error);
+        } else {
+          const types = getStorageItem('vigilen_competency_types', MOCK_COMPETENCY_TYPES);
+          const idx = types.findIndex((t: any) => t.id === entityId);
+          if (idx !== -1) {
+            types[idx] = { ...types[idx], active: true, updated_at: now };
+            setStorageItem('vigilen_competency_types', types);
+          }
+        }
+        break;
+      case 'restore_competency_record':
+        if (shouldUseSupabase()) {
+          const { data: existingRecord } = await supabase!
+            .from('competency_records')
+            .select('id')
+            .eq('id', entityId)
+            .maybeSingle();
+          if (existingRecord) {
+            const { error } = await supabase!
+              .from('competency_records')
+              .update({ ...beforeSnapshot, updated_at: now })
+              .eq('id', entityId);
+            if (error) throwSupabaseError('competency_records.update for undo', error);
+          } else if (beforeSnapshot) {
+            const { error } = await supabase!
+              .from('competency_records')
+              .insert([beforeSnapshot]);
+            if (error) throwSupabaseError('competency_records.insert for undo', error);
+          }
+        } else {
+          const records = getStorageItem('vigilen_competency_records', MOCK_COMPETENCY_RECORDS);
+          const idx = records.findIndex((r: any) => r.id === entityId);
+          if (idx !== -1) {
+            records[idx] = { ...records[idx], ...beforeSnapshot, updated_at: now };
+          } else if (beforeSnapshot) {
+            records.push(beforeSnapshot as any);
+          }
+          setStorageItem('vigilen_competency_records', records);
+        }
+        break;
+      case 'restore_audit_pack':
+        if (shouldUseSupabase()) {
+          const { error } = await supabase!
+            .from('audit_packs')
+            .update({ status: beforeSnapshot?.status || 'Draft', updated_at: now })
+            .eq('id', entityId)
+            .eq('organization_id', orgId);
+          if (error) throwSupabaseError('audit_packs.restore for undo', error);
+        } else {
+          const packs = getStorageItem('vigilen_audit_packs', MOCK_AUDIT_PACKS);
+          const idx = packs.findIndex((p: any) => p.id === entityId);
+          if (idx !== -1) {
+            packs[idx] = { ...packs[idx], status: beforeSnapshot?.status || 'Draft', updated_at: now };
+            setStorageItem('vigilen_audit_packs', packs);
+          }
+        }
+        break;
+      default:
+        throw new Error(`Unsupported undo action type: ${event.undo_action_type}`);
+    }
+
+    // Mark event as undone
+    if (shouldUseSupabase()) {
+      const { error } = await supabase!
+        .from('audit_trail_events')
+        .update({
+          undone_at: now,
+          undone_by: userId,
+          undo_available: false
+        })
+        .eq('id', eventId);
+      if (error) throwSupabaseError('audit_trail_events.update status for undo', error);
+    } else {
+      const events = getStorageItem('vigilen_audit_trail_events', MOCK_AUDIT_TRAIL_EVENTS);
+      const idx = events.findIndex((e: AuditTrailEvent) => e.id === eventId);
+      if (idx !== -1) {
+        events[idx] = {
+          ...events[idx],
+          undone_at: now,
+          undone_by: userId,
+          undo_available: false
+        };
+        setStorageItem('vigilen_audit_trail_events', events);
+      }
+    }
+
+    // Log the undo action itself
+    try {
+      await logAuditEvent({
+        actionCategory: 'System',
+        actionType: 'undo_executed',
+        entityType: event.entity_type,
+        entityId: event.entity_id,
+        entityLabel: event.entity_label,
+        description: `Undid action "${event.description}" (originally performed by ${event.actor_name || 'unknown user'}).`,
+        metadata: {
+          original_event_id: eventId,
+          undone_action_type: event.undo_action_type
+        },
+        severity: 'info',
+        source: 'app'
+      });
+    } catch (logErr) {
+      console.warn('Failed to log undo audit event:', logErr);
+    }
+
+    return true;
   },
 
   async logActivity(action: string, details: string): Promise<AuditLog> {

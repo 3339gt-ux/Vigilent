@@ -21,7 +21,8 @@ import {
   Menu,
   X,
   UserCheck,
-  UploadCloud
+  UploadCloud,
+  History
 } from 'lucide-react';
 import { BulkUploadConfigurationPanel } from '@/components/BulkUploadConfigurationPanel';
 
@@ -181,6 +182,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return null; // gating
   }
 
+  const isOwnerOrAdmin = user?.role === 'Owner' || user?.role === 'Admin';
+
   const menuItems = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Requirements', href: '/dashboard/requirements', icon: ClipboardList },
@@ -188,6 +191,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'Evidence Vault', href: '/dashboard/vault', icon: FolderLock },
     { name: 'Evidence Matrix', href: '/dashboard/matrix', icon: Grid },
     { name: 'Audit Pack Builder', href: '/dashboard/audit-packs', icon: FolderArchive },
+    ...(isOwnerOrAdmin ? [{ name: 'Audit Trail', href: '/dashboard/audit-trail', icon: History }] : []),
     { name: 'Organisation Management', href: '/dashboard/organisation', icon: Building2 },
     { name: 'Billing', href: '/dashboard/billing', icon: CreditCard },
     { name: 'Settings', href: '/dashboard/settings', icon: Settings },

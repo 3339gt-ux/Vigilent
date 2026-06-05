@@ -453,3 +453,30 @@ export interface AuditLog {
   details: string;
   created_at: string;
 }
+
+export interface AuditTrailEvent {
+  id: string;
+  organization_id: string;
+  actor_user_id: string | null;
+  actor_name: string | null;
+  actor_email: string | null;
+  actor_role: string | null;
+  action_type: string;
+  action_category: 'Evidence' | 'Requirements' | 'Actions' | 'Competency' | 'Audit Packs' | 'Users & Admin' | 'System' | string;
+  entity_type: string;
+  entity_id: string | null;
+  entity_label: string | null;
+  description: string;
+  before_snapshot: Record<string, any> | null;
+  after_snapshot: Record<string, any> | null;
+  changed_fields: Record<string, any> | null;
+  metadata: Record<string, any>;
+  undo_available: boolean;
+  undo_action_type: string | null;
+  undo_expires_at: string | null;
+  undone_at: string | null;
+  undone_by: string | null;
+  created_at: string;
+  severity: 'info' | 'warning' | 'critical' | string;
+  source: string;
+}

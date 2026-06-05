@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
@@ -99,7 +99,7 @@ export default function RequirementsPage() {
   } = useApp();
 
   const [search, setSearch] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState<'All' | RequirementStatus>('All');
+  const [selectedStatus, setSelectedStatus] = useState<'All' | 'Attention' | RequirementStatus>('All');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [requirementView, setRequirementView] = useState<RequirementView>('active');
   const [selectedRequirement, setSelectedRequirement] = useState<Requirement | null>(null);
@@ -212,6 +212,37 @@ export default function RequirementsPage() {
     return [...readinessRows, ...lifecycleRows];
   }, [documents, frameworkRequirements, readinessReport.requirements, requirementDocuments]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const statusParam = params.get('status');
+      const categoryParam = params.get('category');
+      const idParam = params.get('id');
+      const actionParam = params.get('action');
+      if (statusParam) {
+        setSelectedStatus(statusParam as any);
+      }
+      if (categoryParam) {
+        setSelectedCategory(categoryParam);
+      }
+      if (actionParam === 'create') {
+        setShowCreateModal(true);
+      }
+      if (idParam && assessedRequirements.length > 0) {
+        const req = assessedRequirements.find(r => r.id === idParam);
+        if (req) {
+          setSelectedRequirement(req);
+        }
+      } else if (actionParam === 'create-action' && assessedRequirements.length > 0) {
+        const firstActiveRequirement = assessedRequirements.find(requirement => lifecycleLabel(requirement.lifecycle_status) === 'ACTIVE');
+        if (firstActiveRequirement) {
+          setSelectedRequirement(firstActiveRequirement);
+          setShowAddActionForm(true);
+        }
+      }
+    }
+  }, [assessedRequirements]);
+
   const filteredRequirements = assessedRequirements.filter(requirement => {
     const lifecycle = lifecycleLabel(requirement.lifecycle_status);
     if (requirementView === 'active' && lifecycle !== 'ACTIVE') return false;
@@ -221,8 +252,51 @@ export default function RequirementsPage() {
       requirement.title.toLowerCase().includes(search.toLowerCase()) ||
       requirement.category.toLowerCase().includes(search.toLowerCase()) ||
       (requirement.owner || '').toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = selectedStatus === 'All' || requirement.status === selectedStatus;
+    const matchesStatus = selectedStatus === 'All' ||
+      (selectedStatus === 'Attention' ? ['RED', 'AMBER', 'GREY'].includes(requirement.status) : requirement.status === selectedStatus);
     const matchesCategory = selectedCategory === 'All' || requirement.category === selectedCategory;
+
+    // Support radar filters via query params
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const filter = params.get('filter');
+      if (filter) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const addDays = (d: Date, days: number) => {
+          const r = new Date(d);
+          r.setDate(r.getDate() + days);
+          return r;
+        };
+        const dStr = requirement.next_due_date;
+        if (filter === 'overdue') {
+          if (!dStr) return false;
+          return new Date(dStr) < today;
+        }
+        if (filter === 'due30') {
+          if (!dStr) return false;
+          const d = new Date(dStr);
+          return d >= today && d < addDays(today, 30);
+        }
+        if (filter === 'due60') {
+          if (!dStr) return false;
+          const d = new Date(dStr);
+          return d >= addDays(today, 30) && d < addDays(today, 60);
+        }
+        if (filter === 'due90') {
+          if (!dStr) return false;
+          const d = new Date(dStr);
+          return d >= addDays(today, 60) && d < addDays(today, 90);
+        }
+        if (filter === 'actions') {
+          return actions.some(action =>
+            (action.status === 'Open' || action.status === 'In Progress') &&
+            requirementActions.some(link => link.requirement_id === requirement.id && link.action_id === action.id)
+          );
+        }
+      }
+    }
+
     return matchesSearch && matchesStatus && matchesCategory;
   });
 
@@ -659,6 +733,15 @@ export default function RequirementsPage() {
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setIsCatDropdownOpen(false)} />
                     <div className="absolute right-0 mt-1 w-64 bg-card solid-panel border border-border rounded-xl shadow-xl z-50 p-3 space-y-2.5">
+                      {categoryMessage && (
+                        <div className={`p-1.5 text-[10px] font-semibold border rounded-lg text-center animate-fade-in ${
+                          categoryMessage.toLowerCase().includes('could not') || categoryMessage.toLowerCase().includes('failed')
+                            ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-450'
+                            : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-450'
+                        }`}>
+                          {categoryMessage}
+                        </div>
+                      )}
                       <div className="relative">
                         <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
                         <input
@@ -721,7 +804,7 @@ export default function RequirementsPage() {
                             }}
                             className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 transition-colors animate-fade-in"
                           >
-                            <Plus className="w-3 h-3" /> Create Category "{catSearchQuery.trim()}"
+                            <Plus className="w-3 h-3" /> Create Category &quot;{catSearchQuery.trim()}&quot;
                           </button>
                         </div>
                       )}
@@ -744,10 +827,11 @@ export default function RequirementsPage() {
               <div className="flex flex-wrap gap-2 w-full md:w-auto justify-end">
                 <select
                   value={selectedStatus}
-                  onChange={event => setSelectedStatus(event.target.value as 'All' | RequirementStatus)}
+                  onChange={event => setSelectedStatus(event.target.value as 'All' | 'Attention' | RequirementStatus)}
                   className="bg-muted border border-border/80 rounded px-2 py-1 outline-none text-xs text-foreground font-semibold cursor-pointer"
                 >
                   <option value="All">All Statuses</option>
+                  <option value="Attention">Needs Attention</option>
                   <option value="GREEN">Green</option>
                   <option value="AMBER">Amber</option>
                   <option value="RED">Red</option>

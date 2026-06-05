@@ -7,7 +7,7 @@ import { buildCompetencyMatrix } from '@/lib/competencyEngine';
 import { COMPETENCY_TEMPLATE_PACKS } from '@/lib/competencyTemplates';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import type { Action, CompetencyCategory, CompetencyRecord, CompetencyStatus, CompetencyType, Person, PersonType, RequirementRiskLevel } from '@/lib/types';
-import { Link as LinkIcon, Plus, Search, Upload, UserCheck, X, ArrowLeft } from 'lucide-react';
+import { Link as LinkIcon, Plus, Search, Upload, UserCheck, X, ArrowLeft, Calendar, Paperclip, AlertCircle } from 'lucide-react';
 
 const categories: CompetencyCategory[] = [
   'Safety',
@@ -73,6 +73,24 @@ export default function CompetencyMatrixPage() {
   const [typeFilter, setTypeFilter] = useState('All');
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
+  const [workspaceSearch, setWorkspaceSearch] = useState('');
+  const [workspaceStatusFilter, setWorkspaceStatusFilter] = useState<'All' | CompetencyStatus>('All');
+  const [isEditingPerson, setIsEditingPerson] = useState(false);
+  const [isSavingPerson, setIsSavingPerson] = useState(false);
+  const [personFormMessage, setPersonFormMessage] = useState('');
+  const [personForm, setPersonForm] = useState({
+    first_name: '',
+    last_name: '',
+    employee_number: '',
+    email: '',
+    department: '',
+    role: '',
+    person_type: 'Employee' as PersonType,
+    active: true,
+    start_date: '',
+    end_date: '',
+    notes: ''
+  });
   const [selectedAction, setSelectedAction] = useState<Action | null>(null);
   const [selectedPackId, setSelectedPackId] = useState(COMPETENCY_TEMPLATE_PACKS[0]?.id || '');
   const [importMessage, setImportMessage] = useState('');
@@ -89,6 +107,55 @@ export default function CompetencyMatrixPage() {
   const [linkDocumentId, setLinkDocumentId] = useState('');
   const [uploading, setUploading] = useState(false);
   const [isEvidenceDragging, setIsEvidenceDragging] = useState(false);
+
+  const syncPersonForm = (person: Person) => {
+    setPersonForm({
+      first_name: person.first_name || '',
+      last_name: person.last_name || '',
+      employee_number: person.employee_number || '',
+      email: person.email || '',
+      department: person.department || '',
+      role: person.role || '',
+      person_type: person.person_type || 'Employee',
+      active: person.active ?? true,
+      start_date: person.start_date || '',
+      end_date: person.end_date || '',
+      notes: person.notes || ''
+    });
+    setPersonFormMessage('');
+  };
+
+  const handleSavePersonProfile = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedPerson) return;
+    setIsSavingPerson(true);
+    setPersonFormMessage('');
+    try {
+      const saved = await upsertPerson({
+        id: selectedPerson.id,
+        first_name: personForm.first_name.trim() || selectedPerson.first_name,
+        last_name: personForm.last_name.trim() || selectedPerson.last_name,
+        display_name: `${personForm.first_name} ${personForm.last_name}`.trim() || selectedPerson.display_name,
+        employee_number: personForm.employee_number.trim() || null,
+        email: personForm.email.trim() || null,
+        department: personForm.department.trim() || null,
+        role: personForm.role.trim() || null,
+        person_type: personForm.person_type,
+        active: personForm.active,
+        start_date: personForm.start_date || null,
+        end_date: personForm.end_date || null,
+        notes: personForm.notes.trim() || null
+      });
+      setSelectedPerson(saved);
+      setIsEditingPerson(false);
+      setPersonFormMessage('Profile saved successfully.');
+    } catch (err) {
+      setPersonFormMessage(err instanceof Error ? err.message : 'Failed to save profile.');
+    } finally {
+      setIsSavingPerson(false);
+    }
+  };
+
   const [newPerson, setNewPerson] = useState({
     first_name: '',
     last_name: '',
@@ -110,9 +177,9 @@ export default function CompetencyMatrixPage() {
     default_risk_level: 'Medium' as RequirementRiskLevel
   });
 
-  const activePeople = people.filter(person => person.active);
-  const activeTypes = competencyTypes.filter(type => type.active);
-  const departments = ['All', ...Array.from(new Set(activePeople.map(person => person.department).filter(Boolean) as string[]))];
+  const activePeople = useMemo(() => people.filter(person => person.active), [people]);
+  const activeTypes = useMemo(() => competencyTypes.filter(type => type.active), [competencyTypes]);
+  const departments = useMemo(() => ['All', ...Array.from(new Set(activePeople.map(person => person.department).filter(Boolean) as string[]))], [activePeople]);
   const selectedPack = COMPETENCY_TEMPLATE_PACKS.find(pack => pack.id === selectedPackId) || COMPETENCY_TEMPLATE_PACKS[0];
 
   const matrix = useMemo(
@@ -120,14 +187,50 @@ export default function CompetencyMatrixPage() {
     [competencyRecords, competencyTypes, people]
   );
 
-  const filteredPeople = activePeople.filter(person => {
-    const text = `${person.display_name} ${person.department || ''} ${person.role || ''} ${person.person_type}`.toLowerCase();
-    return text.includes(search.toLowerCase()) && (departmentFilter === 'All' || person.department === departmentFilter);
-  });
+  const filteredPeople = useMemo(() => {
+    return activePeople.filter(person => {
+      const text = `${person.display_name} ${person.department || ''} ${person.role || ''} ${person.person_type}`.toLowerCase();
+      return text.includes(search.toLowerCase()) && (departmentFilter === 'All' || person.department === departmentFilter);
+    });
+  }, [activePeople, search, departmentFilter]);
 
-  const filteredTypes = activeTypes.filter(type =>
-    typeFilter === 'All' || type.category === typeFilter
-  );
+  const selectedPersonIndex = selectedPerson
+    ? filteredPeople.findIndex(person => person.id === selectedPerson.id)
+    : -1;
+  const canMoveBetweenPeople = selectedPersonIndex >= 0 && filteredPeople.length > 1;
+
+  const moveSelectedPerson = (direction: -1 | 1) => {
+    if (!selectedPerson || !canMoveBetweenPeople) return;
+    const nextIndex = (selectedPersonIndex + direction + filteredPeople.length) % filteredPeople.length;
+    const nextPerson = filteredPeople[nextIndex];
+    if (nextPerson) {
+      openPersonWorkspace(nextPerson);
+    }
+  };
+
+  const openPersonWorkspace = (person: Person) => {
+    setSelectedPerson(person);
+    setActiveCell(null);
+    setIsEditingPerson(false);
+    syncPersonForm(person);
+    setWorkspaceSearch('');
+    setWorkspaceStatusFilter('All');
+  };
+
+  React.useEffect(() => {
+    if (!selectedPerson || isEditingPerson) return;
+    const refreshedPerson = activePeople.find(person => person.id === selectedPerson.id);
+    if (refreshedPerson && refreshedPerson.updated_at !== selectedPerson.updated_at) {
+      setSelectedPerson(refreshedPerson);
+      syncPersonForm(refreshedPerson);
+    }
+  }, [isEditingPerson, activePeople, selectedPerson]);
+
+  const filteredTypes = useMemo(() => {
+    return activeTypes.filter(type =>
+      typeFilter === 'All' || type.category === typeFilter
+    );
+  }, [activeTypes, typeFilter]);
 
   const openCell = (person: Person, competencyType: CompetencyType) => {
     const cell = matrix.find(item => item.person.id === person.id && item.competencyType.id === competencyType.id);
@@ -163,50 +266,71 @@ export default function CompetencyMatrixPage() {
       )
     : [];
 
-  const selectedPersonRows = selectedPerson
-    ? activeTypes.map(type => {
-        const cell = matrix.find(item => item.person.id === selectedPerson.id && item.competencyType.id === type.id);
-        const evidenceCount = cell?.record
-          ? competencyRecordDocuments.filter(link => link.competency_record_id === cell.record?.id).length
-          : 0;
-        const openActionCount = actions.filter(action =>
-          action.status !== 'Complete' &&
-          action.status !== 'Cancelled' &&
-          actionObjectLinks.some(link =>
-            link.action_id === action.id &&
-            ((link.object_type === 'person' && link.object_id === selectedPerson.id) ||
-              (link.object_type === 'competency_type' && link.object_id === type.id) ||
-              (cell?.record && link.object_type === 'competency_record' && link.object_id === cell.record.id))
-          )
-        ).length;
-        return { type, cell, evidenceCount, openActionCount };
-      })
-    : [];
+  const selectedPersonRows = useMemo(() => {
+    return selectedPerson
+      ? activeTypes.map(type => {
+          const cell = matrix.find(item => item.person.id === selectedPerson.id && item.competencyType.id === type.id);
+          const evidenceCount = cell?.record
+            ? competencyRecordDocuments.filter(link => link.competency_record_id === cell.record?.id).length
+            : 0;
+          const openActionCount = actions.filter(action =>
+            action.status !== 'Complete' &&
+            action.status !== 'Cancelled' &&
+            actionObjectLinks.some(link =>
+              link.action_id === action.id &&
+              ((link.object_type === 'person' && link.object_id === selectedPerson.id) ||
+                (link.object_type === 'competency_type' && link.object_id === type.id) ||
+                (cell?.record && link.object_type === 'competency_record' && link.object_id === cell.record.id))
+            )
+          ).length;
+          return { type, cell, evidenceCount, openActionCount };
+        })
+      : [];
+  }, [selectedPerson, activeTypes, matrix, competencyRecordDocuments, actions, actionObjectLinks]);
 
-  const selectedPersonActions = selectedPerson
-    ? actions.filter(action =>
-        actionObjectLinks.some(link => link.action_id === action.id && link.object_type === 'person' && link.object_id === selectedPerson.id)
-      )
-    : [];
+  const selectedPersonActions = useMemo(() => {
+    return selectedPerson
+      ? actions.filter(action =>
+          actionObjectLinks.some(link => link.action_id === action.id && link.object_type === 'person' && link.object_id === selectedPerson.id)
+        )
+      : [];
+  }, [selectedPerson, actions, actionObjectLinks]);
 
-  const selectedPersonGroupedRows = selectedPerson
-    ? categories.map(category => ({
-        category,
-        rows: selectedPersonRows.filter(row => row.type.category === category)
-      })).filter(group => group.rows.length > 0)
-    : [];
+  const filteredPersonRows = useMemo(() => {
+    return selectedPersonRows.filter(row => {
+      const matchesSearch = workspaceSearch.trim() === '' ||
+        row.type.title.toLowerCase().includes(workspaceSearch.toLowerCase()) ||
+        row.type.category.toLowerCase().includes(workspaceSearch.toLowerCase());
 
-  const selectedPersonStatusBreakdown = selectedPersonRows.reduce<Record<CompetencyStatus, number>>((acc, row) => {
-    const status = row.cell?.status || 'Missing';
-    acc[status] = (acc[status] || 0) + 1;
-    return acc;
-  }, {
-    Valid: 0,
-    'Expiring Soon': 0,
-    Expired: 0,
-    Missing: 0,
-    'Not Required': 0
-  });
+      const status = row.cell?.status || 'Missing';
+      const matchesStatus = workspaceStatusFilter === 'All' || status === workspaceStatusFilter;
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [selectedPersonRows, workspaceSearch, workspaceStatusFilter]);
+
+  const selectedPersonGroupedRows = useMemo(() => {
+    return selectedPerson
+      ? categories.map(category => ({
+          category,
+          rows: filteredPersonRows.filter(row => row.type.category === category)
+        })).filter(group => group.rows.length > 0)
+      : [];
+  }, [selectedPerson, filteredPersonRows]);
+
+  const selectedPersonStatusBreakdown = useMemo(() => {
+    return selectedPersonRows.reduce<Record<CompetencyStatus, number>>((acc, row) => {
+      const status = row.cell?.status || 'Missing';
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {
+      Valid: 0,
+      'Expiring Soon': 0,
+      Expired: 0,
+      Missing: 0,
+      'Not Required': 0
+    });
+  }, [selectedPersonRows]);
 
   const handleCreatePerson = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -396,7 +520,7 @@ export default function CompetencyMatrixPage() {
                     <tr key={person.id} className="hover:bg-muted/30">
                       <td className="p-3 sticky left-0 bg-card z-10">
                         <button
-                          onClick={() => setSelectedPerson(person)}
+                          onClick={() => openPersonWorkspace(person)}
                           className="w-full text-left rounded-lg p-1 -m-1 hover:bg-muted cursor-pointer transition-colors"
                         >
                           <span className="font-extrabold block">{person.display_name}</span>
@@ -601,40 +725,155 @@ export default function CompetencyMatrixPage() {
                 <h2 className="text-xl font-extrabold">{selectedPerson.display_name}</h2>
                 <p className="text-xs text-muted-foreground mt-1">{selectedPerson.role || selectedPerson.person_type} | {selectedPerson.department || 'No department'}</p>
               </div>
-              <button
-                onClick={() => {
-                  setSelectedPerson(null);
-                  setActiveCell(null);
-                }}
-                className="p-2 hover:bg-muted rounded-lg h-fit transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                {!isEditingPerson ? (
+                  <button
+                    onClick={() => {
+                      syncPersonForm(selectedPerson);
+                      setIsEditingPerson(true);
+                    }}
+                    className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all shrink-0"
+                  >
+                    Edit Profile
+                  </button>
+                ) : (
+                  <span className="text-xs font-bold text-indigo-600 bg-indigo-500/10 px-2.5 py-1.5 rounded-lg border border-indigo-500/20 shrink-0">
+                    Editing Profile
+                  </span>
+                )}
+                <button
+                  onClick={() => moveSelectedPerson(-1)}
+                  disabled={!canMoveBetweenPeople}
+                  className="px-3 py-2 bg-muted hover:bg-muted/80 border border-border disabled:opacity-40 rounded-lg text-xs font-bold transition-colors"
+                  title="Previous person"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => moveSelectedPerson(1)}
+                  disabled={!canMoveBetweenPeople}
+                  className="px-3 py-2 bg-muted hover:bg-muted/80 border border-border disabled:opacity-40 rounded-lg text-xs font-bold transition-colors"
+                  title="Next person"
+                >
+                  Next
+                </button>
+                <button
+                  onClick={() => {
+                    setSelectedPerson(null);
+                    setActiveCell(null);
+                    setIsEditingPerson(false);
+                  }}
+                  className="p-2 hover:bg-muted rounded-lg h-fit transition-colors ml-1 text-muted-foreground hover:text-foreground"
+                  title="Close person workspace"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             {/* Workspace columns layout */}
             <div className="relative grid grid-cols-1 lg:grid-cols-[280px_1fr] lg:data-[has-active=true]:grid-cols-[280px_1fr_380px] flex-1 min-h-0" data-has-active={!!(activeCell && activeCell.person.id === selectedPerson.id)}>
               {/* Column 1: Person Summary */}
               <aside className="border-r border-border p-5 overflow-y-auto space-y-4 bg-muted/20">
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  {[
-                    ['Employee #', selectedPerson.employee_number || 'Not set'],
-                    ['Email', selectedPerson.email || 'Not set'],
-                    ['Department', selectedPerson.department || 'Not set'],
-                    ['Role', selectedPerson.role || 'Not set'],
-                    ['Type', selectedPerson.person_type],
-                    ['Status', selectedPerson.active ? 'Active' : 'Inactive'],
-                    ['Start', selectedPerson.start_date || 'Not set'],
-                    ['End', selectedPerson.end_date || 'Not set']
-                  ].map(([label, value]) => (
-                    <div key={label} className="p-2.5 bg-card border border-border rounded-lg">
-                      <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold block">{label}</span>
-                      <span className="font-bold text-foreground break-words text-[11px]">{value}</span>
-                    </div>
-                  ))}
+                <div className="flex items-center justify-between gap-2 border-b border-border/80 pb-2 mb-2">
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Profile Summary</h3>
                 </div>
 
-                {selectedPerson.notes && <p className="text-xs text-muted-foreground bg-card border border-border rounded-lg p-3 leading-normal">{selectedPerson.notes}</p>}
+                {isEditingPerson ? (
+                  <form onSubmit={handleSavePersonProfile} className="space-y-3 text-xs">
+                    <label className="space-y-1 block">
+                      <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold block">First Name</span>
+                      <input value={personForm.first_name} onChange={event => setPersonForm({ ...personForm, first_name: event.target.value })} className="w-full px-2.5 py-1.5 bg-card border border-border rounded-lg outline-none" required />
+                    </label>
+                    <label className="space-y-1 block">
+                      <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold block">Last Name</span>
+                      <input value={personForm.last_name} onChange={event => setPersonForm({ ...personForm, last_name: event.target.value })} className="w-full px-2.5 py-1.5 bg-card border border-border rounded-lg outline-none" required />
+                    </label>
+                    <label className="space-y-1 block">
+                      <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold block">Employee #</span>
+                      <input value={personForm.employee_number} onChange={event => setPersonForm({ ...personForm, employee_number: event.target.value })} className="w-full px-2.5 py-1.5 bg-card border border-border rounded-lg outline-none" />
+                    </label>
+                    <label className="space-y-1 block">
+                      <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold block">Email</span>
+                      <input type="email" value={personForm.email} onChange={event => setPersonForm({ ...personForm, email: event.target.value })} className="w-full px-2.5 py-1.5 bg-card border border-border rounded-lg outline-none" />
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="space-y-1 block">
+                        <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold block">Department</span>
+                        <input value={personForm.department} onChange={event => setPersonForm({ ...personForm, department: event.target.value })} className="w-full px-2.5 py-1.5 bg-card border border-border rounded-lg outline-none" />
+                      </label>
+                      <label className="space-y-1 block">
+                        <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold block">Role</span>
+                        <input value={personForm.role} onChange={event => setPersonForm({ ...personForm, role: event.target.value })} className="w-full px-2.5 py-1.5 bg-card border border-border rounded-lg outline-none" />
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="space-y-1 block">
+                        <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold block">Type</span>
+                        <select value={personForm.person_type} onChange={event => setPersonForm({ ...personForm, person_type: event.target.value as PersonType })} className="w-full px-2.5 py-1.5 bg-card border border-border rounded-lg outline-none cursor-pointer">
+                          {personTypes.map(type => <option key={type} value={type}>{type}</option>)}
+                        </select>
+                      </label>
+                      <label className="space-y-1 block">
+                        <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold block">Status</span>
+                        <select value={personForm.active ? 'active' : 'inactive'} onChange={event => setPersonForm({ ...personForm, active: event.target.value === 'active' })} className="w-full px-2.5 py-1.5 bg-card border border-border rounded-lg outline-none cursor-pointer">
+                          <option value="active">Active</option>
+                          <option value="inactive">Inactive</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="space-y-1 block">
+                        <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold block">Start Date</span>
+                        <input type="date" value={personForm.start_date} onChange={event => setPersonForm({ ...personForm, start_date: event.target.value })} className="w-full px-2.5 py-1.5 bg-card border border-border rounded-lg outline-none cursor-pointer" />
+                      </label>
+                      <label className="space-y-1 block">
+                        <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold block">End Date</span>
+                        <input type="date" value={personForm.end_date} onChange={event => setPersonForm({ ...personForm, end_date: event.target.value })} className="w-full px-2.5 py-1.5 bg-card border border-border rounded-lg outline-none cursor-pointer" />
+                      </label>
+                    </div>
+                    <label className="space-y-1 block">
+                      <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold block">Notes</span>
+                      <textarea value={personForm.notes} onChange={event => setPersonForm({ ...personForm, notes: event.target.value })} rows={3} className="w-full px-2.5 py-1.5 bg-card border border-border rounded-lg outline-none resize-none leading-normal" />
+                    </label>
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <button type="button" onClick={() => { syncPersonForm(selectedPerson); setIsEditingPerson(false); }} className="py-2 bg-muted hover:bg-muted/80 border border-border rounded-lg font-bold transition-colors">
+                        Cancel
+                      </button>
+                      <button type="submit" disabled={isSavingPerson} className="py-2 bg-indigo-650 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-lg font-bold transition-all">
+                        {isSavingPerson ? 'Saving...' : 'Save'}
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {[
+                        ['Employee #', selectedPerson.employee_number || 'Not set'],
+                        ['Email', selectedPerson.email || 'Not set'],
+                        ['Department', selectedPerson.department || 'Not set'],
+                        ['Role', selectedPerson.role || 'Not set'],
+                        ['Type', selectedPerson.person_type],
+                        ['Status', selectedPerson.active ? 'Active' : 'Inactive'],
+                        ['Start', selectedPerson.start_date || 'Not set'],
+                        ['End', selectedPerson.end_date || 'Not set']
+                      ].map(([label, value]) => (
+                        <div key={label} className="p-2.5 bg-card border border-border rounded-lg">
+                          <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold block">{label}</span>
+                          <span className="font-bold text-foreground break-words text-[11px]">{value}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {selectedPerson.notes && <p className="text-xs text-muted-foreground bg-card border border-border rounded-lg p-3 leading-normal">{selectedPerson.notes}</p>}
+                  </>
+                )}
+
+                {personFormMessage && (
+                  <p className="text-[10px] text-muted-foreground border border-border bg-card rounded-lg p-2 leading-normal">
+                    {personFormMessage}
+                  </p>
+                )}
 
                 <div className="grid grid-cols-2 gap-2">
                   {statusOptions.map(status => (
@@ -663,27 +902,61 @@ export default function CompetencyMatrixPage() {
               </aside>
 
               {/* Column 2: Competency Records Grouped by Category */}
-              <main className="p-5 overflow-y-auto space-y-5">
-                <div className="flex items-center justify-between gap-3">
+              <main className="p-5 overflow-y-auto space-y-5 flex flex-col h-full">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
                   <div>
                     <h3 className="text-base font-extrabold">Competency Checklist</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">Select a competency card to manage dates, upload evidence, or create actions inline.</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Select a competency card to manage dates, evidence, or actions.</p>
                   </div>
                   {activeCell && activeCell.person.id === selectedPerson.id && (
-                    <span className="hidden lg:inline-flex text-[10px] font-bold text-indigo-650 dark:text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 rounded-full px-2.5 py-0.5">
+                    <span className="inline-flex items-center text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 rounded-full px-2.5 py-0.5 w-fit">
                       Selected: {activeCell.competencyType.title}
                     </span>
                   )}
                 </div>
 
-                <div className="space-y-5">
+                {/* Workspace Search & Filter */}
+                <div className="flex flex-col sm:flex-row gap-3 bg-muted/40 border border-border/80 p-3 rounded-xl shrink-0">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      value={workspaceSearch}
+                      onChange={event => setWorkspaceSearch(event.target.value)}
+                      placeholder="Search competencies..."
+                      className="w-full pl-9 pr-3 py-1.5 bg-card border border-border/80 rounded-lg text-xs outline-none text-foreground placeholder-muted-foreground"
+                    />
+                    {workspaceSearch && (
+                      <button
+                        onClick={() => setWorkspaceSearch('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <select
+                    value={workspaceStatusFilter}
+                    onChange={event => setWorkspaceStatusFilter(event.target.value as any)}
+                    className="bg-card border border-border/80 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                  >
+                    <option value="All">All Statuses</option>
+                    <option value="Valid">Valid</option>
+                    <option value="Expiring Soon">Expiring Soon</option>
+                    <option value="Expired">Expired</option>
+                    <option value="Missing">Missing</option>
+                    <option value="Not Required">Not Required</option>
+                  </select>
+                </div>
+
+                {/* Competency Group List */}
+                <div className="flex-1 min-h-0 overflow-y-auto space-y-5 pr-1">
                   {selectedPersonGroupedRows.map(group => (
                     <section key={group.category} className="space-y-2.5">
                       <div className="flex items-center gap-2">
-                        <span className="h-[1px] w-4 bg-border/80" />
-                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{group.category}</h4>
+                        <span className="h-[1px] w-4 bg-border/60" />
+                        <h4 className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground">{group.category}</h4>
                         <span className="text-[9px] text-muted-foreground/80 bg-muted px-1.5 py-0.5 rounded-full font-semibold">{group.rows.length}</span>
-                        <span className="h-[1px] flex-1 bg-border/80" />
+                        <span className="h-[1px] flex-1 bg-border/60" />
                       </div>
                       <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
                         {group.rows.map(({ type, cell, evidenceCount, openActionCount }) => {
@@ -692,15 +965,15 @@ export default function CompetencyMatrixPage() {
                             <button
                               key={type.id}
                               onClick={() => openCell(selectedPerson, type)}
-                              className={`w-full text-left px-3 py-2.5 border rounded-xl hover:bg-muted/70 transition-all ${
+                              className={`w-full text-left px-3.5 py-2.5 border rounded-xl hover:bg-muted/50 transition-all ${
                                 isActive
-                                  ? 'border-indigo-500 bg-indigo-500/5 shadow-xs ring-1 ring-indigo-500/30'
-                                  : 'border-border bg-card'
-                              } flex items-center justify-between gap-3`}
+                                  ? 'border-indigo-500 bg-indigo-500/10 dark:bg-indigo-500/15 shadow-sm ring-1 ring-indigo-500/30'
+                                  : 'border-border/80 bg-card hover:border-border'
+                              } flex items-center justify-between gap-3 cursor-pointer group`}
                             >
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2">
-                                  <span className="font-bold text-xs truncate block text-foreground">{type.title}</span>
+                                  <span className="font-bold text-xs truncate block text-foreground group-hover:text-indigo-650 dark:group-hover:text-indigo-400 transition-colors">{type.title}</span>
                                   {type.validity_period_months && (
                                     <span className="text-[9px] text-muted-foreground shrink-0 bg-muted px-1.5 py-0.5 rounded font-medium">
                                       {type.validity_period_months}m validity
@@ -709,18 +982,21 @@ export default function CompetencyMatrixPage() {
                                 </div>
                                 <div className="flex items-center gap-3 mt-1.5 text-[10px] text-muted-foreground">
                                   {cell?.record?.expiry_date ? (
-                                    <span>Expiry: <strong className="text-foreground">{cell.record.expiry_date}</strong></span>
+                                    <span className="flex items-center gap-1">
+                                      <Calendar className="w-3.5 h-3.5 text-muted-foreground/70" />
+                                      Expiry: <strong className="text-foreground font-semibold">{cell.record.expiry_date}</strong>
+                                    </span>
                                   ) : (
-                                    <span className="italic text-muted-foreground/70">No date recorded</span>
+                                    <span className="italic text-muted-foreground/60">No date recorded</span>
                                   )}
                                   {evidenceCount > 0 && (
-                                    <span className="flex items-center gap-1 font-semibold text-indigo-650 dark:text-indigo-400">
-                                      {evidenceCount} evidence file{evidenceCount > 1 ? 's' : ''}
+                                    <span className="flex items-center gap-1 font-semibold text-indigo-600 dark:text-indigo-400">
+                                      <Paperclip className="w-3.5 h-3.5" /> {evidenceCount} doc{evidenceCount > 1 ? 's' : ''}
                                     </span>
                                   )}
                                   {openActionCount > 0 && (
                                     <span className="flex items-center gap-1 font-semibold text-rose-500">
-                                      {openActionCount} open action{openActionCount > 1 ? 's' : ''}
+                                      <AlertCircle className="w-3.5 h-3.5" /> {openActionCount} action{openActionCount > 1 ? 's' : ''}
                                     </span>
                                   )}
                                 </div>
@@ -734,13 +1010,13 @@ export default function CompetencyMatrixPage() {
                       </div>
                     </section>
                   ))}
-                </div>
 
-                {selectedPersonGroupedRows.length === 0 && (
-                  <div className="p-8 border border-dashed border-border rounded-xl text-center text-xs text-muted-foreground leading-normal">
-                    No active competency types are available for this person. Customize your competency pack or add more competency types to get started.
-                  </div>
-                )}
+                  {selectedPersonGroupedRows.length === 0 && (
+                    <div className="p-8 border border-dashed border-border rounded-xl text-center text-xs text-muted-foreground leading-normal bg-muted/10">
+                      No matching competencies found. Try adjusting your search query or status filters.
+                    </div>
+                  )}
+                </div>
               </main>
 
               {/* Column 3: Integrated Competency Detail Panel */}
@@ -774,11 +1050,11 @@ export default function CompetencyMatrixPage() {
                     <div className="grid grid-cols-2 gap-2.5">
                       <label className="space-y-1 block">
                         <span className="text-[9px] font-bold uppercase text-muted-foreground block">Completed</span>
-                        <input type="date" value={recordForm.completed_date} onChange={event => setRecordForm({ ...recordForm, completed_date: event.target.value })} className="w-full px-2.5 py-1.5 bg-muted border border-border rounded-lg outline-none text-xs" />
+                        <input type="date" value={recordForm.completed_date} onChange={event => setRecordForm({ ...recordForm, completed_date: event.target.value })} className="w-full px-2.5 py-1.5 bg-muted border border-border rounded-lg outline-none text-xs cursor-pointer" />
                       </label>
                       <label className="space-y-1 block">
                         <span className="text-[9px] font-bold uppercase text-muted-foreground block">Expiry</span>
-                        <input type="date" value={recordForm.expiry_date} onChange={event => setRecordForm({ ...recordForm, expiry_date: event.target.value })} className="w-full px-2.5 py-1.5 bg-muted border border-border rounded-lg outline-none text-xs" />
+                        <input type="date" value={recordForm.expiry_date} onChange={event => setRecordForm({ ...recordForm, expiry_date: event.target.value })} className="w-full px-2.5 py-1.5 bg-muted border border-border rounded-lg outline-none text-xs cursor-pointer" />
                       </label>
                     </div>
                     <div className="grid grid-cols-2 gap-2.5">
@@ -787,12 +1063,12 @@ export default function CompetencyMatrixPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-2.5">
                       <input placeholder="Certificate number" value={recordForm.certificate_number} onChange={event => setRecordForm({ ...recordForm, certificate_number: event.target.value })} className="px-2.5 py-1.5 bg-muted border border-border rounded-lg outline-none text-xs" />
-                      <select value={recordForm.status} onChange={event => setRecordForm({ ...recordForm, status: event.target.value as CompetencyStatus })} className="px-2.5 py-1.5 bg-muted border border-border rounded-lg outline-none text-xs font-semibold">
+                      <select value={recordForm.status} onChange={event => setRecordForm({ ...recordForm, status: event.target.value as CompetencyStatus })} className="px-2.5 py-1.5 bg-muted border border-border rounded-lg outline-none text-xs font-semibold cursor-pointer">
                         {statusOptions.map(status => <option key={status} value={status}>{status}</option>)}
                       </select>
                     </div>
                     <textarea placeholder="Notes / comments..." value={recordForm.notes} onChange={event => setRecordForm({ ...recordForm, notes: event.target.value })} rows={2} className="w-full px-2.5 py-1.5 bg-muted border border-border rounded-lg outline-none resize-none text-xs leading-normal" />
-                    <button type="submit" className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors text-xs">Save Record</button>
+                    <button type="submit" className="w-full py-1.5 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors text-xs">Save Record</button>
                   </form>
 
                   {formMessage && <p className="text-[10px] text-muted-foreground border border-border bg-muted/20 rounded-lg p-2 leading-normal shrink-0">{formMessage}</p>}
@@ -824,7 +1100,7 @@ export default function CompetencyMatrixPage() {
 
                     <div className="space-y-2 shrink-0">
                       <div className="flex gap-1.5">
-                        <select value={linkDocumentId} onChange={event => setLinkDocumentId(event.target.value)} className="flex-1 px-2.5 py-1.5 bg-muted border border-border rounded-lg outline-none text-xs font-semibold appearance-none">
+                        <select value={linkDocumentId} onChange={event => setLinkDocumentId(event.target.value)} className="flex-1 px-2.5 py-1.5 bg-muted border border-border rounded-lg outline-none text-xs font-semibold appearance-none cursor-pointer">
                           <option value="">Link existing evidence...</option>
                           {documents.map(document => <option key={document.id} value={document.id}>{document.title}</option>)}
                         </select>

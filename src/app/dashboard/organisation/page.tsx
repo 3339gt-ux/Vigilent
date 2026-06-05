@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import { isDemoMode } from '@/lib/env';
+import { logAuditEvent } from '@/lib/auditTrail';
 import { Building2, Users, Shield, UserPlus, Save, CheckCircle2, Mail, Trash2, ArrowRight, X } from 'lucide-react';
 
 interface Member {
@@ -116,6 +117,17 @@ export default function OrganisationManagement() {
         localStorage.setItem('vigilen_logs', JSON.stringify(logs));
       }
 
+      await logAuditEvent({
+        actionCategory: 'Users & Admin',
+        actionType: 'member_invited',
+        entityType: 'user_member',
+        entityId: newMem.id,
+        entityLabel: newMem.name,
+        description: `Invited "${inviteName}" (${inviteEmail}) as Workspace ${inviteRole}.`,
+        afterSnapshot: newMem,
+        severity: 'info'
+      });
+
       setInviteName('');
       setInviteEmail('');
       setInviteRole('Viewer');
@@ -127,16 +139,30 @@ export default function OrganisationManagement() {
     }
   };
 
-  const handleRemoveMember = (id: string) => {
+  const handleRemoveMember = async (id: string) => {
     if (!isDemoMode) {
       alert('Member removal requires production authorization before it can be enabled.');
       return;
     }
 
     if (confirm('Are you sure you want to remove this user from the organization workspace?')) {
+      const memberToRemove = members.find(m => m.id === id);
       const updated = members.filter(m => m.id !== id);
       setMembers(updated);
       localStorage.setItem('vigilen_org_members', JSON.stringify(updated));
+
+      if (memberToRemove) {
+        await logAuditEvent({
+          actionCategory: 'Users & Admin',
+          actionType: 'member_removed',
+          entityType: 'user_member',
+          entityId: memberToRemove.id,
+          entityLabel: memberToRemove.name,
+          description: `Removed workspace member "${memberToRemove.name}" (${memberToRemove.email}).`,
+          beforeSnapshot: memberToRemove,
+          severity: 'warning'
+        });
+      }
     }
   };
 
