@@ -40,7 +40,9 @@ import {
   SavedView,
   PaginationControls,
   BulkSelectionToolbar,
+  DensityControls,
   useBulkSelection,
+  useGlobalDensityPreference,
   usePagination,
   usePersistentViewState
 } from '@/components/FilterControls';
@@ -146,6 +148,7 @@ export default function EvidenceVault() {
     saveCurrentView,
     deleteCustomView
   } = useSavedViews(user?.id || 'guest', 'vault', defaultViews, organization?.id);
+  const { globalDensity, setGlobalDensity } = useGlobalDensityPreference(user?.id || 'guest', organization?.id);
 
   const handleResetFilters = () => {
     setSearch('');
@@ -204,7 +207,7 @@ export default function EvidenceVault() {
     );
   }, [activeViewId, allViews, search, selectedCategory, selectedStatus, linkFilter, docTypeFilter, uploadedByFilter, showOnlyStarredDocs]);
 
-  usePersistentViewState(
+  const { storageKey: vaultViewStateKey } = usePersistentViewState(
     user?.id || 'guest',
     organization?.id,
     'vault',
@@ -238,6 +241,16 @@ export default function EvidenceVault() {
     },
     [search, selectedCategory, selectedStatus, sortBy, vaultView, linkFilter, docTypeFilter, uploadedByFilter, showOnlyStarredDocs, density, hiddenColumns, activeViewId]
   );
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = JSON.parse(localStorage.getItem(vaultViewStateKey) || '{}');
+      if (!stored.density) setDensity(globalDensity);
+    } catch {
+      setDensity(globalDensity);
+    }
+  }, [globalDensity, vaultViewStateKey]);
 
   // Upload dialog state
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -1567,7 +1580,7 @@ export default function EvidenceVault() {
         <div className="space-y-4">
           {/* Advanced Filter Ribbon Controls */}
           <div className="flex flex-col gap-3 mb-4">
-            <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-4">
+            <div className="bg-card border border-border rounded-xl p-3 shadow-xs space-y-3">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 {/* Search and Toggle Filter Button */}
                 <div className="flex items-center gap-2 w-full md:max-w-md">
@@ -1694,32 +1707,21 @@ export default function EvidenceVault() {
                     onToggleAll={handleToggleAllColumns}
                   />
 
-                  <div className="flex items-center bg-muted border border-border rounded-lg p-0.5">
-                    <button
-                      type="button"
-                      onClick={() => setDensity('comfortable')}
-                      className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                        density === 'comfortable' ? 'bg-card text-foreground shadow-xs border border-border/50' : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      Comfortable
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDensity('compact')}
-                      className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                        density === 'compact' ? 'bg-card text-foreground shadow-xs border border-border/50' : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      Compact
-                    </button>
-                  </div>
+                  <DensityControls
+                    density={density}
+                    onDensityChange={setDensity}
+                    globalDensity={globalDensity}
+                    onGlobalDensityChange={nextDensity => {
+                      setGlobalDensity(nextDensity);
+                      setDensity(nextDensity);
+                    }}
+                  />
                 </div>
               </div>
 
               {/* Collapsible advanced filters */}
               {showFilters && (
-                <div className="border-t border-border/60 pt-4 space-y-3">
+                <div className="border-t border-border/60 pt-3 space-y-3">
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                     <StarredFilterSelect
                       label="Category"

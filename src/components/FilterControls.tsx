@@ -3,6 +3,7 @@ import { Star, X, Eye, EyeOff, Save, Trash2, Check, ChevronDown } from 'lucide-r
 
 export type PageSize = 20 | 25 | 50 | 75 | 100 | 'All';
 export const PAGE_SIZE_OPTIONS: PageSize[] = [20, 25, 50, 75, 100, 'All'];
+export type DensityPreference = 'comfortable' | 'compact';
 
 const storageScope = (userId: string, module: string, organisationId?: string | null) =>
   `${userId || 'guest'}_${organisationId || 'workspace'}_${module}`;
@@ -140,6 +141,7 @@ export function usePersistentViewState<T extends Record<string, unknown>>(
   const key = `vygilence_view_state_${storageScope(userId, module, organisationId)}`;
   const hydratedRef = useRef(false);
   const previousRef = useRef('');
+  const skipNextSaveRef = useRef(false);
 
   useEffect(() => {
     hydratedRef.current = false;
@@ -147,6 +149,7 @@ export function usePersistentViewState<T extends Record<string, unknown>>(
     if (!enabled || typeof window === 'undefined') return;
     const stored = safeJsonParse<Partial<T>>(localStorage.getItem(key), {});
     if (Object.keys(stored).length > 0) {
+      skipNextSaveRef.current = true;
       applyState(stored);
     }
     hydratedRef.current = true;
@@ -158,6 +161,11 @@ export function usePersistentViewState<T extends Record<string, unknown>>(
   useEffect(() => {
     if (!enabled || typeof window === 'undefined' || !hydratedRef.current) return;
     const serialized = JSON.stringify(state);
+    if (skipNextSaveRef.current) {
+      skipNextSaveRef.current = false;
+      previousRef.current = serialized;
+      return;
+    }
     if (serialized === previousRef.current) return;
     previousRef.current = serialized;
     localStorage.setItem(key, serialized);
@@ -172,6 +180,70 @@ export function usePersistentViewState<T extends Record<string, unknown>>(
   };
 
   return { storageKey: key, resetStoredViewState };
+}
+
+// ==========================================
+// 2aa. Hook: useGlobalDensityPreference
+// ==========================================
+export function useGlobalDensityPreference(userId: string, organisationId?: string | null) {
+  const storageKey = `vygilence_global_density_${userId || 'guest'}_${organisationId || 'workspace'}`;
+  const [globalDensity, setGlobalDensityState] = useState<DensityPreference>('comfortable');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const stored = localStorage.getItem(storageKey);
+    setGlobalDensityState(stored === 'compact' ? 'compact' : 'comfortable');
+  }, [storageKey]);
+
+  const setGlobalDensity = (density: DensityPreference) => {
+    setGlobalDensityState(density);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(storageKey, density);
+    }
+  };
+
+  return { globalDensity, setGlobalDensity, storageKey };
+}
+
+interface DensityControlsProps {
+  density: DensityPreference;
+  onDensityChange: (density: DensityPreference) => void;
+  globalDensity: DensityPreference;
+  onGlobalDensityChange: (density: DensityPreference) => void;
+}
+
+export function DensityControls({
+  density,
+  onDensityChange,
+  globalDensity,
+  onGlobalDensityChange
+}: DensityControlsProps) {
+  return (
+    <div className="flex flex-wrap items-center gap-1 bg-muted border border-border rounded-lg p-0.5">
+      {(['comfortable', 'compact'] as DensityPreference[]).map(option => (
+        <button
+          key={option}
+          type="button"
+          onClick={() => onDensityChange(option)}
+          className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+            density === option ? 'bg-card text-foreground shadow-xs border border-border/50' : 'text-muted-foreground hover:text-foreground'
+          }`}
+          title={`Use ${option} mode on this page`}
+        >
+          {option === 'comfortable' ? 'Comfortable' : 'Compact'}
+        </button>
+      ))}
+      <span className="mx-1 h-4 w-px bg-border" />
+      <button
+        type="button"
+        onClick={() => onGlobalDensityChange(globalDensity === 'compact' ? 'comfortable' : 'compact')}
+        className="px-2.5 py-1.5 rounded-md text-[10px] font-bold text-indigo-700 dark:text-indigo-300 hover:bg-card transition-colors cursor-pointer"
+        title="Set the default density for data-heavy pages"
+      >
+        Global: {globalDensity === 'compact' ? 'Compact' : 'Comfortable'}
+      </button>
+    </div>
+  );
 }
 
 // ==========================================
@@ -272,7 +344,7 @@ export function PaginationControls({
   itemLabel = 'records'
 }: PaginationControlsProps) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 text-xs shadow-xs">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-border bg-card p-2.5 text-xs shadow-xs">
       <div className="font-bold text-muted-foreground">
         Showing <span className="text-foreground">{startItem}-{endItem}</span> of <span className="text-foreground">{totalItems}</span> {itemLabel}
       </div>
@@ -390,10 +462,10 @@ export function BulkSelectionToolbar({
   children,
   message
 }: BulkSelectionToolbarProps) {
-  if (selectedCount === 0 && !onSelectVisible) return null;
+  if (selectedCount === 0) return null;
 
   return (
-    <div className="sticky top-2 z-30 flex flex-col lg:flex-row lg:items-center justify-between gap-3 rounded-xl border border-indigo-500/20 bg-indigo-50 dark:bg-indigo-950/30 p-3 text-xs shadow-lg solid-panel">
+    <div className="sticky bottom-3 z-30 flex flex-col lg:flex-row lg:items-center justify-between gap-2 rounded-xl border border-indigo-500/20 bg-indigo-50 dark:bg-indigo-950/30 p-2.5 text-xs shadow-lg solid-panel">
       <div className="font-bold text-indigo-950 dark:text-indigo-50">
         {selectedCount > 0 ? `${selectedCount} ${recordLabel} selected` : `Select ${recordLabel}`}
         {message && <span className="ml-2 font-medium text-indigo-700 dark:text-indigo-300">{message}</span>}
@@ -532,15 +604,15 @@ export function SavedViewsBar({
   };
 
   return (
-    <div className="bg-card border border-border rounded-xl p-3 shadow-xs space-y-2.5 text-xs">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+    <div className="bg-card border border-border rounded-xl p-2.5 shadow-xs space-y-2 text-xs">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
         <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
           <span className="text-muted-foreground font-bold uppercase tracking-wider text-[10px] mr-1 shrink-0">Views:</span>
           
           {/* Default "All" View */}
           <button
             onClick={() => onSelectView(null)}
-            className={`px-3 py-1.5 rounded-lg border font-bold transition-all cursor-pointer ${
+            className={`px-2.5 py-1 rounded-lg border font-bold transition-all cursor-pointer ${
               activeViewId === null
                 ? 'bg-indigo-650 text-white border-indigo-700 shadow-xs'
                 : 'bg-muted/50 hover:bg-muted border-border text-foreground'
@@ -556,7 +628,7 @@ export function SavedViewsBar({
               <span key={view.id} className="inline-flex items-center gap-1">
                 <button
                   onClick={() => onSelectView(view)}
-                  className={`px-3 py-1.5 rounded-lg border font-bold transition-all cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-lg border font-bold transition-all cursor-pointer ${
                     isActive
                       ? 'bg-indigo-600 text-white border-indigo-650 shadow-xs'
                       : 'bg-muted/50 hover:bg-muted border-border text-foreground'
@@ -585,7 +657,7 @@ export function SavedViewsBar({
           {!showSaveInput ? (
             <button
               onClick={() => setShowSaveInput(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-muted hover:bg-muted/80 text-foreground border border-border font-bold rounded-lg cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-muted hover:bg-muted/80 text-foreground border border-border font-bold rounded-lg cursor-pointer"
             >
               <Save className="w-3.5 h-3.5" /> Save Current View
             </button>
@@ -652,7 +724,7 @@ export function ColumnVisibilityControls({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1.5 px-3 py-2 bg-muted hover:bg-muted/80 text-foreground border border-border font-bold rounded-lg cursor-pointer"
+        className="flex items-center gap-1.5 px-2.5 py-1.5 bg-muted hover:bg-muted/80 text-foreground border border-border font-bold rounded-lg cursor-pointer"
         id="col-visibility-dropdown-btn"
       >
         {isOpen ? <EyeOff className="w-4 h-4 text-indigo-500" /> : <Eye className="w-4 h-4 text-indigo-500" />}
@@ -741,7 +813,7 @@ export function StarredFilterSelect({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-between gap-2 px-3 py-2 bg-muted hover:bg-muted/80 text-foreground border border-border font-bold rounded-lg cursor-pointer min-w-36 text-left"
+        className="flex items-center justify-between gap-2 px-2.5 py-1.5 bg-muted hover:bg-muted/80 text-foreground border border-border font-bold rounded-lg cursor-pointer min-w-32 text-left"
       >
         <span className="truncate">{label}: {value === 'All' ? allLabel : value}</span>
         <ChevronDown className="w-3.5 h-3.5 opacity-60 shrink-0" />

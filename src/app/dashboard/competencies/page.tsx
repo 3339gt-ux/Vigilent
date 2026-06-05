@@ -19,7 +19,9 @@ import {
   SavedView,
   PaginationControls,
   BulkSelectionToolbar,
+  DensityControls,
   useBulkSelection,
+  useGlobalDensityPreference,
   usePagination,
   usePersistentViewState
 } from '@/components/FilterControls';
@@ -189,6 +191,7 @@ export default function CompetencyMatrixPage() {
     saveCurrentView,
     deleteCustomView
   } = useSavedViews(user?.id || 'guest', 'matrix', defaultViews, organization?.id);
+  const { globalDensity, setGlobalDensity } = useGlobalDensityPreference(user?.id || 'guest', organization?.id);
 
   const activePeople = useMemo(() => people.filter(person => person.active), [people]);
   const activeTypes = useMemo(() => competencyTypes.filter(type => type.active), [competencyTypes]);
@@ -429,7 +432,7 @@ export default function CompetencyMatrixPage() {
     sortBy
   ]);
 
-  usePersistentViewState(
+  const { storageKey: competenciesViewStateKey } = usePersistentViewState(
     user?.id || 'guest',
     organization?.id,
     'competency-matrix',
@@ -485,6 +488,16 @@ export default function CompetencyMatrixPage() {
       activeViewId
     ]
   );
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = JSON.parse(localStorage.getItem(competenciesViewStateKey) || '{}');
+      if (!stored.density) setDensity(globalDensity);
+    } catch {
+      setDensity(globalDensity);
+    }
+  }, [globalDensity, competenciesViewStateKey]);
 
   const filterChips = useMemo(() => {
     const chips: any[] = [];
@@ -1132,27 +1145,15 @@ export default function CompetencyMatrixPage() {
                   Filters {(filterChips.length > 0) && <span className="bg-indigo-650 text-white dark:bg-indigo-600 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold">{filterChips.length}</span>}
                 </button>
 
-                {/* Density controls */}
-                <div className="flex bg-muted p-0.5 rounded-lg border border-border">
-                  <button
-                    type="button"
-                    onClick={() => setDensity('comfortable')}
-                    className={`px-2 py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                      density === 'comfortable' ? 'bg-card text-foreground shadow-xs border border-border/50' : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    Comfortable
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDensity('compact')}
-                    className={`px-2 py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                      density === 'compact' ? 'bg-card text-foreground shadow-xs border border-border/50' : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    Compact
-                  </button>
-                </div>
+                <DensityControls
+                  density={density}
+                  onDensityChange={setDensity}
+                  globalDensity={globalDensity}
+                  onGlobalDensityChange={nextDensity => {
+                    setGlobalDensity(nextDensity);
+                    setDensity(nextDensity);
+                  }}
+                />
 
                 <ColumnVisibilityControls
                   columns={columnOptions}
@@ -1164,7 +1165,7 @@ export default function CompetencyMatrixPage() {
 
             {/* Collapsible advanced filters */}
             {showFilters && (
-              <div className="border-t border-border/60 pt-3.5 mt-3.5 space-y-3">
+              <div className="border-t border-border/60 pt-3 mt-3 space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                   <StarredFilterSelect
                     label="Dept"

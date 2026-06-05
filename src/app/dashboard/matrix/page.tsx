@@ -29,7 +29,9 @@ import {
   SavedView,
   PaginationControls,
   BulkSelectionToolbar,
+  DensityControls,
   useBulkSelection,
+  useGlobalDensityPreference,
   usePagination,
   usePersistentViewState
 } from '@/components/FilterControls';
@@ -53,6 +55,10 @@ export default function EvidenceMatrix() {
   const [targetNameFilter, setTargetNameFilter] = useState<string>('All');
   const [showOnlyGaps, setShowOnlyGaps] = useState(false);
   const [showOnlyStarredReqs, setShowOnlyStarredReqs] = useState(false);
+  const [showHiddenRows, setShowHiddenRows] = useState(false);
+  const [hiddenMatrixRowIds, setHiddenMatrixRowIds] = useState<Set<string>>(new Set());
+  const [lastHiddenRowUndo, setLastHiddenRowUndo] = useState<null | { ids: string[]; action: 'hide' | 'restore' }>(null);
+  const hiddenRowsStorageKey = `vygilence_hidden_matrix_rows_${user?.id || 'guest'}_${organization?.id || 'workspace'}`;
 
   // Layout states
   const [density, setDensity] = useState<'comfortable' | 'compact'>('comfortable');
@@ -107,6 +113,22 @@ export default function EvidenceMatrix() {
     saveCurrentView,
     deleteCustomView
   } = useSavedViews(user?.id || 'guest', 'evidence-matrix', defaultViews, organization?.id);
+  const { globalDensity, setGlobalDensity } = useGlobalDensityPreference(user?.id || 'guest', organization?.id);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = JSON.parse(localStorage.getItem(hiddenRowsStorageKey) || '[]');
+      setHiddenMatrixRowIds(new Set(Array.isArray(stored) ? stored.filter((id): id is string => typeof id === 'string') : []));
+    } catch {
+      setHiddenMatrixRowIds(new Set());
+    }
+  }, [hiddenRowsStorageKey]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(hiddenRowsStorageKey, JSON.stringify(Array.from(hiddenMatrixRowIds)));
+  }, [hiddenMatrixRowIds, hiddenRowsStorageKey]);
 
   const handleResetFilters = () => {
     setSearch('');
@@ -116,6 +138,7 @@ export default function EvidenceMatrix() {
     setTargetNameFilter('All');
     setShowOnlyGaps(false);
     setShowOnlyStarredReqs(false);
+    setShowHiddenRows(false);
     setActiveViewId(null);
   };
 
@@ -132,6 +155,7 @@ export default function EvidenceMatrix() {
       setTargetNameFilter(f.targetNameFilter || 'All');
       setShowOnlyGaps(!!f.showOnlyGaps);
       setShowOnlyStarredReqs(!!f.showOnlyStarredReqs);
+      setShowHiddenRows(!!f.showHiddenRows);
       setActiveViewId(view.id);
     }
   };
@@ -144,7 +168,8 @@ export default function EvidenceMatrix() {
       statusFilter,
       targetNameFilter,
       showOnlyGaps,
-      showOnlyStarredReqs
+      showOnlyStarredReqs,
+      showHiddenRows
     };
     saveCurrentView(name, filters);
   };
@@ -162,7 +187,8 @@ export default function EvidenceMatrix() {
       (f.statusFilter || 'All') === statusFilter &&
       (f.targetNameFilter || 'All') === targetNameFilter &&
       (!!f.showOnlyGaps) === showOnlyGaps &&
-      (!!f.showOnlyStarredReqs) === showOnlyStarredReqs
+      (!!f.showOnlyStarredReqs) === showOnlyStarredReqs &&
+      (!!f.showHiddenRows) === showHiddenRows
     );
   }, [
     activeViewId,
@@ -173,10 +199,11 @@ export default function EvidenceMatrix() {
     statusFilter,
     targetNameFilter,
     showOnlyGaps,
-    showOnlyStarredReqs
+    showOnlyStarredReqs,
+    showHiddenRows
   ]);
 
-  usePersistentViewState(
+  const { storageKey: matrixViewStateKey } = usePersistentViewState(
     user?.id || 'guest',
     organization?.id,
     'evidence-matrix',
@@ -188,6 +215,7 @@ export default function EvidenceMatrix() {
       targetNameFilter,
       showOnlyGaps,
       showOnlyStarredReqs,
+      showHiddenRows,
       density,
       activeViewId
     },
@@ -199,11 +227,22 @@ export default function EvidenceMatrix() {
       if (typeof stored.targetNameFilter === 'string') setTargetNameFilter(stored.targetNameFilter);
       if (typeof stored.showOnlyGaps === 'boolean') setShowOnlyGaps(stored.showOnlyGaps);
       if (typeof stored.showOnlyStarredReqs === 'boolean') setShowOnlyStarredReqs(stored.showOnlyStarredReqs);
+      if (typeof stored.showHiddenRows === 'boolean') setShowHiddenRows(stored.showHiddenRows);
       if (stored.density === 'comfortable' || stored.density === 'compact') setDensity(stored.density);
       if (typeof stored.activeViewId === 'string' || stored.activeViewId === null) setActiveViewId(stored.activeViewId);
     },
-    [search, selectedCategory, selectedTargetType, statusFilter, targetNameFilter, showOnlyGaps, showOnlyStarredReqs, density, activeViewId]
+    [search, selectedCategory, selectedTargetType, statusFilter, targetNameFilter, showOnlyGaps, showOnlyStarredReqs, showHiddenRows, density, activeViewId]
   );
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = JSON.parse(localStorage.getItem(matrixViewStateKey) || '{}');
+      if (!stored.density) setDensity(globalDensity);
+    } catch {
+      setDensity(globalDensity);
+    }
+  }, [globalDensity, matrixViewStateKey]);
 
   const filterChips = useMemo(() => {
     const chips: any[] = [];
@@ -263,6 +302,14 @@ export default function EvidenceMatrix() {
         onClear: () => setShowOnlyStarredReqs(false)
       });
     }
+    if (showHiddenRows) {
+      chips.push({
+        key: 'hidden',
+        label: 'Display',
+        valueLabel: 'Hidden Rows',
+        onClear: () => setShowHiddenRows(false)
+      });
+    }
     return chips;
   }, [
     search,
@@ -271,7 +318,8 @@ export default function EvidenceMatrix() {
     statusFilter,
     targetNameFilter,
     showOnlyGaps,
-    showOnlyStarredReqs
+    showOnlyStarredReqs,
+    showHiddenRows
   ]);
 
   // Find unique targets across the cells
@@ -315,6 +363,9 @@ export default function EvidenceMatrix() {
   // Filter requirements based on selection
   const filteredRequirements = useMemo(() => {
     return requirements.filter(r => {
+      const isHidden = hiddenMatrixRowIds.has(r.id);
+      if (!showHiddenRows && isHidden) return false;
+      if (showHiddenRows && !isHidden) return false;
       const matchesCategory = selectedCategory === 'All' || r.category === selectedCategory;
       const matchesSearch = r.title.toLowerCase().includes(search.toLowerCase()) ||
                             (r.description || '').toLowerCase().includes(search.toLowerCase());
@@ -328,14 +379,14 @@ export default function EvidenceMatrix() {
 
       return matchesCategory && matchesSearch && matchesStarred && matchesStatus && matchesGaps;
     });
-  }, [requirements, selectedCategory, search, showOnlyStarredReqs, statusFilter, showOnlyGaps, matrixCells, favourites]);
+  }, [requirements, hiddenMatrixRowIds, showHiddenRows, selectedCategory, search, showOnlyStarredReqs, statusFilter, showOnlyGaps, matrixCells, favourites, isFavourite]);
 
   const matrixPagination = usePagination(
     filteredRequirements,
     user?.id || 'guest',
     organization?.id,
     'evidence-matrix-rows',
-    [search, selectedCategory, selectedTargetType, statusFilter, targetNameFilter, showOnlyGaps, showOnlyStarredReqs]
+    [search, selectedCategory, selectedTargetType, statusFilter, targetNameFilter, showOnlyGaps, showOnlyStarredReqs, showHiddenRows]
   );
   const matrixRowSelection = useBulkSelection(matrixPagination.paginatedItems);
 
@@ -361,6 +412,45 @@ export default function EvidenceMatrix() {
 
     await updateCellMapping(activeCell.id, selectedDocId || null, nextStatus);
     setActiveCell(null);
+  };
+
+  const handleHideSelectedRows = () => {
+    const ids = Array.from(matrixRowSelection.selectedIds);
+    if (ids.length === 0) return;
+    if (!window.confirm(`Hide ${ids.length} selected matrix row(s)? This is a personal workspace display preference and does not change readiness scoring or evidence links.`)) return;
+    setHiddenMatrixRowIds(prev => {
+      const next = new Set(prev);
+      ids.forEach(id => next.add(id));
+      return next;
+    });
+    setLastHiddenRowUndo({ ids, action: 'hide' });
+    matrixRowSelection.clearSelection();
+  };
+
+  const handleRestoreSelectedRows = () => {
+    const ids = Array.from(matrixRowSelection.selectedIds);
+    if (ids.length === 0) return;
+    if (!window.confirm(`Restore ${ids.length} hidden matrix row(s) to the normal view?`)) return;
+    setHiddenMatrixRowIds(prev => {
+      const next = new Set(prev);
+      ids.forEach(id => next.delete(id));
+      return next;
+    });
+    setLastHiddenRowUndo({ ids, action: 'restore' });
+    matrixRowSelection.clearSelection();
+  };
+
+  const undoMatrixRowVisibility = () => {
+    if (!lastHiddenRowUndo) return;
+    setHiddenMatrixRowIds(prev => {
+      const next = new Set(prev);
+      lastHiddenRowUndo.ids.forEach(id => {
+        if (lastHiddenRowUndo.action === 'hide') next.delete(id);
+        else next.add(id);
+      });
+      return next;
+    });
+    setLastHiddenRowUndo(null);
   };
 
   // Add a new target entity
@@ -486,33 +576,21 @@ export default function EvidenceMatrix() {
               Filters {(filterChips.length > 0) && <span className="bg-indigo-650 text-white dark:bg-indigo-600 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold">{filterChips.length}</span>}
             </button>
 
-            {/* Density controls */}
-            <div className="flex bg-muted p-0.5 rounded-lg border border-border">
-              <button
-                type="button"
-                onClick={() => setDensity('comfortable')}
-                className={`px-2 py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                  density === 'comfortable' ? 'bg-card text-foreground shadow-xs border border-border/50' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Comfortable
-              </button>
-              <button
-                type="button"
-                onClick={() => setDensity('compact')}
-                className={`px-2 py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                  density === 'compact' ? 'bg-card text-foreground shadow-xs border border-border/50' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Compact
-              </button>
-            </div>
+            <DensityControls
+              density={density}
+              onDensityChange={setDensity}
+              globalDensity={globalDensity}
+              onGlobalDensityChange={nextDensity => {
+                setGlobalDensity(nextDensity);
+                setDensity(nextDensity);
+              }}
+            />
           </div>
         </div>
 
         {/* Collapsible advanced filters */}
         {showFilters && (
-          <div className="border-t border-border/60 pt-3.5 mt-3.5 space-y-3">
+          <div className="border-t border-border/60 pt-3 mt-3 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
               <StarredFilterSelect
                 label="Category"
@@ -575,6 +653,15 @@ export default function EvidenceMatrix() {
                 />
                 <span>Starred Requirements only</span>
               </label>
+              <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showHiddenRows}
+                  onChange={e => setShowHiddenRows(e.target.checked)}
+                  className="accent-indigo-650 w-3.5 h-3.5"
+                />
+                <span>Show hidden rows ({hiddenMatrixRowIds.size})</span>
+              </label>
             </div>
           </div>
         )}
@@ -617,8 +704,25 @@ export default function EvidenceMatrix() {
         recordLabel="matrix row(s)"
         onSelectVisible={matrixRowSelection.selectVisible}
         onClear={matrixRowSelection.clearSelection}
-        message="Row-level selection is available; cell-level bulk edits are deferred to avoid unsafe evidence link changes."
-      />
+        message="Row visibility is a user/workspace display preference."
+      >
+        <button
+          type="button"
+          onClick={showHiddenRows ? handleRestoreSelectedRows : handleHideSelectedRows}
+          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold cursor-pointer"
+        >
+          {showHiddenRows ? 'Restore selected rows' : 'Hide selected rows'}
+        </button>
+        {lastHiddenRowUndo && (
+          <button
+            type="button"
+            onClick={undoMatrixRowVisibility}
+            className="px-3 py-1.5 bg-card hover:bg-muted border border-border text-foreground rounded-lg font-bold cursor-pointer"
+          >
+            Undo row visibility
+          </button>
+        )}
+      </BulkSelectionToolbar>
 
       <PaginationControls
         pageSize={matrixPagination.pageSize}
@@ -683,8 +787,9 @@ export default function EvidenceMatrix() {
                 matrixPagination.paginatedItems.map(req => {
                   const isStarred = isFavourite(`req:${req.id}`);
                   const isBulkSelected = matrixRowSelection.isSelected(req.id);
+                  const isHiddenRow = hiddenMatrixRowIds.has(req.id);
                   return (
-                    <tr key={req.id} className={`hover:bg-muted/10 transition-colors ${isBulkSelected ? 'bg-indigo-500/5' : ''}`}>
+                    <tr key={req.id} className={`hover:bg-muted/10 transition-colors ${isBulkSelected ? 'bg-indigo-500/5' : ''} ${isHiddenRow ? 'opacity-60 grayscale' : ''}`}>
                       {/* Sticky Row Title */}
                       <td
                         className={`${paddingClass} font-semibold text-foreground sticky left-0 z-10 border-r border-border min-w-[260px] shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)]`}
@@ -701,6 +806,7 @@ export default function EvidenceMatrix() {
                             />
                             <div className="min-w-0">
                               <span className={`block font-bold text-foreground ${textClass}`}>{req.title}</span>
+                              {isHiddenRow && <span className="text-[9px] font-bold uppercase text-muted-foreground">Hidden row</span>}
                               <span className="text-[9px] text-muted-foreground font-medium uppercase mt-0.5 block">{req.category}</span>
                               {density === 'comfortable' && req.description && (
                                 <span className="text-[10px] text-muted-foreground font-normal leading-relaxed block mt-1 line-clamp-2" title={req.description}>
