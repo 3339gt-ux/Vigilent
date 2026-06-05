@@ -960,7 +960,7 @@ export default function DashboardPage() {
                             <div className="min-w-0 flex-1">
                               <span className="font-bold text-foreground block truncate" title={item.requirement.title}>{item.requirement.title}</span>
                               <span className="text-[9px] text-muted-foreground block truncate">{item.requirement.category} • {item.requirement.risk_level} Risk</span>
-                              <span className="text-[9px] text-rose-600 dark:text-rose-450 mt-1 block truncate">
+                              <span className="text-[9px] text-rose-600 dark:text-rose-400 mt-1 block truncate">
                                 {item.reasons.find(r => r.level === 'RED' || r.level === 'AMBER')?.message || 'Gap warning detected.'}
                               </span>
                             </div>
@@ -991,7 +991,7 @@ export default function DashboardPage() {
                               <span className="text-[9px] text-muted-foreground block font-medium">
                                 Review Due: <strong className={item.isOverdue ? 'text-rose-500 font-bold' : 'text-amber-500 font-bold'}>{item.requirement.next_due_date || 'None'}</strong>
                               </span>
-                              <span className={`text-[8px] font-bold uppercase block mt-1 ${item.isOverdue ? 'text-rose-600 dark:text-rose-455 font-extrabold' : 'text-amber-600 dark:text-amber-400'}`}>
+                              <span className={`text-[8px] font-bold uppercase block mt-1 ${item.isOverdue ? 'text-rose-600 dark:text-rose-400 font-extrabold' : 'text-amber-600 dark:text-amber-400'}`}>
                                 {item.isOverdue ? 'Overdue' : 'Due Soon'}
                               </span>
                             </div>
@@ -1419,7 +1419,7 @@ export default function DashboardPage() {
                                   item.type === 'Requirement' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20' :
                                   item.type === 'Evidence' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' :
                                   item.type === 'Competency' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' :
-                                  'bg-rose-500/10 text-rose-600 dark:text-rose-455 border-rose-500/20'
+                                  'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
                                 }`}>
                                   {item.type}
                                 </span>

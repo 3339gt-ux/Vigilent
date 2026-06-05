@@ -408,7 +408,7 @@ export default function EvidenceMatrix() {
 
           <button
             onClick={() => setShowAddTargetModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-650 hover:bg-indigo-755 text-white text-xs font-semibold rounded-lg shadow-md cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-650 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-md cursor-pointer"
             id="matrix-add-target-btn"
           >
             <UserPlus className="w-4 h-4" /> Register Asset
@@ -439,7 +439,7 @@ export default function EvidenceMatrix() {
                   : 'bg-muted hover:bg-muted/80 border-border text-foreground'
               }`}
             >
-              Filters {(filterChips.length > 0) && <span className="bg-indigo-650 text-white dark:bg-indigo-550 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold">{filterChips.length}</span>}
+              Filters {(filterChips.length > 0) && <span className="bg-indigo-650 text-white dark:bg-indigo-600 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold">{filterChips.length}</span>}
             </button>
 
             {/* Density controls */}
@@ -575,7 +575,7 @@ export default function EvidenceMatrix() {
             <thead>
               <tr className="bg-muted border-b border-border/80 text-muted-foreground font-bold uppercase tracking-wider sticky top-0 z-20">
                 <th
-                  className="p-4 min-w-[260px] sticky left-0 top-0 z-35 border-r border-b border-border shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)] font-extrabold text-[10px]"
+                  className="p-4 min-w-[260px] sticky left-0 top-0 z-30 border-r border-b border-border shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)] font-extrabold text-[10px]"
                   style={{ backgroundColor: 'hsl(var(--muted))', left: 0, top: 0 }}
                 >
                   Compliance Requirement
@@ -692,7 +692,7 @@ export default function EvidenceMatrix() {
               onClick={() => setActiveCell(null)}
               className="absolute top-4 right-4 p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded"
             >
-              <X className="w-4.5 h-4.5" />
+              <X className="w-4 h-4" />
             </button>
 
             <div className="flex items-center gap-2.5 border-b border-border pb-3 mb-4">
@@ -751,7 +751,7 @@ export default function EvidenceMatrix() {
                 </button>
                 <button
                   onClick={handleSaveCellLink}
-                  className="w-1/2 py-2 bg-indigo-650 hover:bg-indigo-755 text-white font-bold rounded-lg shadow-md cursor-pointer"
+                  className="w-1/2 py-2 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md cursor-pointer"
                   id="matrix-save-link-btn"
                 >
                   Save Mapping Link
@@ -770,7 +770,7 @@ export default function EvidenceMatrix() {
               onClick={() => setShowAddTargetModal(false)}
               className="absolute top-4 right-4 p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded"
             >
-              <X className="w-4.5 h-4.5" />
+              <X className="w-4 h-4" />
             </button>
 
             <div className="flex items-center gap-2 border-b border-border pb-3 mb-4">
@@ -829,7 +829,7 @@ export default function EvidenceMatrix() {
                 <button
                   id="matrix-submit-target"
                   type="submit"
-                  className="w-1/2 py-2 bg-indigo-650 hover:bg-indigo-755 text-white font-bold rounded-lg shadow-md cursor-pointer"
+                  className="w-1/2 py-2 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md cursor-pointer"
                 >
                   Register Asset
                 </button>
@@ -847,7 +847,7 @@ export default function EvidenceMatrix() {
               onClick={() => setShowAddReqModal(false)}
               className="absolute top-4 right-4 p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded animate-none"
             >
-              <X className="w-4.5 h-4.5" />
+              <X className="w-4 h-4" />
             </button>
 
             <div className="flex items-center gap-2 border-b border-border pb-3 mb-4">
@@ -916,7 +916,7 @@ export default function EvidenceMatrix() {
                 <button
                   id="matrix-submit-req"
                   type="submit"
-                  className="w-1/2 py-2 bg-indigo-650 hover:bg-indigo-755 text-white font-bold rounded-lg shadow-md cursor-pointer"
+                  className="w-1/2 py-2 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md cursor-pointer"
                 >
                   Create Requirement
                 </button>

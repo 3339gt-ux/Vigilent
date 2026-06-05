@@ -270,7 +270,7 @@ export default function BillingPage() {
               onClick={() => setShowCheckoutModal(false)}
               className="absolute top-4 right-4 p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded"
             >
-              <X className="w-4.5 h-4.5" />
+              <X className="w-4 h-4" />
             </button>
 
             {checkoutSuccess ? (

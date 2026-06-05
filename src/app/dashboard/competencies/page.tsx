@@ -903,7 +903,7 @@ export default function CompetencyMatrixPage() {
                       : 'bg-muted hover:bg-muted/80 border-border text-foreground'
                   }`}
                 >
-                  Filters {(filterChips.length > 0) && <span className="bg-indigo-650 text-white dark:bg-indigo-550 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold">{filterChips.length}</span>}
+                  Filters {(filterChips.length > 0) && <span className="bg-indigo-650 text-white dark:bg-indigo-600 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold">{filterChips.length}</span>}
                 </button>
 
                 {/* Density controls */}
@@ -1066,7 +1066,7 @@ export default function CompetencyMatrixPage() {
                     className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border transition-all ${
                       isCollapsed
                         ? 'bg-muted/30 border-border/50 text-muted-foreground'
-                        : 'bg-indigo-500/5 border-indigo-500/20 text-indigo-750 dark:text-indigo-300 font-semibold'
+                        : 'bg-indigo-500/5 border-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-semibold'
                     }`}
                   >
                     <button
@@ -1116,7 +1116,7 @@ export default function CompetencyMatrixPage() {
                 <thead>
                   <tr className="bg-muted border-b border-border text-muted-foreground uppercase tracking-wider sticky top-0 z-20">
                     <th
-                      className="p-3 sticky left-0 top-0 z-35 border-r border-b border-border shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)] font-extrabold uppercase text-[10px] tracking-wider"
+                      className="p-3 sticky left-0 top-0 z-30 border-r border-b border-border shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)] font-extrabold uppercase text-[10px] tracking-wider"
                       style={{ backgroundColor: 'hsl(var(--muted))', left: 0, top: 0 }}
                     >
                       <div className="min-w-52">Person</div>

@@ -289,7 +289,7 @@ export function SavedViewsBar({
               />
               <button
                 type="submit"
-                className="p-1.5 bg-indigo-650 hover:bg-indigo-750 text-white rounded-lg border border-indigo-750 cursor-pointer"
+                className="p-1.5 bg-indigo-650 hover:bg-indigo-700 text-white rounded-lg border border-indigo-700 cursor-pointer"
                 title="Confirm save view"
               >
                 <Check className="w-3.5 h-3.5" />

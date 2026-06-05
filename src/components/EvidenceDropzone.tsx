@@ -260,10 +260,10 @@ export function EvidenceDropzone({
                   </div>
 
                   <div className="shrink-0 flex items-center gap-2">
-                    {isComplete && <CheckCircle2 className="w-4.5 h-4.5 text-emerald-500" />}
-                    {isFailed && <AlertCircle className="w-4.5 h-4.5 text-rose-500" />}
+                    {isComplete && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                    {isFailed && <AlertCircle className="w-4 h-4 text-rose-500" />}
                     {!isComplete && !isFailed && (
-                      <Loader2 className="w-4.5 h-4.5 text-indigo-650 dark:text-indigo-455 animate-spin shrink-0" />
+                      <Loader2 className="w-4 h-4 text-indigo-650 dark:text-indigo-400 animate-spin shrink-0" />
                     )}
                   </div>
                 </div>
@@ -338,7 +338,7 @@ export function EvidenceDropzone({
               </button>
               <button
                 onClick={() => duplicateDecision.resolve('upload')}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-755 text-white rounded-lg font-bold text-xs transition-all shadow-md shadow-indigo-650/15"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs transition-all shadow-md shadow-indigo-650/15"
               >
                 Upload Anyway
               </button>

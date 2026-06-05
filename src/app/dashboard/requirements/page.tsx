@@ -33,7 +33,7 @@ const statusClass = (status: RequirementStatus) => {
   if (status === 'GREEN') return 'bg-emerald-500/10 dark:bg-emerald-500/5 border-emerald-500/20 text-emerald-700 dark:text-emerald-400';
   if (status === 'AMBER') return 'bg-amber-500/10 dark:bg-amber-500/5 border-amber-500/20 text-amber-700 dark:text-amber-400';
   if (status === 'RED') return 'bg-rose-500/10 dark:bg-rose-500/5 border-rose-500/20 text-rose-700 dark:text-rose-400';
-  return 'bg-zinc-500/10 dark:bg-zinc-500/5 border-zinc-500/20 text-zinc-650 dark:text-zinc-400';
+  return 'bg-zinc-500/10 dark:bg-zinc-500/5 border-zinc-500/20 text-zinc-600 dark:text-zinc-400';
 };
 
 const riskOptions: Requirement['risk_level'][] = ['Low', 'Medium', 'High', 'Critical'];
@@ -420,7 +420,7 @@ export default function RequirementsPage() {
 
       if (activeFilter === 'overdue') {
         matchesRadar = (action.status === 'Open' || action.status === 'In Progress') && !!actionDueDate && new Date(actionDueDate) < today;
-      } else if (activeFilter === 'due-week' || activeFilter === 'due-week') {
+      } else if (activeFilter === 'due-week') {
         if (!actionDueDate) matchesRadar = false;
         else {
           const dVal = new Date(actionDueDate);
@@ -1017,8 +1017,8 @@ export default function RequirementsPage() {
                           {categoryMessage && (
                             <div className={`p-1.5 text-[10px] font-semibold border rounded-lg text-center animate-fade-in ${
                               categoryMessage.toLowerCase().includes('could not') || categoryMessage.toLowerCase().includes('failed')
-                                ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-450'
-                                : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-650 dark:text-emerald-450'
+                                ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
+                                : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
                             }`}>
                               {categoryMessage}
                             </div>
@@ -1083,7 +1083,7 @@ export default function RequirementsPage() {
                                   setIsCatDropdownOpen(false);
                                   setCatSearchQuery('');
                                 }}
-                                className="w-full py-1.5 bg-indigo-650 hover:bg-indigo-755 text-white font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 transition-colors animate-fade-in cursor-pointer"
+                                className="w-full py-1.5 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 transition-colors animate-fade-in cursor-pointer"
                               >
                                 <Plus className="w-3 h-3" /> Create Category &quot;{catSearchQuery.trim()}&quot;
                               </button>
@@ -1174,7 +1174,7 @@ export default function RequirementsPage() {
                       label="Due Date Filter"
                       value={radarFilter}
                       onChange={setRadarFilter}
-                      options={['All', 'overdue', 'due30', 'due60', 'due90', 'actions']}
+                      options={['All', 'overdue', 'due-week', 'due30', 'due60', 'due90', 'actions']}
                       isStarred={(opt) => isFavourite(`radar:${opt}`)}
                       onToggleStar={(opt) => toggleFavourite(`radar:${opt}`)}
                       allLabel="No Date Filter"
@@ -1295,9 +1295,9 @@ export default function RequirementsPage() {
                           <td className={`${paddingClass} text-center`}>
                             <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full border leading-none shadow-xs ${
                               action.status === 'Complete' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400' :
-                              action.status === 'Cancelled' ? 'bg-zinc-500/10 border-zinc-500/20 text-zinc-650 dark:text-zinc-400' :
+                              action.status === 'Cancelled' ? 'bg-zinc-500/10 border-zinc-500/20 text-zinc-600 dark:text-zinc-400' :
                               action.status === 'In Progress' ? 'bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-400' :
-                              'bg-indigo-500/10 border-indigo-500/20 text-indigo-750 dark:text-indigo-400'
+                              'bg-indigo-500/10 border-indigo-500/20 text-indigo-700 dark:text-indigo-400'
                             }`}>
                               <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${
                                 action.status === 'Complete' ? 'bg-emerald-500' :

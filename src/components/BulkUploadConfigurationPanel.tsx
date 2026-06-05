@@ -260,7 +260,7 @@ export function BulkUploadConfigurationPanel(props: BulkUploadConfigurationPanel
               <button
                 onClick={saveAll}
                 disabled={savingAll || savedIds.size === documents.length}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-755 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-indigo-650/15"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-indigo-650/15"
               >
                 <Save className="w-4 h-4" />
                 {savingAll ? 'Saving all...' : `Save All Files (${documents.length})`}
@@ -280,13 +280,13 @@ export function BulkUploadConfigurationPanel(props: BulkUploadConfigurationPanel
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {globalMessage && (
             <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-lg text-xs font-semibold flex items-center gap-2">
-              <CheckCircle2 className="w-4.5 h-4.5 shrink-0" />
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
               {globalMessage}
             </div>
           )}
           {globalError && (
             <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 rounded-lg text-xs font-semibold flex items-center gap-2">
-              <AlertCircle className="w-4.5 h-4.5 shrink-0" />
+              <AlertCircle className="w-4 h-4 shrink-0" />
               {globalError}
             </div>
           )}
@@ -329,7 +329,7 @@ export function BulkUploadConfigurationPanel(props: BulkUploadConfigurationPanel
                       disabled={isSaving || isSaved || savingAll}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
                         isSaved ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' :
-                        'bg-indigo-600 hover:bg-indigo-755 text-white disabled:opacity-50'
+                        'bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50'
                       }`}
                     >
                       {isSaved ? (
@@ -565,7 +565,7 @@ export function BulkUploadConfigurationPanel(props: BulkUploadConfigurationPanel
             <button
               onClick={saveAll}
               disabled={savingAll || savedIds.size === documents.length}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-755 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-indigo-650/15"
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-indigo-650/15"
             >
               <Save className="w-4 h-4" />
               {savingAll ? 'Saving all...' : `Save All Files (${documents.length})`}

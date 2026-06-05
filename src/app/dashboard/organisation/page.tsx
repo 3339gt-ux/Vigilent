@@ -340,7 +340,7 @@ export default function OrganisationManagement() {
               onClick={() => setShowInviteModal(false)}
               className="absolute top-4 right-4 p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded"
             >
-              <X className="w-4.5 h-4.5" />
+              <X className="w-4 h-4" />
             </button>
 
             <div className="flex items-center gap-2 border-b border-border pb-3 mb-4">
