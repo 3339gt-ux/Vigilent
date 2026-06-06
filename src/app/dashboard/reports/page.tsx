@@ -4,55 +4,43 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import { dbService } from '@/lib/db';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import {
-  BarChart3,
-  TrendingUp,
   ShieldCheck,
   Briefcase,
   FileSpreadsheet,
   FolderArchive,
   Building2,
   Settings,
-  Star,
   Download,
   Calendar,
   AlertTriangle,
   FileText,
-  Search,
-  Filter,
-  X,
-  ChevronRight,
   RefreshCw,
   Plus,
-  Table as TableIcon,
-  PieChart as PieChartIcon,
   Activity,
-  Layers,
   ChevronDown,
-  Info,
-  CheckCircle2,
   SlidersHorizontal,
   Bookmark
 } from 'lucide-react';
 import {
   Requirement,
-  EvidenceDocument,
-  Action,
-  CompetencyRecord,
-  CompetencyType,
-  Person,
-  AuditPack,
-  AuditTrailEvent,
-  CellStatus,
-  DocumentStatus,
-  ActionStatus,
-  CompetencyStatus
+  AuditTrailEvent
 } from '@/lib/types';
 import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
+import { calculateCompetencyStatus } from '@/lib/competencyEngine';
 
 // Local storage key for saved custom reports
 const SAVED_REPORTS_KEY = 'vygilence_saved_reports';
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const endOfDay = (value: string) => new Date(`${value}T23:59:59.999`);
+
+const escapeHtml = (value: string) => value
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#039;');
 
 type TabType =
   | 'executive'
@@ -88,18 +76,14 @@ export default function ReportsPage() {
     people,
     competencyTypes,
     competencyRecords,
+    requirementDocuments,
     auditPacks,
     readinessReport,
-    competencySummary,
-    readinessScore,
-    stats: appStats
+    readinessScore
   } = useApp();
-
-  const router = useRouter();
 
   // Loading admin trail logs
   const [auditTrailEvents, setAuditTrailEvents] = useState<AuditTrailEvent[]>([]);
-  const [loadingTrail, setLoadingTrail] = useState(false);
   const isOwnerOrAdmin = user?.role === 'Owner' || user?.role === 'Admin';
 
   // State Management
@@ -118,9 +102,7 @@ export default function ReportsPage() {
   const [selectedRisk, setSelectedRisk] = useState('All');
   const [includeInactive, setIncludeInactive] = useState(false);
   const [includeArchived, setIncludeArchived] = useState(false);
-
-  // Search filter for catalogue/report lookup
-  const [reportSearch, setReportSearch] = useState('');
+  const [includeDeactivated, setIncludeDeactivated] = useState(false);
 
   // Custom Report Builder States
   const [builderSource, setBuilderSource] = useState('Requirements');
@@ -137,14 +119,9 @@ export default function ReportsPage() {
   const [pivotRow, setPivotRow] = useState('category');
   const [pivotCol, setPivotCol] = useState('status');
 
-  // Interactive Drill Down Drawer / Popover
-  const [drillDownData, setDrillDownData] = useState<{
-    title: string;
-    items: Array<{ id: string; label: string; details: string; link: string }>;
-  } | null>(null);
-
   // Set freshness timestamp on load
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFreshnessTime(new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     
     // Load saved reports
@@ -152,29 +129,38 @@ export default function ReportsPage() {
       const stored = localStorage.getItem(`${SAVED_REPORTS_KEY}_${user.id}_${organization.id}`);
       if (stored) {
         try {
-          setSavedReports(JSON.parse(stored));
+          const parsed = JSON.parse(stored);
+          if (!Array.isArray(parsed)) throw new Error('Saved report data is not an array.');
+          setSavedReports(parsed);
         } catch (e) {
           console.error('Failed to parse saved reports', e);
+          localStorage.removeItem(`${SAVED_REPORTS_KEY}_${user.id}_${organization.id}`);
+          setSavedReports([]);
         }
       }
     }
   }, [user, organization]);
 
-  // Load audit trail events on admin tab access or page mount
+  // Audit data is fetched only for authorised users when an audit-backed tab needs it.
   useEffect(() => {
-    if (isOwnerOrAdmin) {
-      setLoadingTrail(true);
-      dbService.getAuditTrailEvents()
-        .then(data => {
-          setAuditTrailEvents(data);
-          setLoadingTrail(false);
-        })
-        .catch(err => {
-          console.error('Failed to fetch audit trail events:', err);
-          setLoadingTrail(false);
-        });
+    const needsAuditData = activeTab === 'executive' || activeTab === 'audits' || activeTab === 'administration' || (activeTab === 'builder' && builderSource === 'Audit Trail');
+    if (!isOwnerOrAdmin || !needsAuditData) {
+      return;
     }
-  }, [isOwnerOrAdmin]);
+
+    let cancelled = false;
+    dbService.getAuditTrailEvents()
+      .then(data => {
+        if (!cancelled) setAuditTrailEvents(data);
+      })
+      .catch(err => {
+        console.error('Failed to fetch audit trail events:', err);
+        if (!cancelled) setAuditTrailEvents([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, builderSource, isOwnerOrAdmin]);
 
   // Reset Filters
   const handleResetFilters = () => {
@@ -186,6 +172,7 @@ export default function ReportsPage() {
     setSelectedRisk('All');
     setIncludeInactive(false);
     setIncludeArchived(false);
+    setIncludeDeactivated(false);
     setToast({ type: 'info', message: 'Global filters reset successfully.' });
   };
 
@@ -210,30 +197,36 @@ export default function ReportsPage() {
     return Array.from(cats);
   }, [frameworkRequirements, documents]);
 
+  const readinessByRequirementId = useMemo(
+    () => new Map(readinessReport.requirements.map(item => [item.requirement.id, item])),
+    [readinessReport.requirements]
+  );
+
   // Scoped / Filtered datasets
   const filteredReqs = useMemo(() => {
     return frameworkRequirements.filter(r => {
-      if (!includeArchived && r.lifecycle_status === 'ARCHIVED') return false;
+      const lifecycle = r.lifecycle_status || 'ACTIVE';
+      if (lifecycle === 'DELETED') return false;
+      if (!includeArchived && lifecycle === 'ARCHIVED') return false;
+      if (!includeDeactivated && lifecycle === 'DEACTIVATED') return false;
       if (selectedCategory !== 'All' && r.category !== selectedCategory) return false;
       if (selectedOwner !== 'All' && r.owner !== selectedOwner) return false;
       if (selectedRisk !== 'All' && r.risk_level !== selectedRisk) return false;
-      if (selectedStatus !== 'All' && r.status !== selectedStatus) return false;
+      if (selectedStatus !== 'All' && readinessByRequirementId.get(r.id)?.status !== selectedStatus) return false;
       if (startDate && new Date(r.created_at) < new Date(startDate)) return false;
-      if (endDate && new Date(r.created_at) > new Date(endDate)) return false;
+      if (endDate && new Date(r.created_at) > endOfDay(endDate)) return false;
       return true;
     });
-  }, [frameworkRequirements, selectedCategory, selectedOwner, selectedRisk, selectedStatus, startDate, endDate, includeArchived]);
+  }, [frameworkRequirements, selectedCategory, selectedOwner, selectedRisk, selectedStatus, startDate, endDate, includeArchived, includeDeactivated, readinessByRequirementId]);
 
   const filteredDocs = useMemo(() => {
     return documents.filter(d => {
       if (selectedCategory !== 'All' && d.category !== selectedCategory) return false;
-      if (selectedOwner !== 'All' && d.uploaded_by !== selectedOwner) return false;
-      if (selectedStatus !== 'All' && d.status !== selectedStatus) return false;
       if (startDate && d.created_at && new Date(d.created_at) < new Date(startDate)) return false;
-      if (endDate && d.created_at && new Date(d.created_at) > new Date(endDate)) return false;
+      if (endDate && d.created_at && new Date(d.created_at) > endOfDay(endDate)) return false;
       return true;
     });
-  }, [documents, selectedCategory, selectedOwner, selectedStatus, startDate, endDate]);
+  }, [documents, selectedCategory, startDate, endDate]);
 
   const filteredPeople = useMemo(() => {
     return people.filter(p => {
@@ -245,12 +238,97 @@ export default function ReportsPage() {
   const filteredActions = useMemo(() => {
     return actions.filter(a => {
       if (selectedOwner !== 'All' && a.owner !== selectedOwner) return false;
-      if (selectedStatus !== 'All' && a.status !== selectedStatus) return false;
       if (startDate && a.created_at && new Date(a.created_at) < new Date(startDate)) return false;
-      if (endDate && a.created_at && new Date(a.created_at) > new Date(endDate)) return false;
+      if (endDate && a.created_at && new Date(a.created_at) > endOfDay(endDate)) return false;
       return true;
     });
-  }, [actions, selectedOwner, selectedStatus, startDate, endDate]);
+  }, [actions, selectedOwner, startDate, endDate]);
+
+  const filteredRequirementIds = useMemo(() => new Set(filteredReqs.map(requirement => requirement.id)), [filteredReqs]);
+  const filteredReadinessRequirements = useMemo(
+    () => readinessReport.requirements.filter(item => filteredRequirementIds.has(item.requirement.id)),
+    [filteredRequirementIds, readinessReport.requirements]
+  );
+  const attentionRequirements = useMemo(
+    () => filteredReadinessRequirements.filter(item =>
+      (item.requirement.risk_level === 'High' || item.requirement.risk_level === 'Critical') &&
+      (item.status === 'AMBER' || item.status === 'RED')
+    ),
+    [filteredReadinessRequirements]
+  );
+  const activeCompetencyTypeIds = useMemo(
+    () => new Set(competencyTypes.filter(type => type.active).map(type => type.id)),
+    [competencyTypes]
+  );
+  const filteredPersonIds = useMemo(() => new Set(filteredPeople.map(person => person.id)), [filteredPeople]);
+  const filteredCompetencyRecords = useMemo(
+    () => competencyRecords.filter(record =>
+      filteredPersonIds.has(record.person_id) &&
+      activeCompetencyTypeIds.has(record.competency_type_id)
+    ),
+    [activeCompetencyTypeIds, competencyRecords, filteredPersonIds]
+  );
+  const filteredCompetencySummary = useMemo(() => {
+    const recordsByCell = new Map(
+      filteredCompetencyRecords.map(record => [`${record.person_id}:${record.competency_type_id}`, record])
+    );
+    const counts = { valid: 0, expiringSoon: 0, expired: 0, missing: 0, notRequired: 0 };
+    filteredPeople.forEach(person => {
+      competencyTypes.filter(type => type.active).forEach(type => {
+        const status = calculateCompetencyStatus(recordsByCell.get(`${person.id}:${type.id}`) || null);
+        if (status === 'Valid') counts.valid += 1;
+        else if (status === 'Expiring Soon') counts.expiringSoon += 1;
+        else if (status === 'Expired') counts.expired += 1;
+        else if (status === 'Missing') counts.missing += 1;
+        else counts.notRequired += 1;
+      });
+    });
+    const scored = counts.valid + counts.expiringSoon + counts.expired + counts.missing;
+    return {
+      ...counts,
+      compliancePercent: scored > 0 ? Math.round((counts.valid / scored) * 100) : 0
+    };
+  }, [competencyTypes, filteredCompetencyRecords, filteredPeople]);
+
+  const evidenceLinkMetrics = useMemo(() => {
+    const linkedDocumentIds = new Set(requirementDocuments.map(link => link.document_id));
+    const linked = filteredDocs.filter(document => linkedDocumentIds.has(document.id)).length;
+    return { linked, unlinked: filteredDocs.length - linked };
+  }, [filteredDocs, requirementDocuments]);
+
+  const actionMetrics = useMemo(() => {
+    const today = new Date();
+    const open = filteredActions.filter(action => action.status === 'Open' || action.status === 'In Progress');
+    const overdue = open.filter(action => {
+      const dueDate = action.target_due_date || action.due_date;
+      return Boolean(dueDate && new Date(dueDate) < today);
+    }).length;
+    const completed = filteredActions.filter(action => action.status === 'Complete').length;
+    const eligible = filteredActions.filter(action => action.status !== 'Cancelled').length;
+    return {
+      open: open.length,
+      overdue,
+      completed,
+      completionRate: eligible > 0 ? Math.round((completed / eligible) * 100) : 0
+    };
+  }, [filteredActions]);
+
+  const documentUploadTrend = useMemo(() => {
+    const months = Array.from({ length: 7 }, (_, index) => {
+      const date = new Date();
+      date.setDate(1);
+      date.setHours(0, 0, 0, 0);
+      date.setMonth(date.getMonth() - (6 - index));
+      return date;
+    });
+    const points = months.map(month => filteredDocs.filter(document => {
+      if (!document.created_at) return false;
+      const created = new Date(document.created_at);
+      return created.getFullYear() === month.getFullYear() && created.getMonth() === month.getMonth();
+    }).length);
+    const labels = months.map(month => month.toLocaleDateString(undefined, { month: 'short', year: '2-digit' }));
+    return { points, labels };
+  }, [filteredDocs]);
 
   // ---------------- CUSTOM SVG CHARTING GENERATORS ----------------
 
@@ -417,7 +495,7 @@ export default function ReportsPage() {
           document.body.removeChild(link);
           URL.revokeObjectURL(url);
           setToast({ type: 'success', message: 'Report data exported successfully.' });
-        } catch (e) {
+        } catch {
           setToast({ type: 'error', message: 'Failed to export report CSV.' });
         }
       }
@@ -442,7 +520,7 @@ export default function ReportsPage() {
       <!doctype html>
       <html>
         <head>
-          <title>Vygilence Report - ${reportName}</title>
+          <title>Vygilence Report - ${escapeHtml(reportName)}</title>
           <style>
             body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #111827; margin: 32px; background: #fff; }
             h1 { font-size: 24px; margin-bottom: 2px; }
@@ -458,8 +536,13 @@ export default function ReportsPage() {
           </style>
         </head>
         <body>
-          <h1>Vygilence Compliance Audit Report</h1>
-          <h2>Report: ${reportName} | Workspace: ${organization?.name || 'Vygilence Workspace'}</h2>
+          <h1>Vygilence Readiness and Evidence Report</h1>
+          <h2>Report: ${escapeHtml(reportName)} | Workspace: ${escapeHtml(organization?.name || 'Vygilence Workspace')}</h2>
+          <p style="font-size: 11px; color: #6b7280;">
+            Generated: ${escapeHtml(new Date().toLocaleString())}<br />
+            Filters: category=${escapeHtml(selectedCategory)}, owner=${escapeHtml(selectedOwner)}, requirement status=${escapeHtml(selectedStatus)},
+            risk=${escapeHtml(selectedRisk)}, date=${escapeHtml(startDate || 'any')} to ${escapeHtml(endDate || 'any')}
+          </p>
           <div>${printContent}</div>
           <div class="disclaimer">
             Reports reflect the records currently held in Vygilence and depend on the completeness and accuracy of the underlying data.
@@ -514,12 +597,22 @@ export default function ReportsPage() {
   // ---------------- CUSTOM BUILDER DATA PREVIEW ----------------
 
   const builderReportData = useMemo(() => {
-    let sourceData: any[] = [];
-    if (builderSource === 'Requirements') sourceData = filteredReqs;
-    else if (builderSource === 'Evidence') sourceData = filteredDocs;
-    else if (builderSource === 'Competencies') sourceData = competencyRecords;
-    else if (builderSource === 'Actions') sourceData = filteredActions;
-    else if (builderSource === 'Audit Trail') sourceData = auditTrailEvents;
+    let sourceData: Array<Record<string, unknown>> = [];
+    if (builderSource === 'Requirements') {
+      sourceData = filteredReqs.map(requirement => ({
+        ...requirement,
+        status: readinessByRequirementId.get(requirement.id)?.status || 'GREY'
+      }));
+    }
+    else if (builderSource === 'Evidence') sourceData = filteredDocs.map(document => ({ ...document }));
+    else if (builderSource === 'Competencies') {
+      sourceData = filteredCompetencyRecords.map(record => ({
+        ...record,
+        status: calculateCompetencyStatus(record)
+      }));
+    }
+    else if (builderSource === 'Actions') sourceData = filteredActions.map(action => ({ ...action }));
+    else if (builderSource === 'Audit Trail' && isOwnerOrAdmin) sourceData = auditTrailEvents.map(event => ({ ...event }));
 
     const aggregationMap = new Map<string, number>();
     sourceData.forEach(item => {
@@ -528,7 +621,25 @@ export default function ReportsPage() {
     });
 
     return Array.from(aggregationMap.entries()).map(([label, value]) => ({ label, value }));
-  }, [builderSource, builderDimension, filteredReqs, filteredDocs, competencyRecords, filteredActions, auditTrailEvents]);
+  }, [builderSource, builderDimension, filteredReqs, filteredDocs, filteredCompetencyRecords, filteredActions, auditTrailEvents, readinessByRequirementId, isOwnerOrAdmin]);
+
+  const handleExportBuilderCSV = () => {
+    const reportName = builderReportName.trim() || `${builderSource} by ${builderDimension}`;
+    if (builderVisual === 'pivot' && builderSource === 'Requirements') {
+      const headers = [pivotRow, ...pivotGridData.colArr, 'Row Total'];
+      const rows = pivotGridData.rowArr.map(row => {
+        const values = pivotGridData.colArr.map(column => pivotGridData.matrix[row][column] || 0);
+        return [row, ...values.map(String), String(values.reduce((sum, value) => sum + value, 0))];
+      });
+      handleExportCSV(reportName, headers, rows);
+      return;
+    }
+    handleExportCSV(
+      reportName,
+      [builderDimension, 'Count'],
+      builderReportData.map(item => [item.label, String(item.value)])
+    );
+  };
 
   // Save Custom Report Config
   const handleSaveCustomReport = () => {
@@ -550,13 +661,18 @@ export default function ReportsPage() {
         status: selectedStatus,
         risk: selectedRisk
       },
-      createdAt: new Date().toLocaleDateString()
+      createdAt: new Date().toISOString()
     };
 
     const updated = [...savedReports, newReport];
     setSavedReports(updated);
     if (user && organization) {
-      localStorage.setItem(`${SAVED_REPORTS_KEY}_${user.id}_${organization.id}`, JSON.stringify(updated));
+      try {
+        localStorage.setItem(`${SAVED_REPORTS_KEY}_${user.id}_${organization.id}`, JSON.stringify(updated));
+      } catch {
+        setToast({ type: 'error', message: 'The report could not be saved in this browser.' });
+        return;
+      }
     }
     setBuilderReportName('');
     setBuilderReportDesc('');
@@ -575,23 +691,28 @@ export default function ReportsPage() {
         const updated = savedReports.filter(r => r.id !== id);
         setSavedReports(updated);
         if (user && organization) {
-          localStorage.setItem(`${SAVED_REPORTS_KEY}_${user.id}_${organization.id}`, JSON.stringify(updated));
+          try {
+            localStorage.setItem(`${SAVED_REPORTS_KEY}_${user.id}_${organization.id}`, JSON.stringify(updated));
+          } catch {
+            setToast({ type: 'error', message: 'The saved report could not be removed from this browser.' });
+            return;
+          }
         }
         setToast({ type: 'success', message: 'Saved report deleted successfully.' });
       }
     });
   };
 
-  // ---------------- UPCOMING Obligational forecasts ----------------
+  // ---------------- UPCOMING SCHEDULED RECORDS ----------------
 
   const upcomingReviews = useMemo(() => {
-    const result = { total: 0, w7: 0, w30: 0, w60: 0, w90: 0, items: [] as Requirement[] };
+    const result = { total: 0, undated: 0, w7: 0, w30: 0, w60: 0, w90: 0, items: [] as Requirement[] };
     const today = new Date();
     
-    frameworkRequirements.forEach(req => {
+    filteredReqs.forEach(req => {
       if (req.next_due_date) {
         const dueDate = new Date(req.next_due_date);
-        const diffDays = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 3600 * 24));
+        const diffDays = Math.ceil((dueDate.getTime() - today.getTime()) / DAY_MS);
         if (diffDays >= 0) {
           result.total += 1;
           result.items.push(req);
@@ -600,19 +721,21 @@ export default function ReportsPage() {
           else if (diffDays <= 60) result.w60 += 1;
           else if (diffDays <= 90) result.w90 += 1;
         }
+      } else {
+        result.undated += 1;
       }
     });
     return result;
-  }, [frameworkRequirements]);
+  }, [filteredReqs]);
 
   const upcomingEvidenceExpiries = useMemo(() => {
-    const result = { total: 0, w7: 0, w30: 0, w60: 0, w90: 0 };
+    const result = { total: 0, undated: 0, w7: 0, w30: 0, w60: 0, w90: 0 };
     const today = new Date();
 
-    documents.forEach(doc => {
+    filteredDocs.forEach(doc => {
       if (doc.expiry_date) {
         const expDate = new Date(doc.expiry_date);
-        const diffDays = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 3600 * 24));
+        const diffDays = Math.ceil((expDate.getTime() - today.getTime()) / DAY_MS);
         if (diffDays >= 0) {
           result.total += 1;
           if (diffDays <= 7) result.w7 += 1;
@@ -620,19 +743,22 @@ export default function ReportsPage() {
           else if (diffDays <= 60) result.w60 += 1;
           else if (diffDays <= 90) result.w90 += 1;
         }
+      } else {
+        result.undated += 1;
       }
     });
     return result;
-  }, [documents]);
+  }, [filteredDocs]);
 
   const upcomingTrainingRenewals = useMemo(() => {
-    const result = { total: 0, w7: 0, w30: 0, w60: 0, w90: 0 };
+    const result = { total: 0, undated: 0, w7: 0, w30: 0, w60: 0, w90: 0 };
     const today = new Date();
 
-    competencyRecords.forEach(rec => {
+    filteredCompetencyRecords.forEach(rec => {
+      if (calculateCompetencyStatus(rec) === 'Not Required') return;
       if (rec.expiry_date) {
         const expDate = new Date(rec.expiry_date);
-        const diffDays = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 3600 * 24));
+        const diffDays = Math.ceil((expDate.getTime() - today.getTime()) / DAY_MS);
         if (diffDays >= 0) {
           result.total += 1;
           if (diffDays <= 7) result.w7 += 1;
@@ -640,19 +766,21 @@ export default function ReportsPage() {
           else if (diffDays <= 60) result.w60 += 1;
           else if (diffDays <= 90) result.w90 += 1;
         }
+      } else {
+        result.undated += 1;
       }
     });
     return result;
-  }, [competencyRecords]);
+  }, [filteredCompetencyRecords]);
 
   // Data Quality Metrics
   const dataQualityReport = useMemo(() => {
-    const totalDocs = documents.length;
+    const totalDocs = filteredDocs.length;
     if (totalDocs === 0) return { missingDatesPercent: 0, duplicateHashesCount: 0 };
 
-    const missingDates = documents.filter(d => !d.expiry_date && !d.review_date).length;
+    const missingDates = filteredDocs.filter(d => !d.expiry_date && !d.review_date).length;
     const fileHashes = new Map<string, number>();
-    documents.forEach(d => {
+    filteredDocs.forEach(d => {
       if (d.file_hash) {
         fileHashes.set(d.file_hash, (fileHashes.get(d.file_hash) || 0) + 1);
       }
@@ -667,7 +795,7 @@ export default function ReportsPage() {
       missingDatesPercent: Math.round((missingDates / totalDocs) * 100),
       duplicateHashesCount: duplicateHashes
     };
-  }, [documents]);
+  }, [filteredDocs]);
 
   // Administrative / Activity Audit logs
   const adminEventsBreakdown = useMemo(() => {
@@ -680,24 +808,6 @@ export default function ReportsPage() {
     return stats;
   }, [auditTrailEvents]);
 
-  // Pre-configured Catalogue items
-  const catalogueReports = [
-    { name: 'Compliance Heath Overview', desc: 'Summary of overall workspace readiness score and requirements health.', tab: 'executive' as TabType },
-    { name: 'RAG Requirements Distribution', desc: 'Visual distribution of active requirements mapped by RAG (Green/Amber/Red) criteria.', tab: 'requirements' as TabType },
-    { name: 'Requirements Overdue for Review', desc: 'List of requirements with next review date in the past.', tab: 'requirements' as TabType },
-    { name: 'Evidence Coverage Audit', desc: 'Detailed view of requirements lacking matching criterion evidence files.', tab: 'evidence' as TabType },
-    { name: 'Evidence Expirations Timeline', desc: 'Timeline obligational forecast of evidence documents expiring in the next 90 days.', tab: 'evidence' as TabType },
-    { name: 'Roster Competency Status', desc: 'Roster and competency record status matrices mapped by department.', tab: 'competencies' as TabType },
-    { name: 'Actions Aging & Backlog', desc: 'Average closure time and backlog levels for open corrective actions.', tab: 'actions' as TabType },
-    { name: 'Audit Packs Registry', desc: 'Internal audits progress and readiness statistics.', tab: 'audits' as TabType },
-    { name: 'Administrative Changes', desc: 'Audit log of critical system operations and permission edits.', tab: 'administration' as TabType }
-  ];
-
-  const filteredCatalogue = catalogueReports.filter(r =>
-    r.name.toLowerCase().includes(reportSearch.toLowerCase()) ||
-    r.desc.toLowerCase().includes(reportSearch.toLowerCase())
-  );
-
   return (
     <div className="space-y-6">
       {/* Header Panel */}
@@ -708,7 +818,7 @@ export default function ReportsPage() {
           </div>
           <h1 className="text-3xl font-black tracking-tight mt-1" id="reports-heading">Reports</h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Interactive compliance, evidence, competency, and operational reporting across your workspace.
+            Interactive readiness, evidence, competency, and operational reporting across your workspace.
           </p>
         </div>
         <div className="flex items-center gap-2 self-start md:self-auto">
@@ -726,7 +836,7 @@ export default function ReportsPage() {
             onClick={() => handlePrintReport(activeTab.toUpperCase(), 'active-report-view')}
             className="px-3.5 py-2 bg-muted hover:bg-muted/80 text-foreground font-bold text-xs rounded-lg border border-border flex items-center gap-1.5 cursor-pointer transition-all"
           >
-            <Download className="w-3.5 h-3.5" /> Export PDF
+            <Download className="w-3.5 h-3.5" /> Print / Save as PDF
           </button>
           <button
             onClick={() => {
@@ -746,7 +856,7 @@ export default function ReportsPage() {
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="w-4 h-4 text-indigo-650 dark:text-indigo-400" />
             <span className="text-xs font-bold text-foreground">Global Report Filters</span>
-            {(selectedCategory !== 'All' || selectedStatus !== 'All' || selectedOwner !== 'All' || selectedRisk !== 'All' || includeInactive || includeArchived) && (
+            {(startDate || endDate || selectedCategory !== 'All' || selectedStatus !== 'All' || selectedOwner !== 'All' || selectedRisk !== 'All' || includeInactive || includeArchived || includeDeactivated) && (
               <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 text-[9px] font-extrabold rounded-full">
                 Active
               </span>
@@ -760,7 +870,7 @@ export default function ReportsPage() {
         {showFilters && (
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 pt-3 border-t border-border/40 text-xs animate-in fade-in duration-200">
             <div>
-              <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-1">Date Range Start</label>
+              <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-1">Created date start</label>
               <input
                 type="date"
                 value={startDate}
@@ -769,7 +879,7 @@ export default function ReportsPage() {
               />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-1">Date Range End</label>
+              <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-1">Created date end</label>
               <input
                 type="date"
                 value={endDate}
@@ -778,7 +888,7 @@ export default function ReportsPage() {
               />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-1">Category</label>
+              <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-1">Requirement / evidence category</label>
               <select
                 value={selectedCategory}
                 onChange={e => setSelectedCategory(e.target.value)}
@@ -789,7 +899,7 @@ export default function ReportsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-1">Owner / Actor</label>
+              <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-1">Requirement / action owner</label>
               <select
                 value={selectedOwner}
                 onChange={e => setSelectedOwner(e.target.value)}
@@ -800,21 +910,21 @@ export default function ReportsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-1">RAG Status</label>
+              <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-1">Requirement RAG status</label>
               <select
                 value={selectedStatus}
                 onChange={e => setSelectedStatus(e.target.value)}
                 className="w-full px-2 py-1.5 bg-muted rounded-lg border border-border/60 outline-none font-medium"
               >
                 <option value="All">All Statuses</option>
-                <option value="GREEN">Green (Compliant)</option>
+                <option value="GREEN">Green (Current)</option>
                 <option value="AMBER">Amber (Warning)</option>
                 <option value="RED">Red (Overdue/Gap)</option>
                 <option value="GREY">Grey (Excluded)</option>
               </select>
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-1">Risk Level</label>
+              <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-1">Requirement risk level</label>
               <select
                 value={selectedRisk}
                 onChange={e => setSelectedRisk(e.target.value)}
@@ -846,6 +956,15 @@ export default function ReportsPage() {
                 />
                 Include Archived Reqs
               </label>
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer font-semibold select-none">
+                <input
+                  type="checkbox"
+                  checked={includeDeactivated}
+                  onChange={e => setIncludeDeactivated(e.target.checked)}
+                  className="accent-indigo-650 rounded"
+                />
+                Include Deactivated Reqs
+              </label>
             </div>
             <div className="flex justify-end gap-2 pt-2 col-span-2 md:col-span-1 lg:col-span-3">
               <button
@@ -872,7 +991,7 @@ export default function ReportsPage() {
           { id: 'locations-assets', name: 'Locations & Assets', icon: Building2 },
           ...(isOwnerOrAdmin ? [{ id: 'administration', name: 'Activity & Admin', icon: Settings }] : []),
           { id: 'builder', name: 'Report Builder', icon: SlidersHorizontal },
-          { id: 'saved', name: 'Saved Reports', icon: Bookmark }
+          { id: 'saved', name: 'Personal Saved Reports', icon: Bookmark }
         ].map(tab => {
           const Icon = tab.icon;
           const selected = activeTab === tab.id;
@@ -902,7 +1021,7 @@ export default function ReportsPage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="bg-card border border-border p-5 rounded-2xl flex items-center justify-between shadow-xs">
                 <div className="space-y-1">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Overall Readiness</span>
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Workspace Overall Readiness</span>
                   <span className="text-3xl font-black text-foreground">{readinessScore}%</span>
                 </div>
                 <div className="relative w-12 h-12">
@@ -957,47 +1076,53 @@ export default function ReportsPage() {
               <div className="bg-card border border-border p-5 rounded-2xl space-y-4">
                 <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Requirements RAG Distribution</h3>
                 {renderSVDonut([
-                  { value: filteredReqs.filter(r => r.status === 'GREEN').length, color: '#10b981', label: 'Compliant' },
-                  { value: filteredReqs.filter(r => r.status === 'AMBER').length, color: '#f59e0b', label: 'Due Soon' },
-                  { value: filteredReqs.filter(r => r.status === 'RED').length, color: '#ef4444', label: 'Overdue / Gap' },
-                  { value: filteredReqs.filter(r => r.status === 'GREY').length, color: '#71717a', label: 'Excluded' }
+                  { value: filteredReadinessRequirements.filter(r => r.status === 'GREEN').length, color: '#10b981', label: 'Green' },
+                  { value: filteredReadinessRequirements.filter(r => r.status === 'AMBER').length, color: '#f59e0b', label: 'Due Soon' },
+                  { value: filteredReadinessRequirements.filter(r => r.status === 'RED').length, color: '#ef4444', label: 'Overdue / Gap' },
+                  { value: filteredReadinessRequirements.filter(r => r.status === 'GREY').length, color: '#71717a', label: 'Excluded' }
                 ])}
               </div>
 
-              {/* Card 2: Historical Readiness Trend */}
+              {/* Card 2: Evidence upload activity */}
               <div className="bg-card border border-border p-5 rounded-2xl space-y-4">
-                <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Calculated Readiness Trend</h3>
-                <p className="text-[10px] text-muted-foreground">Derived from historical audit trail events of the previous 30 days.</p>
+                <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Evidence Upload Activity</h3>
+                <p className="text-[10px] text-muted-foreground">Actual document uploads by month. This is activity, not a historical readiness score.</p>
                 <div className="pt-2">
-                  {renderSVGSparkline([80, 81, 83, 82, 85, 84, readinessScore], ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5', 'Week 6', 'Today'])}
+                  {renderSVGSparkline(documentUploadTrend.points, documentUploadTrend.labels)}
                 </div>
               </div>
 
               {/* Card 3: Upcoming obligations forecast */}
               <div className="bg-card border border-border p-5 rounded-2xl space-y-4">
-                <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Upcoming Obligational Timelines</h3>
+                <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Upcoming Scheduled Records</h3>
+                <p className="text-[10px] text-muted-foreground">Exclusive windows; overdue records are not included.</p>
                 <div className="space-y-4 text-xs">
                   <div className="flex justify-between items-center p-2.5 bg-muted/40 rounded-xl border border-border/40">
-                    <span className="font-bold flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> Next 7 Days</span>
+                    <span className="font-bold flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> 0-7 Days</span>
                     <span className="font-extrabold text-foreground">{upcomingReviews.w7 + upcomingEvidenceExpiries.w7 + upcomingTrainingRenewals.w7} items</span>
                   </div>
                   <div className="flex justify-between items-center p-2.5 bg-muted/40 rounded-xl border border-border/40">
-                    <span className="font-bold flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> Next 30 Days</span>
+                    <span className="font-bold flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> 8-30 Days</span>
                     <span className="font-extrabold text-foreground">{upcomingReviews.w30 + upcomingEvidenceExpiries.w30 + upcomingTrainingRenewals.w30} items</span>
                   </div>
                   <div className="flex justify-between items-center p-2.5 bg-muted/40 rounded-xl border border-border/40">
-                    <span className="font-bold flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> Next 60 Days</span>
+                    <span className="font-bold flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> 31-60 Days</span>
                     <span className="font-extrabold text-foreground">{upcomingReviews.w60 + upcomingEvidenceExpiries.w60 + upcomingTrainingRenewals.w60} items</span>
                   </div>
                   <div className="flex justify-between items-center p-2.5 bg-muted/40 rounded-xl border border-border/40">
-                    <span className="font-bold flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> Next 90 Days</span>
+                    <span className="font-bold flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> 61-90 Days</span>
                     <span className="font-extrabold text-foreground">{upcomingReviews.w90 + upcomingEvidenceExpiries.w90 + upcomingTrainingRenewals.w90} items</span>
+                  </div>
+                  <div className="flex justify-between items-center px-2.5 text-[10px] text-muted-foreground">
+                    <span>Records without the relevant due/expiry date</span>
+                    <span className="font-bold">{upcomingReviews.undated + upcomingEvidenceExpiries.undated + upcomingTrainingRenewals.undated}</span>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Recent Compliance Logs Summary */}
+            {/* Recent audit logs are restricted to Owner/Admin roles. */}
+            {isOwnerOrAdmin && (
             <div className="bg-card border border-border rounded-xl p-5 space-y-3">
               <div className="flex justify-between items-center">
                 <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Recent Compliance Logs</h3>
@@ -1023,6 +1148,7 @@ export default function ReportsPage() {
                 ))}
               </div>
             </div>
+            )}
           </div>
         )}
 
@@ -1034,7 +1160,7 @@ export default function ReportsPage() {
                 <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Readiness by Category</h3>
                 {renderHorizontalBarList(
                   uniqueCategories.map(cat => {
-                    const catReqs = filteredReqs.filter(r => r.category === cat);
+                    const catReqs = filteredReadinessRequirements.filter(r => r.requirement.category === cat);
                     const compliant = catReqs.filter(r => r.status === 'GREEN').length;
                     return {
                       label: cat,
@@ -1042,7 +1168,7 @@ export default function ReportsPage() {
                       total: catReqs.length,
                       colorClass: 'bg-indigo-600'
                     };
-                  })
+                  }).filter(item => item.total > 0)
                 )}
               </div>
 
@@ -1051,7 +1177,12 @@ export default function ReportsPage() {
                   <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">High Risk Requirements Needing Attention</h3>
                   <button
                     onClick={() => {
-                      const csvRows = filteredReqs.filter(r => r.risk_level === 'High' || r.risk_level === 'Critical').map(r => [r.title, r.category, r.risk_level, r.status]);
+                      const csvRows = attentionRequirements.map(item => [
+                        item.requirement.title,
+                        item.requirement.category,
+                        item.requirement.risk_level,
+                        item.status
+                      ]);
                       handleExportCSV('High Risk Requirements', ['Requirement Title', 'Category', 'Risk Level', 'RAG Status'], csvRows);
                     }}
                     className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
@@ -1061,24 +1192,23 @@ export default function ReportsPage() {
                   </button>
                 </div>
                 <div className="border border-border/80 rounded-xl overflow-hidden divide-y divide-border/60 text-xs">
-                  {filteredReqs.filter(r => r.risk_level === 'High' || r.risk_level === 'Critical').slice(0, 5).map(r => (
-                    <div key={r.id} className="p-3 flex items-start justify-between gap-3 hover:bg-muted/30">
+                  {attentionRequirements.slice(0, 5).map(item => (
+                    <div key={item.requirement.id} className="p-3 flex items-start justify-between gap-3 hover:bg-muted/30">
                       <div className="min-w-0">
-                        <Link href={`/dashboard/requirements?id=${r.id}`} className="font-bold block truncate hover:underline text-indigo-600 dark:text-indigo-400">
-                          {r.title}
+                        <Link href={`/dashboard/requirements?id=${item.requirement.id}`} className="font-bold block truncate hover:underline text-indigo-600 dark:text-indigo-400">
+                          {item.requirement.title}
                         </Link>
-                        <span className="text-[10px] text-muted-foreground block mt-0.5">Category: {r.category} | Owner: {r.owner || 'Unassigned'}</span>
+                        <span className="text-[10px] text-muted-foreground block mt-0.5">Category: {item.requirement.category} | Owner: {item.requirement.owner || 'Unassigned'}</span>
                       </div>
                       <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase border shrink-0 ${
-                        r.status === 'GREEN' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' :
-                        r.status === 'AMBER' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
+                        item.status === 'AMBER' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
                         'bg-rose-500/10 border-rose-500/20 text-rose-600'
                       }`}>
-                        {r.status}
+                        {item.status}
                       </span>
                     </div>
                   ))}
-                  {filteredReqs.filter(r => r.risk_level === 'High' || r.risk_level === 'Critical').length === 0 && (
+                  {attentionRequirements.length === 0 && (
                     <div className="p-6 text-center text-xs text-muted-foreground">No high or critical risk requirement issues.</div>
                   )}
                 </div>
@@ -1090,7 +1220,7 @@ export default function ReportsPage() {
         {/* Tab 3: Evidence */}
         {activeTab === 'evidence' && (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div className="bg-card border border-border p-4 rounded-xl text-center space-y-1">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Total Evidence Documents</span>
                 <span className="text-3xl font-black text-foreground">{filteredDocs.length}</span>
@@ -1102,6 +1232,14 @@ export default function ReportsPage() {
               <div className="bg-card border border-border p-4 rounded-xl text-center space-y-1">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Duplicate File Hashes Detected</span>
                 <span className="text-3xl font-black text-amber-500">{dataQualityReport.duplicateHashesCount}</span>
+              </div>
+              <div className="bg-card border border-border p-4 rounded-xl text-center space-y-1">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Linked to Requirements</span>
+                <span className="text-3xl font-black text-emerald-500">{evidenceLinkMetrics.linked}</span>
+              </div>
+              <div className="bg-card border border-border p-4 rounded-xl text-center space-y-1">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Not Linked to Requirements</span>
+                <span className="text-3xl font-black text-amber-500">{evidenceLinkMetrics.unlinked}</span>
               </div>
             </div>
 
@@ -1118,9 +1256,9 @@ export default function ReportsPage() {
 
               <div className="bg-card border border-border p-5 rounded-2xl space-y-4">
                 <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Document Uploads Trend</h3>
-                <p className="text-[10px] text-muted-foreground">Cumulative monthly evidence uploads inside the repository.</p>
+                <p className="text-[10px] text-muted-foreground">Actual evidence documents uploaded in each month.</p>
                 <div className="pt-2">
-                  {renderSVGSparkline([10, 25, 45, 78, 120, 150, filteredDocs.length], ['Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Today'])}
+                  {renderSVGSparkline(documentUploadTrend.points, documentUploadTrend.labels)}
                 </div>
               </div>
             </div>
@@ -1132,11 +1270,11 @@ export default function ReportsPage() {
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="bg-card border border-border p-5 rounded-2xl space-y-4">
-                <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest"> Roster Competency Compliance</h3>
+                <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Roster Competency Status</h3>
                 {renderHorizontalBarList(
                   filteredPeople.map(person => {
-                    const records = competencyRecords.filter(r => r.person_id === person.id);
-                    const valid = records.filter(r => r.status === 'Valid').length;
+                    const records = filteredCompetencyRecords.filter(r => r.person_id === person.id);
+                    const valid = records.filter(r => calculateCompetencyStatus(r) === 'Valid').length;
                     return {
                       label: person.display_name,
                       count: valid,
@@ -1155,20 +1293,20 @@ export default function ReportsPage() {
                 <div className="space-y-3 text-xs">
                   <div className="flex justify-between items-center p-3 bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-400 rounded-xl">
                     <span className="font-bold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> High Risk Competency Gaps</span>
-                    <span className="font-extrabold">{competencySummary.expired + competencySummary.missing} records</span>
+                    <span className="font-extrabold">{filteredCompetencySummary.expired + filteredCompetencySummary.missing} records</span>
                   </div>
                   <div className="flex justify-between items-center p-3 bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 rounded-xl">
                     <span className="font-bold flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Expiring Soon / Due Gaps</span>
-                    <span className="font-extrabold">{competencySummary.expiringSoon} records</span>
+                    <span className="font-extrabold">{filteredCompetencySummary.expiringSoon} records</span>
                   </div>
                   <div className="p-3 bg-muted/40 rounded-xl border border-border/40 space-y-1.5 text-muted-foreground">
                     <div className="flex justify-between items-center font-bold">
                       <span>Total Assigned Competency Types:</span>
-                      <span className="text-foreground">{competencyTypes.length}</span>
+                      <span className="text-foreground">{activeCompetencyTypeIds.size}</span>
                     </div>
                     <div className="flex justify-between items-center font-bold">
                       <span>Roster Compliance score:</span>
-                      <span className="text-foreground">{competencySummary.compliancePercent}%</span>
+                      <span className="text-foreground">{filteredCompetencySummary.compliancePercent}%</span>
                     </div>
                   </div>
                 </div>
@@ -1180,6 +1318,24 @@ export default function ReportsPage() {
         {/* Tab 5: Actions Registry */}
         {activeTab === 'actions' && (
           <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-card border border-border p-4 rounded-xl text-center space-y-1">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Open Actions</span>
+                <span className="text-3xl font-black text-foreground">{actionMetrics.open}</span>
+              </div>
+              <div className="bg-card border border-border p-4 rounded-xl text-center space-y-1">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Overdue Open Actions</span>
+                <span className="text-3xl font-black text-rose-500">{actionMetrics.overdue}</span>
+              </div>
+              <div className="bg-card border border-border p-4 rounded-xl text-center space-y-1">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Completed Actions</span>
+                <span className="text-3xl font-black text-emerald-500">{actionMetrics.completed}</span>
+              </div>
+              <div className="bg-card border border-border p-4 rounded-xl text-center space-y-1">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Completion Rate</span>
+                <span className="text-3xl font-black text-indigo-500">{actionMetrics.completionRate}%</span>
+              </div>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="bg-card border border-border p-5 rounded-2xl space-y-4">
                 <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Corrective Actions Status</h3>
@@ -1227,6 +1383,7 @@ export default function ReportsPage() {
                 ])}
               </div>
 
+              {isOwnerOrAdmin ? (
               <div className="bg-card border border-border p-5 rounded-2xl space-y-4">
                 <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Audit Activity Event Volumes</h3>
                 <p className="text-[10px] text-muted-foreground">Historical volume of logged events by compliance categories.</p>
@@ -1242,6 +1399,11 @@ export default function ReportsPage() {
                   })}
                 </div>
               </div>
+              ) : (
+                <div className="bg-card border border-border p-5 rounded-2xl flex items-center justify-center text-center">
+                  <p className="text-xs text-muted-foreground">Audit event analytics are restricted to Owner and Admin roles. Audit pack status remains available.</p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1255,7 +1417,7 @@ export default function ReportsPage() {
             <div className="space-y-1">
               <h2 className="text-base font-black text-foreground">Locations & Assets Reporting Not Configured</h2>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Vygilence's active database schema does not yet support dedicated <strong className="text-foreground">Locations</strong> or <strong className="text-foreground">Assets</strong> tables.
+                Vygilence&apos;s active database schema does not yet support dedicated <strong className="text-foreground">Locations</strong> or <strong className="text-foreground">Assets</strong> tables.
               </p>
             </div>
             <div className="bg-muted/45 border border-border/80 rounded-xl p-4 text-left text-[11px] space-y-2.5 leading-relaxed text-muted-foreground">
@@ -1333,19 +1495,23 @@ export default function ReportsPage() {
                     <p className="text-xs text-muted-foreground">{rep.description}</p>
                     <div className="flex gap-2 pt-2 text-[10px] text-muted-foreground font-semibold">
                       <span>Source: {rep.dataSource}</span>
-                      <span>•</span>
+                      <span>|</span>
                       <span>Dimension: {rep.dimension}</span>
-                      <span>•</span>
-                      <span>Created: {rep.createdAt}</span>
+                      <span>|</span>
+                      <span>Created: {new Date(rep.createdAt).toLocaleDateString()}</span>
                     </div>
                   </div>
                   <div className="flex justify-between items-center pt-3 border-t border-border/40">
                     <button
                       onClick={() => {
-                        setBuilderSource(rep.dataSource);
-                        setBuilderDimension(rep.dimension);
+                        const allowedSource = rep.dataSource === 'Audit Trail' && !isOwnerOrAdmin ? 'Requirements' : rep.dataSource;
+                        setBuilderSource(allowedSource);
+                        setBuilderDimension(allowedSource === rep.dataSource ? rep.dimension : 'category');
                         setBuilderMeasure(rep.measure);
-                        setBuilderVisual(rep.visualType);
+                        setBuilderVisual(allowedSource === 'Requirements' ? rep.visualType : rep.visualType === 'pivot' ? 'table' : rep.visualType);
+                        setSelectedCategory(rep.filters.category || 'All');
+                        setSelectedStatus(rep.filters.status || 'All');
+                        setSelectedRisk(rep.filters.risk || 'All');
                         setActiveTab('builder');
                         setToast({ type: 'info', message: `Loaded config for report "${rep.name}"` });
                       }}
@@ -1386,6 +1552,7 @@ export default function ReportsPage() {
                       value={builderSource}
                       onChange={e => {
                         setBuilderSource(e.target.value);
+                        if (e.target.value !== 'Requirements' && builderVisual === 'pivot') setBuilderVisual('table');
                         if (e.target.value === 'Evidence') setBuilderDimension('category');
                         else if (e.target.value === 'Requirements') setBuilderDimension('category');
                         else if (e.target.value === 'Competencies') setBuilderDimension('status');
@@ -1468,7 +1635,7 @@ export default function ReportsPage() {
                       <option value="bar">Bar Chart</option>
                       <option value="donut">Donut Chart</option>
                       <option value="table">Data Grid Table</option>
-                      <option value="pivot">Pivot Matrix Grid</option>
+                      {builderSource === 'Requirements' && <option value="pivot">Pivot Matrix Grid</option>}
                     </select>
                   </div>
 
@@ -1505,10 +1672,21 @@ export default function ReportsPage() {
 
               {/* Dynamic Live Preview Screen */}
               <div className="lg:col-span-2 bg-card border border-border p-5 rounded-2xl space-y-4 shadow-sm min-h-[300px]">
-                <div className="flex justify-between items-center border-b border-border/50 pb-3">
+                <div className="flex justify-between items-center gap-3 border-b border-border/50 pb-3">
                   <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Interactive Report Preview</h3>
-                  <div className="text-[10px] text-muted-foreground font-bold px-2 py-0.5 bg-muted rounded-full">
-                    Live aggregate: {builderReportData.length} records
+                  <div className="flex items-center gap-2">
+                    <div className="text-[10px] text-muted-foreground font-bold px-2 py-0.5 bg-muted rounded-full">
+                      Live aggregate: {builderReportData.length} groups
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleExportBuilderCSV}
+                      disabled={builderReportData.length === 0}
+                      className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Export displayed aggregate as CSV"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
 
@@ -1524,7 +1702,7 @@ export default function ReportsPage() {
                             <span className="text-muted-foreground">{item.value} ({Math.round(percent)}%)</span>
                           </div>
                           <div className="h-2.5 w-full bg-muted rounded-full overflow-hidden">
-                            <div className="h-full bg-indigo-605 rounded-full" style={{ width: `${percent}%` }} />
+                            <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${percent}%` }} />
                           </div>
                         </div>
                       );
@@ -1560,6 +1738,7 @@ export default function ReportsPage() {
 
                 {builderVisual === 'pivot' && (
                   <div className="space-y-4">
+                    <p className="text-[10px] text-muted-foreground">Pivot matrices are available for Requirements using count aggregation.</p>
                     <div className="flex gap-4 text-xs font-semibold pb-3 border-b border-border/40">
                       <div>
                         <span className="text-muted-foreground block text-[9px] font-bold uppercase mb-1">Rows Field</span>
