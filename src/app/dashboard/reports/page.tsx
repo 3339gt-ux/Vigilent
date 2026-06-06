@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useApp } from '@/context/AppContext';
 import { dbService } from '@/lib/db';
 import Link from 'next/link';
@@ -22,13 +22,9 @@ import {
   ChevronDown,
   SlidersHorizontal,
   Bookmark,
-  TrendingUp,
   Copy,
   Edit,
-  Trash2,
   Link2,
-  ExternalLink,
-  PieChart,
   History,
   Search,
   Clock,
@@ -69,18 +65,6 @@ type TabType =
   | 'saved'
   | 'history';
 
-interface SavedReportConfig {
-  id: string;
-  name: string;
-  description: string;
-  dataSource: string;
-  dimension: string;
-  measure: string;
-  visualType: string;
-  filters: Record<string, string>;
-  createdAt: string;
-}
-
 export default function ReportsPage() {
   const {
     user,
@@ -94,8 +78,7 @@ export default function ReportsPage() {
     requirementDocuments,
     auditPacks,
     readinessReport,
-    readinessScore,
-    reviews
+    readinessScore
   } = useApp();
 
   const router = useRouter();
@@ -191,7 +174,7 @@ export default function ReportsPage() {
     const actionsOpenLabel = `New actions opened: ${currActionsOpen} (current) vs ${prevActionsOpen} (previous)`;
 
     // 3. Actions completed
-    const getCompDate = (a: any) => a.completed_at || a.updated_at || a.created_at;
+    const getCompDate = (a: any) => a.completed_at || a.closed_at;
     const currActionsComp = actions.filter(a => a.status === 'Complete' && getCompDate(a) && new Date(getCompDate(a)) >= currentStart && new Date(getCompDate(a)) <= currentEnd).length;
     const prevActionsComp = actions.filter(a => a.status === 'Complete' && getCompDate(a) && new Date(getCompDate(a)) >= prevStart && new Date(getCompDate(a)) <= prevEnd).length;
     const actionsCompDiff = currActionsComp - prevActionsComp;
@@ -290,6 +273,24 @@ export default function ReportsPage() {
       
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
+        const tabParam = params.get('tab') as TabType | null;
+        const allowedTabs: TabType[] = [
+          'executive',
+          'requirements',
+          'evidence',
+          'competencies',
+          'actions',
+          'audits',
+          'locations-assets',
+          'builder',
+          'saved'
+        ];
+        if (isOwnerOrAdmin) {
+          allowedTabs.push('administration', 'history');
+        }
+        if (tabParam && allowedTabs.includes(tabParam)) {
+          setActiveTab(tabParam);
+        }
         const reportIdParam = params.get('reportId');
         if (reportIdParam) {
           dbService.getSavedReports().then(reports => {
@@ -313,7 +314,7 @@ export default function ReportsPage() {
         }
       }
     }
-  }, [user, organization]);
+  }, [user, organization, isOwnerOrAdmin]);
 
   // Audit data is fetched only for authorised users when an audit-backed tab needs it.
   useEffect(() => {
@@ -814,16 +815,29 @@ export default function ReportsPage() {
 
   // ---------------- PIVOT DATA CALCULATIONS ----------------
 
-  const pivotGridData = useMemo(() => {
-    const rowField = pivotRow as keyof Requirement;
-    const colField = pivotCol as keyof Requirement;
+  const getRequirementDimensionValue = useCallback((requirement: Requirement, field: string) => {
+    if (field === 'status') {
+      return readinessByRequirementId.get(requirement.id)?.status || 'GREY';
+    }
+    return String(requirement[field as keyof Requirement] || 'Unassigned');
+  }, [readinessByRequirementId]);
 
+  const getRequirementsReadinessScore = useCallback((requirements: Requirement[]) => {
+    const scores = requirements
+      .map(requirement => readinessByRequirementId.get(requirement.id)?.score)
+      .filter((score): score is number => score !== null && score !== undefined);
+    return scores.length > 0
+      ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
+      : 0;
+  }, [readinessByRequirementId]);
+
+  const pivotGridData = useMemo(() => {
     const rowValues = new Set<string>();
     const colValues = new Set<string>();
 
     filteredReqs.forEach(r => {
-      const rVal = String(r[rowField] || 'Unassigned');
-      const cVal = String(r[colField] || 'Unassigned');
+      const rVal = getRequirementDimensionValue(r, pivotRow);
+      const cVal = getRequirementDimensionValue(r, pivotCol);
       rowValues.add(rVal);
       colValues.add(cVal);
     });
@@ -841,8 +855,8 @@ export default function ReportsPage() {
     });
 
     filteredReqs.forEach(r => {
-      const rVal = String(r[rowField] || 'Unassigned');
-      const cVal = String(r[colField] || 'Unassigned');
+      const rVal = getRequirementDimensionValue(r, pivotRow);
+      const cVal = getRequirementDimensionValue(r, pivotCol);
       cellReqs[rVal][cVal].push(r);
     });
 
@@ -864,10 +878,9 @@ export default function ReportsPage() {
     const now = new Date();
 
     const getDaysOverdue = (req: Requirement) => {
-      const status = readinessByRequirementId.get(req.id)?.status || 'GREY';
-      if (status === 'RED' && req.next_due_date) {
+      if (req.next_due_date && new Date(req.next_due_date) < now) {
         const due = new Date(req.next_due_date);
-        const diffTime = Math.max(0, now.getTime() - due.getTime());
+        const diffTime = now.getTime() - due.getTime();
         return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       }
       return 0;
@@ -880,29 +893,16 @@ export default function ReportsPage() {
         if (pivotAggregation === 'count') {
           matrix[r][c] = reqs.length;
         } else if (pivotAggregation === 'readiness_rate') {
-          const compliant = reqs.filter(item => {
-            const status = readinessByRequirementId.get(item.id)?.status || 'GREY';
-            return status === 'GREEN' || status === 'AMBER';
-          }).length;
-          matrix[r][c] = reqs.length > 0 ? Math.round((compliant / reqs.length) * 100) : 0;
+          matrix[r][c] = getRequirementsReadinessScore(reqs);
         } else if (pivotAggregation === 'avg_days_overdue') {
-          const overdueReqs = reqs.filter(req => {
-            const status = readinessByRequirementId.get(req.id)?.status || 'GREY';
-            return status === 'RED';
-          });
+          const overdueReqs = reqs.filter(req => getDaysOverdue(req) > 0);
           const sum = overdueReqs.reduce((acc, req) => acc + getDaysOverdue(req), 0);
           matrix[r][c] = overdueReqs.length > 0 ? Math.round(sum / overdueReqs.length) : 0;
         } else if (pivotAggregation === 'max_days_overdue') {
-          const overdueReqs = reqs.filter(req => {
-            const status = readinessByRequirementId.get(req.id)?.status || 'GREY';
-            return status === 'RED';
-          });
+          const overdueReqs = reqs.filter(req => getDaysOverdue(req) > 0);
           matrix[r][c] = overdueReqs.length > 0 ? Math.max(...overdueReqs.map(getDaysOverdue)) : 0;
         } else if (pivotAggregation === 'min_days_overdue') {
-          const overdueReqs = reqs.filter(req => {
-            const status = readinessByRequirementId.get(req.id)?.status || 'GREY';
-            return status === 'RED';
-          });
+          const overdueReqs = reqs.filter(req => getDaysOverdue(req) > 0);
           matrix[r][c] = overdueReqs.length > 0 ? Math.min(...overdueReqs.map(getDaysOverdue)) : 0;
         } else if (pivotAggregation === 'row_pct') {
           const rowTotal = rowCounts[r];
@@ -917,7 +917,7 @@ export default function ReportsPage() {
     });
 
     return { rowArr, colArr, matrix, cellReqs, rowCounts, colCounts, totalCount };
-  }, [filteredReqs, pivotRow, pivotCol, pivotAggregation, readinessByRequirementId]);
+  }, [filteredReqs, pivotRow, pivotCol, pivotAggregation, getRequirementDimensionValue, getRequirementsReadinessScore]);
 
   // ---------------- CUSTOM BUILDER DATA PREVIEW ----------------
 
@@ -939,11 +939,9 @@ export default function ReportsPage() {
   const getPivotRowColTotal = (key: string, type: 'row' | 'col' | 'grand') => {
     let reqs: Requirement[] = [];
     if (type === 'row') {
-      const rowField = pivotRow as keyof Requirement;
-      reqs = filteredReqs.filter(r => String(r[rowField] || 'Unassigned') === key);
+      reqs = filteredReqs.filter(r => getRequirementDimensionValue(r, pivotRow) === key);
     } else if (type === 'col') {
-      const colField = pivotCol as keyof Requirement;
-      reqs = filteredReqs.filter(r => String(r[colField] || 'Unassigned') === key);
+      reqs = filteredReqs.filter(r => getRequirementDimensionValue(r, pivotCol) === key);
     } else {
       reqs = filteredReqs;
     }
@@ -954,42 +952,28 @@ export default function ReportsPage() {
     }
     const now = new Date();
     const getDaysOverdue = (req: Requirement) => {
-      const status = readinessByRequirementId.get(req.id)?.status || 'GREY';
-      if (status === 'RED' && req.next_due_date) {
+      if (req.next_due_date && new Date(req.next_due_date) < now) {
         const due = new Date(req.next_due_date);
-        const diffTime = Math.max(0, now.getTime() - due.getTime());
+        const diffTime = now.getTime() - due.getTime();
         return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       }
       return 0;
     };
 
     if (pivotAggregation === 'readiness_rate') {
-      const compliant = reqs.filter(item => {
-        const status = readinessByRequirementId.get(item.id)?.status || 'GREY';
-        return status === 'GREEN' || status === 'AMBER';
-      }).length;
-      return Math.round((compliant / reqs.length) * 100);
+      return getRequirementsReadinessScore(reqs);
     }
     if (pivotAggregation === 'avg_days_overdue') {
-      const overdueReqs = reqs.filter(req => {
-        const status = readinessByRequirementId.get(req.id)?.status || 'GREY';
-        return status === 'RED';
-      });
+      const overdueReqs = reqs.filter(req => getDaysOverdue(req) > 0);
       const sum = overdueReqs.reduce((acc, req) => acc + getDaysOverdue(req), 0);
       return overdueReqs.length > 0 ? Math.round(sum / overdueReqs.length) : 0;
     }
     if (pivotAggregation === 'max_days_overdue') {
-      const overdueReqs = reqs.filter(req => {
-        const status = readinessByRequirementId.get(req.id)?.status || 'GREY';
-        return status === 'RED';
-      });
+      const overdueReqs = reqs.filter(req => getDaysOverdue(req) > 0);
       return overdueReqs.length > 0 ? Math.max(...overdueReqs.map(getDaysOverdue)) : 0;
     }
     if (pivotAggregation === 'min_days_overdue') {
-      const overdueReqs = reqs.filter(req => {
-        const status = readinessByRequirementId.get(req.id)?.status || 'GREY';
-        return status === 'RED';
-      });
+      const overdueReqs = reqs.filter(req => getDaysOverdue(req) > 0);
       return overdueReqs.length > 0 ? Math.min(...overdueReqs.map(getDaysOverdue)) : 0;
     }
     if (['row_pct', 'col_pct', 'total_pct'].includes(pivotAggregation)) {
@@ -1025,7 +1009,7 @@ export default function ReportsPage() {
       } else if (builderSource === 'Competencies') {
         dateVal = item.expiry_date || item.completed_date || item.created_at;
       } else if (builderSource === 'Actions') {
-        dateVal = item.due_date || item.created_at;
+        dateVal = item.target_due_date || item.due_date || item.created_at;
       } else if (builderSource === 'Audit Trail') {
         dateVal = item.created_at;
       }
@@ -1071,7 +1055,7 @@ export default function ReportsPage() {
     const now = new Date();
 
     const getDaysOverdue = (req: any) => {
-      const dueStr = req.next_due_date || req.due_date;
+      const dueStr = req.next_due_date || req.target_due_date || req.due_date;
       if (!dueStr) return 0;
       const due = new Date(dueStr);
       const diffTime = Math.max(0, now.getTime() - due.getTime());
@@ -1084,11 +1068,7 @@ export default function ReportsPage() {
         val = items.length;
       } else if (builderMeasure === 'completion_rate') {
         if (builderSource === 'Requirements') {
-          const compliant = items.filter(item => {
-            const status = readinessByRequirementId.get(item.id)?.status || 'GREY';
-            return status === 'GREEN' || status === 'AMBER';
-          }).length;
-          val = items.length > 0 ? Math.round((compliant / items.length) * 100) : 0;
+          val = getRequirementsReadinessScore(items as Requirement[]);
         } else if (builderSource === 'Competencies') {
           const valid = items.filter(item => item.status === 'Valid').length;
           val = items.length > 0 ? Math.round((valid / items.length) * 100) : 0;
@@ -1105,7 +1085,10 @@ export default function ReportsPage() {
             return status === 'RED';
           }).length;
         } else if (builderSource === 'Actions') {
-          val = items.filter(item => item.status !== 'Complete' && item.status !== 'Cancelled' && item.due_date && new Date(item.due_date) < now).length;
+          val = items.filter(item => {
+            const dueDate = item.target_due_date || item.due_date;
+            return item.status !== 'Complete' && item.status !== 'Cancelled' && dueDate && new Date(dueDate) < now;
+          }).length;
         } else {
           val = items.length;
         }
@@ -1143,8 +1126,9 @@ export default function ReportsPage() {
           val = countOverdue > 0 ? Math.round(sumDays / countOverdue) : 0;
         } else if (builderSource === 'Actions') {
           items.forEach(item => {
-            if (item.status !== 'Complete' && item.status !== 'Cancelled' && item.due_date) {
-              const due = new Date(item.due_date);
+            const dueDate = item.target_due_date || item.due_date;
+            if (item.status !== 'Complete' && item.status !== 'Cancelled' && dueDate) {
+              const due = new Date(dueDate);
               if (due < now) {
                 sumDays += getDaysOverdue(item);
                 countOverdue++;
@@ -1174,7 +1158,7 @@ export default function ReportsPage() {
     });
 
     return result.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }));
-  }, [builderSource, builderDimension, builderMeasure, filteredReqs, filteredDocs, filteredCompetencyRecords, filteredActions, auditTrailEvents, readinessByRequirementId, isOwnerOrAdmin]);
+  }, [builderSource, builderDimension, builderMeasure, filteredReqs, filteredDocs, filteredCompetencyRecords, filteredActions, auditTrailEvents, readinessByRequirementId, isOwnerOrAdmin, getRequirementsReadinessScore]);
 
   const handleExportBuilderCSV = () => {
     const reportName = builderReportName.trim() || `${builderSource} by ${builderDimension}`;
@@ -2298,6 +2282,7 @@ export default function ReportsPage() {
                 const visualType = getReportVisualType(rep);
                 const filters = getReportFilters(rep);
                 const isOrg = rep.visibility === 'organisation';
+                const canManageReport = rep.owner_user_id === user?.id || isOwnerOrAdmin;
                 
                 return (
                   <div key={rep.id} className="bg-card border border-border p-5 rounded-2xl space-y-3 flex flex-col justify-between shadow-xs">
@@ -2308,13 +2293,15 @@ export default function ReportsPage() {
                         }`}>
                           {isDemoMode ? (isOrg ? 'Organisation report (Local demo)' : 'Personal browser report') : (isOrg ? 'Organisation report' : 'Personal account report')}
                         </span>
-                        <button
-                          onClick={() => handleToggleFavouriteReport(rep.id, rep.is_favourite)}
-                          className="p-1 text-muted-foreground hover:text-amber-500 transition-colors"
-                          title={rep.is_favourite ? "Remove from Favourites" : "Mark as Favourite"}
-                        >
-                          <Bookmark className={`w-4 h-4 ${rep.is_favourite ? 'fill-amber-500 text-amber-500' : 'text-muted-foreground'}`} />
-                        </button>
+                        {canManageReport && (
+                          <button
+                            onClick={() => handleToggleFavouriteReport(rep.id, rep.is_favourite)}
+                            className="p-1 text-muted-foreground hover:text-amber-500 transition-colors"
+                            title={rep.is_favourite ? "Remove from Favourites" : "Mark as Favourite"}
+                          >
+                            <Bookmark className={`w-4 h-4 ${rep.is_favourite ? 'fill-amber-500 text-amber-500' : 'text-muted-foreground'}`} />
+                          </button>
+                        )}
                       </div>
 
                       <h3 className="text-sm font-extrabold text-foreground flex items-center gap-2 mt-1">
@@ -2372,13 +2359,15 @@ export default function ReportsPage() {
                         >
                           <Copy className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          onClick={() => handleRenameReport(rep)}
-                          className="p-1.5 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer transition-all"
-                          title="Rename / Edit description"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
+                        {canManageReport && (
+                          <button
+                            onClick={() => handleRenameReport(rep)}
+                            className="p-1.5 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer transition-all"
+                            title="Rename / Edit description"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           disabled
                           className="p-1.5 bg-muted text-muted-foreground/40 rounded-lg border border-border cursor-not-allowed opacity-50"
@@ -2387,12 +2376,16 @@ export default function ReportsPage() {
                           <Clock className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                      <button
-                        onClick={() => handleDeleteSavedReport(rep.id, rep.name)}
-                        className="px-2.5 py-1.5 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold text-[11px] rounded-lg hover:bg-rose-500/20 cursor-pointer"
-                      >
-                        Delete
-                      </button>
+                      {canManageReport ? (
+                        <button
+                          onClick={() => handleDeleteSavedReport(rep.id, rep.name)}
+                          className="px-2.5 py-1.5 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold text-[11px] rounded-lg hover:bg-rose-500/20 cursor-pointer"
+                        >
+                          Delete
+                        </button>
+                      ) : (
+                        <span className="text-[10px] font-semibold text-muted-foreground">Read-only shared report</span>
+                      )}
                     </div>
                   </div>
                 );

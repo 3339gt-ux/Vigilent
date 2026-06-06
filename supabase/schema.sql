@@ -530,6 +530,23 @@ create index if not exists saved_reports_org_owner_idx
 create index if not exists saved_reports_org_visibility_idx
     on public.saved_reports (organization_id, visibility);
 
+create or replace function public.set_saved_report_updated_at()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+    new.updated_at = timezone('utc'::text, now());
+    return new;
+end;
+$$;
+
+drop trigger if exists set_saved_reports_updated_at on public.saved_reports;
+create trigger set_saved_reports_updated_at
+before update on public.saved_reports
+for each row
+execute function public.set_saved_report_updated_at();
+
 create index if not exists workspace_notifications_org_created_idx on public.workspace_notifications (organisation_id, created_at desc);
 create index if not exists workspace_notifications_recipient_created_idx on public.workspace_notifications (recipient_user_id, created_at desc);
 create index if not exists workspace_notifications_role_created_idx on public.workspace_notifications (organisation_id, recipient_role, created_at desc);
@@ -565,6 +582,9 @@ alter table public.competency_records enable row level security;
 alter table public.competency_record_documents enable row level security;
 alter table public.requirement_competency_types enable row level security;
 alter table public.saved_reports enable row level security;
+
+revoke all on table public.saved_reports from anon;
+grant select, insert, update, delete on table public.saved_reports to authenticated;
 
 -- Row Level Security (RLS) Policies
 -- auth.uid() links to profiles.id. The helper avoids recursive profile policy checks.

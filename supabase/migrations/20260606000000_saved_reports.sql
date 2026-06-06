@@ -16,8 +16,28 @@ create table if not exists public.saved_reports (
     updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
+create or replace function public.set_saved_report_updated_at()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+    new.updated_at = timezone('utc'::text, now());
+    return new;
+end;
+$$;
+
+drop trigger if exists set_saved_reports_updated_at on public.saved_reports;
+create trigger set_saved_reports_updated_at
+before update on public.saved_reports
+for each row
+execute function public.set_saved_report_updated_at();
+
 -- Enable Row Level Security (RLS)
 alter table public.saved_reports enable row level security;
+
+revoke all on table public.saved_reports from anon;
+grant select, insert, update, delete on table public.saved_reports to authenticated;
 
 -- SELECT Policy: permitted organization members can read organization-shared reports, or their own personal reports
 drop policy if exists "Members can read organization-shared or own reports" on public.saved_reports;

@@ -6,44 +6,21 @@ import { dbService } from '@/lib/db';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  ShieldCheck,
-  Briefcase,
-  FileSpreadsheet,
-  FolderArchive,
-  Building2,
   Download,
-  Calendar,
   AlertTriangle,
-  FileText,
   ChevronLeft,
-  Filter,
   X,
-  ChevronDown,
-  Info,
-  CheckCircle2,
-  SlidersHorizontal,
-  Bookmark,
   ExternalLink
 } from 'lucide-react';
 import {
-  Requirement,
-  EvidenceDocument,
-  Action,
   CompetencyRecord,
-  Person,
-  AuditPack,
-  AuditTrailEvent,
-  CellStatus,
-  DocumentStatus,
-  ActionStatus,
-  CompetencyStatus
+  Person
 } from '@/lib/types';
 import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
 import { calculateCompetencyStatus } from '@/lib/competencyEngine';
 
 export default function ReportDetailPage() {
   const {
-    user,
     organization,
     frameworkRequirements,
     documents,
@@ -51,17 +28,12 @@ export default function ReportDetailPage() {
     people,
     competencyTypes,
     competencyRecords,
-    requirementDocuments,
     auditPacks,
     readinessReport,
     requirementActions
   } = useApp();
 
   const router = useRouter();
-
-  // Load audit trail events for Admin reports
-  const [auditTrailEvents, setAuditTrailEvents] = useState<AuditTrailEvent[]>([]);
-  const isOwnerOrAdmin = user?.role === 'Owner' || user?.role === 'Admin';
 
   // State
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>(null);
@@ -81,7 +53,6 @@ export default function ReportDetailPage() {
 
   // Filter overrides from query parameters
   const [source, setSource] = useState<string>('');
-  const [reportKey, setReportKey] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
   const [ownerFilter, setOwnerFilter] = useState<string>('All');
@@ -91,8 +62,10 @@ export default function ReportDetailPage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      setSource(params.get('source') || '');
-      setReportKey(params.get('reportKey') || '');
+      const requestedSource = params.get('source') || '';
+      const supportedSources = ['Requirements', 'Evidence', 'Competencies', 'Actions', 'Audits'];
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSource(supportedSources.includes(requestedSource) ? requestedSource : 'Unsupported');
       setStatusFilter(params.get('status') || 'All');
       setCategoryFilter(params.get('category') || 'All');
       setOwnerFilter(params.get('owner') || 'All');
@@ -107,7 +80,6 @@ export default function ReportDetailPage() {
     if (source === 'Competencies') return 'competencies';
     if (source === 'Actions') return 'actions';
     if (source === 'Audits') return 'audits';
-    if (source === 'Audit Trail') return 'administration';
     return 'executive';
   }, [source]);
 
@@ -122,7 +94,7 @@ export default function ReportDetailPage() {
     if (source === 'Requirements') {
       return frameworkRequirements.filter(r => {
         const lifecycle = r.lifecycle_status || 'ACTIVE';
-        if (lifecycle === 'DELETED') return false;
+        if (lifecycle !== 'ACTIVE') return false;
         if (categoryFilter !== 'All' && r.category !== categoryFilter) return false;
         if (ownerFilter !== 'All' && r.owner !== ownerFilter) return false;
         if (riskFilter !== 'All' && r.risk_level !== riskFilter) return false;
@@ -143,8 +115,6 @@ export default function ReportDetailPage() {
     }
 
     if (source === 'Competencies') {
-      const activeTypes = new Set(competencyTypes.filter(t => t.active).map(t => t.id));
-      const activePeopleIds = new Set(people.filter(p => p.active).map(p => p.id));
       const recordsByCell = new Map(
         competencyRecords.map(record => [`${record.person_id}:${record.competency_type_id}`, record])
       );
@@ -182,7 +152,7 @@ export default function ReportDetailPage() {
     }
 
     return [];
-  }, [source, frameworkRequirements, documents, competencyRecords, competencyTypes, people, actions, auditPacks, categoryFilter, ownerFilter, riskFilter, statusFilter, readinessByRequirementId, requirementActions, getLinkedRequirementRisk]);
+  }, [source, frameworkRequirements, documents, competencyRecords, competencyTypes, people, actions, auditPacks, categoryFilter, ownerFilter, riskFilter, statusFilter, readinessByRequirementId, getLinkedRequirementRisk]);
 
   // Sort records
   const sortedRecords = useMemo(() => {
@@ -218,7 +188,7 @@ export default function ReportDetailPage() {
       return 0;
     });
     return list;
-  }, [records, sortBy, sortOrder, source, readinessByRequirementId]);
+  }, [records, sortBy, sortOrder, source, readinessByRequirementId, getLinkedRequirementRisk]);
 
   // Paginated records
   const paginatedRecords = useMemo(() => {
@@ -227,6 +197,7 @@ export default function ReportDetailPage() {
   }, [sortedRecords, currentPage, pageSize]);
 
   const totalPages = Math.ceil(sortedRecords.length / pageSize) || 1;
+  const isSupportedSource = ['Requirements', 'Evidence', 'Competencies', 'Actions', 'Audits'].includes(source);
 
   const handleSort = (field: string) => {
     if (sortBy === field) {
@@ -240,6 +211,10 @@ export default function ReportDetailPage() {
 
   // CSV Exporter
   const handleExportDetailCSV = () => {
+    if (!isSupportedSource) {
+      setToast({ type: 'error', message: 'Select a supported report source before exporting.' });
+      return;
+    }
     let headers: string[] = [];
     let rows: string[][] = [];
 
@@ -332,6 +307,10 @@ export default function ReportDetailPage() {
 
   // Print Report PDF
   const handlePrintDetailPDF = () => {
+    if (!isSupportedSource) {
+      setToast({ type: 'error', message: 'Select a supported report source before printing.' });
+      return;
+    }
     // Log print activity to audit trail
     dbService.logReportActivity({
       actionType: 'report_printed_pdf',
@@ -355,15 +334,17 @@ export default function ReportDetailPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={handleExportDetailCSV}
+            disabled={!isSupportedSource}
             className="px-3 py-1.5 bg-muted hover:bg-muted/80 text-foreground font-bold text-xs rounded-lg border border-border flex items-center gap-1.5 cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" /> Export CSV
           </button>
           <button
             onClick={handlePrintDetailPDF}
+            disabled={!isSupportedSource}
             className="px-3 py-1.5 bg-indigo-650 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer"
           >
-            Print PDF
+            Print / Save as PDF
           </button>
         </div>
       </div>
@@ -372,13 +353,15 @@ export default function ReportDetailPage() {
       <div className="bg-card border border-border p-6 rounded-2xl shadow-xs space-y-4">
         <div>
           <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
-            {organization?.name || 'Workspace'} • Detail Inspector
+            {organization?.name || 'Workspace'} | Detail Inspector
           </span>
           <h1 className="text-2xl font-black text-foreground tracking-tight mt-1">
-            {source} Compliance Report
+            {isSupportedSource ? source : 'Unavailable'} Readiness Report
           </h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Detailed breakdown of records matching compliance and readiness statuses.
+            {isSupportedSource
+              ? 'Detailed breakdown of records matching the selected readiness and operational filters.'
+              : 'This report source is missing, invalid, or unavailable to this route.'}
           </p>
         </div>
 
@@ -424,7 +407,16 @@ export default function ReportDetailPage() {
         </div>
       </div>
 
+      {!isSupportedSource && (
+        <div className="bg-card border border-amber-500/30 rounded-2xl p-8 text-center">
+          <AlertTriangle className="w-6 h-6 text-amber-500 mx-auto mb-3" />
+          <h2 className="text-sm font-extrabold text-foreground">Report source unavailable</h2>
+          <p className="text-xs text-muted-foreground mt-1">Return to Reports and open a supported detail view.</p>
+        </div>
+      )}
+
       {/* Detail Table */}
+      {isSupportedSource && (
       <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-xs">
         <div className="p-4 border-b border-border/60 flex justify-between items-center bg-muted/20">
           <span className="text-xs font-bold text-foreground">
@@ -670,6 +662,7 @@ export default function ReportDetailPage() {
           </div>
         )}
       </div>
+      )}
 
       {/* Printable Legal Disclaimer */}
       <div className="hidden print:block text-[9px] text-zinc-400 text-center border-t border-zinc-200 pt-6 mt-12">
