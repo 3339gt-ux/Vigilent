@@ -28,7 +28,8 @@ import {
   UserCheck,
   UploadCloud,
   History,
-  Star
+  Star,
+  BarChart3
 } from 'lucide-react';
 import { BulkUploadConfigurationPanel } from '@/components/BulkUploadConfigurationPanel';
 import { NotificationBell } from '@/components/NotificationBell';
@@ -285,6 +286,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'Evidence Vault', href: '/dashboard/vault', icon: FolderLock },
     { name: 'Evidence Matrix', href: '/dashboard/matrix', icon: Grid },
     { name: 'Audit Pack Builder', href: '/dashboard/audit-packs', icon: FolderArchive },
+    { name: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
     ...(isOwnerOrAdmin ? [{ name: 'Audit Trail', href: '/dashboard/audit-trail', icon: History }] : []),
     { name: 'Organisation Management', href: '/dashboard/organisation', icon: Building2 },
     { name: 'Billing', href: '/dashboard/billing', icon: CreditCard },
