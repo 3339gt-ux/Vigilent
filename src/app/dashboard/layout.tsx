@@ -17,9 +17,14 @@ import {
   LogOut,
   Sun,
   Moon,
+  CircleDot,
   Info,
   Menu,
   X,
+  ChevronLeft,
+  ChevronRight,
+  Pin,
+  PinOff,
   UserCheck,
   UploadCloud,
   History,
@@ -28,11 +33,47 @@ import {
 import { BulkUploadConfigurationPanel } from '@/components/BulkUploadConfigurationPanel';
 import { NotificationBell } from '@/components/NotificationBell';
 
+function AppearanceControls({ compact = false }: { compact?: boolean }) {
+  const { themePreference, setThemePreference } = useApp();
+  const options = [
+    { value: 'light' as const, label: 'Light', icon: Sun },
+    { value: 'midtone' as const, label: 'Midtone', icon: CircleDot },
+    { value: 'dark' as const, label: 'Dark', icon: Moon }
+  ];
+
+  return (
+    <div className={`grid grid-cols-3 gap-1 rounded-lg border border-border bg-muted/40 p-1 ${compact ? 'w-full' : ''}`} aria-label="Appearance">
+      {options.map(option => {
+        const Icon = option.icon;
+        const selected = themePreference === option.value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => setThemePreference(option.value)}
+            aria-label={`Use ${option.label} appearance`}
+            aria-pressed={selected}
+            title={option.label}
+            className={`flex min-w-0 items-center justify-center rounded-md transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 ${
+              compact ? 'h-8 px-1' : 'gap-1.5 px-2 py-1.5 text-[10px] font-bold'
+            } ${selected ? 'bg-indigo-600 text-white shadow-sm' : 'text-muted-foreground hover:bg-card hover:text-foreground'}`}
+          >
+            <Icon className="h-3.5 w-3.5 shrink-0" />
+            {!compact && <span>{option.label}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, organization, logout, theme, toggleTheme, isLoading, isAuthenticated } = useApp();
+  const { user, organization, logout, theme, isLoading, isAuthenticated } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
+  const [sidebarPinned, setSidebarPinned] = React.useState(false);
 
   const {
     frameworkRequirements,
@@ -54,6 +95,56 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [globalUploadQueue, setGlobalUploadQueue] = React.useState<any[]>([]);
   const [bulkDocs, setBulkDocs] = React.useState<any[]>([]);
   const dragCounterRef = React.useRef(0);
+  const sidebarStorageKey = user && organization
+    ? `vygilence_sidebar_state_${user.id}_${organization.id}`
+    : null;
+
+  React.useEffect(() => {
+    if (!sidebarStorageKey) return;
+    try {
+      const stored = localStorage.getItem(sidebarStorageKey);
+      if (stored) {
+        const parsed = JSON.parse(stored) as { collapsed?: unknown; pinned?: unknown };
+        setSidebarCollapsed(typeof parsed.collapsed === 'boolean' ? parsed.collapsed : window.innerWidth < 1280);
+        setSidebarPinned(typeof parsed.pinned === 'boolean' ? parsed.pinned : false);
+      } else {
+        setSidebarCollapsed(window.innerWidth < 1280);
+        setSidebarPinned(false);
+      }
+    } catch (error) {
+      console.warn('Unable to load sidebar preference.', error);
+      setSidebarCollapsed(window.innerWidth < 1280);
+      setSidebarPinned(false);
+    }
+  }, [sidebarStorageKey]);
+
+  React.useEffect(() => {
+    if (sidebarPinned) return;
+    const applyResponsiveDefault = () => setSidebarCollapsed(window.innerWidth < 1280);
+    window.addEventListener('resize', applyResponsiveDefault);
+    return () => window.removeEventListener('resize', applyResponsiveDefault);
+  }, [sidebarPinned]);
+
+  const persistSidebarState = (collapsed: boolean, pinned: boolean) => {
+    if (!sidebarStorageKey) return;
+    try {
+      localStorage.setItem(sidebarStorageKey, JSON.stringify({ collapsed, pinned }));
+    } catch (error) {
+      console.warn('Unable to persist sidebar preference.', error);
+    }
+  };
+
+  const toggleSidebarCollapsed = () => {
+    const nextCollapsed = !sidebarCollapsed;
+    setSidebarCollapsed(nextCollapsed);
+    persistSidebarState(nextCollapsed, sidebarPinned);
+  };
+
+  const toggleSidebarPinned = () => {
+    const nextPinned = !sidebarPinned;
+    setSidebarPinned(nextPinned);
+    persistSidebarState(sidebarCollapsed, nextPinned);
+  };
 
   // Determine context from pathname
   const uploadContext = React.useMemo(() => {
@@ -213,27 +304,56 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <div className="flex flex-1 relative">
         {/* 2. Desktop Sidebar */}
-        <aside className="hidden lg:flex flex-col w-64 bg-card border-r border-border/80 sticky top-0 h-[calc(100vh-37px)] p-6 justify-between shrink-0">
-          <div className="space-y-8">
+        <aside className={`hidden lg:flex flex-col overflow-hidden bg-card border-r border-border/80 sticky top-0 h-[calc(100vh-37px)] justify-between shrink-0 transition-[width,padding] duration-200 ${
+          sidebarCollapsed ? 'w-20 p-3' : 'w-64 p-6'
+        }`}>
+          <div className="flex min-h-0 flex-1 flex-col">
             {/* Logo */}
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 flex items-center justify-center">
-                <Image
-                  src={theme === 'dark' ? '/brand/vygilence-mark.png' : '/brand/vygilence-mark-light.png'}
-                  alt="Vygilence Logo"
-                  width={36}
-                  height={36}
-                  className="object-contain"
-                />
+            <div className={`flex ${sidebarCollapsed ? 'flex-col gap-2' : 'items-start justify-between gap-3'}`}>
+              <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3 min-w-0'}`}>
+                <div className="w-9 h-9 flex items-center justify-center shrink-0">
+                  <Image
+                    src={theme === 'light' ? '/brand/vygilence-mark-light.png' : '/brand/vygilence-mark.png'}
+                    alt="Vygilence Logo"
+                    width={36}
+                    height={36}
+                    className="object-contain"
+                  />
+                </div>
+                {!sidebarCollapsed && (
+                  <div className="min-w-0">
+                    <span className="font-extrabold tracking-tight text-sm block">Vygilence</span>
+                    <span className="text-[10px] text-muted-foreground block truncate">{organization.name}</span>
+                  </div>
+                )}
               </div>
-              <div>
-                <span className="font-extrabold tracking-tight text-sm block">Vygilence</span>
-                <span className="text-[10px] text-muted-foreground block">{organization.name}</span>
+              <div className={`flex ${sidebarCollapsed ? 'w-full justify-center gap-1' : 'gap-1'}`}>
+                <button
+                  type="button"
+                  onClick={toggleSidebarPinned}
+                  aria-label={sidebarPinned ? 'Unpin sidebar state' : 'Pin sidebar state'}
+                  aria-pressed={sidebarPinned}
+                  title={sidebarPinned ? 'Unpin sidebar state' : 'Pin sidebar state'}
+                  className={`p-1.5 rounded-md border transition-colors focus-visible:outline-2 focus-visible:outline-indigo-500 ${
+                    sidebarPinned ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-500' : 'bg-muted/40 border-border text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {sidebarPinned ? <Pin className="w-3.5 h-3.5" /> : <PinOff className="w-3.5 h-3.5" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleSidebarCollapsed}
+                  aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                  title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                  className="p-1.5 rounded-md border border-border bg-muted/40 text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-2 focus-visible:outline-indigo-500"
+                >
+                  {sidebarCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+                </button>
               </div>
             </div>
 
             {/* Menu Links */}
-            <nav className="space-y-1.5">
+            <nav className={`min-h-0 flex-1 overflow-y-auto pr-1 space-y-1.5 ${sidebarCollapsed ? 'mt-5' : 'mt-8'}`}>
               {menuItems.map(item => {
                 const isActive = pathname === item.href;
                 const Icon = item.icon;
@@ -242,14 +362,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     key={item.href}
                     href={item.href}
                     id={`sidebar-link-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${
+                    aria-label={item.name}
+                    aria-current={isActive ? 'page' : undefined}
+                    title={sidebarCollapsed ? item.name : undefined}
+                    className={`group relative flex items-center rounded-lg text-xs font-semibold tracking-wide transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 ${
+                      sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2.5'
+                    } ${
                       isActive
                         ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/10'
                         : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                     }`}
                   >
                     <Icon className="w-4 h-4 shrink-0" />
-                    {item.name}
+                    {!sidebarCollapsed && <span>{item.name}</span>}
+                    {sidebarCollapsed && (
+                      <span className="pointer-events-none absolute left-full z-50 ml-3 hidden whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1.5 text-[10px] font-bold text-popover-foreground shadow-lg group-hover:block group-focus-visible:block">
+                        {item.name}
+                      </span>
+                    )}
                   </Link>
                 );
               })}
@@ -257,39 +387,35 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           {/* Footer Actions */}
-          <div className="space-y-4 pt-6 border-t border-border/60">
-            <div className="flex items-center gap-3 px-2 py-1">
+          <div className={`shrink-0 pt-4 border-t border-border/60 ${sidebarCollapsed ? 'space-y-3' : 'space-y-4'}`}>
+            <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3 px-2 py-1'}`} title={sidebarCollapsed ? `${user.full_name}, ${user.role}` : undefined}>
               <div className="w-8 h-8 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold flex items-center justify-center text-xs shrink-0">
                 {user.full_name.charAt(0)}
               </div>
-              <div className="overflow-hidden">
+              {!sidebarCollapsed && <div className="overflow-hidden">
                 <span className="text-xs font-bold block truncate">{user.full_name}</span>
                 <span className="text-[10px] text-muted-foreground block truncate">{user.role}</span>
-              </div>
+              </div>}
             </div>
 
-            <div className="flex items-center justify-between gap-2">
-              <NotificationBell dropdownAlign="left-0 bottom-full mb-2" />
+            <AppearanceControls compact={sidebarCollapsed} />
 
-              <button
-                onClick={toggleTheme}
-                className="flex items-center justify-center p-2 rounded-lg bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                title="Toggle Theme"
-                id="sidebar-theme-toggle"
-              >
-                {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
-              </button>
-
+            <div className={`flex items-center gap-2 ${sidebarCollapsed ? 'flex-col' : 'justify-between'}`}>
+              <NotificationBell dropdownAlign={sidebarCollapsed ? 'left-full bottom-0 ml-3' : 'left-0 bottom-full mb-2'} />
               <button
                 onClick={async () => {
                   await logout();
                   router.push('/');
                 }}
-                className="flex items-center gap-2 justify-center flex-grow px-3 py-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold transition-colors"
+                aria-label="Sign out"
+                title={sidebarCollapsed ? 'Sign out' : undefined}
+                className={`flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold transition-colors ${
+                  sidebarCollapsed ? 'p-2' : 'gap-2 flex-grow px-3 py-2'
+                }`}
                 id="sidebar-logout-btn"
               >
                 <LogOut className="w-4 h-4" />
-                Sign Out
+                {!sidebarCollapsed && 'Sign Out'}
               </button>
             </div>
           </div>
@@ -301,7 +427,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 flex items-center justify-center">
                 <Image
-                  src={theme === 'dark' ? '/brand/vygilence-mark.png' : '/brand/vygilence-mark-light.png'}
+                  src={theme === 'light' ? '/brand/vygilence-mark-light.png' : '/brand/vygilence-mark.png'}
                   alt="Vygilence Logo"
                   width={32}
                   height={32}
@@ -361,12 +487,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={toggleTheme}
-                    className="p-2 rounded-lg bg-muted text-muted-foreground"
-                  >
-                    {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
-                  </button>
+                  <AppearanceControls />
                   <button
                     onClick={async () => {
                       setMobileMenuOpen(false);

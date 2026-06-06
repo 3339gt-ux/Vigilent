@@ -52,12 +52,12 @@ import {
   RequirementCompetencyType,
   RequirementTemplateItem
 } from '@/lib/types';
-export type ThemePreference = 'light' | 'dark' | 'system';
+export type ThemePreference = 'light' | 'midtone' | 'dark';
 export type VygilenceTheme = 'sentinel' | 'obsidian' | 'emerald-watch' | 'amber-beacon' | 'arc-reactor' | 'iron-ledger' | 'vanguard';
 export type InterfaceStyle = 'focused' | 'balanced' | 'command-centre' | 'executive';
 
 interface AppContextType {
-  theme: 'light' | 'dark';
+  theme: ThemePreference;
   themePreference: ThemePreference;
   vygilenceTheme: VygilenceTheme;
   interfaceStyle: InterfaceStyle;
@@ -259,10 +259,10 @@ const calculateDocumentStatus = (expiryDate: string | null): DocumentStatus => {
 };
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [themePreference, setThemePreferenceState] = useState<ThemePreference>('system');
+  const [themePreference, setThemePreferenceState] = useState<ThemePreference>('dark');
   const [vygilenceTheme, setVygilenceThemeState] = useState<VygilenceTheme>('sentinel');
   const [interfaceStyle, setInterfaceStyleState] = useState<InterfaceStyle>('balanced');
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const theme = themePreference;
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [user, setUser] = useState<Profile | null>(null);
   const [organization, setOrganization] = useState<Organization | null>(null);
@@ -355,54 +355,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setNotifications([]);
   };
 
-  // Load preferences per user
+  // Load appearance preferences per user and organisation.
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const userId = user?.id || 'guest';
+    if (typeof window === 'undefined' || !user || !organization) return;
+    const appearanceKey = `vygilence_appearance_${user.id}_${organization.id}`;
 
-    const storedThemePref = localStorage.getItem(`vygilence_theme_pref_${userId}`) || localStorage.getItem('vigilen_theme') || 'system';
-    setThemePreferenceState(storedThemePref as ThemePreference);
+    try {
+      const legacyPreference = localStorage.getItem(`vygilence_theme_pref_${user.id}`) || localStorage.getItem('vigilen_theme');
+      const storedAppearance = localStorage.getItem(appearanceKey) || legacyPreference;
+      const normalizedAppearance: ThemePreference =
+        storedAppearance === 'light' || storedAppearance === 'midtone' || storedAppearance === 'dark'
+          ? storedAppearance
+          : storedAppearance === 'system'
+            ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+            : 'dark';
+      setThemePreferenceState(normalizedAppearance);
 
-    const storedTheme = localStorage.getItem(`vygilence_active_theme_${userId}`) || 'sentinel';
-    setVygilenceThemeState(storedTheme as VygilenceTheme);
+      const storedTheme = localStorage.getItem(`vygilence_active_theme_${user.id}`) || 'sentinel';
+      setVygilenceThemeState(storedTheme as VygilenceTheme);
 
-    const storedStyle = localStorage.getItem(`vygilence_interface_style_${userId}`) || 'balanced';
-    setInterfaceStyleState(storedStyle as InterfaceStyle);
-  }, [user]);
-
-  // Sync theme Preference (system / light / dark)
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const resolveTheme = (pref: ThemePreference): 'light' | 'dark' => {
-      if (pref !== 'system') return pref;
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    };
-
-    setTheme(resolveTheme(themePreference));
-
-    if (themePreference === 'system') {
-      const media = window.matchMedia('(prefers-color-scheme: dark)');
-      const listener = (e: MediaQueryListEvent) => {
-        setTheme(e.matches ? 'dark' : 'light');
-      };
-      media.addEventListener('change', listener);
-      return () => media.removeEventListener('change', listener);
+      const storedStyle = localStorage.getItem(`vygilence_interface_style_${user.id}`) || 'balanced';
+      setInterfaceStyleState(storedStyle as InterfaceStyle);
+    } catch (error) {
+      console.warn('Unable to load local appearance preferences.', error);
+      setThemePreferenceState('dark');
     }
-  }, [themePreference]);
+  }, [organization, user]);
 
   // Sync theme and style variables to root DOM element dataset
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const root = window.document.documentElement;
 
-    if (theme === 'dark') {
-      root.classList.add('dark');
-      root.classList.remove('light');
-    } else {
-      root.classList.add('light');
-      root.classList.remove('dark');
-    }
+    root.classList.remove('light', 'midtone', 'dark');
+    root.classList.add(theme);
 
     root.dataset.theme = vygilenceTheme;
     root.dataset.style = interfaceStyle;
@@ -601,11 +587,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     loadData();
 
-    if (isDemoMode) {
-      const storedTheme = localStorage.getItem('vigilen_theme') as 'light' | 'dark';
-      if (storedTheme) setTheme(storedTheme);
-      return;
-    }
+    if (isDemoMode) return;
 
     if (!supabase) return;
     const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
@@ -617,9 +599,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setThemePreference = (pref: ThemePreference) => {
     setThemePreferenceState(pref);
-    const userId = user?.id || 'guest';
-    localStorage.setItem(`vygilence_theme_pref_${userId}`, pref);
-    localStorage.setItem('vigilen_theme', pref);
+    if (typeof window === 'undefined' || !user || !organization) return;
+    try {
+      localStorage.setItem(`vygilence_appearance_${user.id}_${organization.id}`, pref);
+    } catch (error) {
+      console.warn('Unable to persist appearance preference.', error);
+    }
   };
 
   const setVygilenceTheme = (t: VygilenceTheme) => {
@@ -635,7 +620,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const toggleTheme = () => {
-    const nextTheme = theme === 'light' ? 'dark' : 'light';
+    const nextTheme: ThemePreference = theme === 'light' ? 'midtone' : theme === 'midtone' ? 'dark' : 'light';
     setThemePreference(nextTheme);
   };
 

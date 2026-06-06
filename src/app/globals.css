@@ -378,6 +378,47 @@
   --indigo-950: #faf5ff;
 }
 
+/* Midtone appearance: a solid neutral slate layer between Light and Dark. */
+:root.midtone {
+  color-scheme: dark;
+  --background: 218 15% 30%;
+  --foreground: 210 20% 96%;
+  --card: 218 14% 36%;
+  --card-foreground: 210 20% 97%;
+  --popover: 218 15% 34%;
+  --popover-foreground: 210 20% 97%;
+  --primary: 213 90% 67%;
+  --primary-foreground: 220 35% 10%;
+  --secondary: 218 13% 41%;
+  --secondary-foreground: 210 20% 96%;
+  --muted: 218 12% 40%;
+  --muted-foreground: 215 18% 79%;
+  --accent: 218 13% 43%;
+  --accent-foreground: 210 20% 98%;
+  --destructive: 0 70% 55%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 216 12% 50%;
+  --input: 216 12% 47%;
+  --ring: 213 90% 67%;
+  --indigo-50: #dbeafe;
+  --indigo-100: #bfdbfe;
+  --indigo-200: #93c5fd;
+  --indigo-300: #60a5fa;
+  --indigo-400: #60a5fa;
+  --indigo-500: #3b82f6;
+  --indigo-600: #2563eb;
+  --indigo-650: #1d4ed8;
+  --indigo-700: #1d4ed8;
+  --indigo-800: #1e40af;
+  --indigo-900: #1e3a8a;
+  --indigo-950: #172554;
+}
+
+:root.midtone {
+  --card-gradient: none;
+  --card-shadow: 0 1px 3px rgba(15, 23, 42, 0.22);
+}
+
 /* ==========================================================================
    INTERFACE STYLES CONFIGURATION
    ========================================================================== */
@@ -422,7 +463,8 @@
   border-width: var(--card-border-width) !important;
   border-radius: var(--card-radius) !important;
   box-shadow: var(--card-shadow) !important;
-  background: var(--card-gradient, hsl(var(--card))) !important;
+  background-color: hsl(var(--card)) !important;
+  background-image: var(--card-gradient) !important;
   border-color: hsl(var(--border)) !important;
 }
 
@@ -555,6 +597,9 @@ select {
 .dark select {
   color-scheme: dark;
 }
+.midtone select {
+  color-scheme: dark;
+}
 
 select, option {
   background-color: hsl(var(--card));
@@ -562,6 +607,11 @@ select, option {
 }
 
 .dark select, .dark option {
+  background-color: hsl(var(--card)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.midtone select, .midtone option {
   background-color: hsl(var(--card)) !important;
   color: hsl(var(--foreground)) !important;
 }
@@ -578,6 +628,13 @@ select, option {
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.midtone .glass-panel {
+  background: hsl(var(--card));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: hsl(var(--border));
 }
 
 .solid-panel {

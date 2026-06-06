@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useApp, VygilenceTheme, InterfaceStyle, ThemePreference } from '@/context/AppContext';
 import { isDemoMode } from '@/lib/env';
-import { Save, ShieldAlert, Key, Bell, User, CheckCircle2, Copy, Check, Palette, Sun, Moon, Monitor, ArrowRight, Eye, Sparkles } from 'lucide-react';
+import { Save, ShieldAlert, Key, Bell, User, CheckCircle2, Copy, Check, Palette, Sun, Moon, CircleDot, ArrowRight, Eye, Sparkles } from 'lucide-react';
 
 export default function SettingsPage() {
   const {
@@ -372,17 +372,18 @@ export default function SettingsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Controls */}
           <div className="lg:col-span-7 space-y-6">
-            {/* Theme Mode Selector */}
+            {/* Appearance Selector */}
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-2">Theme Mode</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-2">Appearance</span>
               <div className="grid grid-cols-3 gap-2">
-                {(['system', 'light', 'dark'] as const).map(option => {
-                  const Icon = option === 'system' ? Monitor : option === 'light' ? Sun : Moon;
+                {(['light', 'midtone', 'dark'] as const).map(option => {
+                  const Icon = option === 'light' ? Sun : option === 'midtone' ? CircleDot : Moon;
                   return (
                     <button
                       key={option}
                       type="button"
                       onClick={() => setThemePreference(option)}
+                      aria-pressed={themePreference === option}
                       className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border font-bold capitalize transition-all text-xs cursor-pointer ${
                         themePreference === option
                           ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'

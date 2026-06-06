@@ -12,6 +12,7 @@ import {
   Clock, 
   Sun, 
   Moon, 
+  CircleDot,
   Info,
   CheckCircle2,
   AlertCircle
@@ -44,7 +45,7 @@ export default function LandingPage() {
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 flex items-center justify-center">
               <Image
-                src={theme === 'dark' ? '/brand/vygilence-mark.png' : '/brand/vygilence-mark-light.png'}
+                src={theme === 'light' ? '/brand/vygilence-mark-light.png' : '/brand/vygilence-mark.png'}
                 alt="Vygilence Logo"
                 width={40}
                 height={40}
@@ -68,10 +69,17 @@ export default function LandingPage() {
             <button 
               onClick={toggleTheme} 
               className="p-2 rounded-lg text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-all duration-200"
-              aria-label="Toggle theme"
+              aria-label={`Current appearance: ${theme}. Cycle appearance`}
+              title={`Appearance: ${theme}`}
               id="theme-toggle-btn"
             >
-              {theme === 'dark' ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5 text-indigo-600" />}
+              {theme === 'light' ? (
+                <Sun className="w-5 h-5 text-amber-500" />
+              ) : theme === 'midtone' ? (
+                <CircleDot className="w-5 h-5 text-blue-300" />
+              ) : (
+                <Moon className="w-5 h-5 text-indigo-300" />
+              )}
             </button>
 
             <Link 

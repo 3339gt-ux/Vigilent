@@ -804,21 +804,6 @@ export default function DashboardPage() {
         {renderQuickActions()}
       </section>
 
-      {/* Setup walkthrough bar (hidden in Focus mode) */}
-      {!isFocusMode && dashboardTab === 'overview' && (
-        <div className="bg-card border border-border rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-          <div className="space-y-0.5">
-            <h2 className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Setup Walkthrough</h2>
-            <p className="text-[11px] text-muted-foreground">Import templates, link evidence records, and verify staff competencies to generate an audit pack.</p>
-          </div>
-          <div className="flex flex-wrap gap-2 text-[10px] font-bold">
-            <Link href="/dashboard/requirements" className="px-2.5 py-1.5 bg-muted hover:bg-muted/80 border border-border rounded-lg transition-colors">1. Import Templates</Link>
-            <Link href="/dashboard/vault" className="px-2.5 py-1.5 bg-muted hover:bg-muted/80 border border-border rounded-lg transition-colors">2. Link Evidence</Link>
-            <Link href="/dashboard/audit-packs" className="px-2.5 py-1.5 bg-muted hover:bg-muted/80 border border-border rounded-lg transition-colors">3. Generate Pack</Link>
-          </div>
-        </div>
-      )}
-
       {/* SECTION 1 — EXECUTIVE SUMMARY (hidden in Focus mode) */}
       {!isFocusMode && dashboardTab === 'overview' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
