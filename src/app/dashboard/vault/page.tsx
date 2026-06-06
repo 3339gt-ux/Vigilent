@@ -48,6 +48,7 @@ import {
   usePagination,
   usePersistentViewState
 } from '@/components/FilterControls';
+import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
 
 export default function EvidenceVault() {
   const {
@@ -93,6 +94,8 @@ export default function EvidenceVault() {
   // Search & Filter state
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>(null);
+  const [toast, setToast] = useState<ToastState>(null);
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [sortBy, setSortBy] = useState<'title' | 'expiry' | 'uploaded'>('uploaded');
   const [vaultView, setVaultView] = useState<'active' | 'archive'>('active');
@@ -1009,7 +1012,20 @@ export default function EvidenceVault() {
 
   const exportDocuments = (scope: 'selected' | 'filtered') => {
     const rows = scope === 'selected' ? selectedDocs : filteredDocs;
-    exportCsv(`vygilence-evidence-vault-${scope}-export-${exportDateStamp()}.csv`, documentExportRows(rows));
+    setConfirmRequest({
+      title: 'Export Evidence Documents?',
+      description: `You are about to export ${rows.length} document record${rows.length === 1 ? '' : 's'} as a CSV file. Do you want to download this data?`,
+      confirmLabel: 'Export CSV',
+      tone: 'primary',
+      onConfirm: () => {
+        try {
+          exportCsv(`vygilence-evidence-vault-${scope}-export-${exportDateStamp()}.csv`, documentExportRows(rows));
+          setToast({ type: 'success', message: 'Evidence documents exported successfully.' });
+        } catch (e) {
+          setToast({ type: 'error', message: 'Failed to export documents.' });
+        }
+      }
+    });
   };
 
   const filterChips = useMemo(() => {
@@ -2900,7 +2916,8 @@ export default function EvidenceVault() {
       />
 
       <FavouritesConfirmModal />
-
+      <ConfirmDialog request={confirmRequest} onCancel={() => setConfirmRequest(null)} />
+      <InlineToast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }

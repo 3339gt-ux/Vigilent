@@ -27,7 +27,7 @@ const formatTime = (value: string) => {
   return date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 
-export function NotificationBell() {
+export function NotificationBell({ dropdownAlign = 'right-0 top-full mt-2' }: { dropdownAlign?: string }) {
   const { notifications, markNotificationRead, markAllNotificationsRead } = useApp();
   const [open, setOpen] = React.useState(false);
   const [filter, setFilter] = React.useState('all');
@@ -66,11 +66,11 @@ export function NotificationBell() {
       <button
         type="button"
         onClick={() => setOpen(value => !value)}
-        className="relative flex items-center justify-center p-2 rounded-lg bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+        className="relative flex items-center justify-center p-2 rounded-lg bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
         aria-label="Open notifications"
         title="Notifications"
       >
-        <Bell className="w-4 h-4" />
+        <Bell className={`w-4 h-4 ${unreadCount > 0 ? 'animate-bell-ring text-indigo-600 dark:text-indigo-400' : ''}`} />
         {unreadCount > 0 && (
           <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-rose-600 text-white text-[9px] font-extrabold flex items-center justify-center">
             {unreadCount > 9 ? '9+' : unreadCount}
@@ -79,10 +79,10 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 bottom-full lg:bottom-auto lg:top-full mb-2 lg:mb-0 lg:mt-2 w-[min(24rem,calc(100vw-2rem))] bg-card solid-panel border border-border rounded-2xl shadow-2xl z-50 overflow-hidden">
+        <div className={`absolute ${dropdownAlign} w-[min(24rem,calc(100vw-2rem))] bg-card solid-panel border border-border rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150`}>
           <div className="p-4 border-b border-border/70 flex items-start justify-between gap-3">
             <div>
-              <h3 className="text-sm font-extrabold">Notifications</h3>
+              <h3 className="text-sm font-extrabold text-foreground">Notifications</h3>
               <p className="text-[11px] text-muted-foreground mt-0.5">{unreadCount} unread workspace update{unreadCount === 1 ? '' : 's'}</p>
             </div>
             <div className="flex items-center gap-1">
@@ -90,26 +90,26 @@ export function NotificationBell() {
                 type="button"
                 onClick={markAllNotificationsRead}
                 disabled={unreadCount === 0}
-                className="px-2 py-1 rounded-lg bg-muted hover:bg-muted/80 disabled:opacity-40 text-[10px] font-bold text-foreground border border-border"
+                className="px-2 py-1 rounded-lg bg-muted hover:bg-muted/80 disabled:opacity-40 text-[10px] font-bold text-foreground border border-border cursor-pointer"
               >
-                <CheckCheck className="w-3 h-3 inline mr-1" />
+                <CheckCheck className="w-3.5 h-3.5 inline mr-1" />
                 Mark all
               </button>
-              <button type="button" onClick={() => setOpen(false)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground">
+              <button type="button" onClick={() => setOpen(false)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
           </div>
 
-          <div className="px-3 py-2 border-b border-border/60 flex gap-1 overflow-x-auto">
+          <div className="px-3 py-2 border-b border-border/60 flex gap-1 overflow-x-auto no-scrollbar">
             {filterOptions.map(option => (
               <button
                 key={option.value}
                 type="button"
                 onClick={() => setFilter(option.value)}
-                className={`px-2 py-1 rounded-lg text-[10px] font-bold border shrink-0 ${
+                className={`px-2 py-1 rounded-lg text-[10px] font-bold border shrink-0 cursor-pointer ${
                   filter === option.value
-                    ? 'bg-indigo-600 text-white border-indigo-700'
+                    ? 'bg-indigo-650 text-white border-indigo-700'
                     : 'bg-muted/40 hover:bg-muted text-foreground border-border'
                 }`}
               >
@@ -118,7 +118,7 @@ export function NotificationBell() {
             ))}
           </div>
 
-          <div className="max-h-96 overflow-y-auto p-2 space-y-2">
+          <div className="max-h-96 overflow-y-auto p-2 space-y-2 no-scrollbar">
             {filtered.length === 0 ? (
               <div className="p-6 text-center text-xs text-muted-foreground border border-dashed border-border rounded-xl">
                 No notifications yet.
@@ -145,7 +145,7 @@ export function NotificationBell() {
                             event.preventDefault();
                             void handleToggleRead(notification.id, !notification.read_at);
                           }}
-                          className="font-bold text-indigo-600 dark:text-indigo-300 hover:underline disabled:opacity-50"
+                          className="font-bold text-indigo-600 dark:text-indigo-300 hover:underline disabled:opacity-50 cursor-pointer"
                         >
                           {notification.read_at ? 'Mark unread' : 'Mark read'}
                         </button>
@@ -162,12 +162,23 @@ export function NotificationBell() {
                       if (!notification.read_at) void handleToggleRead(notification.id, true);
                       setOpen(false);
                     }}
-                    className="block p-3 rounded-xl border border-border/70 bg-muted/20 hover:bg-muted/50 transition-colors"
+                    className={`block p-3 rounded-xl border transition-all duration-150 ${
+                      notification.read_at
+                        ? 'border-border/40 bg-transparent hover:bg-muted/30'
+                        : 'border-indigo-500/20 bg-indigo-500/5 hover:bg-indigo-550/10 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/35'
+                    }`}
                   >
                     {content}
                   </Link>
                 ) : (
-                  <div key={notification.id} className="p-3 rounded-xl border border-border/70 bg-muted/20">
+                  <div
+                    key={notification.id}
+                    className={`p-3 rounded-xl border transition-all duration-150 ${
+                      notification.read_at
+                        ? 'border-border/40 bg-transparent'
+                        : 'border-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-950/20'
+                    }`}
+                  >
                     {content}
                   </div>
                 );

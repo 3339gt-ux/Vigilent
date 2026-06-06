@@ -173,6 +173,18 @@ export default function DashboardPage() {
     }
   }, [dashboardTabStorageKey]);
 
+  useEffect(() => {
+    const handleOutsideClick = () => {
+      setExpandedRadarBucket(null);
+      setActiveDashboardPanel(null);
+      setActiveFlyout(null);
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => {
+      document.removeEventListener('click', handleOutsideClick);
+    };
+  }, []);
+
   const updateDashboardTab = (tab: DashboardTab) => {
     setDashboardTab(tab);
     if (typeof window !== 'undefined') {
@@ -524,13 +536,13 @@ export default function DashboardPage() {
         <button
           key={action.label}
           onClick={action.onClick}
-          className="w-full p-3 bg-muted/40 hover:bg-muted/70 hover:border-indigo-500/30 border border-border rounded-xl text-left transition-all duration-200 group flex items-start gap-3 shadow-sm min-h-[78px]"
+          className="w-full p-3 bg-card/60 dark:bg-muted/10 hover:bg-card hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:hover:shadow-[0_8px_30px_rgb(0,0,0,0.2)] hover:border-indigo-500/40 border border-border/80 rounded-2xl text-left transition-all duration-300 group flex items-start gap-3.5 shadow-xs min-h-[84px] cursor-pointer"
         >
-          <div className="p-2 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg group-hover:scale-105 group-hover:bg-indigo-500 group-hover:text-white transition-all duration-200 shrink-0">
+          <div className="p-2.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl group-hover:scale-105 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300 shrink-0">
             {action.icon}
           </div>
           <div className="space-y-1 min-w-0 flex-1">
-            <span className="font-extrabold text-foreground text-xs block leading-none">{action.label}</span>
+            <span className="font-extrabold text-foreground text-xs block leading-none tracking-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors duration-300">{action.label}</span>
             <p className="text-[10px] text-muted-foreground leading-normal font-medium line-clamp-2">{action.description}</p>
           </div>
         </button>
@@ -1394,7 +1406,8 @@ export default function DashboardPage() {
                 {radarRows.map(row => (
                   <div
                     key={row.label}
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setExpandedRadarBucket(current => current === row.label ? null : row.label);
                       setActiveDashboardPanel(null);
                       setActiveFlyout(null);

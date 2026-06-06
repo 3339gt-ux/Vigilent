@@ -441,7 +441,21 @@ export default function EvidenceMatrix() {
     const rows = scope === 'selected'
       ? filteredRequirements.filter(requirement => matrixRowSelection.selectedIds.has(requirement.id))
       : filteredRequirements;
-    exportCsv(`vygilence-evidence-matrix-${scope}-export-${exportDateStamp()}.csv`, matrixExportRows(rows));
+
+    setConfirmRequest({
+      title: 'Export Evidence Matrix?',
+      description: `You are about to export ${rows.length} requirement-target mappings as a CSV file. Do you want to download this data?`,
+      confirmLabel: 'Export CSV',
+      tone: 'primary',
+      onConfirm: () => {
+        try {
+          exportCsv(`vygilence-evidence-matrix-${scope}-export-${exportDateStamp()}.csv`, matrixExportRows(rows));
+          setToast({ type: 'success', message: 'Evidence Matrix exported successfully.' });
+        } catch (e) {
+          setToast({ type: 'error', message: 'Failed to export Evidence Matrix.' });
+        }
+      }
+    });
   };
 
   // Handle cell click

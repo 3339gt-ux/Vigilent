@@ -9,6 +9,7 @@ import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evid
 import { exportCsv, exportDateStamp, ExportRow } from '@/lib/exportData';
 import type { Action, CompetencyCategory, CompetencyRecord, CompetencyStatus, CompetencyType, Person, PersonType, RequirementRiskLevel } from '@/lib/types';
 import { Link as LinkIcon, Plus, Search, Upload, UserCheck, X, ArrowLeft, Calendar, Paperclip, AlertCircle, Eye, EyeOff, Download } from 'lucide-react';
+import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
 import {
   useFilterFavourites,
   useSavedViews,
@@ -91,6 +92,8 @@ export default function CompetencyMatrixPage() {
   const [search, setSearch] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('All');
   const [typeFilter, setTypeFilter] = useState('All');
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>(null);
+  const [toast, setToast] = useState<ToastState>(null);
 
   // Premium filtering and sorting states
   const [roleFilter, setRoleFilter] = useState('All');
@@ -336,7 +339,20 @@ export default function CompetencyMatrixPage() {
 
   const exportPeople = (scope: 'selected' | 'filtered') => {
     const rows = scope === 'selected' ? selectedBulkPeople : sortedPeople;
-    exportCsv(`vygilence-people-${scope}-export-${exportDateStamp()}.csv`, peopleExportRows(rows));
+    setConfirmRequest({
+      title: 'Export Teammates List?',
+      description: `You are about to export ${rows.length} teammate record${rows.length === 1 ? '' : 's'} as a CSV file. Do you want to download this data?`,
+      confirmLabel: 'Export CSV',
+      tone: 'primary',
+      onConfirm: () => {
+        try {
+          exportCsv(`vygilence-people-${scope}-export-${exportDateStamp()}.csv`, peopleExportRows(rows));
+          setToast({ type: 'success', message: 'Teammates list exported successfully.' });
+        } catch (e) {
+          setToast({ type: 'error', message: 'Failed to export teammates list.' });
+        }
+      }
+    });
   };
 
   // Filtering Competency Columns
@@ -1948,8 +1964,23 @@ export default function CompetencyMatrixPage() {
                   )}
                   <button
                     type="button"
-                    onClick={() => exportCsv(`vygilence-competency-records-${selectedPerson.id}-${exportDateStamp()}.csv`, competencyRecordExportRows(filteredPersonRows))}
-                    className="px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground text-xs flex items-center gap-1.5 w-fit"
+                    onClick={() => {
+                      setConfirmRequest({
+                        title: 'Export Teammate Competencies?',
+                        description: `You are about to export competency records for ${selectedPerson.display_name} as a CSV file.`,
+                        confirmLabel: 'Export CSV',
+                        tone: 'primary',
+                        onConfirm: () => {
+                          try {
+                            exportCsv(`vygilence-competency-records-${selectedPerson.id}-${exportDateStamp()}.csv`, competencyRecordExportRows(filteredPersonRows));
+                            setToast({ type: 'success', message: 'Teammate records exported successfully.' });
+                          } catch (e) {
+                            setToast({ type: 'error', message: 'Failed to export records.' });
+                          }
+                        }
+                      });
+                    }}
+                    className="px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground text-xs flex items-center gap-1.5 w-fit cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" /> Export records
                   </button>
@@ -2283,6 +2314,8 @@ export default function CompetencyMatrixPage() {
         onFindDuplicates={findPossibleDuplicateDocuments}
       />
       <FavouritesConfirmModal />
+      <ConfirmDialog request={confirmRequest} onCancel={() => setConfirmRequest(null)} />
+      <InlineToast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }

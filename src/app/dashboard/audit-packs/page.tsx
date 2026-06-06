@@ -30,6 +30,7 @@ import {
   getRequirementStatusLabel
 } from '@/lib/requirementsEngine';
 import { logAuditEvent } from '@/lib/auditTrail';
+import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
 
 type PackStatus = 'Draft' | 'Ready' | 'Sent' | 'Archived';
 
@@ -108,6 +109,8 @@ export default function AuditPackBuilder() {
   const [newlyCreatedPack, setNewlyCreatedPack] = useState<AuditPack | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>(null);
+  const [toast, setToast] = useState<ToastState>(null);
 
   const assessedRequirements = useMemo<AssessedRequirement[]>(() => {
     const readinessByRequirementId = new Map(
@@ -252,7 +255,7 @@ export default function AuditPackBuilder() {
     }
   };
 
-  const exportCsv = (name: string, rows: AssessedRequirement[]) => {
+  const performExportCsv = (name: string, rows: AssessedRequirement[]) => {
     const headers = [
       'Requirement',
       'Category',
@@ -294,6 +297,23 @@ export default function AuditPackBuilder() {
       description: `Exported audit pack "${name}" as CSV.`,
       severity: 'info',
       metadata: { format: 'CSV', rowCount: rows.length }
+    });
+  };
+
+  const exportCsv = (name: string, rows: AssessedRequirement[]) => {
+    setConfirmRequest({
+      title: 'Export Audit Pack?',
+      description: `You are about to export "${name}" as a CSV file. Do you want to download this data?`,
+      confirmLabel: 'Export CSV',
+      tone: 'primary',
+      onConfirm: () => {
+        try {
+          performExportCsv(name, rows);
+          setToast({ type: 'success', message: 'Audit Pack exported successfully.' });
+        } catch (e) {
+          setToast({ type: 'error', message: 'Failed to export Audit Pack.' });
+        }
+      }
     });
   };
 
@@ -845,6 +865,8 @@ export default function AuditPackBuilder() {
           </div>
         </div>
       </div>
+      <ConfirmDialog request={confirmRequest} onCancel={() => setConfirmRequest(null)} />
+      <InlineToast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }

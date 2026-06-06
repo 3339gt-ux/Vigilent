@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { AuditTrailEvent } from '@/lib/types';
+import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
 
 const sensitiveKeys = ['pin_code', 'pin', 'share_token', 'token', 'password', 'secret', 'key', 'apikey', 'api_key', 'signedurl', 'signed_url'];
 
@@ -117,6 +118,8 @@ export default function AuditTrailPage() {
   
   // Confirmation modal state for undoing
   const [confirmUndoEvent, setConfirmUndoEvent] = useState<AuditTrailEvent | null>(null);
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>(null);
+  const [toast, setToast] = useState<ToastState>(null);
 
   // Operation statuses
   const [undoingEventId, setUndoingEventId] = useState<string | null>(null);
@@ -355,7 +358,7 @@ export default function AuditTrailPage() {
   };
 
   // Export Filtered events to CSV
-  const handleExportCSV = () => {
+  const performExportCSV = () => {
     try {
       if (filteredEvents.length === 0) {
         throw new Error('No events to export.');
@@ -412,17 +415,32 @@ export default function AuditTrailPage() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+      setToast({ type: 'success', message: 'Audit Trail exported to CSV successfully.' });
     } catch (err) {
       console.error(err);
-      setOperationStatus({
+      setToast({
         type: 'error',
         message: err instanceof Error ? err.message : 'CSV export failed.'
       });
     }
   };
 
+  const handleExportCSV = () => {
+    if (filteredEvents.length === 0) {
+      setToast({ type: 'error', message: 'No events to export.' });
+      return;
+    }
+    setConfirmRequest({
+      title: 'Export Audit Trail to CSV?',
+      description: `You are about to export ${filteredEvents.length} log event${filteredEvents.length === 1 ? '' : 's'} as a CSV file. Do you want to download this data?`,
+      confirmLabel: 'Export CSV',
+      tone: 'primary',
+      onConfirm: performExportCSV
+    });
+  };
+
   // Export Filtered events to JSON
-  const handleExportJSON = () => {
+  const performExportJSON = () => {
     try {
       if (filteredEvents.length === 0) {
         throw new Error('No events to export.');
@@ -447,13 +465,28 @@ export default function AuditTrailPage() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+      setToast({ type: 'success', message: 'Audit Trail exported to JSON successfully.' });
     } catch (err) {
       console.error(err);
-      setOperationStatus({
+      setToast({
         type: 'error',
         message: err instanceof Error ? err.message : 'JSON export failed.'
       });
     }
+  };
+
+  const handleExportJSON = () => {
+    if (filteredEvents.length === 0) {
+      setToast({ type: 'error', message: 'No events to export.' });
+      return;
+    }
+    setConfirmRequest({
+      title: 'Export Audit Trail to JSON?',
+      description: `You are about to export ${filteredEvents.length} log event${filteredEvents.length === 1 ? '' : 's'} as a structured JSON file. Do you want to download this data?`,
+      confirmLabel: 'Export JSON',
+      tone: 'primary',
+      onConfirm: performExportJSON
+    });
   };
 
   // Render auth loading state
@@ -1334,6 +1367,8 @@ export default function AuditTrailPage() {
           </div>
         </div>
       )}
+      <ConfirmDialog request={confirmRequest} onCancel={() => setConfirmRequest(null)} />
+      <InlineToast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }

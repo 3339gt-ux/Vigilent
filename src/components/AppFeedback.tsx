@@ -33,11 +33,11 @@ export function InlineToast({ toast, onDismiss }: { toast: ToastState; onDismiss
         : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-300';
 
   return (
-    <div className={`rounded-xl border p-3 text-xs font-semibold flex items-start gap-2 ${className}`}>
+    <div className={`fixed bottom-6 right-6 z-[120] w-80 max-w-[calc(100vw-2rem)] shadow-2xl animate-in slide-in-from-bottom-4 duration-150 rounded-xl border p-3 text-xs font-semibold flex items-start gap-2 ${className}`}>
       {toast.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
       <span className="flex-1">{toast.message}</span>
       {onDismiss && (
-        <button type="button" onClick={onDismiss} className="p-0.5 rounded hover:bg-current/10">
+        <button type="button" onClick={onDismiss} className="p-0.5 rounded hover:bg-current/10 cursor-pointer">
           <X className="w-3.5 h-3.5" />
         </button>
       )}

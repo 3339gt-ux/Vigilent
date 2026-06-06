@@ -642,3 +642,18 @@ select, option {
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
 }
+
+/* Premium Bell Ring Animation */
+@keyframes bell-ring {
+  0%, 85%, 100% { transform: rotate(0); }
+  90% { transform: rotate(12deg); }
+  92% { transform: rotate(-10deg); }
+  94% { transform: rotate(8deg); }
+  96% { transform: rotate(-6deg); }
+  98% { transform: rotate(4deg); }
+}
+
+.animate-bell-ring {
+  animation: bell-ring 2.5s ease-in-out infinite;
+  transform-origin: top center;
+}

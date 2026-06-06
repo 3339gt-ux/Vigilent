@@ -269,7 +269,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
 
             <div className="flex items-center justify-between gap-2">
-              <NotificationBell />
+              <NotificationBell dropdownAlign="left-0 bottom-full mb-2" />
 
               <button
                 onClick={toggleTheme}
@@ -312,7 +312,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
 
             <div className="flex items-center gap-1.5">
-              <NotificationBell />
+              <NotificationBell dropdownAlign="right-0 top-full mt-2" />
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"

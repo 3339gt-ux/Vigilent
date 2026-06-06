@@ -36,6 +36,7 @@ import {
   usePagination,
   usePersistentViewState
 } from '@/components/FilterControls';
+import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
 
 const statusClass = (status: RequirementStatus) => {
   if (status === 'GREEN') return 'bg-emerald-500/10 dark:bg-emerald-500/5 border-emerald-500/20 text-emerald-700 dark:text-emerald-400';
@@ -119,6 +120,8 @@ export default function RequirementsPage() {
 
   const [search, setSearch] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<'All' | 'Attention' | RequirementStatus>('All');
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>(null);
+  const [toast, setToast] = useState<ToastState>(null);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [requirementView, setRequirementView] = useState<RequirementView>('active');
 
@@ -607,12 +610,38 @@ export default function RequirementsPage() {
 
   const exportRequirements = (scope: 'selected' | 'filtered') => {
     const rows = scope === 'selected' ? selectedBulkRequirements : filteredRequirements;
-    exportCsv(`vygilence-requirements-${scope}-export-${exportDateStamp()}.csv`, requirementExportRows(rows));
+    setConfirmRequest({
+      title: 'Export Requirements?',
+      description: `You are about to export ${rows.length} requirement record${rows.length === 1 ? '' : 's'} as a CSV file. Do you want to download this data?`,
+      confirmLabel: 'Export CSV',
+      tone: 'primary',
+      onConfirm: () => {
+        try {
+          exportCsv(`vygilence-requirements-${scope}-export-${exportDateStamp()}.csv`, requirementExportRows(rows));
+          setToast({ type: 'success', message: 'Requirements exported successfully.' });
+        } catch (e) {
+          setToast({ type: 'error', message: 'Failed to export requirements.' });
+        }
+      }
+    });
   };
 
   const exportActions = (scope: 'selected' | 'filtered') => {
     const rows = scope === 'selected' ? selectedBulkActions : filteredActions;
-    exportCsv(`vygilence-actions-${scope}-export-${exportDateStamp()}.csv`, actionExportRows(rows));
+    setConfirmRequest({
+      title: 'Export Actions?',
+      description: `You are about to export ${rows.length} action record${rows.length === 1 ? '' : 's'} as a CSV file. Do you want to download this data?`,
+      confirmLabel: 'Export CSV',
+      tone: 'primary',
+      onConfirm: () => {
+        try {
+          exportCsv(`vygilence-actions-${scope}-export-${exportDateStamp()}.csv`, actionExportRows(rows));
+          setToast({ type: 'success', message: 'Actions exported successfully.' });
+        } catch (e) {
+          setToast({ type: 'error', message: 'Failed to export actions.' });
+        }
+      }
+    });
   };
 
   const filterChips = useMemo(() => {
@@ -2653,6 +2682,8 @@ export default function RequirementsPage() {
         onFindDuplicates={findPossibleDuplicateDocuments}
       />
       <FavouritesConfirmModal />
+      <ConfirmDialog request={confirmRequest} onCancel={() => setConfirmRequest(null)} />
+      <InlineToast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }
