@@ -10,7 +10,18 @@ import {
   AlertTriangle,
   ChevronLeft,
   X,
-  ExternalLink
+  ExternalLink,
+  Search,
+  Calendar,
+  CheckCircle2,
+  Lock,
+  Building2,
+  FileSpreadsheet,
+  Briefcase,
+  FileText,
+  Activity,
+  SlidersHorizontal,
+  Bookmark
 } from 'lucide-react';
 import {
   CompetencyRecord,
@@ -39,9 +50,16 @@ export default function ReportDetailPage() {
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(10);
   const [sortBy, setSortBy] = useState<string>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  // Custom workspace options
+  const [searchQuery, setSearchQuery] = useState('');
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({});
+  const [showColumnDropdown, setShowColumnDropdown] = useState(false);
+  const [generatedAt, setGeneratedAt] = useState('');
+  const [overdueFilter, setOverdueFilter] = useState('All');
 
   // Helper to find linked requirement risk
   const getLinkedRequirementRisk = useCallback((actionId: string) => {
@@ -58,20 +76,36 @@ export default function ReportDetailPage() {
   const [ownerFilter, setOwnerFilter] = useState<string>('All');
   const [riskFilter, setRiskFilter] = useState<string>('All');
 
+  // Visible columns defaults mapping
+  const defaultVisibleColumns = useMemo<Record<string, Record<string, boolean>>>(() => ({
+    Requirements: { category: true, status: true, risk: true, owner: true },
+    Evidence: { category: true, status: true, expiry: true, uploaded_by: true },
+    Competencies: { title: true, category: true, status: true, expiry: true },
+    Actions: { risk: true, status: true, owner: true, due_date: true },
+    Audits: { status: true, requirements: true, documents: true }
+  }), []);
+
   // Fetch initial params on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const requestedSource = params.get('source') || '';
       const supportedSources = ['Requirements', 'Evidence', 'Competencies', 'Actions', 'Audits'];
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSource(supportedSources.includes(requestedSource) ? requestedSource : 'Unsupported');
+      const resolvedSource = supportedSources.includes(requestedSource) ? requestedSource : 'Unsupported';
+
+      setSource(resolvedSource);
       setStatusFilter(params.get('status') || 'All');
       setCategoryFilter(params.get('category') || 'All');
       setOwnerFilter(params.get('owner') || 'All');
       setRiskFilter(params.get('risk') || 'All');
+      setOverdueFilter(params.get('overdue') || 'All');
+      setGeneratedAt(new Date().toLocaleString());
+
+      if (resolvedSource && defaultVisibleColumns[resolvedSource]) {
+        setVisibleColumns(defaultVisibleColumns[resolvedSource]);
+      }
     }
-  }, []);
+  }, [defaultVisibleColumns]);
 
   // Back tab tracking (decides which parent reports tab to open when clicking Back)
   const parentTab = useMemo(() => {
@@ -98,7 +132,7 @@ export default function ReportDetailPage() {
         if (categoryFilter !== 'All' && r.category !== categoryFilter) return false;
         if (ownerFilter !== 'All' && r.owner !== ownerFilter) return false;
         if (riskFilter !== 'All' && r.risk_level !== riskFilter) return false;
-        
+
         const readiness = readinessByRequirementId.get(r.id);
         if (statusFilter !== 'All' && readiness?.status !== statusFilter) return false;
         return true;
@@ -124,7 +158,7 @@ export default function ReportDetailPage() {
         competencyTypes.filter(t => t.active).forEach(type => {
           const rec = recordsByCell.get(`${person.id}:${type.id}`) || null;
           const status = calculateCompetencyStatus(rec);
-          
+
           if (categoryFilter !== 'All' && type.category !== categoryFilter) return;
           if (statusFilter !== 'All' && status !== statusFilter) return;
           if (ownerFilter !== 'All' && person.display_name !== ownerFilter) return;
@@ -140,6 +174,11 @@ export default function ReportDetailPage() {
         if (ownerFilter !== 'All' && a.owner !== ownerFilter) return false;
         if (statusFilter !== 'All' && a.status !== statusFilter) return false;
         if (riskFilter !== 'All' && getLinkedRequirementRisk(a.id) !== riskFilter) return false;
+        if (overdueFilter === 'true') {
+          const now = new Date();
+          const isOverdue = a.status !== 'Complete' && a.status !== 'Cancelled' && a.due_date && new Date(a.due_date) < now;
+          if (!isOverdue) return false;
+        }
         return true;
       });
     }
@@ -152,11 +191,35 @@ export default function ReportDetailPage() {
     }
 
     return [];
-  }, [source, frameworkRequirements, documents, competencyRecords, competencyTypes, people, actions, auditPacks, categoryFilter, ownerFilter, riskFilter, statusFilter, readinessByRequirementId, getLinkedRequirementRisk]);
+  }, [source, frameworkRequirements, documents, competencyRecords, competencyTypes, people, actions, auditPacks, categoryFilter, ownerFilter, riskFilter, statusFilter, overdueFilter, readinessByRequirementId, getLinkedRequirementRisk]);
+
+  // Search filter
+  const searchedRecords = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return records;
+    return records.filter((item: any) => {
+      if (source === 'Requirements') {
+        return (item.title || '').toLowerCase().includes(q) || (item.category || '').toLowerCase().includes(q) || (item.owner || '').toLowerCase().includes(q);
+      }
+      if (source === 'Evidence') {
+        return (item.title || '').toLowerCase().includes(q) || (item.category || '').toLowerCase().includes(q) || (item.uploaded_by || '').toLowerCase().includes(q);
+      }
+      if (source === 'Competencies') {
+        return (item.person?.display_name || '').toLowerCase().includes(q) || (item.type?.title || '').toLowerCase().includes(q) || (item.type?.category || '').toLowerCase().includes(q);
+      }
+      if (source === 'Actions') {
+        return (item.description || '').toLowerCase().includes(q) || (item.owner || '').toLowerCase().includes(q);
+      }
+      if (source === 'Audits') {
+        return (item.name || '').toLowerCase().includes(q) || (item.status || '').toLowerCase().includes(q);
+      }
+      return false;
+    });
+  }, [records, searchQuery, source]);
 
   // Sort records
   const sortedRecords = useMemo(() => {
-    const list = [...records];
+    const list = [...searchedRecords];
     list.sort((a: any, b: any) => {
       let valA: any = '';
       let valB: any = '';
@@ -188,7 +251,7 @@ export default function ReportDetailPage() {
       return 0;
     });
     return list;
-  }, [records, sortBy, sortOrder, source, readinessByRequirementId, getLinkedRequirementRisk]);
+  }, [searchedRecords, sortBy, sortOrder, source, readinessByRequirementId, getLinkedRequirementRisk]);
 
   // Paginated records
   const paginatedRecords = useMemo(() => {
@@ -198,6 +261,59 @@ export default function ReportDetailPage() {
 
   const totalPages = Math.ceil(sortedRecords.length / pageSize) || 1;
   const isSupportedSource = ['Requirements', 'Evidence', 'Competencies', 'Actions', 'Audits'].includes(source);
+
+  const metricsSummary = useMemo(() => {
+    if (source === 'Requirements') {
+      const list = sortedRecords as any[];
+      const total = list.length;
+      const compliant = list.filter(r => (readinessByRequirementId.get(r.id)?.status || 'GREY') === 'GREEN').length;
+      const warning = list.filter(r => (readinessByRequirementId.get(r.id)?.status || 'GREY') === 'AMBER').length;
+      const gaps = list.filter(r => (readinessByRequirementId.get(r.id)?.status || 'GREY') === 'RED').length;
+      return { total, compliant, warning, gaps };
+    }
+    if (source === 'Evidence') {
+      const list = sortedRecords as any[];
+      const total = list.length;
+      const active = list.filter(d => d.status === 'Active').length;
+      const expiring = list.filter(d => d.status === 'Expiring Soon').length;
+      const expired = list.filter(d => d.status === 'Expired').length;
+      return { total, active, expiring, expired };
+    }
+    if (source === 'Competencies') {
+      const list = sortedRecords as any[];
+      const total = list.length;
+      const valid = list.filter(c => c.status === 'Valid').length;
+      const expiring = list.filter(c => c.status === 'Expiring Soon').length;
+      const expired = list.filter(c => c.status === 'Expired' || c.status === 'Missing').length;
+      return { total, valid, expiring, expired };
+    }
+    if (source === 'Actions') {
+      const list = sortedRecords as any[];
+      const total = list.length;
+      const completed = list.filter(a => a.status === 'Complete').length;
+      const progress = list.filter(a => a.status === 'In Progress').length;
+      const open = list.filter(a => a.status === 'Open').length;
+      return { total, completed, progress, open };
+    }
+    if (source === 'Audits') {
+      const list = sortedRecords as any[];
+      const total = list.length;
+      const ready = list.filter(p => p.status === 'Ready').length;
+      const draft = list.filter(p => p.status === 'Draft').length;
+      const sent = list.filter(p => p.status === 'Sent').length;
+      return { total, ready, draft, sent };
+    }
+    return null;
+  }, [source, sortedRecords, readinessByRequirementId]);
+
+  const sourceModuleUrl = useMemo(() => {
+    if (source === 'Requirements') return '/dashboard/requirements';
+    if (source === 'Evidence') return '/dashboard/vault';
+    if (source === 'Competencies') return '/dashboard/competencies';
+    if (source === 'Actions') return '/dashboard/requirements?filter=actions';
+    if (source === 'Audits') return '/dashboard/audit-packs';
+    return '';
+  }, [source]);
 
   const handleSort = (field: string) => {
     if (sortBy === field) {
@@ -324,7 +440,7 @@ export default function ReportDetailPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 md:p-6 print:p-0">
       {/* Breadcrumb */}
-      <div className="flex items-center justify-between border-b border-border/60 pb-4 print:hidden">
+      <div className="flex flex-wrap items-center justify-between border-b border-border/60 pb-4 print:hidden gap-4">
         <button
           onClick={() => router.push(`/dashboard/reports?tab=${parentTab}`)}
           className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground cursor-pointer transition-all"
@@ -332,6 +448,14 @@ export default function ReportDetailPage() {
           <ChevronLeft className="w-4 h-4" /> Back to Reports
         </button>
         <div className="flex items-center gap-2">
+          {sourceModuleUrl && (
+            <Link
+              href={sourceModuleUrl}
+              className="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-650 dark:text-indigo-400 font-bold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer"
+            >
+              Open source module <ExternalLink className="w-3.5 h-3.5" />
+            </Link>
+          )}
           <button
             onClick={handleExportDetailCSV}
             disabled={!isSupportedSource}
@@ -351,18 +475,25 @@ export default function ReportDetailPage() {
 
       {/* Report Summary Card */}
       <div className="bg-card border border-border p-6 rounded-2xl shadow-xs space-y-4">
-        <div>
-          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
-            {organization?.name || 'Workspace'} | Detail Inspector
-          </span>
-          <h1 className="text-2xl font-black text-foreground tracking-tight mt-1">
-            {isSupportedSource ? source : 'Unavailable'} Readiness Report
-          </h1>
-          <p className="text-xs text-muted-foreground mt-1">
-            {isSupportedSource
-              ? 'Detailed breakdown of records matching the selected readiness and operational filters.'
-              : 'This report source is missing, invalid, or unavailable to this route.'}
-          </p>
+        <div className="flex flex-wrap justify-between items-start gap-4">
+          <div>
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
+              {organization?.name || 'Workspace'} | Detail Inspector
+            </span>
+            <h1 className="text-2xl font-black text-foreground tracking-tight mt-1">
+              {isSupportedSource ? source : 'Unavailable'} Readiness Report
+            </h1>
+            <p className="text-xs text-muted-foreground mt-1">
+              {isSupportedSource
+                ? 'Detailed breakdown of records matching the selected readiness and operational filters.'
+                : 'This report source is missing, invalid, or unavailable to this route.'}
+            </p>
+            {generatedAt && (
+              <span className="text-[10px] text-muted-foreground font-semibold block mt-1">
+                Generated: {generatedAt}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Filter Badges Summary */}
@@ -391,13 +522,20 @@ export default function ReportDetailPage() {
               <X className="w-3.5 h-3.5 cursor-pointer" onClick={() => setRiskFilter('All')} />
             </span>
           )}
-          {(statusFilter !== 'All' || categoryFilter !== 'All' || ownerFilter !== 'All' || riskFilter !== 'All') && (
+          {overdueFilter !== 'All' && (
+            <span className="px-2.5 py-1 bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-bold rounded-lg flex items-center gap-1">
+              Overdue: {overdueFilter}
+              <X className="w-3.5 h-3.5 cursor-pointer" onClick={() => setOverdueFilter('All')} />
+            </span>
+          )}
+          {(statusFilter !== 'All' || categoryFilter !== 'All' || ownerFilter !== 'All' || riskFilter !== 'All' || overdueFilter !== 'All') && (
             <button
               onClick={() => {
                 setStatusFilter('All');
                 setCategoryFilter('All');
                 setOwnerFilter('All');
                 setRiskFilter('All');
+                setOverdueFilter('All');
               }}
               className="text-xs text-indigo-650 dark:text-indigo-400 hover:underline font-bold"
             >
@@ -405,6 +543,160 @@ export default function ReportDetailPage() {
             </button>
           )}
         </div>
+
+        {/* KPI Summaries Block */}
+        {isSupportedSource && metricsSummary && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-border/40">
+            {source === 'Requirements' && (
+              <>
+                <div className="bg-muted/30 p-3 rounded-xl border border-border/40">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase block">Total Requirements</span>
+                  <span className="text-lg font-black text-foreground">{metricsSummary.total}</span>
+                </div>
+                <div className="bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10">
+                  <span className="text-[10px] font-bold text-emerald-600 block">Compliant</span>
+                  <span className="text-lg font-black text-emerald-600">{metricsSummary.compliant}</span>
+                </div>
+                <div className="bg-amber-500/5 p-3 rounded-xl border border-amber-500/10">
+                  <span className="text-[10px] font-bold text-amber-600 block">Warning</span>
+                  <span className="text-lg font-black text-amber-600">{metricsSummary.warning}</span>
+                </div>
+                <div className="bg-rose-500/5 p-3 rounded-xl border border-rose-500/10">
+                  <span className="text-[10px] font-bold text-rose-600 block">Gaps</span>
+                  <span className="text-lg font-black text-rose-600">{metricsSummary.gaps}</span>
+                </div>
+              </>
+            )}
+            {source === 'Evidence' && (
+              <>
+                <div className="bg-muted/30 p-3 rounded-xl border border-border/40">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase block">Total Evidence</span>
+                  <span className="text-lg font-black text-foreground">{metricsSummary.total}</span>
+                </div>
+                <div className="bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10">
+                  <span className="text-[10px] font-bold text-emerald-600 block">Active</span>
+                  <span className="text-lg font-black text-emerald-600">{metricsSummary.active}</span>
+                </div>
+                <div className="bg-amber-500/5 p-3 rounded-xl border border-amber-500/10">
+                  <span className="text-[10px] font-bold text-amber-600 block">Expiring Soon</span>
+                  <span className="text-lg font-black text-amber-600">{metricsSummary.expiring}</span>
+                </div>
+                <div className="bg-rose-500/5 p-3 rounded-xl border border-rose-500/10">
+                  <span className="text-[10px] font-bold text-rose-600 block">Expired</span>
+                  <span className="text-lg font-black text-rose-600">{metricsSummary.expired}</span>
+                </div>
+              </>
+            )}
+            {source === 'Competencies' && (
+              <>
+                <div className="bg-muted/30 p-3 rounded-xl border border-border/40">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase block">Total Gaps Checked</span>
+                  <span className="text-lg font-black text-foreground">{metricsSummary.total}</span>
+                </div>
+                <div className="bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10">
+                  <span className="text-[10px] font-bold text-emerald-600 block">Valid</span>
+                  <span className="text-lg font-black text-emerald-600">{metricsSummary.valid}</span>
+                </div>
+                <div className="bg-amber-500/5 p-3 rounded-xl border border-amber-500/10">
+                  <span className="text-[10px] font-bold text-amber-600 block">Expiring Soon</span>
+                  <span className="text-lg font-black text-amber-600">{metricsSummary.expiring}</span>
+                </div>
+                <div className="bg-rose-500/5 p-3 rounded-xl border border-rose-500/10">
+                  <span className="text-[10px] font-bold text-rose-600 block">Expired / Gaps</span>
+                  <span className="text-lg font-black text-rose-600">{metricsSummary.expired}</span>
+                </div>
+              </>
+            )}
+            {source === 'Actions' && (
+              <>
+                <div className="bg-muted/30 p-3 rounded-xl border border-border/40">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase block">Total Actions</span>
+                  <span className="text-lg font-black text-foreground">{metricsSummary.total}</span>
+                </div>
+                <div className="bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10">
+                  <span className="text-[10px] font-bold text-emerald-600 block">Completed</span>
+                  <span className="text-lg font-black text-emerald-600">{metricsSummary.completed}</span>
+                </div>
+                <div className="bg-amber-500/5 p-3 rounded-xl border border-amber-500/10">
+                  <span className="text-[10px] font-bold text-amber-600 block">In Progress</span>
+                  <span className="text-lg font-black text-amber-600">{metricsSummary.progress}</span>
+                </div>
+                <div className="bg-rose-500/5 p-3 rounded-xl border border-rose-500/10">
+                  <span className="text-[10px] font-bold text-rose-600 block">Open</span>
+                  <span className="text-lg font-black text-rose-600">{metricsSummary.open}</span>
+                </div>
+              </>
+            )}
+            {source === 'Audits' && (
+              <>
+                <div className="bg-muted/30 p-3 rounded-xl border border-border/40">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase block">Total Packs</span>
+                  <span className="text-lg font-black text-foreground">{metricsSummary.total}</span>
+                </div>
+                <div className="bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10">
+                  <span className="text-[10px] font-bold text-emerald-600 block">Ready</span>
+                  <span className="text-lg font-black text-emerald-600">{metricsSummary.ready}</span>
+                </div>
+                <div className="bg-amber-500/5 p-3 rounded-xl border border-amber-500/10">
+                  <span className="text-[10px] font-bold text-amber-600 block">Draft</span>
+                  <span className="text-lg font-black text-amber-600">{metricsSummary.draft}</span>
+                </div>
+                <div className="bg-indigo-500/5 p-3 rounded-xl border border-indigo-500/10">
+                  <span className="text-[10px] font-bold text-indigo-650 dark:text-indigo-400 block">Sent</span>
+                  <span className="text-lg font-black text-indigo-650 dark:text-indigo-400">{metricsSummary.sent}</span>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Progress bar visual */}
+        {isSupportedSource && metricsSummary && (
+          <div className="pt-2">
+            <span className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Status Proportions</span>
+            <div className="h-2 w-full rounded-full bg-muted overflow-hidden flex">
+              {(() => {
+                const summary = metricsSummary as any;
+                const total = summary.total || 1;
+                let segments: Array<{ color: string; pct: number }> = [];
+                if (source === 'Requirements') {
+                  segments = [
+                    { color: 'bg-emerald-500', pct: (summary.compliant / total) * 100 },
+                    { color: 'bg-amber-500', pct: (summary.warning / total) * 100 },
+                    { color: 'bg-rose-500', pct: (summary.gaps / total) * 100 }
+                  ];
+                } else if (source === 'Evidence') {
+                  segments = [
+                    { color: 'bg-emerald-500', pct: (summary.active / total) * 100 },
+                    { color: 'bg-amber-500', pct: (summary.expiring / total) * 100 },
+                    { color: 'bg-rose-500', pct: (summary.expired / total) * 100 }
+                  ];
+                } else if (source === 'Competencies') {
+                  segments = [
+                    { color: 'bg-emerald-500', pct: (summary.valid / total) * 100 },
+                    { color: 'bg-amber-500', pct: (summary.expiring / total) * 100 },
+                    { color: 'bg-rose-500', pct: (summary.expired / total) * 100 }
+                  ];
+                } else if (source === 'Actions') {
+                  segments = [
+                    { color: 'bg-emerald-500', pct: (summary.completed / total) * 100 },
+                    { color: 'bg-amber-500', pct: (summary.progress / total) * 100 },
+                    { color: 'bg-rose-500', pct: (summary.open / total) * 100 }
+                  ];
+                } else if (source === 'Audits') {
+                  segments = [
+                    { color: 'bg-emerald-500', pct: (summary.ready / total) * 100 },
+                    { color: 'bg-amber-500', pct: (summary.draft / total) * 100 },
+                    { color: 'bg-indigo-550', pct: (summary.sent / total) * 100 }
+                  ];
+                }
+                return segments.map((seg, idx) => (
+                  <div key={idx} className={`${seg.color} h-full`} style={{ width: `${seg.pct}%` }} />
+                ));
+              })()}
+            </div>
+          </div>
+        )}
       </div>
 
       {!isSupportedSource && (
@@ -415,253 +707,334 @@ export default function ReportDetailPage() {
         </div>
       )}
 
-      {/* Detail Table */}
+      {/* Detail Table Container */}
       {isSupportedSource && (
-      <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-xs">
-        <div className="p-4 border-b border-border/60 flex justify-between items-center bg-muted/20">
-          <span className="text-xs font-bold text-foreground">
-            Matching records: <span className="text-indigo-650 dark:text-indigo-400">{sortedRecords.length} total</span>
-          </span>
-          <span className="text-[10px] text-muted-foreground font-bold">
-            Sorted by: {sortBy} ({sortOrder})
-          </span>
-        </div>
+        <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-xs">
+          {/* Custom controls row above table header */}
+          <div className="p-4 border-b border-border/60 flex flex-wrap gap-4 items-center justify-between bg-muted/20 print:hidden text-xs">
+            <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search matching records..."
+                  value={searchQuery}
+                  onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                  className="w-full pl-9 pr-4 py-2 bg-muted rounded-xl border border-border outline-none text-xs text-foreground"
+                />
+              </div>
+            </div>
 
-        <div className="overflow-x-auto">
-          {source === 'Requirements' && (
-            <table className="min-w-full text-xs text-left border-collapse">
-              <thead>
-                <tr className="bg-muted/50 border-b border-border/80 text-muted-foreground uppercase font-bold text-[9px] tracking-wider">
-                  <th className="p-3 cursor-pointer hover:bg-muted/80" onClick={() => handleSort('name')}>Requirement Title</th>
-                  <th className="p-3 cursor-pointer hover:bg-muted/80" onClick={() => handleSort('category')}>Category</th>
-                  <th className="p-3 cursor-pointer hover:bg-muted/80 text-center" onClick={() => handleSort('status')}>RAG Status</th>
-                  <th className="p-3 cursor-pointer hover:bg-muted/80 text-center" onClick={() => handleSort('risk')}>Risk Level</th>
-                  <th className="p-3">Owner</th>
-                  <th className="p-3 text-center print:hidden">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
-                {paginatedRecords.map((r: any) => {
-                  const status = readinessByRequirementId.get(r.id)?.status || 'GREY';
-                  return (
-                    <tr key={r.id} className="hover:bg-muted/10">
-                      <td className="p-3 font-bold text-foreground truncate max-w-xs">{r.title}</td>
-                      <td className="p-3 text-muted-foreground font-semibold">{r.category}</td>
-                      <td className="p-3 text-center">
-                        <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase border ${
-                          status === 'GREEN' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' :
-                          status === 'AMBER' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
-                          status === 'RED' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' :
-                          'bg-zinc-500/10 border-zinc-500/20 text-zinc-500'
-                        }`}>
-                          {status === 'GREEN' ? 'Compliant' : status === 'AMBER' ? 'Warning' : status === 'RED' ? 'Gap' : 'Excluded'}
-                        </span>
-                      </td>
-                      <td className="p-3 text-center font-bold">{r.risk_level || 'Low'}</td>
-                      <td className="p-3 text-muted-foreground">{r.owner || 'Unassigned'}</td>
+            <div className="flex items-center gap-4">
+              {/* Page Size Select */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-muted-foreground font-bold">Page Size:</span>
+                <select
+                  value={pageSize}
+                  onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+                  className="px-2.5 py-1.5 bg-muted rounded-lg border border-border font-bold outline-none cursor-pointer text-foreground"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+
+              {/* Column Visibility Selector */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowColumnDropdown(!showColumnDropdown)}
+                  className="px-3 py-1.5 bg-muted hover:bg-muted/80 text-foreground font-bold rounded-lg border border-border flex items-center gap-1.5 cursor-pointer"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" /> Columns
+                </button>
+
+                {showColumnDropdown && (
+                  <div className="absolute right-0 mt-2 w-48 bg-card border border-border rounded-xl shadow-lg p-3 z-40 space-y-2">
+                    <div className="flex justify-between items-center pb-1.5 border-b border-border/40">
+                      <span className="font-extrabold text-[10px] uppercase text-muted-foreground tracking-wider">Visible Columns</span>
+                      <button onClick={() => setShowColumnDropdown(false)} className="text-muted-foreground hover:text-foreground">✕</button>
+                    </div>
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {Object.keys(visibleColumns).map(colKey => (
+                        <label key={colKey} className="flex items-center gap-2 font-semibold text-xs cursor-pointer select-none text-foreground hover:text-indigo-650">
+                          <input
+                            type="checkbox"
+                            checked={visibleColumns[colKey] !== false}
+                            onChange={e => {
+                              setVisibleColumns(prev => ({
+                                ...prev,
+                                [colKey]: e.target.checked
+                              }));
+                            }}
+                            className="rounded border-border text-indigo-650 focus:ring-0 cursor-pointer"
+                          />
+                          <span className="capitalize">{colKey.replace('_', ' ')}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 border-b border-border/60 flex justify-between items-center bg-muted/5 text-xs">
+            <span className="font-bold text-foreground">
+              Matching records: <span className="text-indigo-650 dark:text-indigo-400">{sortedRecords.length} total</span>
+            </span>
+            <span className="text-[10px] text-muted-foreground font-bold">
+              Sorted by: {sortBy} ({sortOrder})
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            {source === 'Requirements' && (
+              <table className="min-w-full text-xs text-left border-collapse">
+                <thead>
+                  <tr className="bg-muted/50 border-b border-border/80 text-muted-foreground uppercase font-bold text-[9px] tracking-wider">
+                    {visibleColumns.title !== false && <th className="p-3 cursor-pointer hover:bg-muted/80" onClick={() => handleSort('name')}>Requirement Title</th>}
+                    {visibleColumns.category !== false && <th className="p-3 cursor-pointer hover:bg-muted/80" onClick={() => handleSort('category')}>Category</th>}
+                    {visibleColumns.status !== false && <th className="p-3 cursor-pointer hover:bg-muted/80 text-center" onClick={() => handleSort('status')}>RAG Status</th>}
+                    {visibleColumns.risk !== false && <th className="p-3 cursor-pointer hover:bg-muted/80 text-center" onClick={() => handleSort('risk')}>Risk Level</th>}
+                    {visibleColumns.owner !== false && <th className="p-3">Owner</th>}
+                    <th className="p-3 text-center print:hidden">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {paginatedRecords.map((r: any) => {
+                    const status = readinessByRequirementId.get(r.id)?.status || 'GREY';
+                    return (
+                      <tr key={r.id} className="hover:bg-muted/10">
+                        {visibleColumns.title !== false && <td className="p-3 font-bold text-foreground truncate max-w-xs">{r.title}</td>}
+                        {visibleColumns.category !== false && <td className="p-3 text-muted-foreground font-semibold">{r.category}</td>}
+                        {visibleColumns.status !== false && (
+                          <td className="p-3 text-center">
+                            <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase border ${
+                              status === 'GREEN' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-650' :
+                              status === 'AMBER' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
+                              status === 'RED' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' :
+                              'bg-zinc-500/10 border-zinc-500/20 text-zinc-500'
+                            }`}>
+                              {status === 'GREEN' ? 'Compliant' : status === 'AMBER' ? 'Warning' : status === 'RED' ? 'Gap' : 'Excluded'}
+                            </span>
+                          </td>
+                        )}
+                        {visibleColumns.risk !== false && <td className="p-3 text-center font-bold">{r.risk_level || 'Low'}</td>}
+                        {visibleColumns.owner !== false && <td className="p-3 text-muted-foreground">{r.owner || 'Unassigned'}</td>}
+                        <td className="p-3 text-center print:hidden">
+                          <Link href={`/dashboard/requirements?id=${r.id}`} className="text-indigo-650 hover:underline flex items-center justify-center gap-1 font-bold">
+                            Inspect <ExternalLink className="w-3 h-3" />
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+
+            {source === 'Evidence' && (
+              <table className="min-w-full text-xs text-left border-collapse">
+                <thead>
+                  <tr className="bg-muted/50 border-b border-border/80 text-muted-foreground uppercase font-bold text-[9px] tracking-wider">
+                    {visibleColumns.title !== false && <th className="p-3 cursor-pointer hover:bg-muted/80" onClick={() => handleSort('name')}>File Name</th>}
+                    {visibleColumns.category !== false && <th className="p-3 cursor-pointer hover:bg-muted/80" onClick={() => handleSort('category')}>Category</th>}
+                    {visibleColumns.status !== false && <th className="p-3 cursor-pointer hover:bg-muted/80 text-center" onClick={() => handleSort('status')}>Status</th>}
+                    {visibleColumns.expiry !== false && <th className="p-3">Expiry Date</th>}
+                    {visibleColumns.uploaded_by !== false && <th className="p-3">Uploaded By</th>}
+                    <th className="p-3 text-center print:hidden">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {paginatedRecords.map((d: any) => (
+                    <tr key={d.id} className="hover:bg-muted/10">
+                      {visibleColumns.title !== false && <td className="p-3 font-bold text-foreground truncate max-w-xs">{d.title}</td>}
+                      {visibleColumns.category !== false && <td className="p-3 text-muted-foreground font-semibold">{d.category}</td>}
+                      {visibleColumns.status !== false && (
+                        <td className="p-3 text-center">
+                          <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase border ${
+                            d.status === 'Active' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-650' :
+                            d.status === 'Expiring Soon' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
+                            d.status === 'Expired' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' :
+                            'bg-zinc-500/10 border-zinc-500/20 text-zinc-500'
+                          }`}>
+                            {d.status}
+                          </span>
+                        </td>
+                      )}
+                      {visibleColumns.expiry !== false && <td className="p-3 text-muted-foreground">{d.expiry_date ? new Date(d.expiry_date).toLocaleDateString() : 'No expiry'}</td>}
+                      {visibleColumns.uploaded_by !== false && <td className="p-3 text-muted-foreground">{d.uploaded_by || 'Unknown'}</td>}
                       <td className="p-3 text-center print:hidden">
-                        <Link href={`/dashboard/requirements?id=${r.id}`} className="text-indigo-650 hover:underline flex items-center justify-center gap-1 font-bold">
+                        <Link href={`/dashboard/vault?id=${d.id}`} className="text-indigo-650 hover:underline flex items-center justify-center gap-1 font-bold">
                           Inspect <ExternalLink className="w-3 h-3" />
                         </Link>
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {source === 'Competencies' && (
+              <table className="min-w-full text-xs text-left border-collapse">
+                <thead>
+                  <tr className="bg-muted/50 border-b border-border/80 text-muted-foreground uppercase font-bold text-[9px] tracking-wider">
+                    {visibleColumns.name !== false && <th className="p-3 cursor-pointer hover:bg-muted/80" onClick={() => handleSort('name')}>Teammate Name</th>}
+                    {visibleColumns.title !== false && <th className="p-3">Competency Title</th>}
+                    {visibleColumns.category !== false && <th className="p-3 cursor-pointer hover:bg-muted/80" onClick={() => handleSort('category')}>Category</th>}
+                    {visibleColumns.status !== false && <th className="p-3 cursor-pointer hover:bg-muted/80 text-center" onClick={() => handleSort('status')}>Status</th>}
+                    {visibleColumns.expiry !== false && <th className="p-3">Expiry Date</th>}
+                    <th className="p-3 text-center print:hidden">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {paginatedRecords.map((c: any, idx: number) => (
+                    <tr key={idx} className="hover:bg-muted/10">
+                      {visibleColumns.name !== false && <td className="p-3 font-bold text-foreground">{c.person.display_name}</td>}
+                      {visibleColumns.title !== false && <td className="p-3 text-muted-foreground font-semibold">{c.type.title}</td>}
+                      {visibleColumns.category !== false && <td className="p-3 text-muted-foreground">{c.type.category}</td>}
+                      {visibleColumns.status !== false && (
+                        <td className="p-3 text-center">
+                          <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase border ${
+                            c.status === 'Valid' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-650' :
+                            c.status === 'Expiring Soon' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
+                            c.status === 'Expired' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' :
+                            'bg-zinc-500/10 border-zinc-500/20 text-zinc-500'
+                          }`}>
+                            {c.status}
+                          </span>
+                        </td>
+                      )}
+                      {visibleColumns.expiry !== false && <td className="p-3 text-muted-foreground">{c.record?.expiry_date ? new Date(c.record.expiry_date).toLocaleDateString() : 'N/A'}</td>}
+                      <td className="p-3 text-center print:hidden">
+                        <Link href={`/dashboard/competencies?id=${c.person.id}`} className="text-indigo-650 hover:underline flex items-center justify-center gap-1 font-bold">
+                          Inspect <ExternalLink className="w-3 h-3" />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {source === 'Actions' && (
+              <table className="min-w-full text-xs text-left border-collapse">
+                <thead>
+                  <tr className="bg-muted/50 border-b border-border/80 text-muted-foreground uppercase font-bold text-[9px] tracking-wider">
+                    {visibleColumns.description !== false && <th className="p-3 cursor-pointer hover:bg-muted/80" onClick={() => handleSort('name')}>Action Description</th>}
+                    {visibleColumns.risk !== false && <th className="p-3 cursor-pointer hover:bg-muted/80 text-center" onClick={() => handleSort('risk')}>Linked Requirement Risk</th>}
+                    {visibleColumns.status !== false && <th className="p-3 cursor-pointer hover:bg-muted/80 text-center" onClick={() => handleSort('status')}>Status</th>}
+                    {visibleColumns.owner !== false && <th className="p-3">Owner</th>}
+                    {visibleColumns.due_date !== false && <th className="p-3">Due Date</th>}
+                    <th className="p-3 text-center print:hidden">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {paginatedRecords.map((a: any) => (
+                    <tr key={a.id} className="hover:bg-muted/10">
+                      {visibleColumns.description !== false && <td className="p-3 font-bold text-foreground truncate max-w-xs">{a.description}</td>}
+                      {visibleColumns.risk !== false && <td className="p-3 text-center font-semibold text-muted-foreground">{getLinkedRequirementRisk(a.id)}</td>}
+                      {visibleColumns.status !== false && (
+                        <td className="p-3 text-center">
+                          <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase border ${
+                            a.status === 'Complete' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-650' :
+                            a.status === 'In Progress' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
+                            a.status === 'Open' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' :
+                            'bg-zinc-500/10 border-zinc-500/20 text-zinc-500'
+                          }`}>
+                            {a.status}
+                          </span>
+                        </td>
+                      )}
+                      {visibleColumns.owner !== false && <td className="p-3 text-muted-foreground">{a.owner || 'Unassigned'}</td>}
+                      {visibleColumns.due_date !== false && <td className="p-3 text-muted-foreground">{a.target_due_date || a.due_date ? new Date(a.target_due_date || a.due_date).toLocaleDateString() : 'N/A'}</td>}
+                      <td className="p-3 text-center print:hidden">
+                        <Link href={`/dashboard/requirements?filter=actions&actionId=${a.id}`} className="text-indigo-650 hover:underline flex items-center justify-center gap-1 font-bold">
+                          Inspect <ExternalLink className="w-3 h-3" />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {source === 'Audits' && (
+              <table className="min-w-full text-xs text-left border-collapse">
+                <thead>
+                  <tr className="bg-muted/50 border-b border-border/80 text-muted-foreground uppercase font-bold text-[9px] tracking-wider">
+                    {visibleColumns.name !== false && <th className="p-3 cursor-pointer hover:bg-muted/80" onClick={() => handleSort('name')}>Pack Name</th>}
+                    {visibleColumns.status !== false && <th className="p-3 cursor-pointer hover:bg-muted/80 text-center" onClick={() => handleSort('status')}>Status</th>}
+                    {visibleColumns.requirements !== false && <th className="p-3 text-center">Requirements</th>}
+                    {visibleColumns.documents !== false && <th className="p-3 text-center">Documents</th>}
+                    <th className="p-3 text-center print:hidden">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {paginatedRecords.map((p: any) => (
+                    <tr key={p.id} className="hover:bg-muted/10">
+                      {visibleColumns.name !== false && <td className="p-3 font-bold text-foreground">{p.name}</td>}
+                      {visibleColumns.status !== false && (
+                        <td className="p-3 text-center">
+                          <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase border ${
+                            p.status === 'Ready' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-650' :
+                            p.status === 'Draft' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
+                            p.status === 'Sent' ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-650' :
+                            'bg-zinc-500/10 border-zinc-500/20 text-zinc-500'
+                          }`}>
+                            {p.status}
+                          </span>
+                        </td>
+                      )}
+                      {visibleColumns.requirements !== false && <td className="p-3 text-center text-muted-foreground font-semibold">{(p.requirements || []).length}</td>}
+                      {visibleColumns.documents !== false && <td className="p-3 text-center text-muted-foreground font-semibold">{(p.documents || []).length}</td>}
+                      <td className="p-3 text-center print:hidden">
+                        <Link href={`/dashboard/audit-packs`} className="text-indigo-650 hover:underline flex items-center justify-center gap-1 font-bold">
+                          Inspect <ExternalLink className="w-3 h-3" />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Empty State */}
+          {sortedRecords.length === 0 && (
+            <div className="p-12 text-center text-xs text-muted-foreground">
+              No records match the current search or filter criteria.
+            </div>
           )}
 
-          {source === 'Evidence' && (
-            <table className="min-w-full text-xs text-left border-collapse">
-              <thead>
-                <tr className="bg-muted/50 border-b border-border/80 text-muted-foreground uppercase font-bold text-[9px] tracking-wider">
-                  <th className="p-3 cursor-pointer hover:bg-muted/80" onClick={() => handleSort('name')}>File Name</th>
-                  <th className="p-3 cursor-pointer hover:bg-muted/80" onClick={() => handleSort('category')}>Category</th>
-                  <th className="p-3 cursor-pointer hover:bg-muted/80 text-center" onClick={() => handleSort('status')}>Status</th>
-                  <th className="p-3">Expiry Date</th>
-                  <th className="p-3">Uploaded By</th>
-                  <th className="p-3 text-center print:hidden">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
-                {paginatedRecords.map((d: any) => (
-                  <tr key={d.id} className="hover:bg-muted/10">
-                    <td className="p-3 font-bold text-foreground truncate max-w-xs">{d.title}</td>
-                    <td className="p-3 text-muted-foreground font-semibold">{d.category}</td>
-                    <td className="p-3 text-center">
-                      <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase border ${
-                        d.status === 'Active' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' :
-                        d.status === 'Expiring Soon' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
-                        d.status === 'Expired' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' :
-                        'bg-zinc-500/10 border-zinc-500/20 text-zinc-500'
-                      }`}>
-                        {d.status}
-                      </span>
-                    </td>
-                    <td className="p-3 text-muted-foreground">{d.expiry_date ? new Date(d.expiry_date).toLocaleDateString() : 'No expiry'}</td>
-                    <td className="p-3 text-muted-foreground">{d.uploaded_by || 'Unknown'}</td>
-                    <td className="p-3 text-center print:hidden">
-                      <Link href={`/dashboard/vault?id=${d.id}`} className="text-indigo-650 hover:underline flex items-center justify-center gap-1 font-bold">
-                        Inspect <ExternalLink className="w-3 h-3" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          {source === 'Competencies' && (
-            <table className="min-w-full text-xs text-left border-collapse">
-              <thead>
-                <tr className="bg-muted/50 border-b border-border/80 text-muted-foreground uppercase font-bold text-[9px] tracking-wider">
-                  <th className="p-3 cursor-pointer hover:bg-muted/80" onClick={() => handleSort('name')}>Teammate Name</th>
-                  <th className="p-3">Competency Title</th>
-                  <th className="p-3 cursor-pointer hover:bg-muted/80" onClick={() => handleSort('category')}>Category</th>
-                  <th className="p-3 cursor-pointer hover:bg-muted/80 text-center" onClick={() => handleSort('status')}>Status</th>
-                  <th className="p-3">Expiry Date</th>
-                  <th className="p-3 text-center print:hidden">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
-                {paginatedRecords.map((c: any, idx: number) => (
-                  <tr key={idx} className="hover:bg-muted/10">
-                    <td className="p-3 font-bold text-foreground">{c.person.display_name}</td>
-                    <td className="p-3 text-muted-foreground font-semibold">{c.type.title}</td>
-                    <td className="p-3 text-muted-foreground">{c.type.category}</td>
-                    <td className="p-3 text-center">
-                      <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase border ${
-                        c.status === 'Valid' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' :
-                        c.status === 'Expiring Soon' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
-                        c.status === 'Expired' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' :
-                        'bg-zinc-500/10 border-zinc-500/20 text-zinc-500'
-                      }`}>
-                        {c.status}
-                      </span>
-                    </td>
-                    <td className="p-3 text-muted-foreground">{c.record?.expiry_date ? new Date(c.record.expiry_date).toLocaleDateString() : 'N/A'}</td>
-                    <td className="p-3 text-center print:hidden">
-                      <Link href={`/dashboard/competencies?id=${c.person.id}`} className="text-indigo-650 hover:underline flex items-center justify-center gap-1 font-bold">
-                        Inspect <ExternalLink className="w-3 h-3" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          {source === 'Actions' && (
-            <table className="min-w-full text-xs text-left border-collapse">
-              <thead>
-                <tr className="bg-muted/50 border-b border-border/80 text-muted-foreground uppercase font-bold text-[9px] tracking-wider">
-                  <th className="p-3 cursor-pointer hover:bg-muted/80" onClick={() => handleSort('name')}>Action Description</th>
-                  <th className="p-3 cursor-pointer hover:bg-muted/80 text-center" onClick={() => handleSort('risk')}>Linked Requirement Risk</th>
-                  <th className="p-3 cursor-pointer hover:bg-muted/80 text-center" onClick={() => handleSort('status')}>Status</th>
-                  <th className="p-3">Owner</th>
-                  <th className="p-3">Due Date</th>
-                  <th className="p-3 text-center print:hidden">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
-                {paginatedRecords.map((a: any) => (
-                  <tr key={a.id} className="hover:bg-muted/10">
-                    <td className="p-3 font-bold text-foreground truncate max-w-xs">{a.description}</td>
-                    <td className="p-3 text-center font-semibold text-muted-foreground">{getLinkedRequirementRisk(a.id)}</td>
-                    <td className="p-3 text-center">
-                      <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase border ${
-                        a.status === 'Complete' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' :
-                        a.status === 'In Progress' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
-                        a.status === 'Open' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' :
-                        'bg-zinc-500/10 border-zinc-500/20 text-zinc-500'
-                      }`}>
-                        {a.status}
-                      </span>
-                    </td>
-                    <td className="p-3 text-muted-foreground">{a.owner || 'Unassigned'}</td>
-                    <td className="p-3 text-muted-foreground">{a.target_due_date || a.due_date ? new Date(a.target_due_date || a.due_date).toLocaleDateString() : 'N/A'}</td>
-                    <td className="p-3 text-center print:hidden">
-                      <Link href={`/dashboard/requirements?filter=actions&actionId=${a.id}`} className="text-indigo-650 hover:underline flex items-center justify-center gap-1 font-bold">
-                        Inspect <ExternalLink className="w-3 h-3" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          {source === 'Audits' && (
-            <table className="min-w-full text-xs text-left border-collapse">
-              <thead>
-                <tr className="bg-muted/50 border-b border-border/80 text-muted-foreground uppercase font-bold text-[9px] tracking-wider">
-                  <th className="p-3 cursor-pointer hover:bg-muted/80" onClick={() => handleSort('name')}>Pack Name</th>
-                  <th className="p-3 cursor-pointer hover:bg-muted/80 text-center" onClick={() => handleSort('status')}>Status</th>
-                  <th className="p-3 text-center">Requirements</th>
-                  <th className="p-3 text-center">Documents</th>
-                  <th className="p-3 text-center print:hidden">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
-                {paginatedRecords.map((p: any) => (
-                  <tr key={p.id} className="hover:bg-muted/10">
-                    <td className="p-3 font-bold text-foreground">{p.name}</td>
-                    <td className="p-3 text-center">
-                      <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase border ${
-                        p.status === 'Ready' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' :
-                        p.status === 'Draft' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
-                        p.status === 'Sent' ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-600' :
-                        'bg-zinc-500/10 border-zinc-500/20 text-zinc-500'
-                      }`}>
-                        {p.status}
-                      </span>
-                    </td>
-                    <td className="p-3 text-center text-muted-foreground font-semibold">{(p.requirements || []).length}</td>
-                    <td className="p-3 text-center text-muted-foreground font-semibold">{(p.documents || []).length}</td>
-                    <td className="p-3 text-center print:hidden">
-                      <Link href={`/dashboard/audit-packs`} className="text-indigo-650 hover:underline flex items-center justify-center gap-1 font-bold">
-                        Inspect <ExternalLink className="w-3 h-3" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* Pagination footer */}
+          {sortedRecords.length > 0 && (
+            <div className="p-4 border-t border-border/60 flex items-center justify-between text-xs bg-muted/10 print:hidden">
+              <span className="text-muted-foreground">
+                Page <strong className="text-foreground">{currentPage}</strong> of <strong className="text-foreground">{totalPages}</strong>
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="px-2.5 py-1.5 bg-muted hover:bg-muted/80 rounded border border-border disabled:opacity-45 disabled:pointer-events-none cursor-pointer text-foreground"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="px-2.5 py-1.5 bg-muted hover:bg-muted/80 rounded border border-border disabled:opacity-45 disabled:pointer-events-none cursor-pointer text-foreground"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           )}
         </div>
-
-        {/* Empty State */}
-        {sortedRecords.length === 0 && (
-          <div className="p-12 text-center text-xs text-muted-foreground">
-            No records match the current filter criteria.
-          </div>
-        )}
-
-        {/* Pagination footer */}
-        {sortedRecords.length > 0 && (
-          <div className="p-4 border-t border-border/60 flex items-center justify-between text-xs bg-muted/10 print:hidden">
-            <span className="text-muted-foreground">
-              Page <strong className="text-foreground">{currentPage}</strong> of <strong className="text-foreground">{totalPages}</strong>
-            </span>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-                className="px-2.5 py-1.5 bg-muted hover:bg-muted/80 rounded border border-border disabled:opacity-45 disabled:pointer-events-none cursor-pointer"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="px-2.5 py-1.5 bg-muted hover:bg-muted/80 rounded border border-border disabled:opacity-45 disabled:pointer-events-none cursor-pointer"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
       )}
 
       {/* Printable Legal Disclaimer */}

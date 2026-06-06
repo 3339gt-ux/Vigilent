@@ -1233,6 +1233,47 @@ export const getCurrentSupabaseOrganizationId = async (): Promise<string> => {
   return org.id;
 };
 
+let _isSavedReportsTableAvailable: boolean | null = null;
+
+export const checkSavedReportsTableAvailable = async (): Promise<boolean> => {
+  if (!shouldUseSupabase()) return false;
+  if (_isSavedReportsTableAvailable !== null) return _isSavedReportsTableAvailable;
+  try {
+    const { error } = await supabase!
+      .from('saved_reports')
+      .select('id')
+      .limit(1);
+    if (error) {
+      if (error.code === 'PGRST205' || error.code === '42P01' || error.message?.includes('saved_reports')) {
+        _isSavedReportsTableAvailable = false;
+        return false;
+      }
+    }
+    _isSavedReportsTableAvailable = true;
+    return true;
+  } catch (e) {
+    _isSavedReportsTableAvailable = false;
+    return false;
+  }
+};
+
+export const getSavedReportsStorageKey = async (): Promise<string> => {
+  const SAVED_REPORTS_KEY = 'vygilence_saved_reports';
+  if (shouldUseSupabase()) {
+    try {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const profile = await getCurrentSupabaseProfile();
+      const userId = profile?.id || 'anon';
+      return `${SAVED_REPORTS_KEY}_${userId}_${orgId}`;
+    } catch (e) {
+      console.warn('Failed to resolve Supabase key, falling back to mock key', e);
+      return `${SAVED_REPORTS_KEY}_${MOCK_PROFILE.id}_${MOCK_ORG.id}`;
+    }
+  } else {
+    return `${SAVED_REPORTS_KEY}_${MOCK_PROFILE.id}_${MOCK_ORG.id}`;
+  }
+};
+
 const fetchRecordById = async (table: string, id: string): Promise<any> => {
   if (shouldUseSupabase()) {
     const { data } = await supabase!.from(table).select('*').eq('id', id).maybeSingle();
@@ -4381,8 +4422,7 @@ export const dbService = {
 
   // Saved Reports
   async getSavedReports(): Promise<SavedReport[]> {
-    const SAVED_REPORTS_KEY = 'vygilence_saved_reports';
-    if (shouldUseSupabase()) {
+    if (shouldUseSupabase() && await checkSavedReportsTableAvailable()) {
       const orgId = await getCurrentSupabaseOrganizationId();
       const { data, error } = await supabase!
         .from('saved_reports')
@@ -4398,9 +4438,7 @@ export const dbService = {
       return data || [];
     } else {
       initMockDb();
-      const user = MOCK_PROFILE;
-      const org = MOCK_ORG;
-      const key = `${SAVED_REPORTS_KEY}_${user.id}_${org.id}`;
+      const key = await getSavedReportsStorageKey();
       if (typeof window !== 'undefined') {
         const stored = localStorage.getItem(key);
         if (stored) {
@@ -4409,7 +4447,7 @@ export const dbService = {
             if (Array.isArray(parsed)) {
               return parsed.map((item: any) => ({
                 ...item,
-                owner_profile: { full_name: 'Jane Doe', role: 'Admin' }
+                owner_profile: item.owner_profile || { full_name: 'You (Local)', role: 'Owner' }
               }));
             }
           } catch (e) {
@@ -4422,12 +4460,11 @@ export const dbService = {
   },
 
   async addSavedReport(report: Omit<SavedReport, 'id' | 'created_at' | 'updated_at' | 'organization_id' | 'owner_user_id'>): Promise<SavedReport> {
-    const SAVED_REPORTS_KEY = 'vygilence_saved_reports';
     const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
     const userId = shouldUseSupabase() ? (await getCurrentSupabaseProfile())?.id : MOCK_PROFILE.id;
     let newReport: SavedReport;
 
-    if (shouldUseSupabase()) {
+    if (shouldUseSupabase() && await checkSavedReportsTableAvailable()) {
       const { data, error } = await supabase!
         .from('saved_reports')
         .insert([{
@@ -4446,9 +4483,7 @@ export const dbService = {
       if (error) throwSupabaseError('saved_reports.insert', error);
       newReport = data;
     } else {
-      const user = MOCK_PROFILE;
-      const org = MOCK_ORG;
-      const key = `${SAVED_REPORTS_KEY}_${user.id}_${org.id}`;
+      const key = await getSavedReportsStorageKey();
       const list = await this.getSavedReports();
       newReport = {
         ...report,
@@ -4458,7 +4493,7 @@ export const dbService = {
         is_favourite: report.is_favourite || false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        owner_profile: { full_name: 'Jane Doe', role: 'Admin' }
+        owner_profile: { full_name: 'You (Local)', role: 'Owner' }
       };
       const cleanedList = list.map(item => {
         const copy = { ...item };
@@ -4484,11 +4519,10 @@ export const dbService = {
   },
 
   async updateSavedReport(reportId: string, updates: Partial<SavedReport>): Promise<SavedReport> {
-    const SAVED_REPORTS_KEY = 'vygilence_saved_reports';
     let before: any = null;
     let after: SavedReport;
 
-    if (shouldUseSupabase()) {
+    if (shouldUseSupabase() && await checkSavedReportsTableAvailable()) {
       const orgId = await getCurrentSupabaseOrganizationId();
       const { data: beforeData } = await supabase!
         .from('saved_reports')
@@ -4514,9 +4548,7 @@ export const dbService = {
       if (error) throwSupabaseError('saved_reports.update', error);
       after = data;
     } else {
-      const user = MOCK_PROFILE;
-      const org = MOCK_ORG;
-      const key = `${SAVED_REPORTS_KEY}_${user.id}_${org.id}`;
+      const key = await getSavedReportsStorageKey();
       const list = await this.getSavedReports();
       const idx = list.findIndex(r => r.id === reportId);
       if (idx === -1) throw new Error('Saved report not found');
@@ -4552,10 +4584,9 @@ export const dbService = {
   },
 
   async deleteSavedReport(reportId: string): Promise<void> {
-    const SAVED_REPORTS_KEY = 'vygilence_saved_reports';
     let before: any = null;
 
-    if (shouldUseSupabase()) {
+    if (shouldUseSupabase() && await checkSavedReportsTableAvailable()) {
       const orgId = await getCurrentSupabaseOrganizationId();
       const { data: beforeData } = await supabase!
         .from('saved_reports')
@@ -4572,9 +4603,7 @@ export const dbService = {
         .eq('organization_id', orgId);
       if (error) throwSupabaseError('saved_reports.delete', error);
     } else {
-      const user = MOCK_PROFILE;
-      const org = MOCK_ORG;
-      const key = `${SAVED_REPORTS_KEY}_${user.id}_${org.id}`;
+      const key = await getSavedReportsStorageKey();
       const list = await this.getSavedReports();
       const idx = list.findIndex(r => r.id === reportId);
       if (idx === -1) throw new Error('Saved report not found');
@@ -4616,6 +4645,10 @@ export const dbService = {
       ...input,
       entityType: 'saved_report'
     });
+  },
+
+  async checkSavedReportsTableAvailable(): Promise<boolean> {
+    return checkSavedReportsTableAvailable();
   },
 
   // Private helper to automatically map a uploaded document to a matrix cell if it fits requirements

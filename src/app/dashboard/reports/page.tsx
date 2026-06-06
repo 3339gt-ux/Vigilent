@@ -52,6 +52,119 @@ const escapeHtml = (value: string) => value
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#039;');
 
+const PREBUILT_REPORTS = [
+  {
+    id: 'prebuilt_executive',
+    name: 'Executive Readiness Overview',
+    description: 'High-level compliance summary of all requirement statuses, readiness scores, and critical alerts.',
+    category: 'Executive',
+    sourceModule: 'Requirements',
+    filters: 'Category, Status, Owner, Risk',
+    exports: 'CSV, Print/PDF',
+    permission: 'All Members',
+    tab: 'executive'
+  },
+  {
+    id: 'prebuilt_requirements',
+    name: 'Framework Requirements Breakdown',
+    description: 'Granular assessment of active compliance requirements, mapping status, and risk categories.',
+    category: 'Requirements',
+    sourceModule: 'Requirements',
+    filters: 'Category, Status, Owner, Risk',
+    exports: 'CSV, Print/PDF',
+    permission: 'All Members',
+    tab: 'requirements'
+  },
+  {
+    id: 'prebuilt_evidence',
+    name: 'Evidence Vault Status & Expiry',
+    description: 'Deep inspector of uploaded verification documents, approval status, and upcoming expiries.',
+    category: 'Evidence',
+    sourceModule: 'Evidence',
+    filters: 'Category, Status, Expiry Range',
+    exports: 'CSV, Print/PDF',
+    permission: 'All Members',
+    tab: 'evidence'
+  },
+  {
+    id: 'prebuilt_competencies',
+    name: 'Competency Matrix Compliance',
+    description: 'Assessment of team competency fulfillment, required training types, and expiry tracking.',
+    category: 'Competencies',
+    sourceModule: 'Competencies',
+    filters: 'Category, Status, Person',
+    exports: 'CSV, Print/PDF',
+    permission: 'All Members',
+    tab: 'competencies'
+  },
+  {
+    id: 'prebuilt_actions',
+    name: 'Corrective Actions Registry',
+    description: 'List of assigned task actions, completion statistics, overdue status, and requirement links.',
+    category: 'Actions',
+    sourceModule: 'Actions',
+    filters: 'Status, Owner, Risk, Overdue',
+    exports: 'CSV, Print/PDF',
+    permission: 'All Members',
+    tab: 'actions'
+  },
+  {
+    id: 'prebuilt_audits',
+    name: 'Audit Packs Registry',
+    description: 'Review compiled evidence packs, share status, and reviewer responses.',
+    category: 'Audit',
+    sourceModule: 'Audits',
+    filters: 'Status',
+    exports: 'CSV, Print/PDF',
+    permission: 'All Members',
+    tab: 'audits'
+  },
+  {
+    id: 'prebuilt_history',
+    name: 'System Audit Trail Log',
+    description: 'Immutable timeline of system mutations, access events, and export operations.',
+    category: 'Administration',
+    sourceModule: 'Audit Trail',
+    filters: 'None',
+    exports: 'CSV',
+    permission: 'Owner / Admin Only',
+    tab: 'history'
+  },
+  {
+    id: 'prebuilt_upcoming',
+    name: 'Upcoming Compliance Obligations',
+    description: 'Forecast of evidence expirations and action item deadlines due in the next 30, 60, or 90 days.',
+    category: 'Upcoming',
+    sourceModule: 'Requirements',
+    filters: 'Time Horizon',
+    exports: 'CSV, Print/PDF',
+    permission: 'All Members',
+    tab: 'executive'
+  },
+  {
+    id: 'prebuilt_builder',
+    name: 'Interactive Custom Report Builder',
+    description: 'Custom query engine to aggregate compliance data across different models, dimensions, and measures.',
+    category: 'Custom',
+    sourceModule: 'Custom Builder',
+    filters: 'Dynamic',
+    exports: 'CSV',
+    permission: 'All Members',
+    tab: 'builder'
+  },
+  {
+    id: 'prebuilt_pivot',
+    name: 'Pivot Matrix Report Builder',
+    description: 'Cross-tabulation tool to summarize readiness scores, competencies, and actions by row and column variables.',
+    category: 'Pivot',
+    sourceModule: 'Pivot Builder',
+    filters: 'Row, Column, Measure',
+    exports: 'CSV',
+    permission: 'All Members',
+    tab: 'builder'
+  }
+];
+
 type TabType =
   | 'executive'
   | 'requirements'
@@ -122,6 +235,13 @@ export default function ReportsPage() {
   const [savedShowOnlyFavs, setSavedShowOnlyFavs] = useState(false);
   const [savedSourceFilter, setSavedSourceFilter] = useState('all');
   const [selectedScheduledReport, setSelectedScheduledReport] = useState<SavedReport | null>(null);
+
+  const [isSharedTableAvailable, setIsSharedTableAvailable] = useState<boolean>(false);
+  const [favReportIds, setFavReportIds] = useState<string[]>([]);
+  const [recentViews, setRecentViews] = useState<any[]>([]);
+  const [editingReport, setEditingReport] = useState<SavedReport | null>(null);
+  const [editReportName, setEditReportName] = useState('');
+  const [editReportDesc, setEditReportDesc] = useState('');
 
   // Pivot View States
   const [pivotRow, setPivotRow] = useState('category');
@@ -213,23 +333,79 @@ export default function ReportsPage() {
     };
   }, [comparePeriod, startDate, endDate, documents, actions, competencyRecords, auditPacks, auditTrailEvents]);
 
-  const renderComparisonBadge = (data: { diff: number; pct: number; label: string } | undefined) => {
+  const renderComparisonBadge = (data: { diff: number; pct: number; label: string } | undefined, tone: 'positive' | 'negative' | 'neutral' = 'neutral') => {
     if (!comparePeriod || !data) return null;
     const isPositive = data.diff > 0;
     const isZero = data.diff === 0;
+
+    let colorClass = 'bg-zinc-500/10 text-zinc-500';
+    if (!isZero) {
+      if (tone === 'positive') {
+        colorClass = isPositive ? 'bg-emerald-500/10 text-emerald-650' : 'bg-rose-500/10 text-rose-600';
+      } else if (tone === 'negative') {
+        colorClass = isPositive ? 'bg-rose-500/10 text-rose-600' : 'bg-emerald-500/10 text-emerald-650';
+      } else {
+        colorClass = 'bg-zinc-500/10 text-zinc-650 dark:text-zinc-400';
+      }
+    }
+
     return (
       <span
         title={`${data.label} (${comparisonData?.label || ''})`}
-        className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded ml-2 ${
-          isZero ? 'bg-zinc-500/10 text-zinc-500' :
-          isPositive ? 'bg-emerald-500/10 text-emerald-650' :
-          'bg-rose-500/10 text-rose-600'
-        }`}
+        className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded ml-2 ${colorClass}`}
       >
         {isZero ? '' : isPositive ? '+' : ''}{data.pct}% ({isZero ? 'no change' : `${isPositive ? '+' : ''}${data.diff}`})
       </span>
     );
   };
+
+  const getReportFavourites = useCallback((): string[] => {
+    if (typeof window === 'undefined' || !user || !organization) return [];
+    const key = `vygilence_fav_reports_${user.id}_${organization.id}`;
+    try {
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      console.error('Failed to load favourites', e);
+      return [];
+    }
+  }, [user, organization]);
+
+  const saveReportFavourites = useCallback((favs: string[]) => {
+    if (typeof window === 'undefined' || !user || !organization) return;
+    const key = `vygilence_fav_reports_${user.id}_${organization.id}`;
+    localStorage.setItem(key, JSON.stringify(favs));
+  }, [user, organization]);
+
+  const getRecentReports = useCallback((): any[] => {
+    if (typeof window === 'undefined' || !user || !organization) return [];
+    const key = `vygilence_recent_reports_${user.id}_${organization.id}`;
+    try {
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      console.error('Failed to load recents', e);
+      return [];
+    }
+  }, [user, organization]);
+
+  const saveRecentReports = useCallback((recents: any[]) => {
+    if (typeof window === 'undefined' || !user || !organization) return;
+    const key = `vygilence_recent_reports_${user.id}_${organization.id}`;
+    localStorage.setItem(key, JSON.stringify(recents));
+  }, [user, organization]);
+
+  const recordView = useCallback((id: string, name: string, category: string, sourceModule: string, tab: string) => {
+    if (typeof window === 'undefined' || !user || !organization) return;
+    const current = getRecentReports();
+    const filtered = current.filter(r => r.id !== id);
+    const updated = [
+      { id, name, category, sourceModule, tab, openedAt: new Date().toISOString() },
+      ...filtered
+    ].slice(0, 10);
+    setRecentViews(updated);
+    saveRecentReports(updated);
+  }, [user, organization, getRecentReports, saveRecentReports]);
 
   // Load saved reports helper function
   const loadSavedReports = () => {
@@ -267,10 +443,16 @@ export default function ReportsPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setFreshnessTime(new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-    
+
+    dbService.checkSavedReportsTableAvailable().then(avail => {
+      setIsSharedTableAvailable(avail);
+    });
+
     if (user && organization) {
       loadSavedReports();
-      
+      setFavReportIds(getReportFavourites());
+      setRecentViews(getRecentReports());
+
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
         const tabParam = params.get('tab') as TabType | null;
@@ -336,6 +518,52 @@ export default function ReportsPage() {
       cancelled = true;
     };
   }, [activeTab, builderSource, isOwnerOrAdmin]);
+
+  // Record view of prebuilt tabs when activeTab changes
+  useEffect(() => {
+    if (activeTab === 'executive') recordView('prebuilt_executive', 'Executive Readiness Overview', 'Executive', 'Requirements', 'executive');
+    else if (activeTab === 'requirements') recordView('prebuilt_requirements', 'Framework Requirements Breakdown', 'Requirements', 'Requirements', 'requirements');
+    else if (activeTab === 'evidence') recordView('prebuilt_evidence', 'Evidence Vault Status & Expiry', 'Evidence', 'Evidence', 'evidence');
+    else if (activeTab === 'competencies') recordView('prebuilt_competencies', 'Competency Matrix Compliance', 'Competencies', 'Competencies', 'competencies');
+    else if (activeTab === 'actions') recordView('prebuilt_actions', 'Corrective Actions Registry', 'Actions', 'Actions', 'actions');
+    else if (activeTab === 'audits') recordView('prebuilt_audits', 'Audit Packs Registry', 'Audit', 'Audits', 'audits');
+    else if (activeTab === 'history' && isOwnerOrAdmin) recordView('prebuilt_history', 'System Audit Trail Log', 'Administration', 'Audit Trail', 'history');
+    else if (activeTab === 'administration' && isOwnerOrAdmin) recordView('prebuilt_admin', 'System Activity & Admin', 'Administration', 'Audit Trail', 'administration');
+  }, [activeTab, isOwnerOrAdmin, recordView]);
+
+  // Safely reset dimension, measure, visualType when builderSource changes
+  useEffect(() => {
+    if (builderSource === 'Requirements') {
+      const validDims = ['category', 'status', 'risk_level', 'owner', 'date_day', 'date_week', 'date_month', 'date_year'];
+      const validMeas = ['count', 'completion_rate', 'overdue', 'avg_days_overdue'];
+      if (!validDims.includes(builderDimension)) setBuilderDimension('category');
+      if (!validMeas.includes(builderMeasure)) setBuilderMeasure('count');
+    } else if (builderSource === 'Evidence') {
+      const validDims = ['category', 'status', 'uploaded_by', 'date_day', 'date_week', 'date_month', 'date_year'];
+      const validMeas = ['count', 'expiring', 'expired'];
+      if (!validDims.includes(builderDimension)) setBuilderDimension('category');
+      if (!validMeas.includes(builderMeasure)) setBuilderMeasure('count');
+    } else if (builderSource === 'Competencies') {
+      const validDims = ['status', 'trainer', 'provider', 'date_day', 'date_week', 'date_month', 'date_year'];
+      const validMeas = ['count', 'completion_rate', 'expired', 'missing'];
+      if (!validDims.includes(builderDimension)) setBuilderDimension('status');
+      if (!validMeas.includes(builderMeasure)) setBuilderMeasure('count');
+    } else if (builderSource === 'Actions') {
+      const validDims = ['status', 'owner', 'date_day', 'date_week', 'date_month', 'date_year'];
+      const validMeas = ['count', 'completion_rate', 'overdue', 'avg_days_overdue'];
+      if (!validDims.includes(builderDimension)) setBuilderDimension('status');
+      if (!validMeas.includes(builderMeasure)) setBuilderMeasure('count');
+    } else if (builderSource === 'Audit Trail') {
+      const validDims = ['action_category', 'actor_name', 'severity', 'date_day', 'date_week', 'date_month', 'date_year'];
+      const validMeas = ['count', 'critical', 'warning'];
+      if (!validDims.includes(builderDimension)) setBuilderDimension('action_category');
+      if (!validMeas.includes(builderMeasure)) setBuilderMeasure('count');
+    }
+
+    if (builderSource !== 'Requirements' && builderVisual === 'pivot') {
+      setBuilderVisual('bar');
+    }
+  }, [builderSource, builderDimension, builderMeasure, builderVisual]);
 
   // Reset Filters
   const handleResetFilters = () => {
@@ -510,12 +738,12 @@ export default function ReportsPage() {
   const handleDrillDown = (source: string, extraFilters: Record<string, string> = {}) => {
     const params = new URLSearchParams();
     params.set('source', source);
-    
+
     if (selectedCategory !== 'All') params.set('category', selectedCategory);
     if (selectedOwner !== 'All') params.set('owner', selectedOwner);
     if (selectedStatus !== 'All') params.set('status', selectedStatus);
     if (selectedRisk !== 'All') params.set('risk', selectedRisk);
-    
+
     Object.entries(extraFilters).forEach(([key, val]) => {
       if (val === 'All') {
         params.delete(key);
@@ -523,7 +751,7 @@ export default function ReportsPage() {
         params.set(key, val);
       }
     });
-    
+
     router.push(`/dashboard/reports/detail?${params.toString()}`);
   };
 
@@ -976,8 +1204,18 @@ export default function ReportsPage() {
       const overdueReqs = reqs.filter(req => getDaysOverdue(req) > 0);
       return overdueReqs.length > 0 ? Math.min(...overdueReqs.map(getDaysOverdue)) : 0;
     }
-    if (['row_pct', 'col_pct', 'total_pct'].includes(pivotAggregation)) {
+    if (pivotAggregation === 'row_pct') {
+      if (type === 'row') return 100;
+      if (type === 'col') return filteredReqs.length > 0 ? Math.round((reqs.length / filteredReqs.length) * 100) : 0;
       return 100;
+    }
+    if (pivotAggregation === 'col_pct') {
+      if (type === 'row') return filteredReqs.length > 0 ? Math.round((reqs.length / filteredReqs.length) * 100) : 0;
+      if (type === 'col') return 100;
+      return 100;
+    }
+    if (pivotAggregation === 'total_pct') {
+      return filteredReqs.length > 0 ? Math.round((reqs.length / filteredReqs.length) * 100) : 0;
     }
     return 0;
   };
@@ -1016,7 +1254,7 @@ export default function ReportsPage() {
       if (!dateVal) return 'No Date';
       const d = new Date(dateVal);
       if (isNaN(d.getTime())) return 'Invalid Date';
-      
+
       if (bucketType === 'date_day') {
         return d.toISOString().split('T')[0];
       }
@@ -1262,33 +1500,99 @@ export default function ReportsPage() {
   };
 
   const handleToggleFavouriteReport = async (id: string, isFav: boolean) => {
-    try {
-      await dbService.updateSavedReport(id, { is_favourite: !isFav });
-      loadSavedReports();
-      setToast({ type: 'success', message: !isFav ? 'Report added to favourites.' : 'Report removed from favourites.' });
-    } catch (e) {
-      console.error('Failed to toggle favourite', e);
-      setToast({ type: 'error', message: 'Failed to update report favourites.' });
-    }
+    setConfirmRequest({
+      title: isFav ? 'Remove from Favourites?' : 'Add to Favourites?',
+      description: isFav
+        ? 'Are you sure you want to remove this report from your Favourites list?'
+        : 'Are you sure you want to add this report to your Favourites list?',
+      confirmLabel: isFav ? 'Remove' : 'Add',
+      tone: 'primary',
+      onConfirm: async () => {
+        try {
+          const nextFavs = isFav
+            ? favReportIds.filter(fid => fid !== id)
+            : [...favReportIds, id];
+          setFavReportIds(nextFavs);
+          saveReportFavourites(nextFavs);
+
+          if (!id.startsWith('prebuilt_')) {
+            await dbService.updateSavedReport(id, { is_favourite: !isFav });
+            loadSavedReports();
+          }
+          setToast({ type: 'success', message: !isFav ? 'Report added to favourites.' : 'Report removed from favourites.' });
+        } catch (e) {
+          console.error('Failed to toggle favourite', e);
+          setToast({ type: 'error', message: 'Failed to update report favourites.' });
+        }
+      }
+    });
   };
 
-  const handleRenameReport = async (rep: SavedReport) => {
-    const newName = prompt("Rename report:", rep.name);
-    if (newName === null) return;
-    if (!newName.trim()) {
+  const handleRenameReport = (rep: SavedReport) => {
+    setEditingReport(rep);
+    setEditReportName(rep.name);
+    setEditReportDesc(rep.description || '');
+  };
+
+  const handleSaveRename = async () => {
+    if (!editingReport) return;
+    if (!editReportName.trim()) {
       setToast({ type: 'error', message: 'Name cannot be empty.' });
       return;
     }
-    const newDesc = prompt("Edit description:", rep.description || "");
-    if (newDesc === null) return;
-
     try {
-      await dbService.updateSavedReport(rep.id, { name: newName.trim(), description: newDesc.trim() || null });
+      await dbService.updateSavedReport(editingReport.id, {
+        name: editReportName.trim(),
+        description: editReportDesc.trim() || null
+      });
       loadSavedReports();
+      setEditingReport(null);
       setToast({ type: 'success', message: 'Report updated successfully.' });
     } catch (e) {
-      console.error('Failed to rename report', e);
-      setToast({ type: 'error', message: 'Failed to rename report.' });
+      console.error('Failed to update report', e);
+      setToast({ type: 'error', message: 'Failed to update report.' });
+    }
+  };
+
+  const handleClearRecents = () => {
+    setConfirmRequest({
+      title: 'Clear Recently Viewed?',
+      description: 'Are you sure you want to clear your recently viewed reports history? This cannot be undone.',
+      confirmLabel: 'Clear History',
+      tone: 'danger',
+      onConfirm: async () => {
+        setRecentViews([]);
+        saveRecentReports([]);
+        setToast({ type: 'success', message: 'Recently viewed history cleared.' });
+      }
+    });
+  };
+
+  const handleDuplicatePrebuiltReport = async (rep: any) => {
+    try {
+      await dbService.addSavedReport({
+        name: `${rep.name} (Custom Copy)`,
+        description: `Customized copy of ${rep.name}.`,
+        report_type: 'custom',
+        data_source: rep.sourceModule,
+        configuration: {
+          dimension: 'category',
+          measure: 'count',
+          visualType: 'bar',
+          filters: {
+            category: 'All',
+            status: 'All',
+            risk: 'All'
+          }
+        },
+        visibility: 'personal',
+        is_favourite: false
+      });
+      loadSavedReports();
+      setToast({ type: 'success', message: `Prebuilt report duplicated as Personal Browser Report.` });
+    } catch (e) {
+      console.error('Failed to duplicate prebuilt report', e);
+      setToast({ type: 'error', message: 'Failed to duplicate prebuilt report.' });
     }
   };
 
@@ -1375,7 +1679,7 @@ export default function ReportsPage() {
   const upcomingReviews = useMemo(() => {
     const result = { total: 0, undated: 0, w7: 0, w30: 0, w60: 0, w90: 0, items: [] as Requirement[] };
     const today = new Date();
-    
+
     filteredReqs.forEach(req => {
       if (req.next_due_date) {
         const dueDate = new Date(req.next_due_date);
@@ -1452,7 +1756,7 @@ export default function ReportsPage() {
         fileHashes.set(d.file_hash, (fileHashes.get(d.file_hash) || 0) + 1);
       }
     });
-    
+
     let duplicateHashes = 0;
     fileHashes.forEach(count => {
       if (count > 1) duplicateHashes += (count - 1);
@@ -2201,205 +2505,423 @@ export default function ReportsPage() {
         )}
 
         {/* Tab 9: Saved Reports */}
-        {activeTab === 'saved' && (
-          <div className="space-y-6">
-            {/* Import Local Templates Bar */}
-            {typeof window !== 'undefined' && localStorage.getItem(`${SAVED_REPORTS_KEY}_${user?.id}_${organization?.id}`) && (
-              <div className="bg-indigo-500/10 border border-indigo-500/25 p-4 rounded-xl flex items-center justify-between text-xs">
-                <div>
-                  <h4 className="font-bold text-indigo-650 dark:text-indigo-400">Import browser-saved templates</h4>
-                  <p className="text-muted-foreground mt-0.5">We found report configurations saved locally in this browser. Import them to your account storage so they can be shared.</p>
-                </div>
-                <button
-                  onClick={handleImportLocalReports}
-                  className="px-3 py-1.5 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-lg cursor-pointer transition-all shrink-0"
-                >
-                  Import Templates
-                </button>
-              </div>
-            )}
+        {activeTab === 'saved' && (() => {
+          const filteredPrebuilt = PREBUILT_REPORTS.filter(rep => {
+            if (rep.sourceModule === 'Audit Trail' && !isOwnerOrAdmin) return false;
+            const nameMatch = rep.name.toLowerCase().includes(savedSearchQuery.toLowerCase());
+            const descMatch = rep.description.toLowerCase().includes(savedSearchQuery.toLowerCase());
+            const matchesSearch = nameMatch || descMatch;
+            const matchesFav = !savedShowOnlyFavs || favReportIds.includes(rep.id);
+            const matchesSource = savedSourceFilter === 'all' || rep.sourceModule === savedSourceFilter;
+            return matchesSearch && matchesFav && matchesSource;
+          });
 
-            {/* Catalogue Enhancements Filters Bar */}
-            <div className="bg-card border border-border p-4 rounded-2xl flex flex-wrap gap-4 items-center justify-between shadow-xs text-xs">
-              <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
-                <div className="relative flex-1 min-w-[180px]">
-                  <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                  <input
-                    type="text"
-                    placeholder="Search saved reports..."
-                    value={savedSearchQuery}
-                    onChange={e => setSavedSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 bg-muted rounded-xl border border-border outline-none text-xs"
-                  />
-                </div>
-                
-                <select
-                  value={savedVisibilityFilter}
-                  onChange={e => setSavedVisibilityFilter(e.target.value as any)}
-                  className="px-3 py-2 bg-muted rounded-xl border border-border outline-none font-semibold text-muted-foreground text-xs"
-                >
-                  <option value="all">All Visibilities</option>
-                  <option value="personal">Personal reports</option>
-                  <option value="organisation">Organisation reports</option>
-                </select>
+          const filteredCustom = savedReports.filter(rep => {
+            const dataSource = getReportDataSource(rep);
+            if (dataSource === 'Audit Trail' && !isOwnerOrAdmin) return false;
+            const nameMatch = rep.name.toLowerCase().includes(savedSearchQuery.toLowerCase());
+            const descMatch = (rep.description || '').toLowerCase().includes(savedSearchQuery.toLowerCase());
+            const matchesSearch = nameMatch || descMatch;
+            const matchesVisibility = savedVisibilityFilter === 'all' || rep.visibility === savedVisibilityFilter;
+            const matchesFav = !savedShowOnlyFavs || favReportIds.includes(rep.id);
+            const matchesSource = savedSourceFilter === 'all' || dataSource === savedSourceFilter;
+            return matchesSearch && matchesVisibility && matchesFav && matchesSource;
+          });
 
-                <label className="flex items-center gap-1.5 font-semibold text-muted-foreground cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={savedShowOnlyFavs}
-                    onChange={e => setSavedShowOnlyFavs(e.target.checked)}
-                    className="rounded border-border text-indigo-650 focus:ring-0 cursor-pointer"
-                  />
-                  <span>Favourites only</span>
-                </label>
-              </div>
+          const favouriteReports = [
+            ...PREBUILT_REPORTS.filter(r => favReportIds.includes(r.id)),
+            ...savedReports.filter(r => favReportIds.includes(r.id))
+          ].filter(rep => {
+            const src = (rep as any).tab ? (rep as any).sourceModule : getReportDataSource(rep as SavedReport);
+            return isOwnerOrAdmin || src !== 'Audit Trail';
+          });
 
-              {/* Source tags */}
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[10px] uppercase font-bold text-muted-foreground mr-1">Filter Source:</span>
-                {['all', 'Requirements', 'Evidence', 'Competencies', 'Actions', 'Audit Trail'].map(src => (
-                  <button
-                    key={src}
-                    onClick={() => setSavedSourceFilter(src)}
-                    className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border transition-all cursor-pointer ${
-                      savedSourceFilter === src
-                        ? 'bg-indigo-550 border-indigo-550 text-white dark:bg-indigo-650'
-                        : 'bg-muted/50 border-border text-muted-foreground hover:bg-muted'
-                    }`}
-                  >
-                    {src === 'all' ? 'All' : src}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Saved Reports Grid List */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredSavedReports.map(rep => {
-                const dataSource = getReportDataSource(rep);
-                const dimension = getReportDimension(rep);
-                const measure = getReportMeasure(rep);
-                const visualType = getReportVisualType(rep);
-                const filters = getReportFilters(rep);
-                const isOrg = rep.visibility === 'organisation';
-                const canManageReport = rep.owner_user_id === user?.id || isOwnerOrAdmin;
-                
-                return (
-                  <div key={rep.id} className="bg-card border border-border p-5 rounded-2xl space-y-3 flex flex-col justify-between shadow-xs">
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className={`px-2 py-0.5 text-[9px] font-extrabold rounded-full border ${
-                          isOrg ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400' : 'bg-zinc-500/10 border-zinc-500/20 text-zinc-650 dark:text-zinc-400'
-                        }`}>
-                          {isDemoMode ? (isOrg ? 'Organisation report (Local demo)' : 'Personal browser report') : (isOrg ? 'Organisation report' : 'Personal account report')}
-                        </span>
-                        {canManageReport && (
-                          <button
-                            onClick={() => handleToggleFavouriteReport(rep.id, rep.is_favourite)}
-                            className="p-1 text-muted-foreground hover:text-amber-500 transition-colors"
-                            title={rep.is_favourite ? "Remove from Favourites" : "Mark as Favourite"}
-                          >
-                            <Bookmark className={`w-4 h-4 ${rep.is_favourite ? 'fill-amber-500 text-amber-500' : 'text-muted-foreground'}`} />
-                          </button>
-                        )}
-                      </div>
-
-                      <h3 className="text-sm font-extrabold text-foreground flex items-center gap-2 mt-1">
-                        {rep.name}
-                      </h3>
-                      <p className="text-xs text-muted-foreground">{rep.description || 'No description provided.'}</p>
-                      
-                      <div className="flex flex-wrap gap-2 pt-2 text-[10px] text-muted-foreground font-semibold">
-                        <span>Source: {dataSource}</span>
-                        <span>•</span>
-                        <span>Dimension: {dimension}</span>
-                        <span>•</span>
-                        <span>Measure: {measure}</span>
-                        <span>•</span>
-                        <span>Visual: {visualType}</span>
-                      </div>
-
-                      <div className="text-[10px] text-muted-foreground pt-1.5 flex flex-wrap gap-2">
-                        <span>Created by: <strong className="text-foreground">{rep.owner_profile?.full_name || 'You'}</strong></span>
-                        <span>•</span>
-                        <span>Modified: {new Date(rep.updated_at || rep.created_at).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                    
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-border/40">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => {
-                            const allowedSource = dataSource === 'Audit Trail' && !isOwnerOrAdmin ? 'Requirements' : dataSource;
-                            setBuilderSource(allowedSource);
-                            setBuilderDimension(allowedSource === dataSource ? dimension : 'category');
-                            setBuilderMeasure(measure);
-                            setBuilderVisual(allowedSource === 'Requirements' ? visualType : visualType === 'pivot' ? 'table' : visualType);
-                            setSelectedCategory(filters.category || 'All');
-                            setSelectedStatus(filters.status || 'All');
-                            setSelectedRisk(filters.risk || 'All');
-                            setActiveTab('builder');
-                            setToast({ type: 'info', message: `Loaded config for report "${rep.name}"` });
-                          }}
-                          className="px-2.5 py-1.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 font-bold text-[11px] rounded-lg hover:bg-indigo-500/20 cursor-pointer"
-                        >
-                          Open Builder
-                        </button>
-                        <button
-                          onClick={() => handleCopyDeepLink(rep.id)}
-                          className="p-1.5 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer transition-all"
-                          title="Copy internal share link"
-                        >
-                          <Link2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDuplicateReport(rep)}
-                          className="p-1.5 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer transition-all"
-                          title="Duplicate configuration"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                        </button>
-                        {canManageReport && (
-                          <button
-                            onClick={() => handleRenameReport(rep)}
-                            className="p-1.5 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer transition-all"
-                            title="Rename / Edit description"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        <button
-                          disabled
-                          className="p-1.5 bg-muted text-muted-foreground/40 rounded-lg border border-border cursor-not-allowed opacity-50"
-                          title="Scheduling not configured"
-                        >
-                          <Clock className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      {canManageReport ? (
-                        <button
-                          onClick={() => handleDeleteSavedReport(rep.id, rep.name)}
-                          className="px-2.5 py-1.5 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold text-[11px] rounded-lg hover:bg-rose-500/20 cursor-pointer"
-                        >
-                          Delete
-                        </button>
-                      ) : (
-                        <span className="text-[10px] font-semibold text-muted-foreground">Read-only shared report</span>
-                      )}
-                    </div>
+          return (
+            <div className="space-y-6">
+              {/* Calm deferred organization-shared banner */}
+              {!isSharedTableAvailable && (
+                <div className="bg-amber-500/10 border border-amber-500/25 p-4 rounded-xl flex items-center gap-3 text-xs">
+                  <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <div>
+                    <h4 className="font-bold text-amber-700 dark:text-amber-450">Organisation-shared reports are not enabled in this environment yet.</h4>
+                    <p className="text-muted-foreground mt-0.5 font-medium">
+                      You can build and save <strong className="text-foreground">Personal Browser Reports</strong>, which are stored locally in your browser workspace.
+                    </p>
                   </div>
-                );
-              })}
-              {filteredSavedReports.length === 0 && (
-                <div className="p-8 text-center text-xs text-muted-foreground border border-dashed border-border rounded-xl col-span-2">
-                  {savedReports.length === 0 
-                    ? 'No saved reports configuration found. Use the Custom Report Builder to save templates.' 
-                    : 'No saved reports matched the selected search or filter criteria.'}
                 </div>
               )}
+
+              {/* Favourites Section (Pinned) */}
+              {favouriteReports.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest flex items-center gap-1.5">
+                    <Bookmark className="w-3.5 h-3.5 text-amber-505 fill-amber-500 text-amber-500" /> Pinned Favourites
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {favouriteReports.map(rep => {
+                      const isPrebuilt = !!(rep as any).tab;
+                      const dataSource = isPrebuilt ? (rep as any).sourceModule : getReportDataSource(rep as SavedReport);
+                      const isOrg = !isPrebuilt && (rep as SavedReport).visibility === 'organisation';
+                      const tagLabel = isPrebuilt ? 'Vygilence Prebuilt' : (isOrg ? 'Organisation Report' : 'Personal Browser Report');
+                      const tagStyle = isPrebuilt ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400' : (isOrg ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-650' : 'bg-zinc-500/10 border-zinc-500/20 text-zinc-650');
+
+                      return (
+                        <div key={rep.id} className="bg-card border border-border p-4 rounded-2xl flex flex-col justify-between shadow-xs hover:border-amber-500/30 transition-all">
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between items-center">
+                              <span className={`px-2 py-0.5 text-[9px] font-extrabold rounded-full border ${tagStyle}`}>
+                                {tagLabel}
+                              </span>
+                              <button
+                                onClick={() => handleToggleFavouriteReport(rep.id, true)}
+                                className="p-1 text-amber-500 hover:text-muted-foreground transition-colors cursor-pointer"
+                              >
+                                <Bookmark className="w-4 h-4 fill-amber-500" />
+                              </button>
+                            </div>
+                            <h4 className="text-xs font-extrabold text-foreground">{rep.name}</h4>
+                            <p className="text-[11px] text-muted-foreground leading-normal line-clamp-2">{rep.description}</p>
+                          </div>
+
+                          <div className="flex items-center justify-between pt-3 border-t border-border/40 mt-3">
+                            <button
+                              onClick={() => {
+                                if (isPrebuilt) {
+                                  setActiveTab((rep as any).tab as TabType);
+                                } else {
+                                  const allowedSource = dataSource === 'Audit Trail' && !isOwnerOrAdmin ? 'Requirements' : dataSource;
+                                  setBuilderSource(allowedSource);
+                                  setBuilderDimension(allowedSource === dataSource ? getReportDimension(rep as SavedReport) : 'category');
+                                  setBuilderMeasure(getReportMeasure(rep as SavedReport));
+                                  setBuilderVisual(allowedSource === 'Requirements' ? getReportVisualType(rep as SavedReport) : getReportVisualType(rep as SavedReport) === 'pivot' ? 'table' : getReportVisualType(rep as SavedReport));
+                                  const filters = getReportFilters(rep as SavedReport);
+                                  setSelectedCategory(filters.category || 'All');
+                                  setSelectedStatus(filters.status || 'All');
+                                  setSelectedRisk(filters.risk || 'All');
+                                  setActiveTab('builder');
+                                }
+                                recordView(rep.id, rep.name, isPrebuilt ? (rep as any).category : 'Custom Builder', dataSource, (rep as any).tab || 'builder');
+                              }}
+                              className="px-2 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-650 dark:text-indigo-300 font-extrabold text-[10px] rounded"
+                            >
+                              Open
+                            </button>
+                            <span className="text-[9px] text-muted-foreground font-semibold">Source: {dataSource}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Recently Viewed Section */}
+              {recentViews.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-muted-foreground" /> Recently Viewed
+                    </h3>
+                    <button
+                      onClick={handleClearRecents}
+                      className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer font-semibold"
+                    >
+                      Clear History
+                    </button>
+                  </div>
+                  <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
+                    {recentViews.map(r => (
+                      <div
+                        key={r.id}
+                        onClick={() => {
+                          if (r.tab && r.tab !== 'builder') {
+                            setActiveTab(r.tab as TabType);
+                          } else {
+                            dbService.getSavedReports().then(reports => {
+                              const match = reports.find(item => item.id === r.id);
+                              if (match) {
+                                const dataSource = getReportDataSource(match);
+                                const allowedSource = dataSource === 'Audit Trail' && !isOwnerOrAdmin ? 'Requirements' : dataSource;
+                                setBuilderSource(allowedSource);
+                                setBuilderDimension(allowedSource === dataSource ? getReportDimension(match) : 'category');
+                                setBuilderMeasure(getReportMeasure(match));
+                                setBuilderVisual(allowedSource === 'Requirements' ? getReportVisualType(match) : getReportVisualType(match) === 'pivot' ? 'table' : getReportVisualType(match));
+                                const filters = getReportFilters(match);
+                                setSelectedCategory(filters.category || 'All');
+                                setSelectedStatus(filters.status || 'All');
+                                setSelectedRisk(filters.risk || 'All');
+                                setActiveTab('builder');
+                              }
+                            });
+                          }
+                        }}
+                        className="bg-card border border-border p-3.5 rounded-xl min-w-[200px] max-w-[200px] shrink-0 space-y-1.5 cursor-pointer hover:border-indigo-500/30 transition-all text-xs"
+                      >
+                        <h4 className="font-extrabold text-foreground truncate">{r.name}</h4>
+                        <div className="flex justify-between text-[9px] text-muted-foreground font-semibold">
+                          <span>{r.sourceModule}</span>
+                          <span>{new Date(r.openedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Catalogue Enhancements Filters Bar */}
+              <div className="bg-card border border-border p-4 rounded-2xl flex flex-wrap gap-4 items-center justify-between shadow-xs text-xs">
+                <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
+                  <div className="relative flex-1 min-w-[180px]">
+                    <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="Search saved reports..."
+                      value={savedSearchQuery}
+                      onChange={e => setSavedSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2 bg-muted rounded-xl border border-border outline-none text-xs text-foreground"
+                    />
+                  </div>
+
+                  <select
+                    value={savedVisibilityFilter}
+                    onChange={e => setSavedVisibilityFilter(e.target.value as any)}
+                    className="px-3 py-2 bg-muted rounded-xl border border-border outline-none font-semibold text-muted-foreground text-xs"
+                  >
+                    <option value="all">All Visibilities</option>
+                    <option value="personal">Personal browser reports</option>
+                    <option value="organisation" disabled={!isSharedTableAvailable}>
+                      Organisation reports {!isSharedTableAvailable ? '(Unavailable)' : ''}
+                    </option>
+                  </select>
+
+                  <label className="flex items-center gap-1.5 font-semibold text-muted-foreground cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={savedShowOnlyFavs}
+                      onChange={e => setSavedShowOnlyFavs(e.target.checked)}
+                      className="rounded border-border text-indigo-650 focus:ring-0 cursor-pointer"
+                    />
+                    <span>Favourites only</span>
+                  </label>
+                </div>
+
+                {/* Source tags */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground mr-1">Filter Source:</span>
+                  {['all', 'Requirements', 'Evidence', 'Competencies', 'Actions', 'Audit Trail'].map(src => (
+                    <button
+                      key={src}
+                      onClick={() => setSavedSourceFilter(src)}
+                      className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border transition-all cursor-pointer ${
+                        savedSourceFilter === src
+                          ? 'bg-indigo-550 border-indigo-550 text-white dark:bg-indigo-650'
+                          : 'bg-muted/50 border-border text-muted-foreground hover:bg-muted'
+                      }`}
+                    >
+                      {src === 'all' ? 'All' : src}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Combined Grid List */}
+              <div className="space-y-6">
+                {/* 1. Prebuilt Reports */}
+                {filteredPrebuilt.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Vygilence Prebuilt Reports</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {filteredPrebuilt.map(rep => {
+                        const isFavourited = favReportIds.includes(rep.id);
+                        return (
+                          <div key={rep.id} className="bg-card border border-border p-5 rounded-2xl space-y-3 flex flex-col justify-between shadow-xs hover:border-indigo-550/20 transition-all animate-fade-in">
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="px-2 py-0.5 text-[9px] font-extrabold rounded-full border bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400">
+                                  System Prebuilt Report
+                                </span>
+                                <button
+                                  onClick={() => handleToggleFavouriteReport(rep.id, isFavourited)}
+                                  className="p-1 text-muted-foreground hover:text-amber-500 transition-colors cursor-pointer"
+                                  title={isFavourited ? "Remove from Favourites" : "Mark as Favourite"}
+                                >
+                                  <Bookmark className={`w-4 h-4 ${isFavourited ? 'fill-amber-500 text-amber-500' : 'text-muted-foreground'}`} />
+                                </button>
+                              </div>
+
+                              <h3 className="text-sm font-extrabold text-foreground mt-1">{rep.name}</h3>
+                              <p className="text-xs text-muted-foreground leading-normal">{rep.description}</p>
+
+                              <div className="flex flex-wrap gap-1.5 pt-2 font-semibold">
+                                <span className="px-2 py-0.5 bg-muted rounded text-[9px] text-muted-foreground">Category: {rep.category}</span>
+                                <span className="px-2 py-0.5 bg-muted rounded text-[9px] text-muted-foreground">Source: {rep.sourceModule}</span>
+                                <span className="px-2 py-0.5 bg-indigo-500/5 rounded text-[9px] text-indigo-600 dark:text-indigo-400">Filters: {rep.filters}</span>
+                                <span className="px-2 py-0.5 bg-emerald-500/5 rounded text-[9px] text-emerald-600 dark:text-emerald-400">Exports: {rep.exports}</span>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-border/40 mt-2">
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => {
+                                    setActiveTab(rep.tab as TabType);
+                                    recordView(rep.id, rep.name, rep.category, rep.sourceModule, rep.tab);
+                                  }}
+                                  className="px-3 py-1.5 bg-indigo-500/10 text-indigo-650 dark:text-indigo-300 font-extrabold text-[11px] rounded-lg hover:bg-indigo-500/20 cursor-pointer"
+                                >
+                                  Open Report
+                                </button>
+                                <button
+                                  onClick={() => handleDuplicatePrebuiltReport(rep)}
+                                  className="p-1.5 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer transition-all"
+                                  title="Duplicate to Personal browser report"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                              <span className="text-[10px] font-semibold text-muted-foreground flex items-center gap-1">
+                                <Lock className="w-3 h-3 text-muted-foreground/60" /> {rep.permission}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. Custom Saved Reports */}
+                {filteredCustom.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Personal & Shared Reports</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {filteredCustom.map(rep => {
+                        const dataSource = getReportDataSource(rep);
+                        const dimension = getReportDimension(rep);
+                        const measure = getReportMeasure(rep);
+                        const visualType = getReportVisualType(rep);
+                        const filters = getReportFilters(rep);
+                        const isOrg = rep.visibility === 'organisation';
+                        const canManageReport = rep.owner_user_id === user?.id || isOwnerOrAdmin;
+                        const isFavourited = favReportIds.includes(rep.id);
+
+                        return (
+                          <div key={rep.id} className="bg-card border border-border p-5 rounded-2xl space-y-3 flex flex-col justify-between shadow-xs hover:border-indigo-550/20 transition-all animate-fade-in">
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className={`px-2 py-0.5 text-[9px] font-extrabold rounded-full border ${
+                                  isOrg ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-650 dark:text-indigo-400 font-extrabold' : 'bg-zinc-500/10 border-zinc-500/20 text-zinc-650 dark:text-zinc-400'
+                                }`}>
+                                  {isOrg ? 'Organisation report' : 'Personal browser report'}
+                                </span>
+                                <button
+                                  onClick={() => handleToggleFavouriteReport(rep.id, isFavourited)}
+                                  className="p-1 text-muted-foreground hover:text-amber-500 transition-colors cursor-pointer"
+                                  title={isFavourited ? "Remove from Favourites" : "Mark as Favourite"}
+                                >
+                                  <Bookmark className={`w-4 h-4 ${isFavourited ? 'fill-amber-500 text-amber-500' : 'text-muted-foreground'}`} />
+                                </button>
+                              </div>
+
+                              <h3 className="text-sm font-extrabold text-foreground mt-1">{rep.name}</h3>
+                              <p className="text-xs text-muted-foreground leading-normal">{rep.description || 'No description provided.'}</p>
+
+                              <div className="flex flex-wrap gap-2 pt-2 text-[10px] text-muted-foreground font-semibold">
+                                <span>Source: {dataSource}</span>
+                                <span>•</span>
+                                <span>Dimension: {dimension}</span>
+                                <span>•</span>
+                                <span>Measure: {measure}</span>
+                                <span>•</span>
+                                <span>Visual: {visualType}</span>
+                              </div>
+
+                              <div className="text-[10px] text-muted-foreground pt-1 flex flex-wrap gap-2">
+                                <span>Created by: <strong className="text-foreground">{rep.owner_profile?.full_name || 'You'}</strong></span>
+                                <span>•</span>
+                                <span>Modified: {new Date(rep.updated_at || rep.created_at).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-border/40 mt-2">
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => {
+                                    const allowedSource = dataSource === 'Audit Trail' && !isOwnerOrAdmin ? 'Requirements' : dataSource;
+                                    setBuilderSource(allowedSource);
+                                    setBuilderDimension(allowedSource === dataSource ? dimension : 'category');
+                                    setBuilderMeasure(measure);
+                                    setBuilderVisual(allowedSource === 'Requirements' ? visualType : visualType === 'pivot' ? 'table' : visualType);
+                                    setSelectedCategory(filters.category || 'All');
+                                    setSelectedStatus(filters.status || 'All');
+                                    setSelectedRisk(filters.risk || 'All');
+                                    setActiveTab('builder');
+                                    recordView(rep.id, rep.name, 'Custom', dataSource, 'builder');
+                                    setToast({ type: 'info', message: `Loaded report config: "${rep.name}"` });
+                                  }}
+                                  className="px-2.5 py-1.5 bg-indigo-500/10 text-indigo-650 dark:text-indigo-300 font-bold text-[11px] rounded-lg hover:bg-indigo-500/20 cursor-pointer"
+                                >
+                                  Open Builder
+                                </button>
+                                <button
+                                  onClick={() => handleCopyDeepLink(rep.id)}
+                                  className="p-1.5 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer transition-all"
+                                  title="Copy internal share link"
+                                >
+                                  <Link2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDuplicateReport(rep)}
+                                  className="p-1.5 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer transition-all"
+                                  title="Duplicate configuration"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                </button>
+                                {canManageReport && (
+                                  <button
+                                    onClick={() => handleRenameReport(rep)}
+                                    className="p-1.5 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer transition-all"
+                                    title="Rename / Edit description"
+                                  >
+                                    <Edit className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                                <button
+                                  disabled
+                                  className="p-1.5 bg-muted text-muted-foreground/40 rounded-lg border border-border cursor-not-allowed opacity-50"
+                                  title="Scheduling not configured"
+                                >
+                                  <Clock className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                              {canManageReport ? (
+                                <button
+                                  onClick={() => handleDeleteSavedReport(rep.id, rep.name)}
+                                  className="px-2.5 py-1.5 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold text-[11px] rounded-lg hover:bg-rose-500/20 cursor-pointer"
+                                >
+                                  Delete
+                                </button>
+                              ) : (
+                                <span className="text-[10px] font-semibold text-muted-foreground">Read-only shared report</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Empty States */}
+                {filteredPrebuilt.length === 0 && filteredCustom.length === 0 && (
+                  <div className="p-12 text-center text-xs text-muted-foreground border border-dashed border-border rounded-2xl">
+                    No reports match the selected search or filters in this catalogue.
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Tab 10: Report Audit History */}
         {activeTab === 'history' && (
@@ -2427,7 +2949,7 @@ export default function ReportsPage() {
                       .map(event => {
                         const isExport = event.action_type.includes('export');
                         const isPrint = event.action_type.includes('print');
-                        
+
                         const Icon = isExport ? FileSpreadsheet : isPrint ? FileText : Bookmark;
                         const severityColor = event.severity === 'critical' ? 'text-rose-500 bg-rose-500/10' :
                                               event.severity === 'warning' ? 'text-amber-500 bg-amber-500/10' :
@@ -2475,7 +2997,7 @@ export default function ReportsPage() {
               {/* Configuration panel */}
               <div className="bg-card border border-border p-5 rounded-2xl space-y-4 shadow-sm text-xs">
                 <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Configuration Builder</h3>
-                
+
                 <div className="space-y-3">
                   <div>
                     <label className="block font-bold text-muted-foreground uppercase mb-1.5">Data Source</label>
@@ -2485,12 +3007,12 @@ export default function ReportsPage() {
                         const source = e.target.value;
                         setBuilderSource(source);
                         if (source !== 'Requirements' && builderVisual === 'pivot') setBuilderVisual('table');
-                        
+
                         let defDim = 'category';
                         if (source === 'Competencies' || source === 'Actions') defDim = 'status';
                         else if (source === 'Audit Trail') defDim = 'action_category';
                         setBuilderDimension(defDim);
-                        
+
                         setBuilderMeasure('count');
                       }}
                       className="w-full px-2.5 py-2 bg-muted rounded-xl border border-border/80 outline-none font-semibold text-foreground"
@@ -2876,14 +3398,14 @@ export default function ReportsPage() {
                 <h3 className="text-sm font-extrabold text-foreground">Schedule Report Delivery</h3>
                 <p className="text-xs text-indigo-650 dark:text-indigo-400 font-semibold">{selectedScheduledReport.name}</p>
               </div>
-              <button 
+              <button
                 onClick={() => setSelectedScheduledReport(null)}
                 className="text-muted-foreground hover:text-foreground text-xs font-bold"
               >
                 ✕
               </button>
             </div>
-            
+
             <div className="p-4 bg-indigo-500/5 border border-indigo-500/20 rounded-xl space-y-2.5 text-xs text-muted-foreground leading-relaxed text-left">
               <span className="font-extrabold text-indigo-650 dark:text-indigo-400 flex items-center gap-1.5 font-bold">
                 <AlertTriangle className="w-3.5 h-3.5" /> Scheduling is not configured
@@ -2895,7 +3417,7 @@ export default function ReportsPage() {
                 To share this report configuration with your team, please use the <strong className="text-foreground">Copy Share Link</strong> option to copy a deep link to their workspace dashboard instead.
               </p>
             </div>
-            
+
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
