@@ -41,6 +41,7 @@ import {
 } from '@/lib/types';
 import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
 import { calculateCompetencyStatus } from '@/lib/competencyEngine';
+import { isDemoMode } from '@/lib/env';
 
 // Local storage key for saved custom reports
 const SAVED_REPORTS_KEY = 'vygilence_saved_reports';
@@ -180,12 +181,14 @@ export default function ReportsPage() {
     const prevDocs = documents.filter(d => d.created_at && new Date(d.created_at) >= prevStart && new Date(d.created_at) <= prevEnd).length;
     const docsDiff = currDocs - prevDocs;
     const docsPct = calcPct(currDocs, prevDocs);
+    const docLabel = `New uploads: ${currDocs} (current) vs ${prevDocs} (previous)`;
 
     // 2. Actions opened
     const currActionsOpen = actions.filter(a => a.created_at && new Date(a.created_at) >= currentStart && new Date(a.created_at) <= currentEnd).length;
     const prevActionsOpen = actions.filter(a => a.created_at && new Date(a.created_at) >= prevStart && new Date(a.created_at) <= prevEnd).length;
     const actionsOpenDiff = currActionsOpen - prevActionsOpen;
     const actionsOpenPct = calcPct(currActionsOpen, prevActionsOpen);
+    const actionsOpenLabel = `New actions opened: ${currActionsOpen} (current) vs ${prevActionsOpen} (previous)`;
 
     // 3. Actions completed
     const getCompDate = (a: any) => a.completed_at || a.updated_at || a.created_at;
@@ -193,43 +196,47 @@ export default function ReportsPage() {
     const prevActionsComp = actions.filter(a => a.status === 'Complete' && getCompDate(a) && new Date(getCompDate(a)) >= prevStart && new Date(getCompDate(a)) <= prevEnd).length;
     const actionsCompDiff = currActionsComp - prevActionsComp;
     const actionsCompPct = calcPct(currActionsComp, prevActionsComp);
+    const actionsCompLabel = `Actions completed: ${currActionsComp} (current) vs ${prevActionsComp} (previous)`;
 
     // 4. Competency gaps resolved / records updated
     const currComps = competencyRecords.filter(r => r.updated_at && new Date(r.updated_at) >= currentStart && new Date(r.updated_at) <= currentEnd).length;
     const prevComps = competencyRecords.filter(r => r.updated_at && new Date(r.updated_at) >= prevStart && new Date(r.updated_at) <= prevEnd).length;
     const compsDiff = currComps - prevComps;
     const compsPct = calcPct(currComps, prevComps);
+    const compsLabel = `Competencies updated: ${currComps} (current) vs ${prevComps} (previous)`;
 
     // 5. Audit packs generated
     const currPacks = auditPacks.filter(p => p.created_at && new Date(p.created_at) >= currentStart && new Date(p.created_at) <= currentEnd).length;
     const prevPacks = auditPacks.filter(p => p.created_at && new Date(p.created_at) >= prevStart && new Date(p.created_at) <= prevEnd).length;
     const packsDiff = currPacks - prevPacks;
     const packsPct = calcPct(currPacks, prevPacks);
+    const packsLabel = `Audit packs created: ${currPacks} (current) vs ${prevPacks} (previous)`;
 
     // 6. Audit activities
     const currAudits = auditTrailEvents.filter(e => new Date(e.created_at) >= currentStart && new Date(e.created_at) <= currentEnd).length;
     const prevAudits = auditTrailEvents.filter(e => new Date(e.created_at) >= prevStart && new Date(e.created_at) <= prevEnd).length;
     const auditsDiff = currAudits - prevAudits;
     const auditsPct = calcPct(currAudits, prevAudits);
+    const auditsLabel = `Audit events logged: ${currAudits} (current) vs ${prevAudits} (previous)`;
 
     return {
       label,
-      docs: { current: currDocs, previous: prevDocs, diff: docsDiff, pct: docsPct },
-      actionsOpen: { current: currActionsOpen, previous: prevActionsOpen, diff: actionsOpenDiff, pct: actionsOpenPct },
-      actionsComp: { current: currActionsComp, previous: prevActionsComp, diff: actionsCompDiff, pct: actionsCompPct },
-      comps: { current: currComps, previous: prevComps, diff: compsDiff, pct: compsPct },
-      packs: { current: currPacks, previous: prevPacks, diff: packsDiff, pct: packsPct },
-      audits: { current: currAudits, previous: prevAudits, diff: auditsDiff, pct: auditsPct }
+      docs: { current: currDocs, previous: prevDocs, diff: docsDiff, pct: docsPct, label: docLabel },
+      actionsOpen: { current: currActionsOpen, previous: prevActionsOpen, diff: actionsOpenDiff, pct: actionsOpenPct, label: actionsOpenLabel },
+      actionsComp: { current: currActionsComp, previous: prevActionsComp, diff: actionsCompDiff, pct: actionsCompPct, label: actionsCompLabel },
+      comps: { current: currComps, previous: prevComps, diff: compsDiff, pct: compsPct, label: compsLabel },
+      packs: { current: currPacks, previous: prevPacks, diff: packsDiff, pct: packsPct, label: packsLabel },
+      audits: { current: currAudits, previous: prevAudits, diff: auditsDiff, pct: auditsPct, label: auditsLabel }
     };
   }, [comparePeriod, startDate, endDate, documents, actions, competencyRecords, auditPacks, auditTrailEvents]);
 
-  const renderComparisonBadge = (data: { diff: number; pct: number } | undefined) => {
+  const renderComparisonBadge = (data: { diff: number; pct: number; label: string } | undefined) => {
     if (!comparePeriod || !data) return null;
     const isPositive = data.diff > 0;
     const isZero = data.diff === 0;
     return (
       <span
-        title={comparisonData?.label}
+        title={`${data.label} (${comparisonData?.label || ''})`}
         className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded ml-2 ${
           isZero ? 'bg-zinc-500/10 text-zinc-500' :
           isPositive ? 'bg-emerald-500/10 text-emerald-650' :
@@ -1780,7 +1787,7 @@ export default function ReportsPage() {
 
               {/* Card 3: Upcoming obligations forecast */}
               <div className="bg-card border border-border p-5 rounded-2xl space-y-4">
-                <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Upcoming Scheduled Records</h3>
+                <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Upcoming Obligations Forecast</h3>
                 <p className="text-[10px] text-muted-foreground">Exclusive windows; overdue records are not included.</p>
                 <div className="space-y-4 text-xs">
                   <div onClick={() => handleDrillDown('Requirements', { status: 'AMBER' })} className="flex justify-between items-center p-2.5 bg-muted/40 hover:bg-muted/65 cursor-pointer rounded-xl border border-border/40 transition-all">
@@ -1982,11 +1989,11 @@ export default function ReportsPage() {
                 <div className="space-y-3 text-xs">
                   <div onClick={() => handleDrillDown('Competencies', { status: 'Expired' })} className="flex justify-between items-center p-3 bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-400 rounded-xl cursor-pointer hover:bg-rose-500/20 transition-all">
                     <span className="font-bold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> High Risk Competency Gaps</span>
-                    <span className="font-extrabold">{filteredCompetencySummary.expired + filteredCompetencySummary.missing} records{renderComparisonBadge(comparisonData?.comps)}</span>
+                    <span className="font-extrabold">{filteredCompetencySummary.expired + filteredCompetencySummary.missing} records</span>
                   </div>
                   <div onClick={() => handleDrillDown('Competencies', { status: 'Expiring Soon' })} className="flex justify-between items-center p-3 bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 rounded-xl cursor-pointer hover:bg-amber-500/20 transition-all">
                     <span className="font-bold flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Expiring Soon / Due Gaps</span>
-                    <span className="font-extrabold">{filteredCompetencySummary.expiringSoon} records{renderComparisonBadge(comparisonData?.comps)}</span>
+                    <span className="font-extrabold">{filteredCompetencySummary.expiringSoon} records</span>
                   </div>
                   <div className="p-3 bg-muted/40 rounded-xl border border-border/40 space-y-1.5 text-muted-foreground">
                     <div className="flex justify-between items-center font-bold">
@@ -2248,8 +2255,8 @@ export default function ReportsPage() {
                   className="px-3 py-2 bg-muted rounded-xl border border-border outline-none font-semibold text-muted-foreground text-xs"
                 >
                   <option value="all">All Visibilities</option>
-                  <option value="personal">Personal only</option>
-                  <option value="organisation">Shared only</option>
+                  <option value="personal">Personal reports</option>
+                  <option value="organisation">Organisation reports</option>
                 </select>
 
                 <label className="flex items-center gap-1.5 font-semibold text-muted-foreground cursor-pointer select-none">
@@ -2299,7 +2306,7 @@ export default function ReportsPage() {
                         <span className={`px-2 py-0.5 text-[9px] font-extrabold rounded-full border ${
                           isOrg ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400' : 'bg-zinc-500/10 border-zinc-500/20 text-zinc-650 dark:text-zinc-400'
                         }`}>
-                          {isOrg ? 'Shared' : 'Personal'}
+                          {isDemoMode ? (isOrg ? 'Organisation report (Local demo)' : 'Personal browser report') : (isOrg ? 'Organisation report' : 'Personal account report')}
                         </span>
                         <button
                           onClick={() => handleToggleFavouriteReport(rep.id, rep.is_favourite)}
@@ -2373,9 +2380,9 @@ export default function ReportsPage() {
                           <Edit className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => setSelectedScheduledReport(rep)}
-                          className="p-1.5 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer transition-all"
-                          title="Schedule Delivery"
+                          disabled
+                          className="p-1.5 bg-muted text-muted-foreground/40 rounded-lg border border-border cursor-not-allowed opacity-50"
+                          title="Scheduling not configured"
                         >
                           <Clock className="w-3.5 h-3.5" />
                         </button>
@@ -2648,8 +2655,12 @@ export default function ReportsPage() {
                           onChange={e => setBuilderReportVisibility(e.target.value as 'personal' | 'organisation')}
                           className="w-full px-2 py-1.5 bg-muted rounded-lg border border-border outline-none font-semibold text-xs"
                         >
-                          <option value="personal">Personal (Only visible to you)</option>
-                          <option value="organisation">Organisation (Shared with members)</option>
+                          <option value="personal">
+                            {isDemoMode ? 'Personal browser report (Local storage)' : 'Personal account report (Private)'}
+                          </option>
+                          <option value="organisation">
+                            {isDemoMode ? 'Organisation report (Local demo - not shared)' : 'Organisation report (Shared with team)'}
+                          </option>
                         </select>
                       </div>
                     )}

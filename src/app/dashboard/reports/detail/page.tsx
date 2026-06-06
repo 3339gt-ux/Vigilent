@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useApp } from '@/context/AppContext';
 import { dbService } from '@/lib/db';
 import Link from 'next/link';
@@ -53,7 +53,8 @@ export default function ReportDetailPage() {
     competencyRecords,
     requirementDocuments,
     auditPacks,
-    readinessReport
+    readinessReport,
+    requirementActions
   } = useApp();
 
   const router = useRouter();
@@ -69,6 +70,14 @@ export default function ReportDetailPage() {
   const [pageSize] = useState(10);
   const [sortBy, setSortBy] = useState<string>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  // Helper to find linked requirement risk
+  const getLinkedRequirementRisk = useCallback((actionId: string) => {
+    const link = requirementActions.find(la => la.action_id === actionId);
+    if (!link) return 'Not recorded';
+    const req = frameworkRequirements.find(r => r.id === link.requirement_id);
+    return req?.risk_level || 'Not recorded';
+  }, [requirementActions, frameworkRequirements]);
 
   // Filter overrides from query parameters
   const [source, setSource] = useState<string>('');
@@ -160,7 +169,7 @@ export default function ReportDetailPage() {
       return actions.filter(a => {
         if (ownerFilter !== 'All' && a.owner !== ownerFilter) return false;
         if (statusFilter !== 'All' && a.status !== statusFilter) return false;
-        if (riskFilter !== 'All' && 'Medium' !== riskFilter) return false;
+        if (riskFilter !== 'All' && getLinkedRequirementRisk(a.id) !== riskFilter) return false;
         return true;
       });
     }
@@ -173,7 +182,7 @@ export default function ReportDetailPage() {
     }
 
     return [];
-  }, [source, frameworkRequirements, documents, competencyRecords, competencyTypes, people, actions, auditPacks, categoryFilter, ownerFilter, riskFilter, statusFilter, readinessByRequirementId]);
+  }, [source, frameworkRequirements, documents, competencyRecords, competencyTypes, people, actions, auditPacks, categoryFilter, ownerFilter, riskFilter, statusFilter, readinessByRequirementId, requirementActions, getLinkedRequirementRisk]);
 
   // Sort records
   const sortedRecords = useMemo(() => {
@@ -198,7 +207,7 @@ export default function ReportDetailPage() {
       } else if (source === 'Actions') {
         if (sortBy === 'name') { valA = a.description; valB = b.description; }
         else if (sortBy === 'status') { valA = a.status; valB = b.status; }
-        else if (sortBy === 'risk') { valA = 'Medium'; valB = 'Medium'; }
+        else if (sortBy === 'risk') { valA = getLinkedRequirementRisk(a.id); valB = getLinkedRequirementRisk(b.id); }
       } else if (source === 'Audits') {
         if (sortBy === 'name') { valA = a.name; valB = b.name; }
         else if (sortBy === 'status') { valA = a.status; valB = b.status; }
@@ -262,10 +271,10 @@ export default function ReportDetailPage() {
         c.record?.expiry_date || 'N/A'
       ]);
     } else if (source === 'Actions') {
-      headers = ['Description', 'Priority', 'Status', 'Owner', 'Due Date'];
+      headers = ['Description', 'Linked Requirement Risk', 'Status', 'Owner', 'Due Date'];
       rows = sortedRecords.map((a: any) => [
         a.description,
-        'Medium',
+        getLinkedRequirementRisk(a.id),
         a.status,
         a.owner || 'Unassigned',
         a.target_due_date || a.due_date || 'N/A'
@@ -555,7 +564,7 @@ export default function ReportDetailPage() {
               <thead>
                 <tr className="bg-muted/50 border-b border-border/80 text-muted-foreground uppercase font-bold text-[9px] tracking-wider">
                   <th className="p-3 cursor-pointer hover:bg-muted/80" onClick={() => handleSort('name')}>Action Description</th>
-                  <th className="p-3 cursor-pointer hover:bg-muted/80 text-center" onClick={() => handleSort('risk')}>Priority</th>
+                  <th className="p-3 cursor-pointer hover:bg-muted/80 text-center" onClick={() => handleSort('risk')}>Linked Requirement Risk</th>
                   <th className="p-3 cursor-pointer hover:bg-muted/80 text-center" onClick={() => handleSort('status')}>Status</th>
                   <th className="p-3">Owner</th>
                   <th className="p-3">Due Date</th>
@@ -566,7 +575,7 @@ export default function ReportDetailPage() {
                 {paginatedRecords.map((a: any) => (
                   <tr key={a.id} className="hover:bg-muted/10">
                     <td className="p-3 font-bold text-foreground truncate max-w-xs">{a.description}</td>
-                    <td className="p-3 text-center font-semibold text-muted-foreground">Medium</td>
+                    <td className="p-3 text-center font-semibold text-muted-foreground">{getLinkedRequirementRisk(a.id)}</td>
                     <td className="p-3 text-center">
                       <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase border ${
                         a.status === 'Complete' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' :

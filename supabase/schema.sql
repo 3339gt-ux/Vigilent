@@ -508,6 +508,28 @@ create table if not exists public.workspace_notifications (
     created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
+-- 7d. Saved Reports Configuration
+create table if not exists public.saved_reports (
+    id uuid primary key default uuid_generate_v4(),
+    organization_id uuid not null references public.organizations(id) on delete cascade,
+    owner_user_id uuid not null references public.profiles(id) on delete cascade,
+    name text not null,
+    description text,
+    report_type text not null,
+    data_source text not null,
+    configuration jsonb not null,
+    visibility text not null check (visibility in ('personal', 'organisation')),
+    is_favourite boolean default false not null,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create index if not exists saved_reports_org_owner_idx
+    on public.saved_reports (organization_id, owner_user_id);
+
+create index if not exists saved_reports_org_visibility_idx
+    on public.saved_reports (organization_id, visibility);
+
 create index if not exists workspace_notifications_org_created_idx on public.workspace_notifications (organisation_id, created_at desc);
 create index if not exists workspace_notifications_recipient_created_idx on public.workspace_notifications (recipient_user_id, created_at desc);
 create index if not exists workspace_notifications_role_created_idx on public.workspace_notifications (organisation_id, recipient_role, created_at desc);
@@ -542,6 +564,7 @@ alter table public.competency_types enable row level security;
 alter table public.competency_records enable row level security;
 alter table public.competency_record_documents enable row level security;
 alter table public.requirement_competency_types enable row level security;
+alter table public.saved_reports enable row level security;
 
 -- Row Level Security (RLS) Policies
 -- auth.uid() links to profiles.id. The helper avoids recursive profile policy checks.
@@ -742,6 +765,12 @@ drop policy if exists "Users can read competency record documents in own organis
 drop policy if exists "Members can write competency record documents in own organisation" on public.competency_record_documents;
 drop policy if exists "Users can read requirement competency types in own organisation" on public.requirement_competency_types;
 drop policy if exists "Members can write requirement competency types in own organisation" on public.requirement_competency_types;
+
+-- Saved Reports
+drop policy if exists "Members can read organization-shared or own reports" on public.saved_reports;
+drop policy if exists "Members can create own reports; owners can create shared reports" on public.saved_reports;
+drop policy if exists "Owners or admins can update reports" on public.saved_reports;
+drop policy if exists "Owners or admins can delete reports" on public.saved_reports;
 
 -- Organizations
 drop policy if exists "Users can read own organization" on public.organizations;
@@ -1381,3 +1410,51 @@ create trigger enforce_audit_trail_immutability
 before update on public.audit_trail_events
 for each row
 execute function public.check_audit_trail_update();
+
+-- Saved Reports Policies
+create policy "Members can read organization-shared or own reports" on public.saved_reports
+    for select using (
+        public.is_organization_member(organization_id)
+        and (
+            visibility = 'organisation'
+            or owner_user_id = auth.uid()
+        )
+    );
+
+create policy "Members can create own reports; owners can create shared reports" on public.saved_reports
+    for insert with check (
+        public.is_organization_member(organization_id)
+        and owner_user_id = auth.uid()
+        and (
+            visibility = 'personal'
+            or (visibility = 'organisation' and public.can_admin_organization(organization_id))
+        )
+    );
+
+create policy "Owners or admins can update reports" on public.saved_reports
+    for update using (
+        public.is_organization_member(organization_id)
+        and (
+            owner_user_id = auth.uid()
+            or public.can_admin_organization(organization_id)
+        )
+    ) with check (
+        public.is_organization_member(organization_id)
+        and (
+            owner_user_id = auth.uid()
+            or public.can_admin_organization(organization_id)
+        )
+        and (
+            visibility = 'personal'
+            or public.can_admin_organization(organization_id)
+        )
+    );
+
+create policy "Owners or admins can delete reports" on public.saved_reports
+    for delete using (
+        public.is_organization_member(organization_id)
+        and (
+            owner_user_id = auth.uid()
+            or public.can_admin_organization(organization_id)
+        )
+    );
