@@ -510,3 +510,19 @@ export interface WorkspaceNotification {
   read_at: string | null;
   created_at: string;
 }
+
+export interface SavedReport {
+  id: string;
+  organization_id: string;
+  owner_user_id: string;
+  name: string;
+  description: string | null;
+  report_type: string;
+  data_source: string;
+  configuration: Record<string, any>;
+  visibility: 'personal' | 'organisation';
+  is_favourite: boolean;
+  created_at: string;
+  updated_at: string;
+  owner_profile?: { full_name: string | null; role: string | null } | null;
+}

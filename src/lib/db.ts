@@ -39,7 +39,8 @@ import {
   Person,
   ManagedCategory,
   CellStatus,
-  DocumentStatus
+  DocumentStatus,
+  SavedReport
 } from './types';
 import { calculateCompetencyStatus } from './competencyEngine';
 
@@ -4376,6 +4377,245 @@ export const dbService = {
       setStorageItem('vigilen_logs', logs.slice(0, 100)); // cap at 100
       return newLog;
     }
+  },
+
+  // Saved Reports
+  async getSavedReports(): Promise<SavedReport[]> {
+    const SAVED_REPORTS_KEY = 'vygilence_saved_reports';
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('saved_reports')
+        .select(`
+          *,
+          owner_profile:owner_user_id (
+            full_name,
+            role
+          )
+        `)
+        .eq('organization_id', orgId);
+      if (error) throwSupabaseError('saved_reports.select active organization', error);
+      return data || [];
+    } else {
+      initMockDb();
+      const user = MOCK_PROFILE;
+      const org = MOCK_ORG;
+      const key = `${SAVED_REPORTS_KEY}_${user.id}_${org.id}`;
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem(key);
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed)) {
+              return parsed.map((item: any) => ({
+                ...item,
+                owner_profile: { full_name: 'Jane Doe', role: 'Admin' }
+              }));
+            }
+          } catch (e) {
+            console.error('Failed to parse local reports', e);
+          }
+        }
+      }
+      return [];
+    }
+  },
+
+  async addSavedReport(report: Omit<SavedReport, 'id' | 'created_at' | 'updated_at' | 'organization_id' | 'owner_user_id'>): Promise<SavedReport> {
+    const SAVED_REPORTS_KEY = 'vygilence_saved_reports';
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const userId = shouldUseSupabase() ? (await getCurrentSupabaseProfile())?.id : MOCK_PROFILE.id;
+    let newReport: SavedReport;
+
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('saved_reports')
+        .insert([{
+          ...report,
+          organization_id: orgId,
+          owner_user_id: userId
+        }])
+        .select(`
+          *,
+          owner_profile:owner_user_id (
+            full_name,
+            role
+          )
+        `)
+        .single();
+      if (error) throwSupabaseError('saved_reports.insert', error);
+      newReport = data;
+    } else {
+      const user = MOCK_PROFILE;
+      const org = MOCK_ORG;
+      const key = `${SAVED_REPORTS_KEY}_${user.id}_${org.id}`;
+      const list = await this.getSavedReports();
+      newReport = {
+        ...report,
+        id: `rep-${Math.random().toString(36).substr(2, 9)}`,
+        organization_id: orgId,
+        owner_user_id: userId || 'usr-jane-doe',
+        is_favourite: report.is_favourite || false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        owner_profile: { full_name: 'Jane Doe', role: 'Admin' }
+      };
+      const cleanedList = list.map(item => {
+        const copy = { ...item };
+        delete copy.owner_profile;
+        return copy;
+      });
+      const updatedList = [...cleanedList, newReport];
+      localStorage.setItem(key, JSON.stringify(updatedList));
+    }
+
+    await safeLogAuditEvent({
+      actionCategory: 'Users & Admin',
+      actionType: 'saved_report_created',
+      entityType: 'saved_report',
+      entityId: newReport.id,
+      entityLabel: newReport.name,
+      description: `Created ${newReport.visibility} saved report "${newReport.name}".`,
+      afterSnapshot: newReport,
+      severity: 'info'
+    });
+
+    return newReport;
+  },
+
+  async updateSavedReport(reportId: string, updates: Partial<SavedReport>): Promise<SavedReport> {
+    const SAVED_REPORTS_KEY = 'vygilence_saved_reports';
+    let before: any = null;
+    let after: SavedReport;
+
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data: beforeData } = await supabase!
+        .from('saved_reports')
+        .select('*')
+        .eq('id', reportId)
+        .eq('organization_id', orgId)
+        .single();
+      before = beforeData;
+
+      const { data, error } = await supabase!
+        .from('saved_reports')
+        .update(updates)
+        .eq('id', reportId)
+        .eq('organization_id', orgId)
+        .select(`
+          *,
+          owner_profile:owner_user_id (
+            full_name,
+            role
+          )
+        `)
+        .single();
+      if (error) throwSupabaseError('saved_reports.update', error);
+      after = data;
+    } else {
+      const user = MOCK_PROFILE;
+      const org = MOCK_ORG;
+      const key = `${SAVED_REPORTS_KEY}_${user.id}_${org.id}`;
+      const list = await this.getSavedReports();
+      const idx = list.findIndex(r => r.id === reportId);
+      if (idx === -1) throw new Error('Saved report not found');
+      before = { ...list[idx] };
+      after = {
+        ...list[idx],
+        ...updates,
+        updated_at: new Date().toISOString()
+      };
+      list[idx] = after;
+      const cleanedList = list.map(item => {
+        const copy = { ...item };
+        delete copy.owner_profile;
+        return copy;
+      });
+      localStorage.setItem(key, JSON.stringify(cleanedList));
+    }
+
+    await safeLogAuditEvent({
+      actionCategory: 'Users & Admin',
+      actionType: 'saved_report_updated',
+      entityType: 'saved_report',
+      entityId: after.id,
+      entityLabel: after.name,
+      description: `Updated saved report "${after.name}".`,
+      beforeSnapshot: before,
+      afterSnapshot: after,
+      changedFields: getChangedFields(before, after),
+      severity: 'info'
+    });
+
+    return after;
+  },
+
+  async deleteSavedReport(reportId: string): Promise<void> {
+    const SAVED_REPORTS_KEY = 'vygilence_saved_reports';
+    let before: any = null;
+
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data: beforeData } = await supabase!
+        .from('saved_reports')
+        .select('*')
+        .eq('id', reportId)
+        .eq('organization_id', orgId)
+        .single();
+      before = beforeData;
+
+      const { error } = await supabase!
+        .from('saved_reports')
+        .delete()
+        .eq('id', reportId)
+        .eq('organization_id', orgId);
+      if (error) throwSupabaseError('saved_reports.delete', error);
+    } else {
+      const user = MOCK_PROFILE;
+      const org = MOCK_ORG;
+      const key = `${SAVED_REPORTS_KEY}_${user.id}_${org.id}`;
+      const list = await this.getSavedReports();
+      const idx = list.findIndex(r => r.id === reportId);
+      if (idx === -1) throw new Error('Saved report not found');
+      before = { ...list[idx] };
+      const updated = list.filter(r => r.id !== reportId);
+      const cleanedList = updated.map(item => {
+        const copy = { ...item };
+        delete copy.owner_profile;
+        return copy;
+      });
+      localStorage.setItem(key, JSON.stringify(cleanedList));
+    }
+
+    if (before) {
+      await safeLogAuditEvent({
+        actionCategory: 'Users & Admin',
+        actionType: 'saved_report_deleted',
+        entityType: 'saved_report',
+        entityId: reportId,
+        entityLabel: before.name,
+        description: `Deleted saved report "${before.name}".`,
+        beforeSnapshot: before,
+        severity: 'warning'
+      });
+    }
+  },
+
+  async logReportActivity(input: {
+    actionType: string;
+    entityId?: string;
+    entityLabel: string;
+    description: string;
+    metadata?: Record<string, any>;
+    severity?: 'info' | 'warning' | 'critical';
+  }): Promise<void> {
+    await safeLogAuditEvent({
+      actionCategory: 'System',
+      source: 'app',
+      ...input,
+      entityType: 'saved_report'
+    });
   },
 
   // Private helper to automatically map a uploaded document to a matrix cell if it fits requirements

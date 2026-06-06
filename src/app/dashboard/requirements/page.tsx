@@ -434,6 +434,14 @@ export default function RequirementsPage() {
       if (actionParam === 'create') {
         setShowCreateModal(true);
       }
+      const actionIdParam = params.get('actionId');
+      if (actionIdParam && actions.length > 0) {
+        const act = actions.find(a => a.id === actionIdParam);
+        if (act) {
+          setRequirementView('actions');
+          setSelectedAction(act);
+        }
+      }
       if (idParam && assessedRequirements.length > 0) {
         const req = assessedRequirements.find(r => r.id === idParam);
         if (req) {
@@ -447,7 +455,7 @@ export default function RequirementsPage() {
         }
       }
     }
-  }, [assessedRequirements]);
+  }, [assessedRequirements, actions]);
 
   const activeRadarFilter = useMemo(() => {
     if (radarFilter !== 'All') return radarFilter;

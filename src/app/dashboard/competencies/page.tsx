@@ -555,6 +555,15 @@ export default function CompetencyMatrixPage() {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const filterParam = params.get('filter');
+      const idParam = params.get('id');
+      
+      if (idParam && activePeople.length > 0) {
+        const person = activePeople.find(p => p.id === idParam);
+        if (person) {
+          openPersonWorkspace(person);
+        }
+      }
+      
       if (filterParam) {
         if (filterParam.startsWith('comp:')) {
           const compId = filterParam.replace('comp:', '');
@@ -568,7 +577,7 @@ export default function CompetencyMatrixPage() {
         }
       }
     }
-  }, [competencyTypes]);
+  }, [competencyTypes, activePeople]);
 
   const filterChips = useMemo(() => {
     const chips: any[] = [];
@@ -909,14 +918,14 @@ export default function CompetencyMatrixPage() {
     }
   };
 
-  const openPersonWorkspace = (person: Person) => {
+  function openPersonWorkspace(person: Person) {
     setSelectedPerson(person);
     setActiveCell(null);
     setIsEditingPerson(false);
     syncPersonForm(person);
     setWorkspaceSearch('');
     setWorkspaceStatusFilter('All');
-  };
+  }
 
   React.useEffect(() => {
     if (!selectedPerson || isEditingPerson) return;
