@@ -28,7 +28,8 @@ import {
   History,
   Search,
   Clock,
-  Lock
+  Lock,
+  HelpCircle
 } from 'lucide-react';
 import {
   Requirement,
@@ -224,6 +225,139 @@ export interface RecentReportView {
   openedAt: string;
 }
 
+export const METRIC_GLOSSARIES = [
+  {
+    name: 'Overall Readiness',
+    measures: 'Workspace overall compliance health and audit readiness level.',
+    calculation: 'Average compliance score: Green = 100%, Amber = 50%, Red = 0%. Excluded items are omitted from both numerator and denominator.',
+    included: 'Active compliance requirements matching current filters.',
+    excluded: 'Deactivated, archived, deleted, and unassessed (GREY) requirements.',
+    dateField: 'None (derived dynamically from the active requirement status list).',
+    missing: 'Excluded from both the numerator and the denominator of the percentage calculation.',
+    sourceModule: 'Requirements Framework / Readiness Engine'
+  },
+  {
+    name: 'Requirement Compliance',
+    measures: 'Individual compliance readiness status for assigned obligations.',
+    calculation: 'Evaluated into GREEN (100% compliant), AMBER (50% warning / due soon), RED (0% gap / non-compliant), or GREY (exempt/unassessed).',
+    included: 'Active workspace compliance obligations.',
+    excluded: 'Archived, deactivated, or deleted requirements.',
+    dateField: 'Derived from linked document expiry dates and review schedules.',
+    missing: 'Defaults to RED (0%) if no evidence is linked or matching criteria fail.',
+    sourceModule: 'Requirements Framework'
+  },
+  {
+    name: 'Critical Gap',
+    measures: 'Urgent compliance gaps and failures that pose an active audit risk.',
+    calculation: 'Total count of requirements with RED status or Critical/High risk with open actions.',
+    included: 'Active framework requirements with RED status or outstanding critical actions.',
+    excluded: 'GREEN, AMBER, or GREY requirements without active critical actions.',
+    dateField: 'Requirement next review date or overdue action due date.',
+    missing: 'Categorized as a RED gap if compliance evidence is missing.',
+    sourceModule: 'Requirements Framework'
+  },
+  {
+    name: 'Evidence Coverage',
+    measures: 'Proportion of active requirements backed by valid, current evidence.',
+    calculation: '(Requirements with linked valid documents) / (Total active requirements).',
+    included: 'Active compliance requirements and active linked evidence documents.',
+    excluded: 'Exempt/unassessed (GREY) requirements and unlinked files.',
+    dateField: 'Evidence document expiry date.',
+    missing: 'Treated as missing (0% coverage), dragging down readiness.',
+    sourceModule: 'Evidence Vault / Readiness Engine'
+  },
+  {
+    name: 'Linked Evidence',
+    measures: 'Evidence documents successfully mapped to framework requirements or actions.',
+    calculation: 'Count of unique evidence documents mapped in RequirementDocument or linked to criteria matches.',
+    included: 'Uploaded files mapped to requirements, actions, or competency records.',
+    excluded: 'Unmapped documents, archived/trashed documents.',
+    dateField: 'Mapping link creation timestamp.',
+    missing: 'Empty linkages place documents into the Unlinked status category.',
+    sourceModule: 'Evidence Vault'
+  },
+  {
+    name: 'Unlinked Evidence',
+    measures: 'Uploaded evidence files that are unassigned and lack requirement mapping.',
+    calculation: 'Distinct count of documents with no active linkages (status is Unclassified).',
+    included: 'Active evidence documents with no links to requirements or actions.',
+    excluded: 'Linked files, archived files.',
+    dateField: 'Document upload date.',
+    missing: 'Defaults to Unclassified/Unlinked until mapped by a compliance officer.',
+    sourceModule: 'Evidence Vault'
+  },
+  {
+    name: 'Expiring Evidence',
+    measures: 'Documents whose validity is about to expire shortly.',
+    calculation: 'Count of active documents with status Expiring Soon (expiry within 30 days).',
+    included: 'Active evidence documents.',
+    excluded: 'Expired documents, unclassified or undated documents.',
+    dateField: 'Document expiry date.',
+    missing: 'Treated as unclassified (no expiry date specified).',
+    sourceModule: 'Evidence Vault'
+  },
+  {
+    name: 'Competency Gap',
+    measures: 'Outstanding training deficiencies or expired employee certificates.',
+    calculation: 'Count of assigned required competency types that are expired or missing a record.',
+    included: 'Active employee training requirements.',
+    excluded: 'Exempt (N/A) qualifications, archived staff profiles.',
+    dateField: 'Competency record expiry date.',
+    missing: 'Marked as an active gap for the employee.',
+    sourceModule: 'Competency Matrix'
+  },
+  {
+    name: 'People with Gaps',
+    measures: 'Employees with one or more missing or expired training items.',
+    calculation: 'Count of unique active personnel with at least one active Competency Gap.',
+    included: 'Active tracked personnel.',
+    excluded: 'Deactivated staff or historical personnel records.',
+    dateField: 'Competency record expiry date.',
+    missing: 'Missing required training counts as an active gap.',
+    sourceModule: 'Competency Matrix'
+  },
+  {
+    name: 'Action Completion Rate',
+    measures: 'Proportion of resolved corrective actions against all non-cancelled actions.',
+    calculation: '(Completed Actions) / (Total Actions - Cancelled Actions).',
+    included: 'All logged corrective actions.',
+    excluded: 'Actions with status Cancelled.',
+    dateField: 'Action completion timestamp.',
+    missing: 'Uncompleted actions count as Open/Uncompleted.',
+    sourceModule: 'Actions Registry'
+  },
+  {
+    name: 'Overdue Action',
+    measures: 'Corrective actions remaining unresolved past their target due date.',
+    calculation: 'Count of Open or In Progress actions where due_date < current_date.',
+    included: 'Actions with status Open or In Progress.',
+    excluded: 'Completed or cancelled corrective actions.',
+    dateField: 'Action due date.',
+    missing: 'Excluded from overdue checks if no due date is specified.',
+    sourceModule: 'Actions Registry'
+  },
+  {
+    name: 'Average Days Overdue',
+    measures: 'Mean duration that outstanding overdue actions have remained unresolved.',
+    calculation: 'Sum(current_date - due_date) / (Total Overdue Actions).',
+    included: 'Active open overdue corrective actions.',
+    excluded: 'Completed, cancelled, or future-due actions.',
+    dateField: 'Action due date.',
+    missing: 'Omitted from the average calculation.',
+    sourceModule: 'Actions Registry'
+  },
+  {
+    name: 'Audit Pack Readiness',
+    measures: 'Proportion of valid, current evidence within a compiled audit package.',
+    calculation: '(Active Valid Documents in Pack) / (Total Documents in Pack).',
+    included: 'Documents mapped to the selected audit pack.',
+    excluded: 'Omitted or empty requirement sections.',
+    dateField: 'Document expiry date.',
+    missing: 'Missing or expired documents count as invalid (0% readiness).',
+    sourceModule: 'Audit Packs'
+  }
+];
+
 export default function ReportsPage() {
   const {
     user,
@@ -252,6 +386,8 @@ export default function ReportsPage() {
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [showGlossary, setShowGlossary] = useState(false);
+  const [glossarySearchQuery, setGlossarySearchQuery] = useState('');
 
   // Global Filters
   const [startDate, setStartDate] = useState('');
@@ -2065,6 +2201,13 @@ export default function ReportsPage() {
             className="p-2 bg-card hover:bg-muted border border-border rounded-lg text-muted-foreground hover:text-foreground cursor-pointer transition-all"
           >
             <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowGlossary(true)}
+            className="px-3.5 py-2 bg-muted hover:bg-muted/80 text-foreground font-bold text-xs rounded-lg border border-border flex items-center gap-1.5 cursor-pointer transition-all print:hidden"
+          >
+            <HelpCircle className="w-3.5 h-3.5 text-indigo-650 dark:text-indigo-400" /> Metrics Glossary
           </button>
           <button
             onClick={() => handlePrintReport(activeTab.toUpperCase(), 'active-report-view')}
@@ -3913,6 +4056,113 @@ export default function ReportsPage() {
               <button
                 type="button"
                 onClick={() => setFocusedChartId(null)}
+                className="px-4 py-2 bg-indigo-650 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showGlossary && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-card border border-border rounded-2xl max-w-4xl w-full h-[85vh] flex flex-col p-6 space-y-4 shadow-xl relative animate-scaleIn">
+            <div className="flex justify-between items-start gap-4 shrink-0">
+              <div>
+                <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <HelpCircle className="w-4 h-4 text-indigo-650 dark:text-indigo-400" />
+                  Metrics Glossary & Definitions
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Calculation logic, exclusions, boundaries, and source modules for all Vygilence metrics.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowGlossary(false);
+                  setGlossarySearchQuery('');
+                }}
+                className="text-muted-foreground hover:text-foreground text-xs font-bold p-1 bg-muted rounded-lg cursor-pointer"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {/* Search glossary */}
+            <div className="relative shrink-0">
+              <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search metrics or modules..."
+                value={glossarySearchQuery}
+                onChange={e => setGlossarySearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-muted rounded-xl border border-border/60 outline-none text-xs font-medium focus:border-indigo-500"
+              />
+            </div>
+
+            {/* Glossary definitions list */}
+            <div className="flex-1 overflow-y-auto pr-1 space-y-4 no-scrollbar">
+              {METRIC_GLOSSARIES.filter(g =>
+                g.name.toLowerCase().includes(glossarySearchQuery.toLowerCase()) ||
+                g.measures.toLowerCase().includes(glossarySearchQuery.toLowerCase()) ||
+                g.sourceModule.toLowerCase().includes(glossarySearchQuery.toLowerCase())
+              ).map((m, idx) => (
+                <div key={idx} className="bg-muted/20 border border-border/60 rounded-xl p-4 space-y-3 animate-in fade-in duration-200">
+                  <div className="flex justify-between items-start border-b border-border/40 pb-2">
+                    <h4 className="text-xs font-bold text-indigo-650 dark:text-indigo-400 uppercase tracking-wide">
+                      {m.name}
+                    </h4>
+                    <span className="text-[9px] font-extrabold px-2 py-0.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 rounded-full">
+                      {m.sourceModule}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs leading-relaxed">
+                    <div>
+                      <span className="font-extrabold text-[10px] text-muted-foreground uppercase block">What it measures</span>
+                      <p className="text-foreground font-medium mt-0.5">{m.measures}</p>
+                    </div>
+                    <div>
+                      <span className="font-extrabold text-[10px] text-muted-foreground uppercase block">Calculation</span>
+                      <p className="text-foreground font-medium mt-0.5">{m.calculation}</p>
+                    </div>
+                    <div>
+                      <span className="font-extrabold text-[10px] text-muted-foreground uppercase block">Included records</span>
+                      <p className="text-foreground font-medium mt-0.5">{m.included}</p>
+                    </div>
+                    <div>
+                      <span className="font-extrabold text-[10px] text-muted-foreground uppercase block">Excluded records</span>
+                      <p className="text-foreground font-medium mt-0.5">{m.excluded}</p>
+                    </div>
+                    <div>
+                      <span className="font-extrabold text-[10px] text-muted-foreground uppercase block">Date field used</span>
+                      <p className="text-foreground font-medium mt-0.5">{m.dateField}</p>
+                    </div>
+                    <div>
+                      <span className="font-extrabold text-[10px] text-muted-foreground uppercase block">Missing data treatment</span>
+                      <p className="text-foreground font-medium mt-0.5">{m.missing}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {METRIC_GLOSSARIES.filter(g =>
+                g.name.toLowerCase().includes(glossarySearchQuery.toLowerCase()) ||
+                g.measures.toLowerCase().includes(glossarySearchQuery.toLowerCase()) ||
+                g.sourceModule.toLowerCase().includes(glossarySearchQuery.toLowerCase())
+              ).length === 0 && (
+                <div className="text-center py-8 text-xs text-muted-foreground">
+                  No matching metric definitions found.
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2 shrink-0 border-t border-border/40">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowGlossary(false);
+                  setGlossarySearchQuery('');
+                }}
                 className="px-4 py-2 bg-indigo-650 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl cursor-pointer"
               >
                 Done
