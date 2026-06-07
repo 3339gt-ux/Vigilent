@@ -37,6 +37,7 @@ import {
   SavedReport
 } from '@/lib/types';
 import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
+import { REPORT_CAPABILITIES, BuilderSource } from '@/lib/reportCapabilities';
 import { calculateCompetencyStatus } from '@/lib/competencyEngine';
 import { isDemoMode } from '@/lib/env';
 
@@ -402,7 +403,7 @@ export default function ReportsPage() {
   const [comparePeriod, setComparePeriod] = useState(false);
 
   // Custom Report Builder States
-  const [builderSource, setBuilderSource] = useState('Requirements');
+  const [builderSource, setBuilderSource] = useState<BuilderSource>('Requirements');
   const [builderDimension, setBuilderDimension] = useState('category');
   const [builderMeasure, setBuilderMeasure] = useState('count');
   const [builderVisual, setBuilderVisual] = useState('bar');
@@ -733,39 +734,55 @@ export default function ReportsPage() {
     else if (activeTab === 'administration' && isOwnerOrAdmin) recordView('prebuilt_admin', 'System Activity & Admin', 'Administration', 'Audit Trail', 'administration');
   }, [activeTab, isOwnerOrAdmin, recordView]);
 
+  // Helper to resolve supported aggregations for pivot grid based on measure
+  const getSupportedPivotAggregations = useCallback((measure: string) => {
+    if (measure === 'avg_days_overdue') {
+      return [
+        { value: 'avg_days_overdue', label: 'Average Days Overdue' },
+        { value: 'max_days_overdue', label: 'Maximum Days Overdue' },
+        { value: 'min_days_overdue', label: 'Minimum Days Overdue' }
+      ];
+    }
+    if (measure === 'completion_rate') {
+      return [
+        { value: 'readiness_rate', label: 'Readiness Rate (%)' }
+      ];
+    }
+    return [
+      { value: 'count', label: 'Count of Requirements' },
+      { value: 'row_pct', label: 'Row Percentage (%)' },
+      { value: 'col_pct', label: 'Column Percentage (%)' },
+      { value: 'total_pct', label: 'Total Grid Percentage (%)' }
+    ];
+  }, []);
+
   // Safely reset dimension, measure, visualType when builderSource changes
   useEffect(() => {
-    if (builderSource === 'Requirements') {
-      const validDims = ['category', 'status', 'risk_level', 'owner', 'date_day', 'date_week', 'date_month', 'date_year'];
-      const validMeas = ['count', 'completion_rate', 'overdue', 'avg_days_overdue'];
-      if (!validDims.includes(builderDimension)) setBuilderDimension('category');
-      if (!validMeas.includes(builderMeasure)) setBuilderMeasure('count');
-    } else if (builderSource === 'Evidence') {
-      const validDims = ['category', 'status', 'uploaded_by', 'date_day', 'date_week', 'date_month', 'date_year'];
-      const validMeas = ['count', 'expiring', 'expired'];
-      if (!validDims.includes(builderDimension)) setBuilderDimension('category');
-      if (!validMeas.includes(builderMeasure)) setBuilderMeasure('count');
-    } else if (builderSource === 'Competencies') {
-      const validDims = ['status', 'trainer', 'provider', 'date_day', 'date_week', 'date_month', 'date_year'];
-      const validMeas = ['count', 'completion_rate', 'expired', 'missing'];
-      if (!validDims.includes(builderDimension)) setBuilderDimension('status');
-      if (!validMeas.includes(builderMeasure)) setBuilderMeasure('count');
-    } else if (builderSource === 'Actions') {
-      const validDims = ['status', 'owner', 'date_day', 'date_week', 'date_month', 'date_year'];
-      const validMeas = ['count', 'completion_rate', 'overdue', 'avg_days_overdue'];
-      if (!validDims.includes(builderDimension)) setBuilderDimension('status');
-      if (!validMeas.includes(builderMeasure)) setBuilderMeasure('count');
-    } else if (builderSource === 'Audit Trail') {
-      const validDims = ['action_category', 'actor_name', 'severity', 'date_day', 'date_week', 'date_month', 'date_year'];
-      const validMeas = ['count', 'critical', 'warning'];
-      if (!validDims.includes(builderDimension)) setBuilderDimension('action_category');
-      if (!validMeas.includes(builderMeasure)) setBuilderMeasure('count');
-    }
+    const caps = REPORT_CAPABILITIES[builderSource];
+    if (caps) {
+      const validDims = caps.supportedDimensions.map(d => d.value);
+      const validMeas = caps.supportedMeasures.map(m => m.value);
+      const validVisuals = caps.supportedVisualTypes.map(v => v.value);
 
-    if (builderSource !== 'Requirements' && builderVisual === 'pivot') {
-      setBuilderVisual('bar');
+      if (!validDims.includes(builderDimension)) {
+        setBuilderDimension(caps.defaultDimension);
+      }
+      if (!validMeas.includes(builderMeasure)) {
+        setBuilderMeasure(caps.defaultMeasure);
+      }
+      if (!validVisuals.includes(builderVisual)) {
+        setBuilderVisual(caps.defaultVisual);
+      }
     }
   }, [builderSource, builderDimension, builderMeasure, builderVisual]);
+
+  // Safely reset pivotAggregation when builderMeasure changes
+  useEffect(() => {
+    const validAggs = getSupportedPivotAggregations(builderMeasure).map(a => a.value);
+    if (!validAggs.includes(pivotAggregation)) {
+      setPivotAggregation(validAggs[0]);
+    }
+  }, [builderMeasure, pivotAggregation, getSupportedPivotAggregations]);
 
   // Reset Filters
   const handleResetFilters = () => {
@@ -2512,20 +2529,20 @@ export default function ReportsPage() {
                 <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Upcoming Obligations Forecast</h3>
                 <p className="text-[10px] text-muted-foreground">Exclusive windows; overdue records are not included.</p>
                 <div className="space-y-4 text-xs">
-                  <div onClick={() => handleDrillDown('Requirements', { status: 'AMBER' })} className="flex justify-between items-center p-2.5 bg-muted/40 hover:bg-muted/65 cursor-pointer rounded-xl border border-border/40 transition-all">
-                    <span className="font-bold flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> 0-7 Days</span>
+                  <div className="flex justify-between items-center p-2.5 bg-muted/20 rounded-xl border border-border/40 transition-all">
+                    <span className="font-bold flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-650 dark:text-indigo-400" /> 0-7 Days</span>
                     <span className="font-extrabold text-foreground">{upcomingReviews.w7 + upcomingEvidenceExpiries.w7 + upcomingTrainingRenewals.w7} items</span>
                   </div>
-                  <div onClick={() => handleDrillDown('Requirements', { status: 'AMBER' })} className="flex justify-between items-center p-2.5 bg-muted/40 hover:bg-muted/65 cursor-pointer rounded-xl border border-border/40 transition-all">
-                    <span className="font-bold flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> 8-30 Days</span>
+                  <div className="flex justify-between items-center p-2.5 bg-muted/20 rounded-xl border border-border/40 transition-all">
+                    <span className="font-bold flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-650 dark:text-indigo-400" /> 8-30 Days</span>
                     <span className="font-extrabold text-foreground">{upcomingReviews.w30 + upcomingEvidenceExpiries.w30 + upcomingTrainingRenewals.w30} items</span>
                   </div>
-                  <div onClick={() => handleDrillDown('Requirements', { status: 'AMBER' })} className="flex justify-between items-center p-2.5 bg-muted/40 hover:bg-muted/65 cursor-pointer rounded-xl border border-border/40 transition-all">
-                    <span className="font-bold flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> 31-60 Days</span>
+                  <div className="flex justify-between items-center p-2.5 bg-muted/20 rounded-xl border border-border/40 transition-all">
+                    <span className="font-bold flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-650 dark:text-indigo-400" /> 31-60 Days</span>
                     <span className="font-extrabold text-foreground">{upcomingReviews.w60 + upcomingEvidenceExpiries.w60 + upcomingTrainingRenewals.w60} items</span>
                   </div>
-                  <div onClick={() => handleDrillDown('Requirements', { status: 'AMBER' })} className="flex justify-between items-center p-2.5 bg-muted/40 hover:bg-muted/65 cursor-pointer rounded-xl border border-border/40 transition-all">
-                    <span className="font-bold flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> 61-90 Days</span>
+                  <div className="flex justify-between items-center p-2.5 bg-muted/20 rounded-xl border border-border/40 transition-all">
+                    <span className="font-bold flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-650 dark:text-indigo-400" /> 61-90 Days</span>
                     <span className="font-extrabold text-foreground">{upcomingReviews.w90 + upcomingEvidenceExpiries.w90 + upcomingTrainingRenewals.w90} items</span>
                   </div>
                   <div className="flex justify-between items-center px-2.5 text-[10px] text-muted-foreground">
@@ -3494,24 +3511,26 @@ export default function ReportsPage() {
                     <select
                       value={builderSource}
                       onChange={e => {
-                        const source = e.target.value;
+                        const source = e.target.value as BuilderSource;
                         setBuilderSource(source);
-                        if (source !== 'Requirements' && builderVisual === 'pivot') setBuilderVisual('table');
-
-                        let defDim = 'category';
-                        if (source === 'Competencies' || source === 'Actions') defDim = 'status';
-                        else if (source === 'Audit Trail') defDim = 'action_category';
-                        setBuilderDimension(defDim);
-
-                        setBuilderMeasure('count');
+                        const caps = REPORT_CAPABILITIES[source];
+                        if (caps) {
+                          setBuilderDimension(caps.defaultDimension);
+                          setBuilderMeasure(caps.defaultMeasure);
+                          setBuilderVisual(caps.defaultVisual);
+                        }
                       }}
                       className="w-full px-2.5 py-2 bg-muted rounded-xl border border-border/80 outline-none font-semibold text-foreground"
                     >
-                      <option value="Requirements">Requirements & Readiness</option>
-                      <option value="Evidence">Evidence Documents</option>
-                      <option value="Competencies">Competencies & People</option>
-                      <option value="Actions">Corrective Actions Registry</option>
-                      {isOwnerOrAdmin && <option value="Audit Trail">Audit Logs Trail</option>}
+                      {Object.keys(REPORT_CAPABILITIES).map(key => {
+                        const caps = REPORT_CAPABILITIES[key as BuilderSource];
+                        if (caps.permissionRequirement === 'Owner/Admin only' && !isOwnerOrAdmin) return null;
+                        return (
+                          <option key={key} value={key}>
+                            {caps.label}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
 
@@ -3522,61 +3541,11 @@ export default function ReportsPage() {
                       onChange={e => setBuilderDimension(e.target.value)}
                       className="w-full px-2.5 py-2 bg-muted rounded-xl border border-border/80 outline-none font-semibold text-foreground"
                     >
-                      {builderSource === 'Requirements' && (
-                        <>
-                          <option value="category">Category</option>
-                          <option value="status">RAG Status</option>
-                          <option value="risk_level">Risk Level</option>
-                          <option value="owner">Owner</option>
-                          <option value="date_day">Date (Day)</option>
-                          <option value="date_week">Date (Week)</option>
-                          <option value="date_month">Date (Month)</option>
-                          <option value="date_year">Date (Year)</option>
-                        </>
-                      )}
-                      {builderSource === 'Evidence' && (
-                        <>
-                          <option value="category">Category</option>
-                          <option value="status">Status</option>
-                          <option value="uploaded_by">Uploaded By</option>
-                          <option value="date_day">Date (Day)</option>
-                          <option value="date_week">Date (Week)</option>
-                          <option value="date_month">Date (Month)</option>
-                          <option value="date_year">Date (Year)</option>
-                        </>
-                      )}
-                      {builderSource === 'Competencies' && (
-                        <>
-                          <option value="status">Status</option>
-                          <option value="trainer">Trainer</option>
-                          <option value="provider">Provider</option>
-                          <option value="date_day">Date (Day)</option>
-                          <option value="date_week">Date (Week)</option>
-                          <option value="date_month">Date (Month)</option>
-                          <option value="date_year">Date (Year)</option>
-                        </>
-                      )}
-                      {builderSource === 'Actions' && (
-                        <>
-                          <option value="status">Status</option>
-                          <option value="owner">Owner</option>
-                          <option value="date_day">Date (Day)</option>
-                          <option value="date_week">Date (Week)</option>
-                          <option value="date_month">Date (Month)</option>
-                          <option value="date_year">Date (Year)</option>
-                        </>
-                      )}
-                      {builderSource === 'Audit Trail' && (
-                        <>
-                          <option value="action_category">Event Category</option>
-                          <option value="actor_name">Actor Name</option>
-                          <option value="severity">Severity</option>
-                          <option value="date_day">Date (Day)</option>
-                          <option value="date_week">Date (Week)</option>
-                          <option value="date_month">Date (Month)</option>
-                          <option value="date_year">Date (Year)</option>
-                        </>
-                      )}
+                      {REPORT_CAPABILITIES[builderSource]?.supportedDimensions.map(dim => (
+                        <option key={dim.value} value={dim.value}>
+                          {dim.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
@@ -3587,34 +3556,11 @@ export default function ReportsPage() {
                       onChange={e => setBuilderMeasure(e.target.value)}
                       className="w-full px-2.5 py-2 bg-muted rounded-xl border border-border/80 outline-none font-semibold text-foreground"
                     >
-                      <option value="count">Count of Records</option>
-                      {(builderSource === 'Requirements' || builderSource === 'Competencies' || builderSource === 'Actions') && (
-                        <option value="completion_rate">Completion/Readiness Rate (%)</option>
-                      )}
-                      {(builderSource === 'Requirements' || builderSource === 'Actions') && (
-                        <>
-                          <option value="overdue">Overdue Count</option>
-                          <option value="avg_days_overdue">Average Days Overdue</option>
-                        </>
-                      )}
-                      {builderSource === 'Evidence' && (
-                        <>
-                          <option value="expiring">Expiring Soon Count</option>
-                          <option value="expired">Expired Count</option>
-                        </>
-                      )}
-                      {builderSource === 'Competencies' && (
-                        <>
-                          <option value="expired">Expired Count</option>
-                          <option value="missing">Missing Count</option>
-                        </>
-                      )}
-                      {builderSource === 'Audit Trail' && (
-                        <>
-                          <option value="critical">Critical Event Count</option>
-                          <option value="warning">Warning Event Count</option>
-                        </>
-                      )}
+                      {REPORT_CAPABILITIES[builderSource]?.supportedMeasures.map(meas => (
+                        <option key={meas.value} value={meas.value}>
+                          {meas.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
@@ -3625,10 +3571,11 @@ export default function ReportsPage() {
                       onChange={e => setBuilderVisual(e.target.value)}
                       className="w-full px-2.5 py-2 bg-muted rounded-xl border border-border/80 outline-none font-semibold text-foreground"
                     >
-                      <option value="bar">Bar Chart</option>
-                      <option value="donut">Donut Chart</option>
-                      <option value="table">Data Grid Table</option>
-                      {builderSource === 'Requirements' && <option value="pivot">Pivot Matrix Grid</option>}
+                      {REPORT_CAPABILITIES[builderSource]?.supportedVisualTypes.map(vis => (
+                        <option key={vis.value} value={vis.value}>
+                          {vis.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
@@ -3784,10 +3731,12 @@ export default function ReportsPage() {
                           onChange={e => setPivotRow(e.target.value)}
                           className="px-2 py-1 bg-muted border border-border/60 rounded"
                         >
-                          <option value="category">Category</option>
-                          <option value="risk_level">Risk Level</option>
-                          <option value="owner">Owner</option>
-                          <option value="status">RAG Status</option>
+                          {REPORT_CAPABILITIES['Requirements'].supportedDimensions
+                            .filter(dim => ['category', 'risk_level', 'owner', 'status'].includes(dim.value))
+                            .map(dim => (
+                              <option key={dim.value} value={dim.value}>{dim.label}</option>
+                            ))
+                          }
                         </select>
                       </div>
                       <div>
@@ -3797,10 +3746,12 @@ export default function ReportsPage() {
                           onChange={e => setPivotCol(e.target.value)}
                           className="px-2 py-1 bg-muted border border-border/60 rounded"
                         >
-                          <option value="status">RAG Status</option>
-                          <option value="risk_level">Risk Level</option>
-                          <option value="category">Category</option>
-                          <option value="owner">Owner</option>
+                          {REPORT_CAPABILITIES['Requirements'].supportedDimensions
+                            .filter(dim => ['category', 'risk_level', 'owner', 'status'].includes(dim.value))
+                            .map(dim => (
+                              <option key={dim.value} value={dim.value}>{dim.label}</option>
+                            ))
+                          }
                         </select>
                       </div>
                       <div>
@@ -3810,14 +3761,9 @@ export default function ReportsPage() {
                           onChange={e => setPivotAggregation(e.target.value)}
                           className="px-2 py-1 bg-muted border border-border/60 rounded"
                         >
-                          <option value="count">Count of Requirements</option>
-                          <option value="readiness_rate">Readiness Rate (%)</option>
-                          <option value="avg_days_overdue">Average Days Overdue</option>
-                          <option value="max_days_overdue">Maximum Days Overdue</option>
-                          <option value="min_days_overdue">Minimum Days Overdue</option>
-                          <option value="row_pct">Row Percentage (%)</option>
-                          <option value="col_pct">Column Percentage (%)</option>
-                          <option value="total_pct">Total Grid Percentage (%)</option>
+                          {getSupportedPivotAggregations(builderMeasure).map(agg => (
+                            <option key={agg.value} value={agg.value}>{agg.label}</option>
+                          ))}
                         </select>
                       </div>
                     </div>

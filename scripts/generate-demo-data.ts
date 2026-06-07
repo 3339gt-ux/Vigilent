@@ -221,7 +221,7 @@ export function generateDemoData() {
   const docCategories = ['Evidence', 'Requirements', 'Actions', 'Competency', 'General'];
   
   const evidenceDocuments: any[] = [];
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 350; i++) {
     const docType = randomElement(documentTypes);
     const ext = randomElement(fileExtensions);
     const title = `[DEMO] Doc-${i + 1} ${docType}`;
@@ -277,11 +277,11 @@ export function generateDemoData() {
     });
   }
 
-  // 5. Competency Records (around 350)
+  // 5. Competency Records (around 1,000)
   const competencyRecords: any[] = [];
   const recordKeys = new Set<string>();
   let recordIndex = 0;
-  while (competencyRecords.length < 350 && recordIndex < 2000) {
+  while (competencyRecords.length < 1000 && recordIndex < 5000) {
     const person = randomElement(people);
     const type = randomElement(competencyTypes);
     const key = `${person.id}-${type.id}`;
@@ -353,10 +353,10 @@ export function generateDemoData() {
     }
   });
 
-  // 6. Requirements (around 100)
+  // 6. Requirements (around 120)
   const requirements: any[] = [];
   const reqUnits = ['Unit 1', 'Unit 2', 'Fleet A', 'Fleet B', 'Dublin Depot', 'Cork Warehouse', 'Main Facility'];
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 120; i++) {
     const template = REQUIREMENT_TEMPLATES[i % REQUIREMENT_TEMPLATES.length];
     const unit = reqUnits[Math.floor(i / REQUIREMENT_TEMPLATES.length) % reqUnits.length];
     const title = `[DEMO] ${unit} - ${template.title}`;
@@ -479,7 +479,7 @@ export function generateDemoData() {
   ];
 
   const actions: any[] = [];
-  for (let i = 0; i < 180; i++) {
+  for (let i = 0; i < 200; i++) {
     const templateTitle = actionTitles[i % actionTitles.length];
     const unit = reqUnits[Math.floor(i / actionTitles.length) % reqUnits.length];
     const title = `[DEMO] ${unit} - ${templateTitle}`;
@@ -578,7 +578,7 @@ export function generateDemoData() {
   ];
 
   const auditPacks: any[] = [];
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 30; i++) {
     const name = `[DEMO] ${auditPackNames[i % auditPackNames.length]} - Batch ${Math.floor(i / auditPackNames.length) + 1}`;
     const randStatus = random();
     let status: 'Draft' | 'Ready' | 'Sent' | 'Archived' = 'Draft';
@@ -622,10 +622,10 @@ export function generateDemoData() {
     { type: 'audit_pack_exported', category: 'Audit Packs', entity: 'audit_pack' }
   ];
 
-  for (let i = 0; i < 500; i++) {
+  for (let i = 0; i < 750; i++) {
     const evAction = eventActions[i % eventActions.length];
     const eventId = `00000000-0000-0000-000d-${i.toString().padStart(8, '0')}`;
-    const timeOffset = (90 - (i * 90 / 500)) * 24 * 60 * 60 * 1000;
+    const timeOffset = (90 - (i * 90 / 750)) * 24 * 60 * 60 * 1000;
     const createdAt = new Date(Date.now() - timeOffset).toISOString();
 
     let entityLabel = `[DEMO] Event Entity ${i}`;
