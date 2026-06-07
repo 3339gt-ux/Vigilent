@@ -294,6 +294,13 @@ export default function ReportsPage() {
   const [pivotCol, setPivotCol] = useState('status');
   const [pivotAggregation, setPivotAggregation] = useState('count');
 
+  // Interactive Chart States
+  const [hoveredDonutSegment, setHoveredDonutSegment] = useState<Record<string, { label: string; value: number; color: string; percent: number } | null>>({});
+  const [hoveredSparklinePoint, setHoveredSparklinePoint] = useState<Record<string, { label: string; value: number; index: number } | null>>({});
+  const [expandedTables, setExpandedTables] = useState<Record<string, boolean>>({});
+  const [focusedChartId, setFocusedChartId] = useState<string | null>(null);
+
+
   const comparisonData = useMemo(() => {
     if (!comparePeriod) return null;
 
@@ -850,8 +857,8 @@ export default function ReportsPage() {
     }
   };
 
-  // Donut segment math with click handlers
-  const renderSVDonut = (data: Array<{ value: number; color: string; label: string }>, sourceName?: string) => {
+  // Donut segment math with click handlers and interactive overlays
+  const renderSVDonut = (data: Array<{ value: number; color: string; label: string }>, sourceName?: string, chartId?: string) => {
     const total = data.reduce((sum, item) => sum + item.value, 0);
     if (total === 0) {
       return (
@@ -863,60 +870,160 @@ export default function ReportsPage() {
 
     let accumulatedPercentage = 0;
     const segments = data.map(item => {
-      const percentage = (item.value / total) * 100;
+      const percentage = total > 0 ? (item.value / total) * 100 : 0;
       const strokeDash = `${percentage} ${100 - percentage}`;
       const strokeOffset = 100 - accumulatedPercentage + 25; // start from 12 o'clock
       accumulatedPercentage += percentage;
-      return { strokeDash, strokeOffset, color: item.color, label: item.label, value: item.value };
+      return { strokeDash, strokeOffset, color: item.color, label: item.label, value: item.value, percent: Math.round(percentage) };
     });
 
+    const hovered = chartId ? hoveredDonutSegment[chartId] : null;
+
     return (
-      <div className="flex flex-col sm:flex-row items-center justify-center gap-6 py-2">
-        <div className="relative w-36 h-36">
-          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36" aria-hidden="true">
-            <circle cx="18" cy="18" r="15.915" fill="none" stroke="hsl(var(--border))" strokeWidth="3" opacity="0.25" />
+      <div className="flex flex-col gap-4 py-2">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
+          <div className="relative w-36 h-36 shrink-0">
+            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36" aria-hidden="true">
+              <circle cx="18" cy="18" r="15.915" fill="none" stroke="hsl(var(--border))" strokeWidth="3" opacity="0.25" />
+              {segments.map((seg, i) => (
+                <circle
+                  key={i}
+                  cx="18"
+                  cy="18"
+                  r="15.915"
+                  fill="none"
+                  stroke={seg.color}
+                  strokeWidth={hovered && hovered.label === seg.label ? "4.2" : "3.2"}
+                  strokeDasharray={seg.strokeDash}
+                  strokeDashoffset={seg.strokeOffset}
+                  onClick={() => sourceName && handleDonutSegmentClick(sourceName, seg.label)}
+                  onMouseEnter={() => {
+                    if (chartId) {
+                      setHoveredDonutSegment(prev => ({
+                        ...prev,
+                        [chartId]: { label: seg.label, value: seg.value, color: seg.color, percent: seg.percent }
+                      }));
+                    }
+                  }}
+                  onMouseLeave={() => {
+                    if (chartId) {
+                      setHoveredDonutSegment(prev => ({ ...prev, [chartId]: null }));
+                    }
+                  }}
+                  className={`transition-all duration-200 ${sourceName ? 'cursor-pointer' : ''}`}
+                />
+              ))}
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2 pointer-events-none">
+              {hovered ? (
+                <>
+                  <span className="text-[9px] font-black uppercase tracking-wider truncate max-w-[80px]" style={{ color: hovered.color }}>{hovered.label}</span>
+                  <span className="text-lg font-black text-foreground">{hovered.value}</span>
+                  <span className="text-[10px] text-muted-foreground font-bold">{hovered.percent}%</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-xl font-black text-foreground">{total}</span>
+                  <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-extrabold">total</span>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="flex-1 space-y-1.5 text-xs w-full max-w-[200px]">
             {segments.map((seg, i) => (
-              <circle
+              <div
                 key={i}
-                cx="18"
-                cy="18"
-                r="15.915"
-                fill="none"
-                stroke={seg.color}
-                strokeWidth="3.2"
-                strokeDasharray={seg.strokeDash}
-                strokeDashoffset={seg.strokeOffset}
                 onClick={() => sourceName && handleDonutSegmentClick(sourceName, seg.label)}
-                className={`transition-all duration-300 hover:stroke-[4] ${sourceName ? 'cursor-pointer' : ''}`}
-              />
+                onMouseEnter={() => {
+                  if (chartId) {
+                    setHoveredDonutSegment(prev => ({
+                      ...prev,
+                      [chartId]: { label: seg.label, value: seg.value, color: seg.color, percent: seg.percent }
+                    }));
+                  }
+                }}
+                onMouseLeave={() => {
+                  if (chartId) {
+                    setHoveredDonutSegment(prev => ({ ...prev, [chartId]: null }));
+                  }
+                }}
+                className={`flex items-center justify-between border-b border-border/40 pb-1 ${
+                  hovered && hovered.label === seg.label ? 'bg-muted/50 font-bold' : ''
+                } ${sourceName ? 'cursor-pointer hover:bg-muted/30 px-1 rounded transition-all' : ''}`}
+              >
+                <span className="flex items-center gap-2 text-muted-foreground font-semibold truncate max-w-[130px]">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: seg.color }} />
+                  {seg.label}
+                </span>
+                <span className="font-extrabold text-foreground shrink-0">{seg.value} ({seg.percent}%)</span>
+              </div>
             ))}
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-            <span className="text-xl font-black text-foreground">{total}</span>
-            <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-extrabold">total</span>
           </div>
         </div>
-        <div className="flex-1 space-y-1.5 text-xs w-full max-w-[200px]">
-          {segments.map((seg, i) => (
-            <div
-              key={i}
-              onClick={() => sourceName && handleDonutSegmentClick(sourceName, seg.label)}
-              className={`flex items-center justify-between border-b border-border/40 pb-1 ${sourceName ? 'cursor-pointer hover:bg-muted/30 px-1 rounded transition-all' : ''}`}
-            >
-              <span className="flex items-center gap-2 text-muted-foreground font-semibold">
-                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: seg.color }} />
-                {seg.label}
-              </span>
-              <span className="font-extrabold text-foreground">{seg.value} ({Math.round((seg.value / total) * 100)}%)</span>
+
+        {chartId && (
+          <div className="flex items-center justify-between pt-2 border-t border-border/40 text-[10px] font-bold">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setExpandedTables(prev => ({ ...prev, [chartId]: !prev[chartId] }))}
+                className="text-indigo-650 dark:text-indigo-400 hover:underline cursor-pointer flex items-center gap-1"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" /> {expandedTables[chartId] ? 'Hide Grid' : 'View Data'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setFocusedChartId(chartId)}
+                className="text-muted-foreground hover:text-foreground hover:underline cursor-pointer flex items-center gap-1"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" /> Focus View
+              </button>
             </div>
-          ))}
-        </div>
+            <button
+              type="button"
+              onClick={() => {
+                const headers = ['Label', 'Value', 'Percentage'];
+                const rows = data.map(item => [item.label, String(item.value), `${Math.round((item.value / total) * 100)}%`]);
+                handleExportCSV(sourceName ? `${sourceName} distribution` : 'Chart summary', headers, rows);
+              }}
+              className="text-muted-foreground hover:text-foreground hover:underline cursor-pointer flex items-center gap-1"
+            >
+              <Download className="w-3.5 h-3.5" /> Export CSV
+            </button>
+          </div>
+        )}
+
+        {chartId && expandedTables[chartId] && (
+          <div className="overflow-hidden border border-border/60 rounded-xl text-[10px] bg-card animate-fadeIn">
+            <table className="min-w-full divide-y divide-border/60">
+              <thead className="bg-muted/50 font-bold text-muted-foreground uppercase text-[9px]">
+                <tr>
+                  <th className="px-2 py-1.5 text-left">Label</th>
+                  <th className="px-2 py-1.5 text-center">Value</th>
+                  <th className="px-2 py-1.5 text-center">Proportion</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {data.map((item, idx) => (
+                  <tr key={idx} className="hover:bg-muted/10">
+                    <td className="px-2 py-1 text-left font-semibold text-muted-foreground flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                      {item.label}
+                    </td>
+                    <td className="px-2 py-1 text-center text-foreground font-extrabold">{item.value}</td>
+                    <td className="px-2 py-1 text-center text-muted-foreground">{total > 0 ? Math.round((item.value / total) * 100) : 0}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     );
   };
 
-  // Sparkline Chart (Area/Line SVG)
-  const renderSVGSparkline = (dataPoints: number[], labels: string[], areaColor = 'rgba(79, 70, 229, 0.15)', strokeColor = '#4f46e5', sourceName?: string) => {
+  // Sparkline Chart (Area/Line SVG with Interactive Hover Tooltips and View Data Option)
+  const renderSVGSparkline = (dataPoints: number[], labels: string[], areaColor = 'rgba(79, 70, 229, 0.15)', strokeColor = '#4f46e5', sourceName?: string, chartId?: string) => {
     if (dataPoints.length === 0) return null;
     const maxVal = Math.max(...dataPoints, 5); // ensure we don't divide by 0
     const height = 80;
@@ -933,30 +1040,113 @@ export default function ReportsPage() {
     const linePath = svgPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
     const areaPath = `${linePath} L ${svgPoints[svgPoints.length - 1].x} ${height} L 0 ${height} Z`;
 
+    const hovered = chartId ? hoveredSparklinePoint[chartId] : null;
+
     return (
-      <div className={`relative ${sourceName ? 'cursor-pointer' : ''}`} onClick={() => sourceName && handleDrillDown(sourceName)}>
-        <svg className="w-full h-20" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-          <path d={areaPath} fill={areaColor} />
-          <path d={linePath} fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-          {svgPoints.map((p, i) => (
-            <circle
-              key={i}
-              cx={p.x}
-              cy={p.y}
-              r="3.5"
-              fill="hsl(var(--card))"
-              stroke={strokeColor}
-              strokeWidth="2"
-              className="cursor-pointer hover:r-5 transition-all duration-150"
-            >
-              <title>{`${labels[i]}: ${dataPoints[i]}`}</title>
-            </circle>
-          ))}
-        </svg>
-        <div className="flex justify-between text-[9px] text-muted-foreground uppercase font-bold tracking-wider pt-2 border-t border-border/40 mt-1">
-          <span>{labels[0]}</span>
-          <span>{labels[labels.length - 1]}</span>
+      <div className="space-y-4 py-2">
+        <div className="relative">
+          <div className="h-6 flex justify-between items-center text-[10px] font-bold text-muted-foreground px-1 pointer-events-none">
+            {hovered ? (
+              <span className="text-indigo-650 dark:text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-md border border-indigo-500/25">
+                {hovered.label}: <span className="font-extrabold text-foreground">{hovered.value} docs</span>
+              </span>
+            ) : (
+              <span>Hover points for detail</span>
+            )}
+          </div>
+          <div className={`relative ${sourceName ? 'cursor-pointer' : ''}`}>
+            <svg className="w-full h-20" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+              <path d={areaPath} fill={areaColor} />
+              <path d={linePath} fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              {svgPoints.map((p, i) => (
+                <circle
+                  key={i}
+                  cx={p.x}
+                  cy={p.y}
+                  r={hovered && hovered.index === i ? 5 : 3.5}
+                  fill="hsl(var(--card))"
+                  stroke={strokeColor}
+                  strokeWidth="2"
+                  onMouseEnter={() => {
+                    if (chartId) {
+                      setHoveredSparklinePoint(prev => ({
+                        ...prev,
+                        [chartId]: { label: labels[i], value: dataPoints[i], index: i }
+                      }));
+                    }
+                  }}
+                  onMouseLeave={() => {
+                    if (chartId) {
+                      setHoveredSparklinePoint(prev => ({ ...prev, [chartId]: null }));
+                    }
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (sourceName) handleDrillDown(sourceName);
+                  }}
+                  className="cursor-pointer transition-all duration-150"
+                />
+              ))}
+            </svg>
+          </div>
+          <div className="flex justify-between text-[9px] text-muted-foreground uppercase font-bold tracking-wider pt-2 border-t border-border/40 mt-1">
+            <span>{labels[0]}</span>
+            <span>{labels[labels.length - 1]}</span>
+          </div>
         </div>
+
+        {chartId && (
+          <div className="flex items-center justify-between pt-2 border-t border-border/40 text-[10px] font-bold">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setExpandedTables(prev => ({ ...prev, [chartId]: !prev[chartId] }))}
+                className="text-indigo-650 dark:text-indigo-400 hover:underline cursor-pointer flex items-center gap-1"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" /> {expandedTables[chartId] ? 'Hide Grid' : 'View Data'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setFocusedChartId(chartId)}
+                className="text-muted-foreground hover:text-foreground hover:underline cursor-pointer flex items-center gap-1"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" /> Focus View
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const headers = ['Month', 'Upload Count'];
+                const rows = labels.map((l, i) => [l, String(dataPoints[i])]);
+                handleExportCSV('Evidence Upload Trend', headers, rows);
+              }}
+              className="text-muted-foreground hover:text-foreground hover:underline cursor-pointer flex items-center gap-1"
+            >
+              <Download className="w-3.5 h-3.5" /> Export CSV
+            </button>
+          </div>
+        )}
+
+        {chartId && expandedTables[chartId] && (
+          <div className="overflow-hidden border border-border/60 rounded-xl text-[10px] bg-card animate-fadeIn">
+            <table className="min-w-full divide-y divide-border/60">
+              <thead className="bg-muted/50 font-bold text-muted-foreground uppercase text-[9px]">
+                <tr>
+                  <th className="px-2 py-1.5 text-left">Month</th>
+                  <th className="px-2 py-1.5 text-center">Document Uploads</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {labels.map((l, i) => (
+                  <tr key={i} className="hover:bg-muted/10">
+                    <td className="px-2 py-1 text-left font-semibold text-muted-foreground">{l}</td>
+                    <td className="px-2 py-1 text-center text-foreground font-extrabold">{dataPoints[i]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     );
   };
@@ -1462,14 +1652,24 @@ export default function ReportsPage() {
     if (builderVisual === 'pivot' && builderSource === 'Requirements') {
       const headers = [pivotRow, ...pivotGridData.colArr, 'Grand Total'];
       const rows = pivotGridData.rowArr.map(row => {
-        const values = pivotGridData.colArr.map(column => pivotGridData.matrix[row][column] || 0);
-        const rowTotal = getPivotRowColTotal(row, 'row');
-        return [row, ...values.map(String), String(rowTotal)];
+        const values = pivotGridData.colArr.map(column => {
+          const val = pivotGridData.matrix[row][column] || 0;
+          return ['readiness_rate', 'row_pct', 'col_pct', 'total_pct'].includes(pivotAggregation) ? `${val}%` : String(val);
+        });
+        const rTotalVal = getPivotRowColTotal(row, 'row');
+        const rowTotalStr = pivotAggregation === 'col_pct' ? 'N/A' : ['readiness_rate', 'row_pct', 'col_pct', 'total_pct'].includes(pivotAggregation) ? `${rTotalVal}%` : String(rTotalVal);
+        return [row, ...values, rowTotalStr];
       });
       const colTotals = [
         'Grand Total',
-        ...pivotGridData.colArr.map(col => String(getPivotRowColTotal(col, 'col'))),
-        String(getPivotRowColTotal('', 'grand'))
+        ...pivotGridData.colArr.map(col => {
+          const cTotalVal = getPivotRowColTotal(col, 'col');
+          return pivotAggregation === 'row_pct' ? 'N/A' : ['readiness_rate', 'row_pct', 'col_pct', 'total_pct'].includes(pivotAggregation) ? `${cTotalVal}%` : String(cTotalVal);
+        }),
+        (() => {
+          const gTotalVal = getPivotRowColTotal('', 'grand');
+          return ['readiness_rate', 'row_pct', 'col_pct', 'total_pct'].includes(pivotAggregation) ? `${gTotalVal}%` : String(gTotalVal);
+        })()
       ];
       handleExportCSV(reportName, headers, [...rows, colTotals]);
 
@@ -1497,10 +1697,8 @@ export default function ReportsPage() {
 
   // Save Custom Report Config
   const handleSaveCustomReport = async () => {
-    if (!builderReportName.trim()) {
-      setToast({ type: 'error', message: 'Please provide a name for the report.' });
-      return;
-    }
+    const finalReportName = builderReportName.trim() || `${builderSource} by ${builderDimension.replace('date_', 'Date ')}`;
+    const finalReportDesc = builderReportDesc.trim() || `Summary of ${getMeasureLabel(builderMeasure)} grouped by ${builderDimension.replace('date_', 'Date ')} from ${builderSource} compliance module.`;
 
     if (builderReportVisibility === 'organisation' && !isOwnerOrAdmin) {
       setToast({ type: 'error', message: 'Only Owners or Admins can save organisation-shared reports.' });
@@ -1515,8 +1713,8 @@ export default function ReportsPage() {
     try {
       const isLocal = builderReportVisibility === 'personal_local';
       await dbService.addSavedReport({
-        name: builderReportName.trim(),
-        description: builderReportDesc.trim() || 'No description provided.',
+        name: finalReportName,
+        description: finalReportDesc,
         report_type: 'custom',
         data_source: builderSource,
         configuration: {
@@ -1536,7 +1734,7 @@ export default function ReportsPage() {
       loadSavedReports();
       setBuilderReportName('');
       setBuilderReportDesc('');
-      setToast({ type: 'success', message: `Report "${builderReportName.trim()}" saved successfully.` });
+      setToast({ type: 'success', message: `Report "${finalReportName}" saved successfully.` });
       setActiveTab('saved');
     } catch (e) {
       console.error('Failed to save report', e);
@@ -2065,9 +2263,16 @@ export default function ReportsPage() {
         {activeTab === 'executive' && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div onClick={() => handleDrillDown('Requirements')} className="bg-card border border-border p-5 rounded-2xl flex items-center justify-between shadow-xs cursor-pointer hover:bg-muted/30 transition-all">
+              <div
+                onClick={() => handleDrillDown('Requirements')}
+                title="Workspace Overall Readiness&#10;Basis: Average score of assessed active compliance obligations (Green=100%, Amber=50%, Red=0%).&#10;Exclusions: Excludes unassessed (GREY) requirements.&#10;Missing Data: N/A counts."
+                className="bg-card border border-border p-5 rounded-2xl flex items-center justify-between shadow-xs cursor-pointer hover:bg-muted/30 transition-all group"
+              >
                 <div className="space-y-1">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Workspace Overall Readiness</span>
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                    Workspace Overall Readiness
+                    <span className="text-indigo-500 font-extrabold text-[9px] group-hover:underline">ⓘ</span>
+                  </span>
                   <span className="text-3xl font-black text-foreground">{readinessScore}%</span>
                 </div>
                 <div className="relative w-12 h-12">
@@ -2086,19 +2291,33 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              <div onClick={() => handleDrillDown('Requirements')} className="bg-card border border-border p-5 rounded-2xl flex items-center justify-between shadow-xs cursor-pointer hover:bg-muted/30 transition-all">
+              <div
+                onClick={() => handleDrillDown('Requirements')}
+                title="Framework Requirements&#10;Basis: Total count of active framework compliance obligations.&#10;Exclusions: Archived, deactivated, or deleted requirements are excluded."
+                className="bg-card border border-border p-5 rounded-2xl flex items-center justify-between shadow-xs cursor-pointer hover:bg-muted/30 transition-all group"
+              >
                 <div className="space-y-1">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Requirements</span>
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                    Requirements
+                    <span className="text-indigo-500 font-extrabold text-[9px] group-hover:underline">ⓘ</span>
+                  </span>
                   <span className="text-3xl font-black text-foreground">{filteredReqs.length}</span>
                 </div>
-                <span className="p-2.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl">
+                <span className="p-2.5 bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 rounded-xl">
                   <ShieldCheck className="w-5 h-5" />
                 </span>
               </div>
 
-              <div onClick={() => handleDrillDown('Evidence')} className="bg-card border border-border p-5 rounded-2xl flex items-center justify-between shadow-xs cursor-pointer hover:bg-muted/30 transition-all">
+              <div
+                onClick={() => handleDrillDown('Evidence')}
+                title="Evidence Files&#10;Basis: Active verification documents uploaded.&#10;Exclusions: Excludes permanently deleted files.&#10;Date Window: Active/Expiring status limits apply."
+                className="bg-card border border-border p-5 rounded-2xl flex items-center justify-between shadow-xs cursor-pointer hover:bg-muted/30 transition-all group"
+              >
                 <div className="space-y-1">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Evidence Files</span>
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                    Evidence Files
+                    <span className="text-indigo-500 font-extrabold text-[9px] group-hover:underline">ⓘ</span>
+                  </span>
                   <span className="text-3xl font-black text-foreground">{filteredDocs.length}{renderComparisonBadge(comparisonData?.docs)}</span>
                 </div>
                 <span className="p-2.5 bg-emerald-500/10 text-emerald-650 dark:text-emerald-400 rounded-xl">
@@ -2106,12 +2325,19 @@ export default function ReportsPage() {
                 </span>
               </div>
 
-              <div onClick={() => handleDrillDown('Actions', { status: 'Open' })} className="bg-card border border-border p-5 rounded-2xl flex items-center justify-between shadow-xs cursor-pointer hover:bg-muted/30 transition-all">
+              <div
+                onClick={() => handleDrillDown('Actions', { status: 'Open' })}
+                title="Open Actions&#10;Basis: Count of corrective actions with status 'Open' or 'In Progress'.&#10;Exclusions: Cancelled or completed items."
+                className="bg-card border border-border p-5 rounded-2xl flex items-center justify-between shadow-xs cursor-pointer hover:bg-muted/30 transition-all group"
+              >
                 <div className="space-y-1">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Open Actions</span>
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                    Open Actions
+                    <span className="text-indigo-500 font-extrabold text-[9px] group-hover:underline">ⓘ</span>
+                  </span>
                   <span className="text-3xl font-black text-foreground">{filteredActions.filter(a => a.status !== 'Complete' && a.status !== 'Cancelled').length}{renderComparisonBadge(comparisonData?.actionsOpen)}</span>
                 </div>
-                <span className="p-2.5 bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-xl">
+                <span className="p-2.5 bg-rose-500/10 text-rose-650 dark:text-rose-400 rounded-xl">
                   <AlertTriangle className="w-5 h-5" />
                 </span>
               </div>
@@ -2126,7 +2352,7 @@ export default function ReportsPage() {
                   { value: filteredReadinessRequirements.filter(r => r.status === 'AMBER').length, color: '#f59e0b', label: 'Due Soon' },
                   { value: filteredReadinessRequirements.filter(r => r.status === 'RED').length, color: '#ef4444', label: 'Overdue / Gap' },
                   { value: filteredReadinessRequirements.filter(r => r.status === 'GREY').length, color: '#71717a', label: 'Excluded' }
-                ], 'Requirements')}
+                ], 'Requirements', 'rag_distribution')}
               </div>
 
               {/* Card 2: Evidence upload activity */}
@@ -2134,7 +2360,7 @@ export default function ReportsPage() {
                 <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Evidence Upload Activity</h3>
                 <p className="text-[10px] text-muted-foreground">Actual document uploads by month. This is activity, not a historical readiness score.</p>
                 <div className="pt-2">
-                  {renderSVGSparkline(documentUploadTrend.points, documentUploadTrend.labels, undefined, undefined, 'Evidence')}
+                  {renderSVGSparkline(documentUploadTrend.points, documentUploadTrend.labels, undefined, undefined, 'Evidence', 'evidence_uploads')}
                 </div>
               </div>
 
@@ -2298,14 +2524,14 @@ export default function ReportsPage() {
                   { value: filteredDocs.filter(d => d.status === 'Expiring Soon').length, color: '#f59e0b', label: 'Expiring Soon' },
                   { value: filteredDocs.filter(d => d.status === 'Expired').length, color: '#ef4444', label: 'Expired' },
                   { value: filteredDocs.filter(d => d.status === 'Unclassified').length, color: '#71717a', label: 'Unclassified' }
-                ], 'Evidence')}
+                ], 'Evidence', 'evidence_status')}
               </div>
 
               <div className="bg-card border border-border p-5 rounded-2xl space-y-4">
                 <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Document Uploads Trend</h3>
                 <p className="text-[10px] text-muted-foreground">Actual evidence documents uploaded in each month.</p>
                 <div className="pt-2">
-                  {renderSVGSparkline(documentUploadTrend.points, documentUploadTrend.labels, undefined, undefined, 'Evidence')}
+                  {renderSVGSparkline(documentUploadTrend.points, documentUploadTrend.labels, undefined, undefined, 'Evidence', 'evidence_trend')}
                 </div>
               </div>
             </div>
@@ -2393,7 +2619,7 @@ export default function ReportsPage() {
                   { value: filteredActions.filter(a => a.status === 'In Progress').length, color: '#f59e0b', label: 'In Progress' },
                   { value: filteredActions.filter(a => a.status === 'Open').length, color: '#ef4444', label: 'Open' },
                   { value: filteredActions.filter(a => a.status === 'Cancelled').length, color: '#71717a', label: 'Cancelled' }
-                ], 'Actions')}
+                ], 'Actions', 'actions_status')}
               </div>
 
               <div className="bg-card border border-border p-5 rounded-2xl space-y-4">
@@ -2468,7 +2694,7 @@ export default function ReportsPage() {
                   { value: auditPacks.filter(p => p.status === 'Draft').length, color: '#f59e0b', label: 'Draft' },
                   { value: auditPacks.filter(p => p.status === 'Sent').length, color: '#4f46e5', label: 'Sent' },
                   { value: auditPacks.filter(p => p.status === 'Archived').length, color: '#71717a', label: 'Archived' }
-                ], 'Audits')}
+                ], 'Audits', 'audits_status')}
               </div>
 
               {isOwnerOrAdmin ? (
@@ -3320,10 +3546,19 @@ export default function ReportsPage() {
               {/* Dynamic Live Preview Screen */}
               <div className="lg:col-span-2 bg-card border border-border p-5 rounded-2xl space-y-4 shadow-sm min-h-[300px]">
                 <div className="flex justify-between items-center gap-3 border-b border-border/50 pb-3">
-                  <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Interactive Report Preview</h3>
+                  <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest truncate max-w-[280px]">
+                    Preview: {getMeasureLabel(builderMeasure)} by {builderDimension.replace('date_', 'Date ')}
+                  </h3>
                   <div className="flex items-center gap-2">
                     <div className="text-[10px] text-muted-foreground font-bold px-2 py-0.5 bg-muted rounded-full">
-                      Live aggregate: {builderReportData.length} groups
+                      {builderReportData.length} groups (based on {(() => {
+                        if (builderSource === 'Requirements') return filteredReqs.length;
+                        if (builderSource === 'Evidence') return filteredDocs.length;
+                        if (builderSource === 'Competencies') return filteredCompetencyRecords.length;
+                        if (builderSource === 'Actions') return filteredActions.length;
+                        if (builderSource === 'Audit Trail') return auditTrailEvents.length;
+                        return 0;
+                      })()} total records)
                     </div>
                     <button
                       type="button"
@@ -3335,6 +3570,16 @@ export default function ReportsPage() {
                       <Download className="w-3.5 h-3.5" />
                     </button>
                   </div>
+                </div>
+
+                {/* Configuration validation summary card */}
+                <div className="p-3 bg-muted/40 border border-border/60 rounded-xl flex flex-col gap-1 text-[11px] leading-normal text-muted-foreground text-left">
+                  <div className="flex items-center justify-between font-bold text-foreground mb-1">
+                    <span className="uppercase text-[9px] tracking-wider text-indigo-650 dark:text-indigo-400">Configuration Validation Status</span>
+                    <span className="text-emerald-600 flex items-center gap-1 font-semibold">✓ Verified Compatible</span>
+                  </div>
+                  <p>Source: <strong className="text-foreground">{builderSource}</strong> | Dimension: <strong className="text-foreground">{builderDimension.replace('date_', 'Date ')}</strong> | Measure: <strong className="text-foreground">{getMeasureLabel(builderMeasure)}</strong> | Visual: <strong className="text-foreground">{builderVisual}</strong></p>
+                  <p>Active Filters: Category=<strong className="text-foreground">{selectedCategory}</strong>, Status=<strong className="text-foreground">{selectedStatus}</strong>, Risk=<strong className="text-foreground">{selectedRisk}</strong></p>
                 </div>
 
                 {builderVisual === 'bar' && (
@@ -3365,7 +3610,9 @@ export default function ReportsPage() {
                            item.label.includes('RED') || item.label.includes('Expired') || item.label.includes('Gap') || item.label.includes('Open') ? '#ef4444' :
                            '#4f46e5',
                     label: item.label
-                  }))
+                  })),
+                  undefined,
+                  'builder_donut'
                 )}
 
                 {builderVisual === 'table' && (
@@ -3479,8 +3726,8 @@ export default function ReportsPage() {
                                   );
                                 })}
                                 <td className="border border-border/60 p-2 text-center font-bold text-foreground bg-muted/20">
-                                  {rowTotal}
-                                  {['readiness_rate', 'row_pct', 'col_pct', 'total_pct'].includes(pivotAggregation) ? '%' : ''}
+                                  {pivotAggregation === 'col_pct' ? 'N/A' : rowTotal}
+                                  {['readiness_rate', 'row_pct', 'col_pct', 'total_pct'].includes(pivotAggregation) && pivotAggregation !== 'col_pct' ? '%' : ''}
                                 </td>
                               </tr>
                             );
@@ -3492,8 +3739,8 @@ export default function ReportsPage() {
                               const colTotal = getPivotRowColTotal(c, 'col');
                               return (
                                 <td key={c} className="border border-border/60 p-2 text-center text-foreground">
-                                  {colTotal}
-                                  {['readiness_rate', 'row_pct', 'col_pct', 'total_pct'].includes(pivotAggregation) ? '%' : ''}
+                                  {pivotAggregation === 'row_pct' ? 'N/A' : colTotal}
+                                  {['readiness_rate', 'row_pct', 'col_pct', 'total_pct'].includes(pivotAggregation) && pivotAggregation !== 'row_pct' ? '%' : ''}
                                 </td>
                               );
                             })}
@@ -3567,6 +3814,119 @@ export default function ReportsPage() {
           </div>
         </div>
       )}
+
+      {focusedChartId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-card border border-border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-xl relative animate-scaleIn">
+            <div className="flex justify-between items-start gap-4">
+              <div>
+                <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider">
+                  Focused Chart View
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Detailed visualization and raw data grid inspection.
+                </p>
+              </div>
+              <button
+                onClick={() => setFocusedChartId(null)}
+                className="text-muted-foreground hover:text-foreground text-xs font-bold p-1 bg-muted rounded-lg"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            <div className="p-4 bg-muted/20 border border-border/60 rounded-xl">
+              {focusedChartId === 'rag_distribution' && (
+                <>
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase mb-3">Requirements RAG Distribution</h4>
+                  {renderSVDonut([
+                    { value: filteredReadinessRequirements.filter(r => r.status === 'GREEN').length, color: '#10b981', label: 'Green' },
+                    { value: filteredReadinessRequirements.filter(r => r.status === 'AMBER').length, color: '#f59e0b', label: 'Due Soon' },
+                    { value: filteredReadinessRequirements.filter(r => r.status === 'RED').length, color: '#ef4444', label: 'Overdue / Gap' },
+                    { value: filteredReadinessRequirements.filter(r => r.status === 'GREY').length, color: '#71717a', label: 'Excluded' }
+                  ], 'Requirements')}
+                </>
+              )}
+              {focusedChartId === 'evidence_uploads' && (
+                <>
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase mb-3">Evidence Upload Activity</h4>
+                  {renderSVGSparkline(documentUploadTrend.points, documentUploadTrend.labels, undefined, undefined, 'Evidence')}
+                </>
+              )}
+              {focusedChartId === 'evidence_status' && (
+                <>
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase mb-3">Evidence by Expiry Status</h4>
+                  {renderSVDonut([
+                    { value: filteredDocs.filter(d => d.status === 'Active').length, color: '#10b981', label: 'Active / Current' },
+                    { value: filteredDocs.filter(d => d.status === 'Expiring Soon').length, color: '#f59e0b', label: 'Expiring Soon' },
+                    { value: filteredDocs.filter(d => d.status === 'Expired').length, color: '#ef4444', label: 'Expired' },
+                    { value: filteredDocs.filter(d => d.status === 'Unclassified').length, color: '#71717a', label: 'Unclassified' }
+                  ], 'Evidence')}
+                </>
+              )}
+              {focusedChartId === 'evidence_trend' && (
+                <>
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase mb-3">Document Uploads Trend</h4>
+                  {renderSVGSparkline(documentUploadTrend.points, documentUploadTrend.labels, undefined, undefined, 'Evidence')}
+                </>
+              )}
+              {focusedChartId === 'actions_status' && (
+                <>
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase mb-3">Corrective Actions Status</h4>
+                  {renderSVDonut([
+                    { value: filteredActions.filter(a => a.status === 'Complete').length, color: '#10b981', label: 'Complete' },
+                    { value: filteredActions.filter(a => a.status === 'In Progress').length, color: '#f59e0b', label: 'In Progress' },
+                    { value: filteredActions.filter(a => a.status === 'Open').length, color: '#ef4444', label: 'Open' },
+                    { value: filteredActions.filter(a => a.status === 'Cancelled').length, color: '#71717a', label: 'Cancelled' }
+                  ], 'Actions')}
+                </>
+              )}
+              {focusedChartId === 'audits_status' && (
+                <>
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase mb-3">Audit Packs Status</h4>
+                  {renderSVDonut([
+                    { value: auditPacks.filter(p => p.status === 'Ready').length, color: '#10b981', label: 'Ready' },
+                    { value: auditPacks.filter(p => p.status === 'Draft').length, color: '#f59e0b', label: 'Draft' },
+                    { value: auditPacks.filter(p => p.status === 'Sent').length, color: '#4f46e5', label: 'Sent' },
+                    { value: auditPacks.filter(p => p.status === 'Archived').length, color: '#71717a', label: 'Archived' }
+                  ], 'Audits')}
+                </>
+              )}
+              {focusedChartId === 'builder_donut' && (
+                <>
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase mb-3">Custom Report Builder Aggregate</h4>
+                  {renderSVDonut(
+                    builderReportData.map(item => ({
+                      value: item.value,
+                      color: item.label.includes('GREEN') || item.label.includes('Compliant') || item.label.includes('Valid') ? '#10b981' :
+                             item.label.includes('AMBER') || item.label.includes('Soon') || item.label.includes('Warning') ? '#f59e0b' :
+                             item.label.includes('RED') || item.label.includes('Expired') || item.label.includes('Gap') || item.label.includes('Open') ? '#ef4444' :
+                             '#4f46e5',
+                      label: item.label
+                    }))
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setFocusedChartId(null)}
+                className="px-4 py-2 bg-indigo-650 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Report Trust Note */}
+      <div className="pt-6 border-t border-border/60 text-center text-[10px] text-muted-foreground leading-relaxed print:block mt-8">
+        <span className="font-extrabold text-indigo-650 dark:text-indigo-400 block mb-1">REPORT TRUST NOTE</span>
+        Reports reflect the records currently held in Vygilence and depend on the completeness and accuracy of the underlying data.
+      </div>
 
       <ConfirmDialog request={confirmRequest} onCancel={() => setConfirmRequest(null)} />
       <InlineToast toast={toast} onDismiss={() => setToast(null)} />

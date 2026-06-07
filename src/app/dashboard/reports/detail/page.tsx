@@ -1133,8 +1133,9 @@ export default function ReportDetailPage() {
         </div>
       )}
 
-      {/* Printable Legal Disclaimer */}
-      <div className="hidden print:block text-[9px] text-zinc-400 text-center border-t border-zinc-200 pt-6 mt-12">
+      {/* Report Trust Note */}
+      <div className="text-[10px] text-muted-foreground text-center border-t border-border/60 pt-6 mt-12">
+        <span className="font-extrabold text-indigo-650 dark:text-indigo-400 block mb-1">REPORT TRUST NOTE</span>
         Reports reflect the records currently held in Vygilence and depend on the completeness and accuracy of the underlying data.
       </div>
 
