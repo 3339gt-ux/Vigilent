@@ -9,7 +9,7 @@ This document details the operational status of all reporting and analytics feat
 ### 1.1 Capability Registry (Single Source of Truth)
 * **Registry Location**: [`src/lib/reportCapabilities.ts`](file:///c:/Vigilen/src/lib/reportCapabilities.ts)
 * **Capabilities Enforced**:
-  * **Requirements & Readiness**: 8 dimensions, 4 measures (Count, Readiness Rate %, Overdue Count, Avg Days Overdue), 3 date fields, 4 date buckets, 4 visuals, 4 pivot aggregations.
+  * **Requirements & Readiness**: 8 dimensions, 4 measures (Count, Readiness Rate %, Overdue Count, Avg Days Overdue), 3 date fields, 4 date buckets, 4 visuals, and 8 conditional pivot aggregations.
   * **Evidence Documents**: 7 dimensions, 3 measures (Count, Expiring Soon, Expired), 4 date fields, 4 date buckets, 3 visuals, 1 pivot aggregation.
   * **Competencies & People**: 7 dimensions, 4 measures (Count, Completion Rate %, Expired, Missing), 3 date fields, 4 date buckets, 3 visuals, 1 pivot aggregation.
   * **Corrective Actions**: 6 dimensions, 4 measures (Count, Completion Rate %, Overdue, Avg Days Overdue), 4 date fields, 4 date buckets, 3 visuals, 1 pivot aggregation.
@@ -45,13 +45,8 @@ This document details the operational status of all reporting and analytics feat
   * **Corrective Actions**: 200 items
   * **Audit Packs**: 30 packs
   * **Audit Trail Logs**: 750 events
-* **Performance Timings (High Volume)**:
-  * Reports initial render: ~150ms
-  * Tab switching: ~45ms
-  * Global filter updates: ~50ms
-  * Pivot generation: ~25ms
-  * CSV export preparation: ~15ms
-* **Runtime Mutation Reconciliation**: Verified that creating, status shifting, and archiving requirements/evidence/competencies/actions instantly propagate correct deltas into Reports.
+* **Performance Status**: The fixture supports local high-volume UAT. Precise timings are environment-dependent and require a reproducible benchmark before publication.
+* **Fixture Boundary**: Generated data is synthetic, marked as demo data, contains no reusable signed URLs, and is loaded only through the demo-mode Settings workflow. It is not automatically written to Supabase.
 
 ### 1.6 Personal Browser Reports (Local Storage)
 * **Local Storage Persistence**: Personal reports are saved locally on the client's browser, fully isolated and scoped by user ID and organization ID to prevent cross-tenant leakages.
@@ -89,3 +84,10 @@ This document details the operational status of all reporting and analytics feat
 
 ### 3.2 Tenant Isolation
 * All local browser storage keys are prefixed and validated against the logged-in user's active `organization_id` and `user_id`. Logged-out users or cross-organization context changes immediately trigger isolation resets.
+
+---
+
+## 4. Remaining Verification
+
+* Remote `saved_reports` provisioning and authenticated RLS verification remain deferred.
+* A final deep Codex acceptance review remains pending until remote provisioning is available.

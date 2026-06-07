@@ -52,6 +52,10 @@ export const REPORT_CAPABILITIES: Record<BuilderSource, ReportSourceCapability> 
     ],
     supportedPivotAggregations: [
       { value: 'count', label: 'Count' },
+      { value: 'readiness_rate', label: 'Readiness Rate (%)' },
+      { value: 'avg_days_overdue', label: 'Average Days Overdue' },
+      { value: 'max_days_overdue', label: 'Maximum Days Overdue' },
+      { value: 'min_days_overdue', label: 'Minimum Days Overdue' },
       { value: 'row_pct', label: 'Row Percentage' },
       { value: 'col_pct', label: 'Column Percentage' },
       { value: 'total_pct', label: 'Total Percentage' }
@@ -160,7 +164,7 @@ export const REPORT_CAPABILITIES: Record<BuilderSource, ReportSourceCapability> 
     supportedFilters: ['status', 'owner'],
     supportedDateFields: [
       { value: 'created_at', label: 'Created Date' },
-      { value: 'due_date', label: 'Due Date' },
+      { value: 'target_due_date', label: 'Target Due Date' },
       { value: 'opened_at', label: 'Opened Date' },
       { value: 'closed_at', label: 'Closed Date' }
     ],

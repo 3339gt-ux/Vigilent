@@ -1248,10 +1248,16 @@ export const checkSavedReportsTableAvailable = async (): Promise<boolean> => {
         _isSavedReportsTableAvailable = false;
         return false;
       }
+      console.warn('Saved reports database availability check failed:', {
+        code: error.code,
+        message: error.message
+      });
+      _isSavedReportsTableAvailable = false;
+      return false;
     }
     _isSavedReportsTableAvailable = true;
     return true;
-  } catch (e) {
+  } catch {
     _isSavedReportsTableAvailable = false;
     return false;
   }
@@ -1260,18 +1266,14 @@ export const checkSavedReportsTableAvailable = async (): Promise<boolean> => {
 export const getSavedReportsStorageKey = async (): Promise<string> => {
   const SAVED_REPORTS_KEY = 'vygilence_saved_reports';
   if (shouldUseSupabase()) {
-    try {
-      const orgId = await getCurrentSupabaseOrganizationId();
-      const profile = await getCurrentSupabaseProfile();
-      const userId = profile?.id || 'anon';
-      return `${SAVED_REPORTS_KEY}_${userId}_${orgId}`;
-    } catch (e) {
-      console.warn('Failed to resolve Supabase key, falling back to mock key', e);
-      return `${SAVED_REPORTS_KEY}_${MOCK_PROFILE.id}_${MOCK_ORG.id}`;
+    const orgId = await getCurrentSupabaseOrganizationId();
+    const profile = await getCurrentSupabaseProfile();
+    if (!profile?.id) {
+      throw new Error('Cannot scope browser reports without an authenticated profile.');
     }
-  } else {
-    return `${SAVED_REPORTS_KEY}_${MOCK_PROFILE.id}_${MOCK_ORG.id}`;
+    return `${SAVED_REPORTS_KEY}_${profile.id}_${orgId}`;
   }
+  return `${SAVED_REPORTS_KEY}_${MOCK_PROFILE.id}_${MOCK_ORG.id}`;
 };
 
 const fetchRecordById = async (table: string, id: string): Promise<any> => {

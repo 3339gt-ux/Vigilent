@@ -736,24 +736,18 @@ export default function ReportsPage() {
 
   // Helper to resolve supported aggregations for pivot grid based on measure
   const getSupportedPivotAggregations = useCallback((measure: string) => {
+    const supported = REPORT_CAPABILITIES.Requirements.supportedPivotAggregations;
     if (measure === 'avg_days_overdue') {
-      return [
-        { value: 'avg_days_overdue', label: 'Average Days Overdue' },
-        { value: 'max_days_overdue', label: 'Maximum Days Overdue' },
-        { value: 'min_days_overdue', label: 'Minimum Days Overdue' }
-      ];
+      return supported.filter(option =>
+        ['avg_days_overdue', 'max_days_overdue', 'min_days_overdue'].includes(option.value)
+      );
     }
     if (measure === 'completion_rate') {
-      return [
-        { value: 'readiness_rate', label: 'Readiness Rate (%)' }
-      ];
+      return supported.filter(option => option.value === 'readiness_rate');
     }
-    return [
-      { value: 'count', label: 'Count of Requirements' },
-      { value: 'row_pct', label: 'Row Percentage (%)' },
-      { value: 'col_pct', label: 'Column Percentage (%)' },
-      { value: 'total_pct', label: 'Total Grid Percentage (%)' }
-    ];
+    return supported.filter(option =>
+      ['count', 'row_pct', 'col_pct', 'total_pct'].includes(option.value)
+    );
   }, []);
 
   // Safely reset dimension, measure, visualType when builderSource changes

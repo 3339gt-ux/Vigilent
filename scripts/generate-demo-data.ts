@@ -252,7 +252,7 @@ export function generateDemoData() {
       organization_id: org.id,
       uploaded_by: profile.id,
       title: title,
-      file_url: `https://dwagrtwnwgtvfmhxznen.supabase.co/storage/v1/object/sign/evidence-documents/${filename}?token=seeded_demo_only`,
+      file_url: null,
       file_name: filename,
       original_file_name: filename,
       safe_file_name: filename,
