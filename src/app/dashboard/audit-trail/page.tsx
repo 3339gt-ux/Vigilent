@@ -1245,8 +1245,8 @@ export default function AuditTrailPage() {
                     <div>
                       <span className="text-[9px] text-muted-foreground block font-bold uppercase mb-1">Before State</span>
                       {selectedEvent.before_snapshot ? (
-                        <div className="bg-muted p-2 rounded-lg font-mono text-[9px] max-h-48 overflow-y-auto border border-border/60 animate-fade-in">
-                          <pre className="whitespace-pre-wrap break-all">{JSON.stringify(maskSensitiveData(selectedEvent.before_snapshot), null, 2)}</pre>
+                        <div className="bg-muted p-2 rounded-lg font-mono text-[9px] max-h-48 overflow-auto border border-border/60 animate-fade-in">
+                          <pre className="whitespace-pre-wrap break-words">{JSON.stringify(maskSensitiveData(selectedEvent.before_snapshot), null, 2)}</pre>
                         </div>
                       ) : (
                         <span className="text-muted-foreground italic">None (e.g. Creation Event)</span>
@@ -1255,8 +1255,8 @@ export default function AuditTrailPage() {
                     <div>
                       <span className="text-[9px] text-muted-foreground block font-bold uppercase mb-1">After State</span>
                       {selectedEvent.after_snapshot ? (
-                        <div className="bg-muted p-2 rounded-lg font-mono text-[9px] max-h-48 overflow-y-auto border border-border/60 animate-fade-in">
-                          <pre className="whitespace-pre-wrap break-all">{JSON.stringify(maskSensitiveData(selectedEvent.after_snapshot), null, 2)}</pre>
+                        <div className="bg-muted p-2 rounded-lg font-mono text-[9px] max-h-48 overflow-auto border border-border/60 animate-fade-in">
+                          <pre className="whitespace-pre-wrap break-words">{JSON.stringify(maskSensitiveData(selectedEvent.after_snapshot), null, 2)}</pre>
                         </div>
                       ) : (
                         <span className="text-muted-foreground italic">None (e.g. Deletion Event)</span>

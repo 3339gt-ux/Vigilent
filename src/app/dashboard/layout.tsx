@@ -454,7 +454,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           {/* Mobile Dropdown Panel */}
           {mobileMenuOpen && (
-            <div className="lg:hidden absolute top-14 left-0 right-0 bg-card border-b border-border shadow-lg z-50 p-4 space-y-4 print:hidden">
+            <div className="lg:hidden absolute top-14 left-0 right-0 bg-card border-b border-border shadow-lg z-40 p-4 space-y-4 print:hidden">
               <nav className="flex flex-col gap-1">
                 {menuItems.map(item => {
                   const isActive = pathname === item.href;

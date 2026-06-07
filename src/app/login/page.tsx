@@ -160,7 +160,7 @@ export default function LoginPage() {
             <button
               id="login-submit-btn"
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !agreedDisclaimers}
               className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/50 text-white font-semibold rounded-lg shadow-lg shadow-indigo-600/15 flex items-center justify-center gap-2 transition-all duration-200"
             >
               {isSubmitting ? (
