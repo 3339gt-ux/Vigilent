@@ -25,10 +25,72 @@ import {
 } from 'lucide-react';
 import {
   CompetencyRecord,
-  Person
+  Person,
+  Requirement,
+  EvidenceDocument,
+  CompetencyType,
+  Action,
+  AuditPack
 } from '@/lib/types';
 import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
 import { calculateCompetencyStatus } from '@/lib/competencyEngine';
+
+export interface CompetencyDetail {
+  person: Person;
+  type: CompetencyType;
+  status: string;
+  record: CompetencyRecord | null;
+}
+
+export type DetailRecord =
+  | Requirement
+  | EvidenceDocument
+  | CompetencyDetail
+  | Action
+  | AuditPack;
+
+export interface RequirementsMetrics {
+  total: number;
+  compliant: number;
+  warning: number;
+  gaps: number;
+}
+
+export interface EvidenceMetrics {
+  total: number;
+  active: number;
+  expiring: number;
+  expired: number;
+}
+
+export interface CompetencyMetrics {
+  total: number;
+  valid: number;
+  expiring: number;
+  expired: number;
+}
+
+export interface ActionMetrics {
+  total: number;
+  completed: number;
+  progress: number;
+  open: number;
+}
+
+export interface AuditMetrics {
+  total: number;
+  ready: number;
+  draft: number;
+  sent: number;
+}
+
+export type MetricsSummary =
+  | RequirementsMetrics
+  | EvidenceMetrics
+  | CompetencyMetrics
+  | ActionMetrics
+  | AuditMetrics;
+
 
 export default function ReportDetailPage() {
   const {
@@ -124,7 +186,7 @@ export default function ReportDetailPage() {
   );
 
   // Filtered lists
-  const records = useMemo(() => {
+  const records = useMemo<DetailRecord[]>(() => {
     if (source === 'Requirements') {
       return frameworkRequirements.filter(r => {
         const lifecycle = r.lifecycle_status || 'ACTIVE';
@@ -153,7 +215,7 @@ export default function ReportDetailPage() {
         competencyRecords.map(record => [`${record.person_id}:${record.competency_type_id}`, record])
       );
 
-      const list: Array<{ person: Person; type: any; status: string; record: CompetencyRecord | null }> = [];
+      const list: CompetencyDetail[] = [];
       people.filter(p => p.active).forEach(person => {
         competencyTypes.filter(t => t.active).forEach(type => {
           const rec = recordsByCell.get(`${person.id}:${type.id}`) || null;
@@ -194,56 +256,71 @@ export default function ReportDetailPage() {
   }, [source, frameworkRequirements, documents, competencyRecords, competencyTypes, people, actions, auditPacks, categoryFilter, ownerFilter, riskFilter, statusFilter, overdueFilter, readinessByRequirementId, getLinkedRequirementRisk]);
 
   // Search filter
-  const searchedRecords = useMemo(() => {
+  const searchedRecords = useMemo<DetailRecord[]>(() => {
     const q = searchQuery.toLowerCase().trim();
     if (!q) return records;
-    return records.filter((item: any) => {
+    return records.filter((item) => {
       if (source === 'Requirements') {
-        return (item.title || '').toLowerCase().includes(q) || (item.category || '').toLowerCase().includes(q) || (item.owner || '').toLowerCase().includes(q);
+        const req = item as Requirement;
+        return (req.title || '').toLowerCase().includes(q) || (req.category || '').toLowerCase().includes(q) || (req.owner || '').toLowerCase().includes(q);
       }
       if (source === 'Evidence') {
-        return (item.title || '').toLowerCase().includes(q) || (item.category || '').toLowerCase().includes(q) || (item.uploaded_by || '').toLowerCase().includes(q);
+        const doc = item as EvidenceDocument;
+        return (doc.title || '').toLowerCase().includes(q) || (doc.category || '').toLowerCase().includes(q) || (doc.uploaded_by || '').toLowerCase().includes(q);
       }
       if (source === 'Competencies') {
-        return (item.person?.display_name || '').toLowerCase().includes(q) || (item.type?.title || '').toLowerCase().includes(q) || (item.type?.category || '').toLowerCase().includes(q);
+        const comp = item as CompetencyDetail;
+        return (comp.person?.display_name || '').toLowerCase().includes(q) || (comp.type?.title || '').toLowerCase().includes(q) || (comp.type?.category || '').toLowerCase().includes(q);
       }
       if (source === 'Actions') {
-        return (item.description || '').toLowerCase().includes(q) || (item.owner || '').toLowerCase().includes(q);
+        const act = item as Action;
+        return (act.description || '').toLowerCase().includes(q) || (act.owner || '').toLowerCase().includes(q);
       }
       if (source === 'Audits') {
-        return (item.name || '').toLowerCase().includes(q) || (item.status || '').toLowerCase().includes(q);
+        const aud = item as AuditPack;
+        return (aud.name || '').toLowerCase().includes(q) || (aud.status || '').toLowerCase().includes(q);
       }
       return false;
     });
   }, [records, searchQuery, source]);
 
   // Sort records
-  const sortedRecords = useMemo(() => {
+  const sortedRecords = useMemo<DetailRecord[]>(() => {
     const list = [...searchedRecords];
-    list.sort((a: any, b: any) => {
-      let valA: any = '';
-      let valB: any = '';
+    list.sort((a, b) => {
+      let valA: string | number = '';
+      let valB: string | number = '';
 
       if (source === 'Requirements') {
-        if (sortBy === 'name') { valA = a.title; valB = b.title; }
-        else if (sortBy === 'category') { valA = a.category; valB = b.category; }
-        else if (sortBy === 'status') { valA = readinessByRequirementId.get(a.id)?.status || ''; valB = readinessByRequirementId.get(b.id)?.status || ''; }
-        else if (sortBy === 'risk') { valA = a.risk_level; valB = b.risk_level; }
+        const reqA = a as Requirement;
+        const reqB = b as Requirement;
+        if (sortBy === 'name') { valA = reqA.title; valB = reqB.title; }
+        else if (sortBy === 'category') { valA = reqA.category; valB = reqB.category; }
+        else if (sortBy === 'status') { valA = readinessByRequirementId.get(reqA.id)?.status || ''; valB = readinessByRequirementId.get(reqB.id)?.status || ''; }
+        else if (sortBy === 'risk') { valA = reqA.risk_level; valB = reqB.risk_level; }
       } else if (source === 'Evidence') {
-        if (sortBy === 'name') { valA = a.title; valB = b.title; }
-        else if (sortBy === 'category') { valA = a.category; valB = b.category; }
-        else if (sortBy === 'status') { valA = a.status; valB = b.status; }
+        const docA = a as EvidenceDocument;
+        const docB = b as EvidenceDocument;
+        if (sortBy === 'name') { valA = docA.title; valB = docB.title; }
+        else if (sortBy === 'category') { valA = docA.category; valB = docB.category; }
+        else if (sortBy === 'status') { valA = docA.status; valB = docB.status; }
       } else if (source === 'Competencies') {
-        if (sortBy === 'name') { valA = a.person.display_name; valB = b.person.display_name; }
-        else if (sortBy === 'category') { valA = a.type.category; valB = b.type.category; }
-        else if (sortBy === 'status') { valA = a.status; valB = b.status; }
+        const compA = a as CompetencyDetail;
+        const compB = b as CompetencyDetail;
+        if (sortBy === 'name') { valA = compA.person.display_name; valB = compB.person.display_name; }
+        else if (sortBy === 'category') { valA = compA.type.category; valB = compB.type.category; }
+        else if (sortBy === 'status') { valA = compA.status; valB = compB.status; }
       } else if (source === 'Actions') {
-        if (sortBy === 'name') { valA = a.description; valB = b.description; }
-        else if (sortBy === 'status') { valA = a.status; valB = b.status; }
-        else if (sortBy === 'risk') { valA = getLinkedRequirementRisk(a.id); valB = getLinkedRequirementRisk(b.id); }
+        const actA = a as Action;
+        const actB = b as Action;
+        if (sortBy === 'name') { valA = actA.description || ''; valB = actB.description || ''; }
+        else if (sortBy === 'status') { valA = actA.status; valB = actB.status; }
+        else if (sortBy === 'risk') { valA = getLinkedRequirementRisk(actA.id); valB = getLinkedRequirementRisk(actB.id); }
       } else if (source === 'Audits') {
-        if (sortBy === 'name') { valA = a.name; valB = b.name; }
-        else if (sortBy === 'status') { valA = a.status; valB = b.status; }
+        const audA = a as AuditPack;
+        const audB = b as AuditPack;
+        if (sortBy === 'name') { valA = audA.name; valB = audB.name; }
+        else if (sortBy === 'status') { valA = audA.status; valB = audB.status; }
       }
 
       if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
@@ -254,7 +331,7 @@ export default function ReportDetailPage() {
   }, [searchedRecords, sortBy, sortOrder, source, readinessByRequirementId, getLinkedRequirementRisk]);
 
   // Paginated records
-  const paginatedRecords = useMemo(() => {
+  const paginatedRecords = useMemo<DetailRecord[]>(() => {
     const start = (currentPage - 1) * pageSize;
     return sortedRecords.slice(start, start + pageSize);
   }, [sortedRecords, currentPage, pageSize]);
@@ -262,9 +339,9 @@ export default function ReportDetailPage() {
   const totalPages = Math.ceil(sortedRecords.length / pageSize) || 1;
   const isSupportedSource = ['Requirements', 'Evidence', 'Competencies', 'Actions', 'Audits'].includes(source);
 
-  const metricsSummary = useMemo(() => {
+  const metricsSummary = useMemo<MetricsSummary | null>(() => {
     if (source === 'Requirements') {
-      const list = sortedRecords as any[];
+      const list = sortedRecords as Requirement[];
       const total = list.length;
       const compliant = list.filter(r => (readinessByRequirementId.get(r.id)?.status || 'GREY') === 'GREEN').length;
       const warning = list.filter(r => (readinessByRequirementId.get(r.id)?.status || 'GREY') === 'AMBER').length;
@@ -272,7 +349,7 @@ export default function ReportDetailPage() {
       return { total, compliant, warning, gaps };
     }
     if (source === 'Evidence') {
-      const list = sortedRecords as any[];
+      const list = sortedRecords as EvidenceDocument[];
       const total = list.length;
       const active = list.filter(d => d.status === 'Active').length;
       const expiring = list.filter(d => d.status === 'Expiring Soon').length;
@@ -280,7 +357,7 @@ export default function ReportDetailPage() {
       return { total, active, expiring, expired };
     }
     if (source === 'Competencies') {
-      const list = sortedRecords as any[];
+      const list = sortedRecords as CompetencyDetail[];
       const total = list.length;
       const valid = list.filter(c => c.status === 'Valid').length;
       const expiring = list.filter(c => c.status === 'Expiring Soon').length;
@@ -288,7 +365,7 @@ export default function ReportDetailPage() {
       return { total, valid, expiring, expired };
     }
     if (source === 'Actions') {
-      const list = sortedRecords as any[];
+      const list = sortedRecords as Action[];
       const total = list.length;
       const completed = list.filter(a => a.status === 'Complete').length;
       const progress = list.filter(a => a.status === 'In Progress').length;
@@ -296,7 +373,7 @@ export default function ReportDetailPage() {
       return { total, completed, progress, open };
     }
     if (source === 'Audits') {
-      const list = sortedRecords as any[];
+      const list = sortedRecords as AuditPack[];
       const total = list.length;
       const ready = list.filter(p => p.status === 'Ready').length;
       const draft = list.filter(p => p.status === 'Draft').length;
@@ -336,7 +413,7 @@ export default function ReportDetailPage() {
 
     if (source === 'Requirements') {
       headers = ['Requirement Title', 'Category', 'RAG Status', 'Risk Level', 'Owner'];
-      rows = sortedRecords.map((r: any) => [
+      rows = (sortedRecords as Requirement[]).map((r) => [
         r.title,
         r.category,
         readinessByRequirementId.get(r.id)?.status || 'GREY',
@@ -345,7 +422,7 @@ export default function ReportDetailPage() {
       ]);
     } else if (source === 'Evidence') {
       headers = ['Document Name', 'Category', 'Status', 'Expiry Date', 'Uploaded By'];
-      rows = sortedRecords.map((d: any) => [
+      rows = (sortedRecords as EvidenceDocument[]).map((d) => [
         d.title,
         d.category,
         d.status,
@@ -354,7 +431,7 @@ export default function ReportDetailPage() {
       ]);
     } else if (source === 'Competencies') {
       headers = ['Teammate Name', 'Competency Title', 'Category', 'Compliance Status', 'Expiry Date'];
-      rows = sortedRecords.map((c: any) => [
+      rows = (sortedRecords as CompetencyDetail[]).map((c) => [
         c.person.display_name,
         c.type.title,
         c.type.category,
@@ -363,8 +440,8 @@ export default function ReportDetailPage() {
       ]);
     } else if (source === 'Actions') {
       headers = ['Description', 'Linked Requirement Risk', 'Status', 'Owner', 'Due Date'];
-      rows = sortedRecords.map((a: any) => [
-        a.description,
+      rows = (sortedRecords as Action[]).map((a) => [
+        a.description || '',
         getLinkedRequirementRisk(a.id),
         a.status,
         a.owner || 'Unassigned',
@@ -372,7 +449,7 @@ export default function ReportDetailPage() {
       ]);
     } else if (source === 'Audits') {
       headers = ['Pack Name', 'Status', 'Requirements Count', 'Documents Count', 'Created At'];
-      rows = sortedRecords.map((p: any) => [
+      rows = (sortedRecords as AuditPack[]).map((p) => [
         p.name,
         p.status,
         (p.requirements || []).length.toString(),
@@ -547,106 +624,121 @@ export default function ReportDetailPage() {
         {/* KPI Summaries Block */}
         {isSupportedSource && metricsSummary && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-border/40">
-            {source === 'Requirements' && (
-              <>
-                <div className="bg-muted/30 p-3 rounded-xl border border-border/40">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase block">Total Requirements</span>
-                  <span className="text-lg font-black text-foreground">{metricsSummary.total}</span>
-                </div>
-                <div className="bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10">
-                  <span className="text-[10px] font-bold text-emerald-600 block">Compliant</span>
-                  <span className="text-lg font-black text-emerald-600">{metricsSummary.compliant}</span>
-                </div>
-                <div className="bg-amber-500/5 p-3 rounded-xl border border-amber-500/10">
-                  <span className="text-[10px] font-bold text-amber-600 block">Warning</span>
-                  <span className="text-lg font-black text-amber-600">{metricsSummary.warning}</span>
-                </div>
-                <div className="bg-rose-500/5 p-3 rounded-xl border border-rose-500/10">
-                  <span className="text-[10px] font-bold text-rose-600 block">Gaps</span>
-                  <span className="text-lg font-black text-rose-600">{metricsSummary.gaps}</span>
-                </div>
-              </>
-            )}
-            {source === 'Evidence' && (
-              <>
-                <div className="bg-muted/30 p-3 rounded-xl border border-border/40">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase block">Total Evidence</span>
-                  <span className="text-lg font-black text-foreground">{metricsSummary.total}</span>
-                </div>
-                <div className="bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10">
-                  <span className="text-[10px] font-bold text-emerald-600 block">Active</span>
-                  <span className="text-lg font-black text-emerald-600">{metricsSummary.active}</span>
-                </div>
-                <div className="bg-amber-500/5 p-3 rounded-xl border border-amber-500/10">
-                  <span className="text-[10px] font-bold text-amber-600 block">Expiring Soon</span>
-                  <span className="text-lg font-black text-amber-600">{metricsSummary.expiring}</span>
-                </div>
-                <div className="bg-rose-500/5 p-3 rounded-xl border border-rose-500/10">
-                  <span className="text-[10px] font-bold text-rose-600 block">Expired</span>
-                  <span className="text-lg font-black text-rose-600">{metricsSummary.expired}</span>
-                </div>
-              </>
-            )}
-            {source === 'Competencies' && (
-              <>
-                <div className="bg-muted/30 p-3 rounded-xl border border-border/40">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase block">Total Gaps Checked</span>
-                  <span className="text-lg font-black text-foreground">{metricsSummary.total}</span>
-                </div>
-                <div className="bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10">
-                  <span className="text-[10px] font-bold text-emerald-600 block">Valid</span>
-                  <span className="text-lg font-black text-emerald-600">{metricsSummary.valid}</span>
-                </div>
-                <div className="bg-amber-500/5 p-3 rounded-xl border border-amber-500/10">
-                  <span className="text-[10px] font-bold text-amber-600 block">Expiring Soon</span>
-                  <span className="text-lg font-black text-amber-600">{metricsSummary.expiring}</span>
-                </div>
-                <div className="bg-rose-500/5 p-3 rounded-xl border border-rose-500/10">
-                  <span className="text-[10px] font-bold text-rose-600 block">Expired / Gaps</span>
-                  <span className="text-lg font-black text-rose-600">{metricsSummary.expired}</span>
-                </div>
-              </>
-            )}
-            {source === 'Actions' && (
-              <>
-                <div className="bg-muted/30 p-3 rounded-xl border border-border/40">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase block">Total Actions</span>
-                  <span className="text-lg font-black text-foreground">{metricsSummary.total}</span>
-                </div>
-                <div className="bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10">
-                  <span className="text-[10px] font-bold text-emerald-600 block">Completed</span>
-                  <span className="text-lg font-black text-emerald-600">{metricsSummary.completed}</span>
-                </div>
-                <div className="bg-amber-500/5 p-3 rounded-xl border border-amber-500/10">
-                  <span className="text-[10px] font-bold text-amber-600 block">In Progress</span>
-                  <span className="text-lg font-black text-amber-600">{metricsSummary.progress}</span>
-                </div>
-                <div className="bg-rose-500/5 p-3 rounded-xl border border-rose-500/10">
-                  <span className="text-[10px] font-bold text-rose-600 block">Open</span>
-                  <span className="text-lg font-black text-rose-600">{metricsSummary.open}</span>
-                </div>
-              </>
-            )}
-            {source === 'Audits' && (
-              <>
-                <div className="bg-muted/30 p-3 rounded-xl border border-border/40">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase block">Total Packs</span>
-                  <span className="text-lg font-black text-foreground">{metricsSummary.total}</span>
-                </div>
-                <div className="bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10">
-                  <span className="text-[10px] font-bold text-emerald-600 block">Ready</span>
-                  <span className="text-lg font-black text-emerald-600">{metricsSummary.ready}</span>
-                </div>
-                <div className="bg-amber-500/5 p-3 rounded-xl border border-amber-500/10">
-                  <span className="text-[10px] font-bold text-amber-600 block">Draft</span>
-                  <span className="text-lg font-black text-amber-600">{metricsSummary.draft}</span>
-                </div>
-                <div className="bg-indigo-500/5 p-3 rounded-xl border border-indigo-500/10">
-                  <span className="text-[10px] font-bold text-indigo-650 dark:text-indigo-400 block">Sent</span>
-                  <span className="text-lg font-black text-indigo-650 dark:text-indigo-400">{metricsSummary.sent}</span>
-                </div>
-              </>
-            )}
+            {source === 'Requirements' && (() => {
+              const s = metricsSummary as RequirementsMetrics;
+              return (
+                <>
+                  <div className="bg-muted/30 p-3 rounded-xl border border-border/40">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase block">Total Requirements</span>
+                    <span className="text-lg font-black text-foreground">{s.total}</span>
+                  </div>
+                  <div className="bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10">
+                    <span className="text-[10px] font-bold text-emerald-600 block">Compliant</span>
+                    <span className="text-lg font-black text-emerald-600">{s.compliant}</span>
+                  </div>
+                  <div className="bg-amber-500/5 p-3 rounded-xl border border-amber-500/10">
+                    <span className="text-[10px] font-bold text-amber-600 block">Warning</span>
+                    <span className="text-lg font-black text-amber-600">{s.warning}</span>
+                  </div>
+                  <div className="bg-rose-500/5 p-3 rounded-xl border border-rose-500/10">
+                    <span className="text-[10px] font-bold text-rose-600 block">Gaps</span>
+                    <span className="text-lg font-black text-rose-600">{s.gaps}</span>
+                  </div>
+                </>
+              );
+            })()}
+            {source === 'Evidence' && (() => {
+              const s = metricsSummary as EvidenceMetrics;
+              return (
+                <>
+                  <div className="bg-muted/30 p-3 rounded-xl border border-border/40">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase block">Total Evidence</span>
+                    <span className="text-lg font-black text-foreground">{s.total}</span>
+                  </div>
+                  <div className="bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10">
+                    <span className="text-[10px] font-bold text-emerald-600 block">Active</span>
+                    <span className="text-lg font-black text-emerald-600">{s.active}</span>
+                  </div>
+                  <div className="bg-amber-500/5 p-3 rounded-xl border border-amber-500/10">
+                    <span className="text-[10px] font-bold text-amber-600 block">Expiring Soon</span>
+                    <span className="text-lg font-black text-amber-600">{s.expiring}</span>
+                  </div>
+                  <div className="bg-rose-500/5 p-3 rounded-xl border border-rose-500/10">
+                    <span className="text-[10px] font-bold text-rose-600 block">Expired</span>
+                    <span className="text-lg font-black text-rose-600">{s.expired}</span>
+                  </div>
+                </>
+              );
+            })()}
+            {source === 'Competencies' && (() => {
+              const s = metricsSummary as CompetencyMetrics;
+              return (
+                <>
+                  <div className="bg-muted/30 p-3 rounded-xl border border-border/40">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase block">Total Gaps Checked</span>
+                    <span className="text-lg font-black text-foreground">{s.total}</span>
+                  </div>
+                  <div className="bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10">
+                    <span className="text-[10px] font-bold text-emerald-600 block">Valid</span>
+                    <span className="text-lg font-black text-emerald-600">{s.valid}</span>
+                  </div>
+                  <div className="bg-amber-500/5 p-3 rounded-xl border border-amber-500/10">
+                    <span className="text-[10px] font-bold text-amber-600 block">Expiring Soon</span>
+                    <span className="text-lg font-black text-amber-600">{s.expiring}</span>
+                  </div>
+                  <div className="bg-rose-500/5 p-3 rounded-xl border border-rose-500/10">
+                    <span className="text-[10px] font-bold text-rose-600 block">Expired / Gaps</span>
+                    <span className="text-lg font-black text-rose-600">{s.expired}</span>
+                  </div>
+                </>
+              );
+            })()}
+            {source === 'Actions' && (() => {
+              const s = metricsSummary as ActionMetrics;
+              return (
+                <>
+                  <div className="bg-muted/30 p-3 rounded-xl border border-border/40">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase block">Total Actions</span>
+                    <span className="text-lg font-black text-foreground">{s.total}</span>
+                  </div>
+                  <div className="bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10">
+                    <span className="text-[10px] font-bold text-emerald-600 block">Completed</span>
+                    <span className="text-lg font-black text-emerald-600">{s.completed}</span>
+                  </div>
+                  <div className="bg-amber-500/5 p-3 rounded-xl border border-amber-500/10">
+                    <span className="text-[10px] font-bold text-amber-600 block">In Progress</span>
+                    <span className="text-lg font-black text-amber-600">{s.progress}</span>
+                  </div>
+                  <div className="bg-rose-500/5 p-3 rounded-xl border border-rose-500/10">
+                    <span className="text-[10px] font-bold text-rose-600 block">Open</span>
+                    <span className="text-lg font-black text-rose-600">{s.open}</span>
+                  </div>
+                </>
+              );
+            })()}
+            {source === 'Audits' && (() => {
+              const s = metricsSummary as AuditMetrics;
+              return (
+                <>
+                  <div className="bg-muted/30 p-3 rounded-xl border border-border/40">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase block">Total Packs</span>
+                    <span className="text-lg font-black text-foreground">{s.total}</span>
+                  </div>
+                  <div className="bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10">
+                    <span className="text-[10px] font-bold text-emerald-600 block">Ready</span>
+                    <span className="text-lg font-black text-emerald-600">{s.ready}</span>
+                  </div>
+                  <div className="bg-amber-500/5 p-3 rounded-xl border border-amber-500/10">
+                    <span className="text-[10px] font-bold text-amber-600 block">Draft</span>
+                    <span className="text-lg font-black text-amber-600">{s.draft}</span>
+                  </div>
+                  <div className="bg-indigo-500/5 p-3 rounded-xl border border-indigo-500/10">
+                    <span className="text-[10px] font-bold text-indigo-650 dark:text-indigo-400 block">Sent</span>
+                    <span className="text-lg font-black text-indigo-650 dark:text-indigo-400">{s.sent}</span>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
 
@@ -656,38 +748,42 @@ export default function ReportDetailPage() {
             <span className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Status Proportions</span>
             <div className="h-2 w-full rounded-full bg-muted overflow-hidden flex">
               {(() => {
-                const summary = metricsSummary as any;
-                const total = summary.total || 1;
+                const total = metricsSummary.total || 1;
                 let segments: Array<{ color: string; pct: number }> = [];
                 if (source === 'Requirements') {
+                  const s = metricsSummary as RequirementsMetrics;
                   segments = [
-                    { color: 'bg-emerald-500', pct: (summary.compliant / total) * 100 },
-                    { color: 'bg-amber-500', pct: (summary.warning / total) * 100 },
-                    { color: 'bg-rose-500', pct: (summary.gaps / total) * 100 }
+                    { color: 'bg-emerald-500', pct: (s.compliant / total) * 100 },
+                    { color: 'bg-amber-500', pct: (s.warning / total) * 100 },
+                    { color: 'bg-rose-500', pct: (s.gaps / total) * 100 }
                   ];
                 } else if (source === 'Evidence') {
+                  const s = metricsSummary as EvidenceMetrics;
                   segments = [
-                    { color: 'bg-emerald-500', pct: (summary.active / total) * 100 },
-                    { color: 'bg-amber-500', pct: (summary.expiring / total) * 100 },
-                    { color: 'bg-rose-500', pct: (summary.expired / total) * 100 }
+                    { color: 'bg-emerald-500', pct: (s.active / total) * 100 },
+                    { color: 'bg-amber-500', pct: (s.expiring / total) * 100 },
+                    { color: 'bg-rose-500', pct: (s.expired / total) * 100 }
                   ];
                 } else if (source === 'Competencies') {
+                  const s = metricsSummary as CompetencyMetrics;
                   segments = [
-                    { color: 'bg-emerald-500', pct: (summary.valid / total) * 100 },
-                    { color: 'bg-amber-500', pct: (summary.expiring / total) * 100 },
-                    { color: 'bg-rose-500', pct: (summary.expired / total) * 100 }
+                    { color: 'bg-emerald-500', pct: (s.valid / total) * 100 },
+                    { color: 'bg-amber-500', pct: (s.expiring / total) * 100 },
+                    { color: 'bg-rose-500', pct: (s.expired / total) * 100 }
                   ];
                 } else if (source === 'Actions') {
+                  const s = metricsSummary as ActionMetrics;
                   segments = [
-                    { color: 'bg-emerald-500', pct: (summary.completed / total) * 100 },
-                    { color: 'bg-amber-500', pct: (summary.progress / total) * 100 },
-                    { color: 'bg-rose-500', pct: (summary.open / total) * 100 }
+                    { color: 'bg-emerald-500', pct: (s.completed / total) * 100 },
+                    { color: 'bg-amber-500', pct: (s.progress / total) * 100 },
+                    { color: 'bg-rose-500', pct: (s.open / total) * 100 }
                   ];
                 } else if (source === 'Audits') {
+                  const s = metricsSummary as AuditMetrics;
                   segments = [
-                    { color: 'bg-emerald-500', pct: (summary.ready / total) * 100 },
-                    { color: 'bg-amber-500', pct: (summary.draft / total) * 100 },
-                    { color: 'bg-indigo-550', pct: (summary.sent / total) * 100 }
+                    { color: 'bg-emerald-500', pct: (s.ready / total) * 100 },
+                    { color: 'bg-amber-500', pct: (s.draft / total) * 100 },
+                    { color: 'bg-indigo-550', pct: (s.sent / total) * 100 }
                   ];
                 }
                 return segments.map((seg, idx) => (
@@ -804,7 +900,7 @@ export default function ReportDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
-                  {paginatedRecords.map((r: any) => {
+                  {(paginatedRecords as Requirement[]).map((r) => {
                     const status = readinessByRequirementId.get(r.id)?.status || 'GREY';
                     return (
                       <tr key={r.id} className="hover:bg-muted/10">
@@ -849,7 +945,7 @@ export default function ReportDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
-                  {paginatedRecords.map((d: any) => (
+                  {(paginatedRecords as EvidenceDocument[]).map((d) => (
                     <tr key={d.id} className="hover:bg-muted/10">
                       {visibleColumns.title !== false && <td className="p-3 font-bold text-foreground truncate max-w-xs">{d.title}</td>}
                       {visibleColumns.category !== false && <td className="p-3 text-muted-foreground font-semibold">{d.category}</td>}
@@ -891,7 +987,7 @@ export default function ReportDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
-                  {paginatedRecords.map((c: any, idx: number) => (
+                  {(paginatedRecords as CompetencyDetail[]).map((c, idx) => (
                     <tr key={idx} className="hover:bg-muted/10">
                       {visibleColumns.name !== false && <td className="p-3 font-bold text-foreground">{c.person.display_name}</td>}
                       {visibleColumns.title !== false && <td className="p-3 text-muted-foreground font-semibold">{c.type.title}</td>}
@@ -933,7 +1029,7 @@ export default function ReportDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
-                  {paginatedRecords.map((a: any) => (
+                  {(paginatedRecords as Action[]).map((a) => (
                     <tr key={a.id} className="hover:bg-muted/10">
                       {visibleColumns.description !== false && <td className="p-3 font-bold text-foreground truncate max-w-xs">{a.description}</td>}
                       {visibleColumns.risk !== false && <td className="p-3 text-center font-semibold text-muted-foreground">{getLinkedRequirementRisk(a.id)}</td>}
@@ -950,7 +1046,7 @@ export default function ReportDetailPage() {
                         </td>
                       )}
                       {visibleColumns.owner !== false && <td className="p-3 text-muted-foreground">{a.owner || 'Unassigned'}</td>}
-                      {visibleColumns.due_date !== false && <td className="p-3 text-muted-foreground">{a.target_due_date || a.due_date ? new Date(a.target_due_date || a.due_date).toLocaleDateString() : 'N/A'}</td>}
+                      {visibleColumns.due_date !== false && <td className="p-3 text-muted-foreground">{a.target_due_date || a.due_date ? new Date((a.target_due_date || a.due_date) as string).toLocaleDateString() : 'N/A'}</td>}
                       <td className="p-3 text-center print:hidden">
                         <Link href={`/dashboard/requirements?filter=actions&actionId=${a.id}`} className="text-indigo-650 hover:underline flex items-center justify-center gap-1 font-bold">
                           Inspect <ExternalLink className="w-3 h-3" />
@@ -974,7 +1070,7 @@ export default function ReportDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
-                  {paginatedRecords.map((p: any) => (
+                  {(paginatedRecords as AuditPack[]).map((p) => (
                     <tr key={p.id} className="hover:bg-muted/10">
                       {visibleColumns.name !== false && <td className="p-3 font-bold text-foreground">{p.name}</td>}
                       {visibleColumns.status !== false && (

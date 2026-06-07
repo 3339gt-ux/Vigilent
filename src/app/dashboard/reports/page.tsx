@@ -178,6 +178,52 @@ type TabType =
   | 'saved'
   | 'history';
 
+export interface PrebuiltReportDefinition {
+  kind: 'prebuilt';
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  sourceModule: string;
+  filters: string;
+  exports: string;
+  permission: string;
+  tab: TabType;
+}
+
+export interface SavedReportWrapper {
+  kind: 'saved';
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  sourceModule: string;
+  filters: string;
+  exports: string;
+  permission: string;
+  tab: TabType;
+  savedReport: SavedReport;
+}
+
+export type CatalogueReport = PrebuiltReportDefinition | SavedReportWrapper;
+
+export function isPrebuiltReport(report: CatalogueReport): report is PrebuiltReportDefinition {
+  return report.kind === 'prebuilt';
+}
+
+export function isSavedReport(report: CatalogueReport): report is SavedReportWrapper {
+  return report.kind === 'saved';
+}
+
+export interface RecentReportView {
+  id: string;
+  name: string;
+  category: string;
+  sourceModule: string;
+  tab: TabType;
+  openedAt: string;
+}
+
 export default function ReportsPage() {
   const {
     user,
@@ -226,7 +272,7 @@ export default function ReportsPage() {
   const [builderVisual, setBuilderVisual] = useState('bar');
   const [builderReportName, setBuilderReportName] = useState('');
   const [builderReportDesc, setBuilderReportDesc] = useState('');
-  const [builderReportVisibility, setBuilderReportVisibility] = useState<'personal' | 'organisation'>('personal');
+  const [builderReportVisibility, setBuilderReportVisibility] = useState<'personal_local' | 'personal' | 'organisation'>('personal');
 
   // Saved Reports List
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
@@ -238,7 +284,7 @@ export default function ReportsPage() {
 
   const [isSharedTableAvailable, setIsSharedTableAvailable] = useState<boolean>(false);
   const [favReportIds, setFavReportIds] = useState<string[]>([]);
-  const [recentViews, setRecentViews] = useState<any[]>([]);
+  const [recentViews, setRecentViews] = useState<RecentReportView[]>([]);
   const [editingReport, setEditingReport] = useState<SavedReport | null>(null);
   const [editReportName, setEditReportName] = useState('');
   const [editReportDesc, setEditReportDesc] = useState('');
@@ -377,25 +423,33 @@ export default function ReportsPage() {
     localStorage.setItem(key, JSON.stringify(favs));
   }, [user, organization]);
 
-  const getRecentReports = useCallback((): any[] => {
+  const getRecentReports = useCallback((): RecentReportView[] => {
     if (typeof window === 'undefined' || !user || !organization) return [];
     const key = `vygilence_recent_reports_${user.id}_${organization.id}`;
     try {
       const stored = localStorage.getItem(key);
-      return stored ? JSON.parse(stored) : [];
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((item: any) =>
+            item && typeof item === 'object' && typeof item.id === 'string' && typeof item.name === 'string'
+          ) as RecentReportView[];
+        }
+      }
+      return [];
     } catch (e) {
       console.error('Failed to load recents', e);
       return [];
     }
   }, [user, organization]);
 
-  const saveRecentReports = useCallback((recents: any[]) => {
+  const saveRecentReports = useCallback((recents: RecentReportView[]) => {
     if (typeof window === 'undefined' || !user || !organization) return;
     const key = `vygilence_recent_reports_${user.id}_${organization.id}`;
     localStorage.setItem(key, JSON.stringify(recents));
   }, [user, organization]);
 
-  const recordView = useCallback((id: string, name: string, category: string, sourceModule: string, tab: string) => {
+  const recordView = useCallback((id: string, name: string, category: string, sourceModule: string, tab: TabType) => {
     if (typeof window === 'undefined' || !user || !organization) return;
     const current = getRecentReports();
     const filtered = current.filter(r => r.id !== id);
@@ -446,6 +500,11 @@ export default function ReportsPage() {
 
     dbService.checkSavedReportsTableAvailable().then(avail => {
       setIsSharedTableAvailable(avail);
+      if (!avail) {
+        setBuilderReportVisibility('personal_local');
+      } else {
+        setBuilderReportVisibility('personal');
+      }
     });
 
     if (user && organization) {
@@ -1448,7 +1507,13 @@ export default function ReportsPage() {
       return;
     }
 
+    if ((builderReportVisibility === 'organisation' || builderReportVisibility === 'personal') && !isSharedTableAvailable) {
+      setToast({ type: 'error', message: 'Database storage is currently unavailable. Organisation and Personal Account reports cannot be saved.' });
+      return;
+    }
+
     try {
+      const isLocal = builderReportVisibility === 'personal_local';
       await dbService.addSavedReport({
         name: builderReportName.trim(),
         description: builderReportDesc.trim() || 'No description provided.',
@@ -1464,9 +1529,9 @@ export default function ReportsPage() {
             risk: selectedRisk
           }
         },
-        visibility: builderReportVisibility,
+        visibility: isLocal ? 'personal' : (builderReportVisibility as 'personal' | 'organisation'),
         is_favourite: false
-      });
+      }, { forceLocal: isLocal });
 
       loadSavedReports();
       setBuilderReportName('');
@@ -1475,7 +1540,7 @@ export default function ReportsPage() {
       setActiveTab('saved');
     } catch (e) {
       console.error('Failed to save report', e);
-      setToast({ type: 'error', message: 'Failed to save the report configuration.' });
+      setToast({ type: 'error', message: 'Failed to save the report configuration. Database storage is currently unavailable.' });
     }
   };
 
@@ -1587,7 +1652,7 @@ export default function ReportsPage() {
         },
         visibility: 'personal',
         is_favourite: false
-      });
+      }, { forceLocal: true });
       loadSavedReports();
       setToast({ type: 'success', message: `Prebuilt report duplicated as Personal Browser Report.` });
     } catch (e) {
@@ -1611,7 +1676,7 @@ export default function ReportsPage() {
         },
         visibility: 'personal',
         is_favourite: false
-      });
+      }, { forceLocal: !!rep.is_local });
       loadSavedReports();
       setToast({ type: 'success', message: `Report "${rep.name}" duplicated.` });
     } catch (e) {
@@ -2506,7 +2571,37 @@ export default function ReportsPage() {
 
         {/* Tab 9: Saved Reports */}
         {activeTab === 'saved' && (() => {
-          const filteredPrebuilt = PREBUILT_REPORTS.filter(rep => {
+          const mappedPrebuilt: CatalogueReport[] = PREBUILT_REPORTS.map(r => ({
+            kind: 'prebuilt',
+            id: r.id,
+            name: r.name,
+            description: r.description,
+            category: r.category,
+            sourceModule: r.sourceModule,
+            filters: r.filters,
+            exports: r.exports,
+            permission: r.permission,
+            tab: r.tab as TabType
+          }));
+
+          const mappedSaved: CatalogueReport[] = savedReports.map(r => ({
+            kind: 'saved',
+            id: r.id,
+            name: r.name,
+            description: r.description || 'No description provided.',
+            category: 'Custom Builder',
+            sourceModule: getReportDataSource(r),
+            filters: 'Saved Configuration',
+            exports: 'CSV',
+            permission: r.is_local ? 'Personal Browser Report' : (r.visibility === 'organisation' ? 'Organisation Members' : 'Personal Account (Private)'),
+            tab: 'builder',
+            savedReport: r
+          }));
+
+          const allCatalogueReports = [...mappedPrebuilt, ...mappedSaved];
+
+          const filteredPrebuilt = allCatalogueReports.filter(rep => {
+            if (rep.kind !== 'prebuilt') return false;
             if (rep.sourceModule === 'Audit Trail' && !isOwnerOrAdmin) return false;
             const nameMatch = rep.name.toLowerCase().includes(savedSearchQuery.toLowerCase());
             const descMatch = rep.description.toLowerCase().includes(savedSearchQuery.toLowerCase());
@@ -2514,27 +2609,34 @@ export default function ReportsPage() {
             const matchesFav = !savedShowOnlyFavs || favReportIds.includes(rep.id);
             const matchesSource = savedSourceFilter === 'all' || rep.sourceModule === savedSourceFilter;
             return matchesSearch && matchesFav && matchesSource;
-          });
+          }) as PrebuiltReportDefinition[];
 
-          const filteredCustom = savedReports.filter(rep => {
-            const dataSource = getReportDataSource(rep);
+          const filteredCustom = allCatalogueReports.filter(rep => {
+            if (rep.kind !== 'saved') return false;
+            const sr = rep.savedReport;
+            const dataSource = getReportDataSource(sr);
             if (dataSource === 'Audit Trail' && !isOwnerOrAdmin) return false;
             const nameMatch = rep.name.toLowerCase().includes(savedSearchQuery.toLowerCase());
-            const descMatch = (rep.description || '').toLowerCase().includes(savedSearchQuery.toLowerCase());
+            const descMatch = rep.description.toLowerCase().includes(savedSearchQuery.toLowerCase());
             const matchesSearch = nameMatch || descMatch;
-            const matchesVisibility = savedVisibilityFilter === 'all' || rep.visibility === savedVisibilityFilter;
+
+            let matchesVisibility = true;
+            if (savedVisibilityFilter === 'personal') {
+              matchesVisibility = sr.visibility === 'personal' || !!sr.is_local;
+            } else if (savedVisibilityFilter === 'organisation') {
+              matchesVisibility = sr.visibility === 'organisation' && !sr.is_local;
+            }
+
             const matchesFav = !savedShowOnlyFavs || favReportIds.includes(rep.id);
             const matchesSource = savedSourceFilter === 'all' || dataSource === savedSourceFilter;
             return matchesSearch && matchesVisibility && matchesFav && matchesSource;
-          });
+          }) as SavedReportWrapper[];
 
-          const favouriteReports = [
-            ...PREBUILT_REPORTS.filter(r => favReportIds.includes(r.id)),
-            ...savedReports.filter(r => favReportIds.includes(r.id))
-          ].filter(rep => {
-            const src = (rep as any).tab ? (rep as any).sourceModule : getReportDataSource(rep as SavedReport);
-            return isOwnerOrAdmin || src !== 'Audit Trail';
-          });
+          const favouriteReports = allCatalogueReports.filter(r => favReportIds.includes(r.id))
+            .filter(rep => {
+              const src = rep.kind === 'prebuilt' ? rep.sourceModule : getReportDataSource(rep.savedReport);
+              return isOwnerOrAdmin || src !== 'Audit Trail';
+            });
 
           return (
             <div className="space-y-6">
@@ -2559,11 +2661,22 @@ export default function ReportsPage() {
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {favouriteReports.map(rep => {
-                      const isPrebuilt = !!(rep as any).tab;
-                      const dataSource = isPrebuilt ? (rep as any).sourceModule : getReportDataSource(rep as SavedReport);
-                      const isOrg = !isPrebuilt && (rep as SavedReport).visibility === 'organisation';
-                      const tagLabel = isPrebuilt ? 'Vygilence Prebuilt' : (isOrg ? 'Organisation Report' : 'Personal Browser Report');
-                      const tagStyle = isPrebuilt ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400' : (isOrg ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-650' : 'bg-zinc-500/10 border-zinc-500/20 text-zinc-650');
+                      const isPrebuilt = isPrebuiltReport(rep);
+                      const dataSource = isPrebuilt ? rep.sourceModule : getReportDataSource(rep.savedReport);
+                      const isOrg = !isPrebuilt && rep.savedReport.visibility === 'organisation' && !rep.savedReport.is_local;
+                      const isLocal = !isPrebuilt && !!rep.savedReport.is_local;
+
+                      const tagLabel = isPrebuilt
+                        ? 'Vygilence Prebuilt'
+                        : (isOrg ? 'Organisation Report' : (isLocal ? 'Personal Browser Report' : 'Personal Account Report'));
+
+                      const tagStyle = isPrebuilt
+                        ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400'
+                        : (isOrg
+                            ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-650 dark:text-indigo-400 font-extrabold'
+                            : (isLocal
+                                ? 'bg-zinc-500/10 border-zinc-500/20 text-zinc-650 dark:text-zinc-400'
+                                : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-650 dark:text-emerald-450'));
 
                       return (
                         <div key={rep.id} className="bg-card border border-border p-4 rounded-2xl flex flex-col justify-between shadow-xs hover:border-amber-500/30 transition-all">
@@ -2576,7 +2689,7 @@ export default function ReportsPage() {
                                 onClick={() => handleToggleFavouriteReport(rep.id, true)}
                                 className="p-1 text-amber-500 hover:text-muted-foreground transition-colors cursor-pointer"
                               >
-                                <Bookmark className="w-4 h-4 fill-amber-500" />
+                                <Bookmark className="w-4 h-4 fill-amber-500 text-amber-500" />
                               </button>
                             </div>
                             <h4 className="text-xs font-extrabold text-foreground">{rep.name}</h4>
@@ -2586,23 +2699,24 @@ export default function ReportsPage() {
                           <div className="flex items-center justify-between pt-3 border-t border-border/40 mt-3">
                             <button
                               onClick={() => {
-                                if (isPrebuilt) {
-                                  setActiveTab((rep as any).tab as TabType);
+                                if (isPrebuiltReport(rep)) {
+                                  setActiveTab(rep.tab);
                                 } else {
+                                  const sr = rep.savedReport;
                                   const allowedSource = dataSource === 'Audit Trail' && !isOwnerOrAdmin ? 'Requirements' : dataSource;
                                   setBuilderSource(allowedSource);
-                                  setBuilderDimension(allowedSource === dataSource ? getReportDimension(rep as SavedReport) : 'category');
-                                  setBuilderMeasure(getReportMeasure(rep as SavedReport));
-                                  setBuilderVisual(allowedSource === 'Requirements' ? getReportVisualType(rep as SavedReport) : getReportVisualType(rep as SavedReport) === 'pivot' ? 'table' : getReportVisualType(rep as SavedReport));
-                                  const filters = getReportFilters(rep as SavedReport);
+                                  setBuilderDimension(allowedSource === dataSource ? getReportDimension(sr) : 'category');
+                                  setBuilderMeasure(getReportMeasure(sr));
+                                  setBuilderVisual(allowedSource === 'Requirements' ? getReportVisualType(sr) : getReportVisualType(sr) === 'pivot' ? 'table' : getReportVisualType(sr));
+                                  const filters = getReportFilters(sr);
                                   setSelectedCategory(filters.category || 'All');
                                   setSelectedStatus(filters.status || 'All');
                                   setSelectedRisk(filters.risk || 'All');
                                   setActiveTab('builder');
                                 }
-                                recordView(rep.id, rep.name, isPrebuilt ? (rep as any).category : 'Custom Builder', dataSource, (rep as any).tab || 'builder');
+                                recordView(rep.id, rep.name, isPrebuilt ? rep.category : 'Custom Builder', dataSource, isPrebuilt ? rep.tab : 'builder');
                               }}
-                              className="px-2 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-650 dark:text-indigo-300 font-extrabold text-[10px] rounded"
+                              className="px-2 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-650 dark:text-indigo-300 font-extrabold text-[10px] rounded cursor-pointer"
                             >
                               Open
                             </button>
@@ -2684,11 +2798,16 @@ export default function ReportsPage() {
 
                   <select
                     value={savedVisibilityFilter}
-                    onChange={e => setSavedVisibilityFilter(e.target.value as any)}
-                    className="px-3 py-2 bg-muted rounded-xl border border-border outline-none font-semibold text-muted-foreground text-xs"
+                    onChange={e => {
+                      const val = e.target.value;
+                      if (val === 'all' || val === 'personal' || val === 'organisation') {
+                        setSavedVisibilityFilter(val);
+                      }
+                    }}
+                    className="px-3 py-2 bg-muted rounded-xl border border-border outline-none font-semibold text-muted-foreground text-xs text-foreground"
                   >
                     <option value="all">All Visibilities</option>
-                    <option value="personal">Personal browser reports</option>
+                    <option value="personal">Personal browser/account reports</option>
                     <option value="organisation" disabled={!isSharedTableAvailable}>
                       Organisation reports {!isSharedTableAvailable ? '(Unavailable)' : ''}
                     </option>
@@ -2796,26 +2915,28 @@ export default function ReportsPage() {
                     <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Personal & Shared Reports</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {filteredCustom.map(rep => {
-                        const dataSource = getReportDataSource(rep);
-                        const dimension = getReportDimension(rep);
-                        const measure = getReportMeasure(rep);
-                        const visualType = getReportVisualType(rep);
-                        const filters = getReportFilters(rep);
-                        const isOrg = rep.visibility === 'organisation';
-                        const canManageReport = rep.owner_user_id === user?.id || isOwnerOrAdmin;
-                        const isFavourited = favReportIds.includes(rep.id);
+                        const sr = rep.savedReport;
+                        const dataSource = getReportDataSource(sr);
+                        const dimension = getReportDimension(sr);
+                        const measure = getReportMeasure(sr);
+                        const visualType = getReportVisualType(sr);
+                        const filters = getReportFilters(sr);
+                        const isOrg = !sr.is_local && sr.visibility === 'organisation';
+                        const isLocal = !!sr.is_local;
+                        const canManageReport = sr.owner_user_id === user?.id || isOwnerOrAdmin;
+                        const isFavourited = favReportIds.includes(sr.id);
 
                         return (
-                          <div key={rep.id} className="bg-card border border-border p-5 rounded-2xl space-y-3 flex flex-col justify-between shadow-xs hover:border-indigo-550/20 transition-all animate-fade-in">
+                          <div key={sr.id} className="bg-card border border-border p-5 rounded-2xl space-y-3 flex flex-col justify-between shadow-xs hover:border-indigo-550/20 transition-all animate-fade-in">
                             <div className="space-y-1">
                               <div className="flex items-center justify-between gap-2">
                                 <span className={`px-2 py-0.5 text-[9px] font-extrabold rounded-full border ${
-                                  isOrg ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-650 dark:text-indigo-400 font-extrabold' : 'bg-zinc-500/10 border-zinc-500/20 text-zinc-650 dark:text-zinc-400'
+                                  isLocal ? 'bg-zinc-500/10 border-zinc-500/20 text-zinc-650 dark:text-zinc-400' : (isOrg ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-650 dark:text-indigo-400 font-extrabold' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-650 dark:text-emerald-450')
                                 }`}>
-                                  {isOrg ? 'Organisation report' : 'Personal browser report'}
+                                  {isLocal ? 'Personal browser report' : (isOrg ? 'Organisation report' : 'Personal account report')}
                                 </span>
                                 <button
-                                  onClick={() => handleToggleFavouriteReport(rep.id, isFavourited)}
+                                  onClick={() => handleToggleFavouriteReport(sr.id, isFavourited)}
                                   className="p-1 text-muted-foreground hover:text-amber-500 transition-colors cursor-pointer"
                                   title={isFavourited ? "Remove from Favourites" : "Mark as Favourite"}
                                 >
@@ -2823,8 +2944,8 @@ export default function ReportsPage() {
                                 </button>
                               </div>
 
-                              <h3 className="text-sm font-extrabold text-foreground mt-1">{rep.name}</h3>
-                              <p className="text-xs text-muted-foreground leading-normal">{rep.description || 'No description provided.'}</p>
+                              <h3 className="text-sm font-extrabold text-foreground mt-1">{sr.name}</h3>
+                              <p className="text-xs text-muted-foreground leading-normal">{sr.description || 'No description provided.'}</p>
 
                               <div className="flex flex-wrap gap-2 pt-2 text-[10px] text-muted-foreground font-semibold">
                                 <span>Source: {dataSource}</span>
@@ -2837,9 +2958,9 @@ export default function ReportsPage() {
                               </div>
 
                               <div className="text-[10px] text-muted-foreground pt-1 flex flex-wrap gap-2">
-                                <span>Created by: <strong className="text-foreground">{rep.owner_profile?.full_name || 'You'}</strong></span>
+                                <span>Created by: <strong className="text-foreground">{sr.owner_profile?.full_name || (isLocal ? 'You (Local)' : 'You')}</strong></span>
                                 <span>•</span>
-                                <span>Modified: {new Date(rep.updated_at || rep.created_at).toLocaleDateString()}</span>
+                                <span>Modified: {new Date(sr.updated_at || sr.created_at).toLocaleDateString()}</span>
                               </div>
                             </div>
 
@@ -2856,22 +2977,22 @@ export default function ReportsPage() {
                                     setSelectedStatus(filters.status || 'All');
                                     setSelectedRisk(filters.risk || 'All');
                                     setActiveTab('builder');
-                                    recordView(rep.id, rep.name, 'Custom', dataSource, 'builder');
-                                    setToast({ type: 'info', message: `Loaded report config: "${rep.name}"` });
+                                    recordView(sr.id, sr.name, 'Custom Builder', dataSource, 'builder');
+                                    setToast({ type: 'info', message: `Loaded report config: "${sr.name}"` });
                                   }}
                                   className="px-2.5 py-1.5 bg-indigo-500/10 text-indigo-650 dark:text-indigo-300 font-bold text-[11px] rounded-lg hover:bg-indigo-500/20 cursor-pointer"
                                 >
                                   Open Builder
                                 </button>
                                 <button
-                                  onClick={() => handleCopyDeepLink(rep.id)}
+                                  onClick={() => handleCopyDeepLink(sr.id)}
                                   className="p-1.5 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer transition-all"
                                   title="Copy internal share link"
                                 >
                                   <Link2 className="w-3.5 h-3.5" />
                                 </button>
                                 <button
-                                  onClick={() => handleDuplicateReport(rep)}
+                                  onClick={() => handleDuplicateReport(sr)}
                                   className="p-1.5 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer transition-all"
                                   title="Duplicate configuration"
                                 >
@@ -2879,7 +3000,7 @@ export default function ReportsPage() {
                                 </button>
                                 {canManageReport && (
                                   <button
-                                    onClick={() => handleRenameReport(rep)}
+                                    onClick={() => handleRenameReport(sr)}
                                     className="p-1.5 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground rounded-lg border border-border cursor-pointer transition-all"
                                     title="Rename / Edit description"
                                   >
@@ -3162,23 +3283,29 @@ export default function ReportsPage() {
                         className="w-full px-2.5 py-2 bg-muted rounded-xl border border-border/80 outline-none text-xs resize-none"
                       />
                     </div>
-                    {isOwnerOrAdmin && (
-                      <div className="space-y-1">
-                        <label className="block text-[10px] font-bold text-muted-foreground uppercase">Visibility</label>
-                        <select
-                          value={builderReportVisibility}
-                          onChange={e => setBuilderReportVisibility(e.target.value as 'personal' | 'organisation')}
-                          className="w-full px-2 py-1.5 bg-muted rounded-lg border border-border outline-none font-semibold text-xs"
-                        >
-                          <option value="personal">
-                            {isDemoMode ? 'Personal browser report (Local storage)' : 'Personal account report (Private)'}
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-bold text-muted-foreground uppercase">Visibility</label>
+                      <select
+                        value={builderReportVisibility}
+                        onChange={e => setBuilderReportVisibility(e.target.value as 'personal_local' | 'personal' | 'organisation')}
+                        className="w-full px-2 py-1.5 bg-muted rounded-lg border border-border outline-none font-semibold text-xs text-foreground"
+                      >
+                        <option value="personal_local">Personal browser report (Local storage)</option>
+                        <option value="personal" disabled={!isSharedTableAvailable}>
+                          Personal account report {!isSharedTableAvailable ? '(Unavailable)' : '(Private)'}
+                        </option>
+                        {isOwnerOrAdmin && (
+                          <option value="organisation" disabled={!isSharedTableAvailable}>
+                            Organisation report {!isSharedTableAvailable ? '(Unavailable)' : '(Shared with team)'}
                           </option>
-                          <option value="organisation">
-                            {isDemoMode ? 'Organisation report (Local demo - not shared)' : 'Organisation report (Shared with team)'}
-                          </option>
-                        </select>
-                      </div>
-                    )}
+                        )}
+                      </select>
+                      {!isSharedTableAvailable && (
+                        <p className="text-[10px] text-amber-600 font-bold mt-1 leading-normal">
+                          Organisation-shared reports are not enabled in this environment yet.
+                        </p>
+                      )}
+                    </div>
                     <button
                       type="button"
                       onClick={handleSaveCustomReport}

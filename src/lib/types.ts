@@ -525,4 +525,5 @@ export interface SavedReport {
   created_at: string;
   updated_at: string;
   owner_profile?: { full_name: string | null; role: string | null } | null;
+  is_local?: boolean;
 }

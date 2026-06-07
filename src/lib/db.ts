@@ -4422,55 +4422,88 @@ export const dbService = {
 
   // Saved Reports
   async getSavedReports(): Promise<SavedReport[]> {
+    const localReports = await this.getLocalSavedReports();
     if (shouldUseSupabase() && await checkSavedReportsTableAvailable()) {
-      const orgId = await getCurrentSupabaseOrganizationId();
-      const { data, error } = await supabase!
-        .from('saved_reports')
-        .select(`
-          *,
-          owner_profile:owner_user_id (
-            full_name,
-            role
-          )
-        `)
-        .eq('organization_id', orgId);
-      if (error) throwSupabaseError('saved_reports.select active organization', error);
-      return data || [];
-    } else {
-      initMockDb();
-      const key = await getSavedReportsStorageKey();
-      if (typeof window !== 'undefined') {
-        const stored = localStorage.getItem(key);
-        if (stored) {
-          try {
-            const parsed = JSON.parse(stored);
-            if (Array.isArray(parsed)) {
-              return parsed.map((item: any) => ({
-                ...item,
-                owner_profile: item.owner_profile || { full_name: 'You (Local)', role: 'Owner' }
-              }));
-            }
-          } catch (e) {
-            console.error('Failed to parse local reports', e);
-          }
-        }
+      try {
+        const orgId = await getCurrentSupabaseOrganizationId();
+        const { data, error } = await supabase!
+          .from('saved_reports')
+          .select(`
+            *,
+            owner_profile:owner_user_id (
+              full_name,
+              role
+            )
+          `)
+          .eq('organization_id', orgId);
+
+        if (error) throwSupabaseError('saved_reports.select active organization', error);
+
+        const dbReports = (data || []).map((item: any) => ({
+          ...item,
+          is_local: false
+        }));
+        return [...dbReports, ...localReports];
+      } catch (e) {
+        console.warn('Failed to load database reports, returning local reports only', e);
+        return localReports;
       }
-      return [];
+    } else {
+      return localReports;
     }
   },
 
-  async addSavedReport(report: Omit<SavedReport, 'id' | 'created_at' | 'updated_at' | 'organization_id' | 'owner_user_id'>): Promise<SavedReport> {
+  async getLocalSavedReports(): Promise<SavedReport[]> {
+    initMockDb();
+    const key = await getSavedReportsStorageKey();
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) {
+            return parsed.map((item: any) => ({
+              ...item,
+              is_local: true,
+              owner_profile: item.owner_profile || { full_name: 'You (Local)', role: 'Owner' }
+            }));
+          }
+        } catch (e) {
+          console.error('Failed to parse local reports', e);
+        }
+      }
+    }
+    return [];
+  },
+
+  async addSavedReport(
+    report: Omit<SavedReport, 'id' | 'created_at' | 'updated_at' | 'organization_id' | 'owner_user_id'>,
+    options?: { forceLocal?: boolean }
+  ): Promise<SavedReport> {
     const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
     const userId = shouldUseSupabase() ? (await getCurrentSupabaseProfile())?.id : MOCK_PROFILE.id;
     let newReport: SavedReport;
 
-    if (shouldUseSupabase() && await checkSavedReportsTableAvailable()) {
+    const useLocal = options?.forceLocal || !shouldUseSupabase();
+
+    if (!useLocal) {
+      const tableAvailable = await checkSavedReportsTableAvailable();
+      if (!tableAvailable) {
+        throw new Error('Database table saved_reports is not available in this environment. Personal Account and Organisation reports cannot be saved.');
+      }
+
       const { data, error } = await supabase!
         .from('saved_reports')
         .insert([{
-          ...report,
           organization_id: orgId,
-          owner_user_id: userId
+          owner_user_id: userId,
+          name: report.name,
+          description: report.description,
+          report_type: report.report_type,
+          data_source: report.data_source,
+          configuration: report.configuration,
+          visibility: report.visibility,
+          is_favourite: report.is_favourite || false
         }])
         .select(`
           *,
@@ -4480,28 +4513,32 @@ export const dbService = {
           )
         `)
         .single();
+
       if (error) throwSupabaseError('saved_reports.insert', error);
-      newReport = data;
+      newReport = { ...data, is_local: false };
     } else {
       const key = await getSavedReportsStorageKey();
-      const list = await this.getSavedReports();
+      const list = await this.getLocalSavedReports();
       newReport = {
         ...report,
-        id: `rep-${Math.random().toString(36).substr(2, 9)}`,
+        id: 'local_' + Math.random().toString(36).substr(2, 9),
         organization_id: orgId,
         owner_user_id: userId || 'usr-jane-doe',
         is_favourite: report.is_favourite || false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        owner_profile: { full_name: 'You (Local)', role: 'Owner' }
+        owner_profile: { full_name: 'You (Local)', role: 'Owner' },
+        is_local: true
       };
       const cleanedList = list.map(item => {
         const copy = { ...item };
-        delete copy.owner_profile;
+        delete (copy as any).owner_profile;
         return copy;
       });
-      const updatedList = [...cleanedList, newReport];
-      localStorage.setItem(key, JSON.stringify(updatedList));
+      const toPersist = { ...newReport };
+      delete (toPersist as any).owner_profile;
+
+      localStorage.setItem(key, JSON.stringify([...cleanedList, toPersist]));
     }
 
     await safeLogAuditEvent({
@@ -4510,7 +4547,7 @@ export const dbService = {
       entityType: 'saved_report',
       entityId: newReport.id,
       entityLabel: newReport.name,
-      description: `Created ${newReport.visibility} saved report "${newReport.name}".`,
+      description: `Created ${newReport.is_local ? 'local' : newReport.visibility} saved report "${newReport.name}".`,
       afterSnapshot: newReport,
       severity: 'info'
     });
@@ -4519,11 +4556,36 @@ export const dbService = {
   },
 
   async updateSavedReport(reportId: string, updates: Partial<SavedReport>): Promise<SavedReport> {
+    const localList = await this.getLocalSavedReports();
+    const isLocal = localList.some(r => r.id === reportId);
     let before: any = null;
     let after: SavedReport;
 
-    if (shouldUseSupabase() && await checkSavedReportsTableAvailable()) {
+    if (isLocal) {
+      const key = await getSavedReportsStorageKey();
+      const idx = localList.findIndex(r => r.id === reportId);
+      if (idx === -1) throw new Error('Local saved report not found');
+      before = { ...localList[idx] };
+      after = {
+        ...localList[idx],
+        ...updates,
+        updated_at: new Date().toISOString()
+      };
+      localList[idx] = after;
+      const toPersist = localList.map(item => {
+        const copy = { ...item };
+        delete (copy as any).owner_profile;
+        return copy;
+      });
+      localStorage.setItem(key, JSON.stringify(toPersist));
+    } else {
+      const tableAvailable = await checkSavedReportsTableAvailable();
+      if (!tableAvailable) {
+        throw new Error('Database table saved_reports is not available. Cannot update database report.');
+      }
+
       const orgId = await getCurrentSupabaseOrganizationId();
+
       const { data: beforeData } = await supabase!
         .from('saved_reports')
         .select('*')
@@ -4534,7 +4596,14 @@ export const dbService = {
 
       const { data, error } = await supabase!
         .from('saved_reports')
-        .update(updates)
+        .update({
+          name: updates.name,
+          description: updates.description,
+          configuration: updates.configuration,
+          visibility: updates.visibility,
+          is_favourite: updates.is_favourite,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', reportId)
         .eq('organization_id', orgId)
         .select(`
@@ -4545,26 +4614,9 @@ export const dbService = {
           )
         `)
         .single();
+
       if (error) throwSupabaseError('saved_reports.update', error);
-      after = data;
-    } else {
-      const key = await getSavedReportsStorageKey();
-      const list = await this.getSavedReports();
-      const idx = list.findIndex(r => r.id === reportId);
-      if (idx === -1) throw new Error('Saved report not found');
-      before = { ...list[idx] };
-      after = {
-        ...list[idx],
-        ...updates,
-        updated_at: new Date().toISOString()
-      };
-      list[idx] = after;
-      const cleanedList = list.map(item => {
-        const copy = { ...item };
-        delete copy.owner_profile;
-        return copy;
-      });
-      localStorage.setItem(key, JSON.stringify(cleanedList));
+      after = { ...data, is_local: false };
     }
 
     await safeLogAuditEvent({
@@ -4584,10 +4636,31 @@ export const dbService = {
   },
 
   async deleteSavedReport(reportId: string): Promise<void> {
+    const localList = await this.getLocalSavedReports();
+    const isLocal = localList.some(r => r.id === reportId);
     let before: any = null;
 
-    if (shouldUseSupabase() && await checkSavedReportsTableAvailable()) {
+    if (isLocal) {
+      const key = await getSavedReportsStorageKey();
+      const idx = localList.findIndex(r => r.id === reportId);
+      if (idx !== -1) {
+        before = { ...localList[idx] };
+        const updated = localList.filter(r => r.id !== reportId);
+        const toPersist = updated.map(item => {
+          const copy = { ...item };
+          delete (copy as any).owner_profile;
+          return copy;
+        });
+        localStorage.setItem(key, JSON.stringify(toPersist));
+      }
+    } else {
+      const tableAvailable = await checkSavedReportsTableAvailable();
+      if (!tableAvailable) {
+        throw new Error('Database table saved_reports is not available. Cannot delete database report.');
+      }
+
       const orgId = await getCurrentSupabaseOrganizationId();
+
       const { data: beforeData } = await supabase!
         .from('saved_reports')
         .select('*')
@@ -4602,19 +4675,6 @@ export const dbService = {
         .eq('id', reportId)
         .eq('organization_id', orgId);
       if (error) throwSupabaseError('saved_reports.delete', error);
-    } else {
-      const key = await getSavedReportsStorageKey();
-      const list = await this.getSavedReports();
-      const idx = list.findIndex(r => r.id === reportId);
-      if (idx === -1) throw new Error('Saved report not found');
-      before = { ...list[idx] };
-      const updated = list.filter(r => r.id !== reportId);
-      const cleanedList = updated.map(item => {
-        const copy = { ...item };
-        delete copy.owner_profile;
-        return copy;
-      });
-      localStorage.setItem(key, JSON.stringify(cleanedList));
     }
 
     if (before) {
