@@ -1241,12 +1241,12 @@ export default function AuditTrailPage() {
               {(selectedEvent.before_snapshot || selectedEvent.after_snapshot) && (
                 <div className="bg-card border border-border rounded-xl p-4 space-y-3">
                   <span className="text-[9px] font-bold uppercase text-foreground tracking-wider block border-b border-border/60 pb-1.5">JSON State Snapshots</span>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <span className="text-[9px] text-muted-foreground block font-bold uppercase mb-1">Before State</span>
                       {selectedEvent.before_snapshot ? (
                         <div className="bg-muted p-2 rounded-lg font-mono text-[9px] max-h-48 overflow-y-auto border border-border/60 animate-fade-in">
-                          <pre className="whitespace-pre-wrap">{JSON.stringify(maskSensitiveData(selectedEvent.before_snapshot), null, 2)}</pre>
+                          <pre className="whitespace-pre-wrap break-all">{JSON.stringify(maskSensitiveData(selectedEvent.before_snapshot), null, 2)}</pre>
                         </div>
                       ) : (
                         <span className="text-muted-foreground italic">None (e.g. Creation Event)</span>
@@ -1256,7 +1256,7 @@ export default function AuditTrailPage() {
                       <span className="text-[9px] text-muted-foreground block font-bold uppercase mb-1">After State</span>
                       {selectedEvent.after_snapshot ? (
                         <div className="bg-muted p-2 rounded-lg font-mono text-[9px] max-h-48 overflow-y-auto border border-border/60 animate-fade-in">
-                          <pre className="whitespace-pre-wrap">{JSON.stringify(maskSensitiveData(selectedEvent.after_snapshot), null, 2)}</pre>
+                          <pre className="whitespace-pre-wrap break-all">{JSON.stringify(maskSensitiveData(selectedEvent.after_snapshot), null, 2)}</pre>
                         </div>
                       ) : (
                         <span className="text-muted-foreground italic">None (e.g. Deletion Event)</span>

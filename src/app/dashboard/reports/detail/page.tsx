@@ -524,7 +524,7 @@ export default function ReportDetailPage() {
         >
           <ChevronLeft className="w-4 h-4" /> Back to Reports
         </button>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {sourceModuleUrl && (
             <Link
               href={sourceModuleUrl}

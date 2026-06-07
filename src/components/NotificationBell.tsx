@@ -73,7 +73,7 @@ export function NotificationBell({ dropdownAlign = 'right-0 top-full mt-2' }: { 
         <Bell className={`w-4 h-4 ${unreadCount > 0 ? 'animate-bell-ring text-indigo-600 dark:text-indigo-400' : ''}`} />
         {unreadCount > 0 && (
           <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-rose-600 text-white text-[9px] font-extrabold flex items-center justify-center">
-            {unreadCount > 9 ? '9+' : unreadCount}
+            {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
       </button>

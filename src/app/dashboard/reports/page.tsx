@@ -2202,7 +2202,7 @@ export default function ReportsPage() {
             Interactive readiness, evidence, competency, and operational reporting across your workspace.
           </p>
         </div>
-        <div className="flex items-center gap-2 self-start md:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
           <div className="text-[10px] text-muted-foreground font-bold px-2 py-1 bg-muted/50 rounded-lg border border-border/40">
             Updated: <span className="text-foreground">{freshnessTime}</span>
           </div>

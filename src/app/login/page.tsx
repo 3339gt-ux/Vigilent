@@ -15,7 +15,7 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [agreedDisclaimers, setAgreedDisclaimers] = useState(true);
+  const [agreedDisclaimers, setAgreedDisclaimers] = useState(false);
 
   React.useEffect(() => {
     if (!isLoading && isAuthenticated) {

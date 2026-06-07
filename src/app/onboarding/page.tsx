@@ -48,10 +48,45 @@ export default function OnboardingPage() {
       await createOrganization(organizationName, industry || null, country || 'Ireland');
       router.push('/dashboard');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to create organisation. Check your connection and try again.');
+      console.error('Onboarding workspace creation error:', err);
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const getFriendlyError = () => {
+    const rawError = error || authError;
+    if (!rawError) return '';
+
+    const errMsg = typeof rawError === 'string' ? rawError : (rawError instanceof Error ? rawError.message : String(rawError));
+    const lowerMsg = errMsg.toLowerCase();
+
+    // Check for technical database schema/cache/connection or relation errors
+    if (
+      lowerMsg.includes('pgrst') ||
+      lowerMsg.includes('postgres') ||
+      lowerMsg.includes('relation') ||
+      lowerMsg.includes('42p01') ||
+      lowerMsg.includes('does not exist') ||
+      lowerMsg.includes('column ') ||
+      lowerMsg.includes('table ') ||
+      lowerMsg.includes('database error') ||
+      lowerMsg.includes('schema') ||
+      lowerMsg.includes('sql')
+    ) {
+      if (
+        lowerMsg.includes('does not exist') ||
+        lowerMsg.includes('42p01') ||
+        lowerMsg.includes('relation') ||
+        lowerMsg.includes('missing')
+      ) {
+        return 'This workspace feature is not enabled in this environment yet.';
+      }
+      return 'We could not complete workspace setup. Please check your connection and try again. If this continues, contact support.';
+    }
+
+    return errMsg;
   };
 
   if (isLoading || hasOrganization) {
@@ -93,7 +128,7 @@ export default function OnboardingPage() {
           {(error || authError) && (
             <div className="p-3 bg-destructive/15 border border-destructive/20 text-destructive text-xs font-semibold rounded-lg flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{error || authError}</span>
+              <span>{getFriendlyError()}</span>
             </div>
           )}
 

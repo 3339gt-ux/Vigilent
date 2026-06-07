@@ -17,7 +17,7 @@ export default function RegisterPage() {
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [agreedDisclaimers, setAgreedDisclaimers] = useState(true);
+  const [agreedDisclaimers, setAgreedDisclaimers] = useState(false);
 
   React.useEffect(() => {
     if (!isLoading && isAuthenticated) {

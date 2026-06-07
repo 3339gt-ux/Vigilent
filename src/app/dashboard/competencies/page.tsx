@@ -1480,7 +1480,7 @@ export default function CompetencyMatrixPage() {
                 <thead>
                   <tr className="bg-muted border-b border-border text-muted-foreground uppercase tracking-wider sticky top-0 z-20">
                     <th
-                      className="p-3 sticky left-0 top-0 z-30 border-r border-b border-border shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)] font-extrabold uppercase text-[10px] tracking-wider"
+                      className="p-3 sticky left-0 top-0 z-30 border-r-2 border-b border-border/80 font-extrabold uppercase text-[10px] tracking-wider"
                       style={{ backgroundColor: 'hsl(var(--muted))', left: 0, top: 0 }}
                     >
                       <div className="min-w-56 flex items-center gap-2">
@@ -1538,7 +1538,7 @@ export default function CompetencyMatrixPage() {
                     return (
                       <tr key={person.id} className={`hover:bg-muted/30 transition-colors ${isPersonSelected ? 'bg-indigo-500/5' : ''}`}>
                         <td
-                          className={`${paddingClass} sticky left-0 z-10 border-r border-border shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)]`}
+                          className={`${paddingClass} sticky left-0 z-10 border-r-2 border-border/80`}
                           style={{ backgroundColor: 'hsl(var(--card))', left: 0 }}
                           onClick={(event) => {
                             if (event.ctrlKey || event.metaKey) {

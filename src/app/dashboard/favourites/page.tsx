@@ -80,6 +80,17 @@ export default function FavouritesPage() {
   const [requirementsSavedViews, setRequirementsSavedViews] = useState<any[]>([]);
   const [vaultSavedViews, setVaultSavedViews] = useState<any[]>([]);
 
+  useEffect(() => {
+    if (!confirmItem) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setConfirmItem(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [confirmItem]);
+
   const userId = user?.id || 'guest';
   const orgId = organization?.id || 'workspace';
 
@@ -680,8 +691,14 @@ export default function FavouritesPage() {
 
       {/* Confirmation Modal */}
       {confirmItem && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-card solid-panel border border-border w-full max-w-md rounded-2xl p-6 relative shadow-2xl space-y-4">
+        <div
+          className="fixed inset-0 bg-background/80 backdrop-blur-xs flex items-center justify-center p-4 z-50 cursor-pointer"
+          onClick={() => setConfirmItem(null)}
+        >
+          <div
+            className="bg-card solid-panel border border-border w-full max-w-md rounded-2xl p-6 relative shadow-2xl space-y-4 cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-start justify-between">
               <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-xl">
                 <AlertCircle className="w-6 h-6" />

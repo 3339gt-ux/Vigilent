@@ -381,24 +381,24 @@
 /* Midtone appearance: a solid neutral slate layer between Light and Dark. */
 :root.midtone {
   color-scheme: dark;
-  --background: 218 15% 30%;
+  --background: 218 15% 24%;
   --foreground: 210 20% 96%;
-  --card: 218 14% 36%;
+  --card: 218 13% 38%;
   --card-foreground: 210 20% 97%;
-  --popover: 218 15% 34%;
+  --popover: 218 13% 40%;
   --popover-foreground: 210 20% 97%;
   --primary: 213 90% 67%;
   --primary-foreground: 220 35% 10%;
-  --secondary: 218 13% 41%;
+  --secondary: 218 13% 34%;
   --secondary-foreground: 210 20% 96%;
-  --muted: 218 12% 40%;
-  --muted-foreground: 215 18% 79%;
-  --accent: 218 13% 43%;
+  --muted: 218 12% 30%;
+  --muted-foreground: 215 18% 75%;
+  --accent: 218 13% 35%;
   --accent-foreground: 210 20% 98%;
   --destructive: 0 70% 55%;
   --destructive-foreground: 0 0% 100%;
-  --border: 216 12% 50%;
-  --input: 216 12% 47%;
+  --border: 218 12% 45%;
+  --input: 218 12% 42%;
   --ring: 213 90% 67%;
   --indigo-50: #dbeafe;
   --indigo-100: #bfdbfe;
@@ -592,28 +592,26 @@ body {
 
 /* Custom native select option styling for dark-mode dropdown readability */
 select {
-  color-scheme: dark light;
-}
-.dark select {
-  color-scheme: dark;
-}
-.midtone select {
-  color-scheme: dark;
-}
-
-select, option {
   background-color: hsl(var(--card));
   color: hsl(var(--foreground));
 }
-
-.dark select, .dark option {
-  background-color: hsl(var(--card)) !important;
-  color: hsl(var(--foreground)) !important;
+.dark select {
+  color-scheme: dark;
+  background-color: hsl(var(--card));
+  color: hsl(var(--foreground));
 }
-
-.midtone select, .midtone option {
-  background-color: hsl(var(--card)) !important;
-  color: hsl(var(--foreground)) !important;
+.light select {
+  color-scheme: light;
+}
+.midtone select {
+  color-scheme: dark;
+  background-color: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+/* Native option dropdown menu styling should let the browser render text and background matching select color-scheme to avoid invisible text */
+option {
+  background-color: transparent;
+  color: inherit;
 }
 
 /* Premium custom styling classes */

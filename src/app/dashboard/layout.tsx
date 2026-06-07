@@ -425,7 +425,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* 3. Mobile Header & Menu */}
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="lg:hidden h-14 bg-card border-b border-border/80 px-4 flex items-center justify-between z-40 print:hidden">
+          <header className="lg:hidden h-14 bg-card border-b border-border/80 px-4 flex items-center justify-between z-50 print:hidden">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 flex items-center justify-center">
                 <Image
@@ -454,7 +454,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           {/* Mobile Dropdown Panel */}
           {mobileMenuOpen && (
-            <div className="lg:hidden absolute top-14 left-0 right-0 bg-card border-b border-border shadow-lg z-30 p-4 space-y-4 print:hidden">
+            <div className="lg:hidden absolute top-14 left-0 right-0 bg-card border-b border-border shadow-lg z-50 p-4 space-y-4 print:hidden">
               <nav className="flex flex-col gap-1">
                 {menuItems.map(item => {
                   const isActive = pathname === item.href;

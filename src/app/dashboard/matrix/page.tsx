@@ -903,7 +903,7 @@ export default function EvidenceMatrix() {
             <thead>
               <tr className="bg-muted border-b border-border/80 text-muted-foreground font-bold uppercase tracking-wider sticky top-0 z-20">
                 <th
-                  className="p-4 min-w-[260px] sticky left-0 top-0 z-30 border-r border-b border-border shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)] font-extrabold text-[10px]"
+                  className="p-4 min-w-[260px] sticky left-0 top-0 z-30 border-r-2 border-b border-border/80 font-extrabold text-[10px]"
                   style={{ backgroundColor: 'hsl(var(--muted))', left: 0, top: 0 }}
                 >
                   <div className="flex items-center gap-2">
@@ -952,7 +952,7 @@ export default function EvidenceMatrix() {
                     <tr key={req.id} className={`hover:bg-muted/10 transition-colors ${isBulkSelected ? 'bg-indigo-500/5' : ''} ${isHiddenRow ? 'opacity-60 grayscale' : ''}`}>
                       {/* Sticky Row Title */}
                       <td
-                        className={`${paddingClass} font-semibold text-foreground sticky left-0 z-10 border-r border-border min-w-[260px] shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.5)]`}
+                        className={`${paddingClass} font-semibold text-foreground sticky left-0 z-10 border-r-2 border-border/80 min-w-[260px]`}
                         style={{ backgroundColor: 'hsl(var(--card))', left: 0 }}
                         onClick={(event) => {
                           if (event.ctrlKey || event.metaKey) {
