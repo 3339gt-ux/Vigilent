@@ -1387,92 +1387,123 @@ export default function DashboardPage() {
                 <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Compliance Radar</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">Hover or click a row to view specific due and overdue tasks.</p>
               </div>
-              <div className="space-y-3 text-xs">
-                {radarRows.map(row => (
-                  <div
-                    key={row.label}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setExpandedRadarBucket(current => current === row.label ? null : row.label);
-                      setActiveDashboardPanel(null);
-                      setActiveFlyout(null);
-                    }}
-                    className="relative group flex items-center justify-between p-3.5 bg-muted/40 hover:bg-muted/75 hover:border-indigo-500/20 border border-border/80 rounded-xl cursor-pointer transition-all duration-200"
-                  >
-                    <span className="font-extrabold text-foreground/85">{row.label}</span>
-                    <div className="flex items-center gap-1.5">
-                      <span className={`${row.styleClass} px-2.5 py-0.5 bg-card border border-border/50 rounded-full text-[10px] font-extrabold`}>
-                        {row.items.length}
-                      </span>
-                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
-                    </div>
-
-                    {/* Popover content (opens to the left) */}
-                    {expandedRadarBucket === row.label && (
-                    <div
-                      className={`absolute right-full mr-3 top-0 w-80 max-w-[min(20rem,calc(100vw-2rem))] p-4 ${flyoutPanelClass} transition-all duration-200 space-y-3`}
-                      onClick={e => e.stopPropagation()}
-                    >
-                      <div className="flex items-center justify-between border-b border-border/80 pb-2">
-                        <span className="font-extrabold text-foreground text-xs">{row.label} Workload</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{row.items.length} item{row.items.length === 1 ? '' : 's'}</span>
-                          <button
-                            type="button"
-                            onClick={() => setExpandedRadarBucket(null)}
-                            className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                            aria-label={`Close ${row.label} workload`}
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
+              <div className="space-y-3">
+                {radarRows.map(row => {
+                  const radarDescriptions: Record<string, string> = {
+                    'Overdue': 'Active requirements, expired evidence, overdue actions, or competency gaps past schedule.',
+                    'Due 30 Days': 'Requirements, evidence, and actions due for scheduled review or renewal in 30 days.',
+                    'Due 60 Days': 'Requirements, evidence, and actions due for scheduled review or renewal in 30 to 60 days.',
+                    'Due 90 Days': 'Requirements, evidence, and actions due for scheduled review or renewal in 60 to 90 days.'
+                  };
+                  const filterParamMap: Record<string, string> = {
+                    'Overdue': 'overdue',
+                    'Due 30 Days': 'due30',
+                    'Due 60 Days': 'due60',
+                    'Due 90 Days': 'due90'
+                  };
+                  return (
+                    <div key={row.label} className="relative">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedRadarBucket(current => current === row.label ? null : row.label);
+                          setActiveDashboardPanel(null);
+                          setActiveFlyout(null);
+                        }}
+                        className="w-full text-left relative group flex items-center justify-between p-3.5 bg-muted/40 hover:bg-muted/75 hover:border-indigo-500/20 focus-visible:ring-2 focus-visible:ring-indigo-600 border border-border/80 rounded-xl cursor-pointer transition-all duration-200 outline-none"
+                        aria-expanded={expandedRadarBucket === row.label}
+                        aria-haspopup="true"
+                        aria-label={`View ${row.label} compliance items. Contains ${row.items.length} items.`}
+                      >
+                        <span className="font-extrabold text-foreground/85 group-hover:text-indigo-650 dark:group-hover:text-indigo-400 transition-colors">{row.label}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`${row.styleClass} px-2.5 py-0.5 bg-card border border-border/50 rounded-full text-[10px] font-extrabold group-hover:scale-105 transition-transform`}>
+                            {row.items.length}
+                          </span>
+                          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
                         </div>
-                      </div>
-                      <div className="max-h-60 overflow-y-auto pr-1 space-y-2">
-                        {row.items.length === 0 ? (
-                          <p className="text-[10px] text-muted-foreground italic text-center py-4">No tasks found in this timeframe.</p>
-                        ) : (
-                          row.items.slice(0, 10).map(item => (
+                      </button>
+
+                      {/* Popover content (opens to the left) */}
+                      {expandedRadarBucket === row.label && (
+                        <div
+                          className={`absolute right-full mr-3 top-0 w-80 max-w-[min(20rem,calc(100vw-2rem))] p-4 ${flyoutPanelClass} transition-all duration-200 space-y-3 z-30`}
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <div className="flex flex-col gap-1 border-b border-border/80 pb-2">
+                            <div className="flex items-center justify-between">
+                              <span className="font-extrabold text-foreground text-xs">{row.label} Workload</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{row.items.length} item{row.items.length === 1 ? '' : 's'}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedRadarBucket(null)}
+                                  className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-indigo-600"
+                                  aria-label={`Close ${row.label} workload`}
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                            <p className="text-[9px] text-muted-foreground leading-normal mt-0.5">
+                              {radarDescriptions[row.label]}
+                            </p>
+                          </div>
+                          <div className="max-h-60 overflow-y-auto pr-1 space-y-2">
+                            {row.items.length === 0 ? (
+                              <p className="text-[10px] text-muted-foreground italic text-center py-4">No tasks found in this timeframe.</p>
+                            ) : (
+                              row.items.slice(0, 10).map(item => (
+                                <button
+                                  key={item.id}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openRadarItem(item);
+                                  }}
+                                  className="w-full text-left p-2.5 bg-muted/30 hover:bg-muted/70 hover:border-indigo-500/30 border border-border/50 rounded-lg flex flex-col gap-1 text-[11px] transition-all duration-150 cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-600 outline-none"
+                                >
+                                  <div className="flex items-start justify-between gap-1.5 w-full">
+                                    <span className="font-bold text-foreground truncate max-w-[170px]" title={item.title}>
+                                      {item.title}
+                                    </span>
+                                    <span className={`px-1.5 py-0.5 rounded-[4px] text-[8px] font-extrabold shrink-0 border uppercase tracking-wider ${
+                                      item.type === 'Requirement' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20' :
+                                      item.type === 'Evidence' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' :
+                                      item.type === 'Competency' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' :
+                                      'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                                    }`}>
+                                      {item.type}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-[9px] text-muted-foreground">
+                                    <span>Due: {formatShortDate(item.dueDate)}</span>
+                                    <span className="font-semibold truncate max-w-[95px]">{item.owner || 'Unassigned'}</span>
+                                  </div>
+                                </button>
+                              ))
+                            )}
+                            {row.items.length > 10 && (
+                              <p className="text-[9px] text-muted-foreground italic text-center pt-1 font-medium">{row.items.length - 10} more items available via filters.</p>
+                            )}
+                          </div>
+                          <div className="border-t border-border/80 pt-2 text-center">
                             <button
-                              key={item.id}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openRadarItem(item);
+                              type="button"
+                              onClick={() => {
+                                setExpandedRadarBucket(null);
+                                router.push(`/dashboard/requirements?filter=${filterParamMap[row.label]}`);
                               }}
-                              className="w-full text-left p-2.5 bg-muted/30 hover:bg-muted/70 hover:border-indigo-500/30 border border-border/50 rounded-lg flex flex-col gap-1 text-[11px] transition-all duration-150"
+                              className="w-full text-center text-[10px] font-black text-indigo-600 hover:text-indigo-750 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline cursor-pointer py-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 rounded"
                             >
-                              <div className="flex items-start justify-between gap-1.5 w-full">
-                                <span className="font-bold text-foreground truncate max-w-[170px]" title={item.title}>
-                                  {item.title}
-                                </span>
-                                <span className={`px-1.5 py-0.5 rounded-[4px] text-[8px] font-extrabold shrink-0 border uppercase tracking-wider ${
-                                  item.type === 'Requirement' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20' :
-                                  item.type === 'Evidence' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' :
-                                  item.type === 'Competency' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' :
-                                  'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
-                                }`}>
-                                  {item.type}
-                                </span>
-                              </div>
-                              <div className="flex justify-between items-center text-[9px] text-muted-foreground">
-                                <span>Due: {formatShortDate(item.dueDate)}</span>
-                                <span className="font-semibold truncate max-w-[95px]">{item.owner || 'Unassigned'}</span>
-                              </div>
+                              View Filtered Requirements →
                             </button>
-                          ))
-                        )}
-                        {row.items.length > 10 && (
-                          <p className="text-[9px] text-muted-foreground italic text-center pt-1 font-medium">{row.items.length - 10} more items available via filters.</p>
-                        )}
-                      </div>
-                      <div className="border-t border-border/80 pt-2 text-center">
-                        <span className="text-[10px] font-extrabold text-indigo-650 dark:text-indigo-400 group-hover:underline">
-                          View Workload Matrix →
-                        </span>
-                      </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

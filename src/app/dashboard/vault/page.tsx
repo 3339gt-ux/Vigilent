@@ -30,7 +30,8 @@ import {
   AlertCircle,
   ChevronDown,
   Download,
-  Archive
+  Archive,
+  HelpCircle
 } from 'lucide-react';
 import {
   useFilterFavourites,
@@ -1618,12 +1619,20 @@ export default function EvidenceVault() {
         </button>
       </div>
 
-      <div className="bg-card border border-border rounded-xl p-4 text-xs">
-        <h2 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Upload and Link Evidence</h2>
-        <p className="text-muted-foreground mt-1 leading-relaxed">
+      <details className="group border border-border rounded-xl bg-card p-3.5 text-xs transition-all [&_summary::-webkit-details-marker]:hidden">
+        <summary className="flex items-center justify-between font-bold text-foreground cursor-pointer focus:outline-none">
+          <span className="flex items-center gap-2">
+            <HelpCircle className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <span>How to upload & link evidence?</span>
+          </span>
+          <span className="transition group-open:rotate-180 text-muted-foreground">
+            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+          </span>
+        </summary>
+        <p className="text-muted-foreground mt-2 leading-relaxed pl-6">
           Upload a private evidence file, select it from the table, then use <strong className="text-foreground">Linked Requirements</strong> in the detail panel to connect the record to one or more requirements. Files open through temporary signed URLs only.
         </p>
-      </div>
+      </details>
 
       <EvidenceDropzone
         label="Drop evidence files anywhere here or choose files"

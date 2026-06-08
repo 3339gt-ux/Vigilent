@@ -22,7 +22,9 @@ import {
   Printer,
   RefreshCw,
   Search,
-  ShieldAlert
+  ShieldAlert,
+  ChevronDown,
+  HelpCircle
 } from 'lucide-react';
 import {
   calculateRequirementStatus,
@@ -406,12 +408,20 @@ export default function AuditPackBuilder() {
         </p>
       </div>
 
-      <div className="bg-card border border-border rounded-xl p-4 text-xs">
-        <h2 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">How to Create a Pack</h2>
-        <p className="text-muted-foreground mt-1 leading-relaxed">
+      <details className="group border border-border rounded-xl bg-card p-3.5 text-xs transition-all [&_summary::-webkit-details-marker]:hidden">
+        <summary className="flex items-center justify-between font-bold text-foreground cursor-pointer focus:outline-none">
+          <span className="flex items-center gap-2">
+            <HelpCircle className="w-4 h-4 text-indigo-650 dark:text-indigo-400 shrink-0" />
+            <span>How to create an audit pack?</span>
+          </span>
+          <span className="transition group-open:rotate-180 text-muted-foreground">
+            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+          </span>
+        </summary>
+        <p className="text-muted-foreground mt-2 leading-relaxed pl-6">
           Name the pack, select requirements, review linked documents and warnings, then save it as a draft. The pack stores requirement and document references only; evidence files remain private and open through signed URLs.
         </p>
-      </div>
+      </details>
 
       {(error || message) && (
         <div className={`border rounded-xl p-3 text-xs font-semibold flex items-start gap-2 ${

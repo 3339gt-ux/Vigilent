@@ -428,15 +428,12 @@ export default function RequirementsPage() {
       const idParam = params.get('id');
       const actionParam = params.get('action');
       const filterParam = params.get('filter');
-      if (filterParam === 'actions' || filterParam === 'overdue' || filterParam === 'due-week') {
+      if (filterParam === 'actions' || filterParam === 'due-week') {
         setRequirementView('actions');
-        if (filterParam === 'overdue') {
-          setRadarFilter('overdue');
-        } else if (filterParam === 'due-week') {
-          setRadarFilter('due-week');
-        } else {
-          setRadarFilter('All');
-        }
+        setRadarFilter(filterParam === 'due-week' ? 'due-week' : 'All');
+      } else if (filterParam === 'overdue' || filterParam === 'due30' || filterParam === 'due60' || filterParam === 'due90') {
+        setRequirementView('active');
+        setRadarFilter(filterParam);
       }
       if (statusParam) {
         setSelectedStatus(statusParam as any);
