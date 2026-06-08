@@ -417,7 +417,7 @@ export default function OrganisationManagement() {
               </h3>
               <p className="text-xs text-muted-foreground">
                 {confirmAction.type === 'disable'
-                  ? 'Disabling this member will immediately block their access to this organization workspace. You can re-enable them later.'
+                  ? 'Disabling this member will immediately block their access to this organisation workspace. You can re-enable them later.'
                   : 'Removing this member will delete their workspace association. To regain access, they must be invited again.'}
               </p>
             </div>
@@ -452,7 +452,7 @@ export default function OrganisationManagement() {
       <div>
         <h1 className="text-3xl font-extrabold tracking-tight" id="org-heading">Organisation Management</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Configure organization compliance standards and manage team collaboration roles.
+          Configure organisation compliance standards and manage team collaboration roles.
         </p>
       </div>
 

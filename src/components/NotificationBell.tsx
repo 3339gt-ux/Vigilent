@@ -95,7 +95,7 @@ export function NotificationBell({ dropdownAlign = 'right-0 top-full mt-2' }: { 
                 <CheckCheck className="w-3.5 h-3.5 inline mr-1" />
                 Mark all
               </button>
-              <button type="button" onClick={() => setOpen(false)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground cursor-pointer">
+              <button type="button" onClick={() => setOpen(false)} aria-label="Close notifications dropdown" className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>

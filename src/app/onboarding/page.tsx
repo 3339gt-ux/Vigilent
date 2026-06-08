@@ -59,7 +59,7 @@ export default function OnboardingPage() {
     const rawError = error || authError;
     if (!rawError) return '';
 
-    const errMsg = typeof rawError === 'string' ? rawError : (rawError instanceof Error ? rawError.message : String(rawError));
+    const errMsg = rawError;
     const lowerMsg = errMsg.toLowerCase();
 
     // Check for technical database schema/cache/connection or relation errors

@@ -965,8 +965,8 @@ export default function FavouritesPage() {
           <h3 className="text-sm font-bold text-foreground">No matching favourites</h3>
           <p className="text-xs text-muted-foreground max-w-sm mx-auto mt-1">
             {consolidatedItems.length === 0
-              ? 'No favourites yet. Star requirements, evidence, competency types or filters to build a focused workspace.'
-              : 'No favourites match these filters. Star requirements, evidence, competency types or filters to build a focused workspace.'}
+              ? 'No favourites yet. Use the star icon to keep important items here.'
+              : 'No favourites match these filters. Use the star icon to keep important items here.'}
           </p>
         </div>
       ) : (

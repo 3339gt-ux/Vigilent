@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { isDemoMode } from '@/lib/env';
 import { CreditCard, CheckCircle2, ShieldCheck, ArrowRight, DollarSign, Download, Loader2, X, AlertCircle } from 'lucide-react';
+import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
 
 interface Invoice {
   id: string;
@@ -15,6 +16,9 @@ interface Invoice {
 
 export default function BillingPage() {
   const { organization, updateOrgProfile } = useApp();
+
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>(null);
+  const [toast, setToast] = useState<ToastState>(null);
 
   const [activePlan, setActivePlan] = useState(organization?.compliance_profile ? 'Professional' : 'Standard');
   const [selectedPlan, setSelectedPlan] = useState<'Standard' | 'Professional' | 'Enterprise'>('Professional');
@@ -37,7 +41,10 @@ export default function BillingPage() {
 
   const handleOpenCheckout = (plan: 'Standard' | 'Professional' | 'Enterprise') => {
     if (!isDemoMode) {
-      alert('Billing checkout is not configured for production. Set explicit Stripe environment variables and server-side checkout first.');
+      setToast({
+        type: 'error',
+        message: 'Billing checkout is not configured for production. Set explicit Stripe environment variables and server-side checkout first.'
+      });
       return;
     }
 
@@ -80,7 +87,7 @@ export default function BillingPage() {
           organization_id: organization?.id || '',
           profile_id: 'usr-jane-doe',
           action: 'Plan Upgraded',
-          details: `Jane Doe upgraded organization billing workspace to "${selectedPlan}" Monthly Plan.`,
+          details: `Jane Doe upgraded organisation billing workspace to "${selectedPlan}" Monthly Plan.`,
           created_at: new Date().toISOString()
         });
         localStorage.setItem('vigilen_logs', JSON.stringify(logs));
@@ -123,7 +130,7 @@ export default function BillingPage() {
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Active Package Plan</span>
                 <h2 className="text-2xl font-extrabold text-foreground mt-1">{activePlan} subscription</h2>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed max-w-md">
-                  Configured under Professional compliance limits: Up to 75 assets tracked, 5 organization members, and PIN-protected share portals.
+                  Configured under Professional compliance limits: Up to 75 assets tracked, 5 organisation members, and PIN-protected share portals.
                 </p>
               </div>
 
@@ -248,7 +255,10 @@ export default function BillingPage() {
                   </span>
                   
                   <button 
-                    onClick={() => alert(`Simulated Invoice receipt PDF download for ${inv.invoice_no}`)}
+                    onClick={() => setToast({
+                      type: 'success',
+                      message: `Simulated Invoice receipt PDF download for ${inv.invoice_no}`
+                    })}
                     className="p-1.5 hover:bg-muted rounded text-muted-foreground hover:text-foreground"
                     title="Download Invoice"
                   >
@@ -281,7 +291,7 @@ export default function BillingPage() {
                 <div>
                   <h3 className="text-base font-extrabold text-foreground">Upgrade Confirmed</h3>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Your organization compliance capabilities have been adjusted.
+                    Your organisation compliance capabilities have been adjusted.
                   </p>
                 </div>
               </div>
@@ -388,6 +398,8 @@ export default function BillingPage() {
         </div>
       )}
 
+      <ConfirmDialog request={confirmRequest} onCancel={() => setConfirmRequest(null)} />
+      <InlineToast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }

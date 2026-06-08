@@ -818,21 +818,27 @@ export default function RequirementsPage() {
     }
   };
 
-  const handleArchiveRequirementCategory = async (categoryId: string) => {
+  const handleArchiveRequirementCategory = (categoryId: string) => {
     const category = requirementCategories.find(item => item.id === categoryId);
     if (!category) return;
     const inUse = frameworkRequirements.some(requirement => requirement.category === category.name);
-    const confirmed = window.confirm(inUse
-      ? `Archive "${category.name}"?\n\nExisting requirements keep this category text, but it will be hidden from the managed custom category list.`
-      : `Archive unused category "${category.name}"?`);
-    if (!confirmed) return;
-    try {
-      await archiveRequirementCategory(categoryId);
-      if (selectedCategory === category.name) setSelectedCategory('All');
-      setCategoryMessage('Requirement category archived.');
-    } catch (error) {
-      setCategoryMessage(error instanceof Error ? error.message : 'Could not archive category.');
-    }
+    setConfirmRequest({
+      title: 'Archive Category',
+      description: inUse
+        ? `Archive "${category.name}"?\n\nExisting requirements keep this category text, but it will be hidden from the managed custom category list.`
+        : `Archive unused category "${category.name}"?`,
+      confirmLabel: 'Archive Category',
+      tone: 'warning',
+      onConfirm: async () => {
+        try {
+          await archiveRequirementCategory(categoryId);
+          if (selectedCategory === category.name) setSelectedCategory('All');
+          setCategoryMessage('Requirement category archived.');
+        } catch (error) {
+          setCategoryMessage(error instanceof Error ? error.message : 'Could not archive category.');
+        }
+      }
+    });
   };
 
   const selectedPack = REQUIREMENT_TEMPLATE_PACKS.find(pack => pack.id === selectedPackId) || REQUIREMENT_TEMPLATE_PACKS[0];
@@ -888,20 +894,26 @@ export default function RequirementsPage() {
     }
   };
 
-  const handleArchiveRequirement = async () => {
+  const handleArchiveRequirement = () => {
     if (!selectedRequirement) return;
-    const confirmed = window.confirm('Archive Requirement?\n\nArchived requirements remain available for historical review but are excluded from readiness scoring and audit packs.');
-    if (!confirmed) return;
-    setEditError('');
-    setEditSuccess('');
-    try {
-      const updated = await archiveFrameworkRequirement(selectedRequirement.id);
-      setSelectedRequirement(updated);
-      setRequirementView('archive');
-      setEditSuccess('Requirement archived.');
-    } catch (error) {
-      setEditError(error instanceof Error ? error.message : 'Could not archive requirement.');
-    }
+    setConfirmRequest({
+      title: 'Archive Requirement',
+      description: 'Archive Requirement?\n\nArchived requirements remain available for historical review but are excluded from readiness scoring and audit packs.',
+      confirmLabel: 'Archive',
+      tone: 'warning',
+      onConfirm: async () => {
+        setEditError('');
+        setEditSuccess('');
+        try {
+          const updated = await archiveFrameworkRequirement(selectedRequirement.id);
+          setSelectedRequirement(updated);
+          setRequirementView('archive');
+          setEditSuccess('Requirement archived.');
+        } catch (error) {
+          setEditError(error instanceof Error ? error.message : 'Could not archive requirement.');
+        }
+      }
+    });
   };
 
   const handleRestoreRequirement = async () => {
@@ -918,35 +930,47 @@ export default function RequirementsPage() {
     }
   };
 
-  const handleDeactivateRequirement = async () => {
+  const handleDeactivateRequirement = () => {
     if (!selectedRequirement) return;
-    const confirmed = window.confirm('Deactivate Requirement?\n\nDeactivated requirements are retained for history but excluded from readiness scoring and audit packs.');
-    if (!confirmed) return;
-    setEditError('');
-    setEditSuccess('');
-    try {
-      const updated = await deactivateFrameworkRequirement(selectedRequirement.id);
-      setSelectedRequirement(updated);
-      setRequirementView('inactive');
-      setEditSuccess('Requirement deactivated.');
-    } catch (error) {
-      setEditError(error instanceof Error ? error.message : 'Could not deactivate requirement.');
-    }
+    setConfirmRequest({
+      title: 'Deactivate Requirement',
+      description: 'Deactivate Requirement?\n\nDeactivated requirements are retained for history but excluded from readiness scoring and audit packs.',
+      confirmLabel: 'Deactivate',
+      tone: 'warning',
+      onConfirm: async () => {
+        setEditError('');
+        setEditSuccess('');
+        try {
+          const updated = await deactivateFrameworkRequirement(selectedRequirement.id);
+          setSelectedRequirement(updated);
+          setRequirementView('inactive');
+          setEditSuccess('Requirement deactivated.');
+        } catch (error) {
+          setEditError(error instanceof Error ? error.message : 'Could not deactivate requirement.');
+        }
+      }
+    });
   };
 
-  const handleDeleteRequirement = async () => {
+  const handleDeleteRequirement = () => {
     if (!selectedRequirement) return;
-    const confirmed = window.confirm('Delete Requirement?\n\nOnly requirements with no linked evidence, criteria, reviews, actions, or competency history can be deleted. If deletion is blocked, archive the requirement instead.');
-    if (!confirmed) return;
-    setEditError('');
-    setEditSuccess('');
-    try {
-      await deleteFrameworkRequirement(selectedRequirement.id);
-      setSelectedRequirement(null);
-      setEditSuccess('Requirement deleted.');
-    } catch (error) {
-      setEditError(`${error instanceof Error ? error.message : 'Could not delete requirement.'} Archive instead to preserve history.`);
-    }
+    setConfirmRequest({
+      title: 'Delete Requirement',
+      description: 'Delete Requirement?\n\nOnly requirements with no linked evidence, criteria, reviews, actions, or competency history can be deleted. If deletion is blocked, archive the requirement instead.',
+      confirmLabel: 'Delete',
+      tone: 'danger',
+      onConfirm: async () => {
+        setEditError('');
+        setEditSuccess('');
+        try {
+          await deleteFrameworkRequirement(selectedRequirement.id);
+          setSelectedRequirement(null);
+          setEditSuccess('Requirement deleted.');
+        } catch (error) {
+          setEditError(`${error instanceof Error ? error.message : 'Could not delete requirement.'} Archive instead to preserve history.`);
+        }
+      }
+    });
   };
 
   const handleLinkDocument = async () => {
@@ -1050,7 +1074,7 @@ export default function RequirementsPage() {
     setImportMessage('');
   };
 
-  const applyRequirementBulkMetadata = async () => {
+  const applyRequirementBulkMetadata = () => {
     if (selectedBulkRequirements.length === 0) return;
     const updates: Partial<Requirement> = {};
     if (bulkRequirementCategory) updates.category = bulkRequirementCategory;
@@ -1062,72 +1086,93 @@ export default function RequirementsPage() {
       setBulkMessage('Choose at least one requirement bulk edit value before applying.');
       return;
     }
-    if (!window.confirm(`Apply changes to ${selectedBulkRequirements.length} requirement(s)? Existing requirement update logging will be used.`)) return;
-    setLastRequirementUndo({ label: 'Undo requirement bulk edit', requirements: selectedBulkRequirements });
-    try {
-      for (const requirement of selectedBulkRequirements) {
-        await updateFrameworkRequirement(requirement.id, updates);
+    setConfirmRequest({
+      title: 'Bulk Edit Requirements',
+      description: `Apply changes to ${selectedBulkRequirements.length} requirement(s)? Existing requirement update logging will be used.`,
+      confirmLabel: 'Apply Edit',
+      tone: 'primary',
+      onConfirm: async () => {
+        setLastRequirementUndo({ label: 'Undo requirement bulk edit', requirements: selectedBulkRequirements });
+        try {
+          for (const requirement of selectedBulkRequirements) {
+            await updateFrameworkRequirement(requirement.id, updates);
+          }
+          requirementSelection.clearSelection();
+          setBulkRequirementCategory('');
+          setBulkRequirementOwner('');
+          setBulkRequirementStatus('');
+          setBulkRequirementRisk('');
+          setBulkRequirementReviewDate('');
+          setBulkMessage(`Updated ${selectedBulkRequirements.length} requirement(s).`);
+        } catch (error) {
+          setBulkMessage(error instanceof Error ? error.message : 'Bulk requirement update failed.');
+        }
       }
-      requirementSelection.clearSelection();
-      setBulkRequirementCategory('');
-      setBulkRequirementOwner('');
-      setBulkRequirementStatus('');
-      setBulkRequirementRisk('');
-      setBulkRequirementReviewDate('');
-      setBulkMessage(`Updated ${selectedBulkRequirements.length} requirement(s).`);
-    } catch (error) {
-      setBulkMessage(error instanceof Error ? error.message : 'Bulk requirement update failed.');
-    }
+    });
   };
 
-  const applyRequirementBulkLifecycle = async () => {
+  const applyRequirementBulkLifecycle = () => {
     if (selectedBulkRequirements.length === 0) return;
     const action = requirementView === 'archive' || requirementView === 'inactive' ? 'restore' : 'archive';
-    if (!window.confirm(`${action === 'restore' ? 'Restore' : 'Archive'} ${selectedBulkRequirements.length} selected requirement(s)?`)) return;
-    setLastRequirementUndo({ label: 'Undo requirement lifecycle bulk action', requirements: selectedBulkRequirements });
-    try {
-      for (const requirement of selectedBulkRequirements) {
-        if (action === 'restore') await restoreFrameworkRequirement(requirement.id);
-        else await archiveFrameworkRequirement(requirement.id);
+    setConfirmRequest({
+      title: action === 'restore' ? 'Restore Requirements' : 'Archive Requirements',
+      description: `${action === 'restore' ? 'Restore' : 'Archive'} ${selectedBulkRequirements.length} selected requirement(s)?`,
+      confirmLabel: action === 'restore' ? 'Restore' : 'Archive',
+      tone: 'warning',
+      onConfirm: async () => {
+        setLastRequirementUndo({ label: 'Undo requirement lifecycle bulk action', requirements: selectedBulkRequirements });
+        try {
+          for (const requirement of selectedBulkRequirements) {
+            if (action === 'restore') await restoreFrameworkRequirement(requirement.id);
+            else await archiveFrameworkRequirement(requirement.id);
+          }
+          requirementSelection.clearSelection();
+          setBulkMessage(action === 'restore' ? `Restored ${selectedBulkRequirements.length} requirement(s).` : `Archived ${selectedBulkRequirements.length} requirement(s).`);
+        } catch (error) {
+          setBulkMessage(error instanceof Error ? error.message : 'Bulk requirement lifecycle action failed.');
+        }
       }
-      requirementSelection.clearSelection();
-      setBulkMessage(action === 'restore' ? `Restored ${selectedBulkRequirements.length} requirement(s).` : `Archived ${selectedBulkRequirements.length} requirement(s).`);
-    } catch (error) {
-      setBulkMessage(error instanceof Error ? error.message : 'Bulk requirement lifecycle action failed.');
-    }
+    });
   };
 
-  const undoRequirementBulkAction = async () => {
+  const undoRequirementBulkAction = () => {
     if (!lastRequirementUndo) return;
-    if (!window.confirm(`Restore previous values for ${lastRequirementUndo.requirements.length} requirement(s)?`)) return;
-    try {
-      for (const requirement of lastRequirementUndo.requirements) {
-        await updateFrameworkRequirement(requirement.id, {
-          title: requirement.title,
-          description: requirement.description || null,
-          category: requirement.category,
-          owner: requirement.owner || null,
-          risk_level: requirement.risk_level,
-          status: requirement.status,
-          review_frequency: requirement.review_frequency,
-          review_date: requirement.review_date || null,
-          next_due_date: requirement.next_due_date || null,
-          notes: requirement.notes || null,
-          lifecycle_status: requirement.lifecycle_status || 'ACTIVE',
-          archived_at: requirement.archived_at || null,
-          archived_by: requirement.archived_by || null,
-          deactivated_at: requirement.deactivated_at || null,
-          deactivated_by: requirement.deactivated_by || null
-        });
+    setConfirmRequest({
+      title: 'Undo Requirements Bulk Action',
+      description: `Restore previous values for ${lastRequirementUndo.requirements.length} requirement(s)?`,
+      confirmLabel: 'Restore Values',
+      tone: 'warning',
+      onConfirm: async () => {
+        try {
+          for (const requirement of lastRequirementUndo.requirements) {
+            await updateFrameworkRequirement(requirement.id, {
+              title: requirement.title,
+              description: requirement.description || null,
+              category: requirement.category,
+              owner: requirement.owner || null,
+              risk_level: requirement.risk_level,
+              status: requirement.status,
+              review_frequency: requirement.review_frequency,
+              review_date: requirement.review_date || null,
+              next_due_date: requirement.next_due_date || null,
+              notes: requirement.notes || null,
+              lifecycle_status: requirement.lifecycle_status || 'ACTIVE',
+              archived_at: requirement.archived_at || null,
+              archived_by: requirement.archived_by || null,
+              deactivated_at: requirement.deactivated_at || null,
+              deactivated_by: requirement.deactivated_by || null
+            });
+          }
+          setLastRequirementUndo(null);
+          setBulkMessage('Previous requirement values restored.');
+        } catch (error) {
+          setBulkMessage(error instanceof Error ? error.message : 'Requirement undo failed.');
+        }
       }
-      setLastRequirementUndo(null);
-      setBulkMessage('Previous requirement values restored.');
-    } catch (error) {
-      setBulkMessage(error instanceof Error ? error.message : 'Requirement undo failed.');
-    }
+    });
   };
 
-  const applyActionBulkUpdate = async () => {
+  const applyActionBulkUpdate = () => {
     if (selectedBulkActions.length === 0) return;
     const updates: Partial<Action> = {};
     if (bulkActionStatus) {
@@ -1143,44 +1188,58 @@ export default function RequirementsPage() {
       setBulkMessage('Choose at least one action bulk edit value before applying.');
       return;
     }
-    if (!window.confirm(`Apply changes to ${selectedBulkActions.length} action(s)? Existing action history and audit logging will be used.`)) return;
-    setLastActionUndo({ label: 'Undo action bulk edit', actions: selectedBulkActions });
-    try {
-      for (const action of selectedBulkActions) {
-        await updateAction(action.id, updates);
+    setConfirmRequest({
+      title: 'Bulk Edit Actions',
+      description: `Apply changes to ${selectedBulkActions.length} action(s)? Existing action history and audit logging will be used.`,
+      confirmLabel: 'Apply Edit',
+      tone: 'primary',
+      onConfirm: async () => {
+        setLastActionUndo({ label: 'Undo action bulk edit', actions: selectedBulkActions });
+        try {
+          for (const action of selectedBulkActions) {
+            await updateAction(action.id, updates);
+          }
+          actionSelection.clearSelection();
+          setBulkActionStatus('');
+          setBulkActionDueDate('');
+          setBulkMessage(`Updated ${selectedBulkActions.length} action(s).`);
+        } catch (error) {
+          setBulkMessage(error instanceof Error ? error.message : 'Bulk action update failed.');
+        }
       }
-      actionSelection.clearSelection();
-      setBulkActionStatus('');
-      setBulkActionDueDate('');
-      setBulkMessage(`Updated ${selectedBulkActions.length} action(s).`);
-    } catch (error) {
-      setBulkMessage(error instanceof Error ? error.message : 'Bulk action update failed.');
-    }
+    });
   };
 
-  const undoActionBulkAction = async () => {
+  const undoActionBulkAction = () => {
     if (!lastActionUndo) return;
-    if (!window.confirm(`Restore previous values for ${lastActionUndo.actions.length} action(s)?`)) return;
-    try {
-      for (const action of lastActionUndo.actions) {
-        await updateAction(action.id, {
-          status: action.status,
-          owner: action.owner || null,
-          due_date: action.due_date || null,
-          target_due_date: action.target_due_date || null,
-          status_changed_at: action.status_changed_at || null,
-          status_changed_by: action.status_changed_by || null,
-          closed_at: action.closed_at || null,
-          closed_by: action.closed_by || null,
-          completion_note: action.completion_note || null,
-          cancellation_note: action.cancellation_note || null
-        });
+    setConfirmRequest({
+      title: 'Undo Actions Bulk Action',
+      description: `Restore previous values for ${lastActionUndo.actions.length} action(s)?`,
+      confirmLabel: 'Restore Values',
+      tone: 'warning',
+      onConfirm: async () => {
+        try {
+          for (const action of lastActionUndo.actions) {
+            await updateAction(action.id, {
+              status: action.status,
+              owner: action.owner || null,
+              due_date: action.due_date || null,
+              target_due_date: action.target_due_date || null,
+              status_changed_at: action.status_changed_at || null,
+              status_changed_by: action.status_changed_by || null,
+              closed_at: action.closed_at || null,
+              closed_by: action.closed_by || null,
+              completion_note: action.completion_note || null,
+              cancellation_note: action.cancellation_note || null
+            });
+          }
+          setLastActionUndo(null);
+          setBulkMessage('Previous action values restored.');
+        } catch (error) {
+          setBulkMessage(error instanceof Error ? error.message : 'Action undo failed.');
+        }
       }
-      setLastActionUndo(null);
-      setBulkMessage('Previous action values restored.');
-    } catch (error) {
-      setBulkMessage(error instanceof Error ? error.message : 'Action undo failed.');
-    }
+    });
   };
 
   return (

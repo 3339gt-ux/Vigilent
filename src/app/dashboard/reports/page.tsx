@@ -3313,7 +3313,7 @@ export default function ReportsPage() {
                                 <span className={`px-2 py-0.5 text-[9px] font-extrabold rounded-full border ${
                                   isLocal ? 'bg-zinc-500/10 border-zinc-500/20 text-zinc-650 dark:text-zinc-400' : (isOrg ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-650 dark:text-indigo-400 font-extrabold' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-650 dark:text-emerald-450')
                                 }`}>
-                                  {isLocal ? 'Personal browser report' : (isOrg ? 'Organisation report' : 'Personal account report')}
+                                  {isLocal ? 'Personal Browser Report' : (isOrg ? 'Organisation Report' : 'Personal Account Report')}
                                 </span>
                                 <button
                                   onClick={() => handleToggleFavouriteReport(sr.id, isFavourited)}
@@ -3600,13 +3600,13 @@ export default function ReportsPage() {
                         onChange={e => setBuilderReportVisibility(e.target.value as 'personal_local' | 'personal' | 'organisation')}
                         className="w-full px-2 py-1.5 bg-muted rounded-lg border border-border outline-none font-semibold text-xs text-foreground"
                       >
-                        <option value="personal_local">Personal browser report (Local storage)</option>
+                        <option value="personal_local">Personal Browser Report</option>
                         <option value="personal" disabled={!isSharedTableAvailable}>
-                          Personal account report {!isSharedTableAvailable ? '(Unavailable)' : '(Private)'}
+                          Personal Account Report {!isSharedTableAvailable ? 'unavailable' : '(Private)'}
                         </option>
                         {isOwnerOrAdmin && (
                           <option value="organisation" disabled={!isSharedTableAvailable}>
-                            Organisation report {!isSharedTableAvailable ? '(Unavailable)' : '(Shared with team)'}
+                            Organisation Report {!isSharedTableAvailable ? 'unavailable' : '(Shared with team)'}
                           </option>
                         )}
                       </select>
@@ -3865,7 +3865,7 @@ export default function ReportsPage() {
 
             <div className="p-4 bg-indigo-500/5 border border-indigo-500/20 rounded-xl space-y-2.5 text-xs text-muted-foreground leading-relaxed text-left">
               <span className="font-extrabold text-indigo-650 dark:text-indigo-400 flex items-center gap-1.5 font-bold">
-                <AlertTriangle className="w-3.5 h-3.5" /> Scheduling is not configured
+                <AlertTriangle className="w-3.5 h-3.5" /> Scheduling not configured
               </span>
               <p>
                 Automated report deliveries and email scheduling are currently not configured in the Vygilence platform database.

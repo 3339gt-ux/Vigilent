@@ -862,7 +862,7 @@ export default function AuditTrailPage() {
               <span className="font-bold text-foreground text-sm block">No Audit Trail Events Found</span>
               <p className="max-w-xs leading-relaxed text-[11px] text-muted-foreground/90 mx-auto">
                 {events.length === 0
-                  ? 'No compliance activities have been recorded in this organization workspace yet.'
+                  ? 'No compliance activities have been recorded in this organisation workspace yet.'
                   : 'No audit logs match the selected advanced query filters. Try resetting the criteria.'}
               </p>
             </div>

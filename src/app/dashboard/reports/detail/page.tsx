@@ -578,31 +578,31 @@ export default function ReportDetailPage() {
           {statusFilter !== 'All' && (
             <span className="px-2.5 py-1 bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-bold rounded-lg flex items-center gap-1">
               Status: {statusFilter}
-              <X className="w-3.5 h-3.5 cursor-pointer" onClick={() => setStatusFilter('All')} />
+              <X className="w-3.5 h-3.5 cursor-pointer print:hidden" onClick={() => setStatusFilter('All')} />
             </span>
           )}
           {categoryFilter !== 'All' && (
             <span className="px-2.5 py-1 bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-bold rounded-lg flex items-center gap-1">
               Category: {categoryFilter}
-              <X className="w-3.5 h-3.5 cursor-pointer" onClick={() => setCategoryFilter('All')} />
+              <X className="w-3.5 h-3.5 cursor-pointer print:hidden" onClick={() => setCategoryFilter('All')} />
             </span>
           )}
           {ownerFilter !== 'All' && (
             <span className="px-2.5 py-1 bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-bold rounded-lg flex items-center gap-1">
               Owner/Person: {ownerFilter}
-              <X className="w-3.5 h-3.5 cursor-pointer" onClick={() => setOwnerFilter('All')} />
+              <X className="w-3.5 h-3.5 cursor-pointer print:hidden" onClick={() => setOwnerFilter('All')} />
             </span>
           )}
           {riskFilter !== 'All' && (
             <span className="px-2.5 py-1 bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-bold rounded-lg flex items-center gap-1">
               Risk: {riskFilter}
-              <X className="w-3.5 h-3.5 cursor-pointer" onClick={() => setRiskFilter('All')} />
+              <X className="w-3.5 h-3.5 cursor-pointer print:hidden" onClick={() => setRiskFilter('All')} />
             </span>
           )}
           {overdueFilter !== 'All' && (
             <span className="px-2.5 py-1 bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-bold rounded-lg flex items-center gap-1">
               Overdue: {overdueFilter}
-              <X className="w-3.5 h-3.5 cursor-pointer" onClick={() => setOverdueFilter('All')} />
+              <X className="w-3.5 h-3.5 cursor-pointer print:hidden" onClick={() => setOverdueFilter('All')} />
             </span>
           )}
           {(statusFilter !== 'All' || categoryFilter !== 'All' || ownerFilter !== 'All' || riskFilter !== 'All' || overdueFilter !== 'All') && (
@@ -614,7 +614,7 @@ export default function ReportDetailPage() {
                 setRiskFilter('All');
                 setOverdueFilter('All');
               }}
-              className="text-xs text-indigo-650 dark:text-indigo-400 hover:underline font-bold"
+              className="text-xs text-indigo-650 dark:text-indigo-400 hover:underline font-bold print:hidden"
             >
               Reset Filters
             </button>
@@ -1101,8 +1101,8 @@ export default function ReportDetailPage() {
 
           {/* Empty State */}
           {sortedRecords.length === 0 && (
-            <div className="p-12 text-center text-xs text-muted-foreground">
-              No records match the current search or filter criteria.
+            <div className="p-12 text-center text-xs text-muted-foreground border border-dashed border-border rounded-2xl">
+              No report results match the current filters.
             </div>
           )}
 

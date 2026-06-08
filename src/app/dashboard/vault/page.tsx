@@ -523,17 +523,23 @@ export default function EvidenceVault() {
     const category = evidenceCategories.find(item => item.id === categoryId);
     if (!category) return;
     const inUse = [...documents, ...archivedDocuments].some(document => document.category === category.name);
-    const confirmed = confirm(inUse
-      ? `Archive "${category.name}"?\n\nExisting evidence keeps this category text, but it will be hidden from the managed custom category list.`
-      : `Archive unused category "${category.name}"?`);
-    if (!confirmed) return;
-    try {
-      await archiveEvidenceCategory(categoryId);
-      if (selectedCategory === category.name) setSelectedCategory('All');
-      setCategoryMessage('Evidence category archived.');
-    } catch (error) {
-      setCategoryMessage(error instanceof Error ? error.message : 'Could not archive evidence category.');
-    }
+    setConfirmRequest({
+      title: 'Archive Category',
+      description: inUse
+        ? `Archive "${category.name}"?\n\nExisting evidence keeps this category text, but it will be hidden from the managed custom category list.`
+        : `Archive unused category "${category.name}"?`,
+      confirmLabel: 'Archive',
+      tone: 'danger',
+      onConfirm: async () => {
+        try {
+          await archiveEvidenceCategory(categoryId);
+          if (selectedCategory === category.name) setSelectedCategory('All');
+          setCategoryMessage('Evidence category archived.');
+        } catch (error) {
+          setCategoryMessage(error instanceof Error ? error.message : 'Could not archive evidence category.');
+        }
+      }
+    });
   };
 
   const syncDocumentEditState = (doc: EvidenceDocument) => {
@@ -790,11 +796,17 @@ export default function EvidenceVault() {
   };
 
   const handleDeleteDoc = async (id: string) => {
-    if (confirm('Archive this evidence document? The private file remains stored, but the record will be hidden from normal views.')) {
-      await deleteDocument(id);
-      setSelectedDoc(null);
-      setVaultView('archive');
-    }
+    setConfirmRequest({
+      title: 'Archive Document',
+      description: 'Archive this evidence document? The private file remains stored, but the record will be hidden from normal views.',
+      confirmLabel: 'Archive',
+      tone: 'warning',
+      onConfirm: async () => {
+        await deleteDocument(id);
+        setSelectedDoc(null);
+        setVaultView('archive');
+      }
+    });
   };
 
   const handleRestoreDoc = async (id: string) => {
@@ -807,14 +819,21 @@ export default function EvidenceVault() {
   };
 
   const handlePermanentDeleteDoc = async (id: string) => {
-    if (!confirm('Permanently delete this archived evidence document? This cannot be undone. Vygilence will mark the record permanently deleted, clean links, and attempt to remove the private storage object.')) return;
-    await permanentlyDeleteDocument(id);
-    setSelectedArchiveIds(prev => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
+    setConfirmRequest({
+      title: 'Permanently Delete Document',
+      description: 'Permanently delete this archived evidence document? This cannot be undone. Vygilence will mark the record permanently deleted, clean links, and attempt to remove the private storage object.',
+      confirmLabel: 'Delete Permanently',
+      tone: 'danger',
+      onConfirm: async () => {
+        await permanentlyDeleteDocument(id);
+        setSelectedArchiveIds(prev => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        if (selectedDoc?.id === id) setSelectedDoc(null);
+      }
     });
-    if (selectedDoc?.id === id) setSelectedDoc(null);
   };
 
   const handleBulkRestore = async () => {
@@ -824,9 +843,16 @@ export default function EvidenceVault() {
 
   const handleBulkPermanentDelete = async () => {
     if (selectedArchiveIds.size === 0) return;
-    if (!confirm(`Permanently delete ${selectedArchiveIds.size} archived document(s)? This cannot be undone.`)) return;
-    for (const id of selectedArchiveIds) await permanentlyDeleteDocument(id);
-    setSelectedArchiveIds(new Set());
+    setConfirmRequest({
+      title: 'Permanently Delete Documents',
+      description: `Permanently delete ${selectedArchiveIds.size} archived document(s)? This cannot be undone.`,
+      confirmLabel: 'Delete Permanently',
+      tone: 'danger',
+      onConfirm: async () => {
+        for (const id of selectedArchiveIds) await permanentlyDeleteDocument(id);
+        setSelectedArchiveIds(new Set());
+      }
+    });
   };
 
   const resetBulkInputs = () => {
@@ -847,67 +873,91 @@ export default function EvidenceVault() {
       setBulkMessage('Choose at least one bulk edit value before applying.');
       return;
     }
-    if (!confirm(`Apply metadata changes to ${selectedDocs.length} evidence record(s)? This operation will be audit logged through the normal document update path.`)) return;
-    setBulkMessage('');
-    setLastBulkUndo({ label: 'Undo evidence metadata bulk edit', documents: selectedDocs });
-    try {
-      for (const doc of selectedDocs) {
-        await updateDocumentMetadata(doc.id, updates);
+    setConfirmRequest({
+      title: 'Apply Metadata Changes',
+      description: `Apply metadata changes to ${selectedDocs.length} evidence record(s)? This operation will be audit logged through the normal document update path.`,
+      confirmLabel: 'Apply Changes',
+      tone: 'primary',
+      onConfirm: async () => {
+        setBulkMessage('');
+        setLastBulkUndo({ label: 'Undo evidence metadata bulk edit', documents: selectedDocs });
+        try {
+          for (const doc of selectedDocs) {
+            await updateDocumentMetadata(doc.id, updates);
+          }
+          documentSelection.clearSelection();
+          resetBulkInputs();
+          setBulkMessage(`Updated ${selectedDocs.length} evidence record(s).`);
+        } catch (error) {
+          setBulkMessage(error instanceof Error ? error.message : 'Bulk evidence update failed.');
+        }
       }
-      documentSelection.clearSelection();
-      resetBulkInputs();
-      setBulkMessage(`Updated ${selectedDocs.length} evidence record(s).`);
-    } catch (error) {
-      setBulkMessage(error instanceof Error ? error.message : 'Bulk evidence update failed.');
-    }
+    });
   };
 
   const applyDocumentBulkArchive = async () => {
     if (selectedDocs.length === 0) return;
-    if (!confirm(`Archive ${selectedDocs.length} selected evidence record(s)? Files remain private and restorable from the archive.`)) return;
-    setBulkMessage('');
-    setLastBulkUndo({ label: 'Undo evidence archive', documents: selectedDocs });
-    try {
-      for (const doc of selectedDocs) {
-        if (vaultView === 'archive') await restoreDocument(doc.id);
-        else await deleteDocument(doc.id);
+    const isRestore = vaultView === 'archive';
+    setConfirmRequest({
+      title: isRestore ? 'Restore Documents' : 'Archive Documents',
+      description: isRestore
+        ? `Restore ${selectedDocs.length} selected evidence record(s)?`
+        : `Archive ${selectedDocs.length} selected evidence record(s)? Files remain private and restorable from the archive.`,
+      confirmLabel: isRestore ? 'Restore' : 'Archive',
+      tone: isRestore ? 'primary' : 'warning',
+      onConfirm: async () => {
+        setBulkMessage('');
+        setLastBulkUndo({ label: 'Undo evidence archive', documents: selectedDocs });
+        try {
+          for (const doc of selectedDocs) {
+            if (vaultView === 'archive') await restoreDocument(doc.id);
+            else await deleteDocument(doc.id);
+          }
+          documentSelection.clearSelection();
+          setSelectedDoc(null);
+          setBulkMessage(vaultView === 'archive' ? `Restored ${selectedDocs.length} evidence record(s).` : `Archived ${selectedDocs.length} evidence record(s).`);
+        } catch (error) {
+          setBulkMessage(error instanceof Error ? error.message : 'Bulk archive/restore failed.');
+        }
       }
-      documentSelection.clearSelection();
-      setSelectedDoc(null);
-      setBulkMessage(vaultView === 'archive' ? `Restored ${selectedDocs.length} evidence record(s).` : `Archived ${selectedDocs.length} evidence record(s).`);
-    } catch (error) {
-      setBulkMessage(error instanceof Error ? error.message : 'Bulk archive/restore failed.');
-    }
+    });
   };
 
   const undoDocumentBulkAction = async () => {
     if (!lastBulkUndo) return;
-    if (!confirm(`Restore previous values for ${lastBulkUndo.documents.length} evidence record(s)?`)) return;
-    try {
-      for (const doc of lastBulkUndo.documents) {
-        const restorePayload: Partial<EvidenceDocument> = {
-          title: doc.title,
-          category: doc.category,
-          status: doc.status,
-          issue_date: doc.issue_date || null,
-          expiry_date: doc.expiry_date || null,
-          review_date: doc.review_date || null,
-          training_date: doc.training_date || null,
-          calibration_date: doc.calibration_date || null,
-          tags: doc.tags || [],
-          metadata: doc.metadata || {}
-        };
-        if (doc.status === 'deleted') await deleteDocument(doc.id);
-        else {
-          if (vaultView === 'archive') await restoreDocument(doc.id);
-          await updateDocumentMetadata(doc.id, restorePayload);
+    setConfirmRequest({
+      title: 'Undo Bulk Action',
+      description: `Restore previous values for ${lastBulkUndo.documents.length} evidence record(s)?`,
+      confirmLabel: 'Undo',
+      tone: 'primary',
+      onConfirm: async () => {
+        try {
+          for (const doc of lastBulkUndo.documents) {
+            const restorePayload: Partial<EvidenceDocument> = {
+              title: doc.title,
+              category: doc.category,
+              status: doc.status,
+              issue_date: doc.issue_date || null,
+              expiry_date: doc.expiry_date || null,
+              review_date: doc.review_date || null,
+              training_date: doc.training_date || null,
+              calibration_date: doc.calibration_date || null,
+              tags: doc.tags || [],
+              metadata: doc.metadata || {}
+            };
+            if (doc.status === 'deleted') await deleteDocument(doc.id);
+            else {
+              if (vaultView === 'archive') await restoreDocument(doc.id);
+              await updateDocumentMetadata(doc.id, restorePayload);
+            }
+          }
+          setBulkMessage('Previous evidence values restored.');
+          setLastBulkUndo(null);
+        } catch (error) {
+          setBulkMessage(error instanceof Error ? error.message : 'Undo failed.');
         }
       }
-      setBulkMessage('Previous evidence values restored.');
-      setLastBulkUndo(null);
-    } catch (error) {
-      setBulkMessage(error instanceof Error ? error.message : 'Undo failed.');
-    }
+    });
   };
 
   const getDocumentLinkSummary = (docId: string) => {

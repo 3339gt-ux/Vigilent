@@ -712,3 +712,34 @@ option {
   animation: bell-ring 2.5s ease-in-out infinite;
   transform-origin: top center;
 }
+
+/* Visible keyboard focus indicators across all themes, overriding default outline suppresses */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid hsl(var(--ring)) !important;
+  outline-offset: 2px !important;
+  box-shadow: none !important;
+}
+
+/* Global Print Layout overrides to prevent page truncation and hide navigation columns */
+@media print {
+  html, body, #__next, [role="main"], main {
+    height: auto !important;
+    overflow: visible !important;
+    overflow-y: visible !important;
+    position: static !important;
+  }
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+  .print\:hidden {
+    display: none !important;
+  }
+}

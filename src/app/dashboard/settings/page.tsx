@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useApp, VygilenceTheme, InterfaceStyle, ThemePreference } from '@/context/AppContext';
 import { isDemoMode } from '@/lib/env';
 import { Save, ShieldAlert, Key, Bell, User, CheckCircle2, Copy, Check, Palette, Sun, Moon, CircleDot, ArrowRight, Eye, Sparkles } from 'lucide-react';
+import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
 
 export default function SettingsPage() {
   const {
@@ -17,6 +18,9 @@ export default function SettingsPage() {
     refreshSession,
     resetDemoData
   } = useApp();
+
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>(null);
+  const [toast, setToast] = useState<ToastState>(null);
 
   // Profile Form States
   const [name, setName] = useState(user?.full_name || 'Jane Doe');
@@ -49,7 +53,7 @@ export default function SettingsPage() {
 
   const handleGenerateKey = () => {
     if (!isDemoMode) {
-      alert('API token generation requires a production secrets service before it can be enabled.');
+      setToast({ type: 'error', message: 'API token generation requires a production secrets service before it can be enabled.' });
       return;
     }
     const randomHex = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
@@ -109,34 +113,36 @@ export default function SettingsPage() {
       setSeedingSuccess(true);
     } catch (err) {
       console.error(err);
-      alert('Error seeding local demo data: ' + (err instanceof Error ? err.message : String(err)));
+      setToast({ type: 'error', message: 'Error seeding local demo data: ' + (err instanceof Error ? err.message : String(err)) });
     } finally {
       setSeedingLoading(false);
     }
   };
 
-  const handleLocalReset = async () => {
-    if (!confirm('Are you sure you want to reset the database? This will clear all current demo data.')) {
-      return;
-    }
-    setResetLoading(true);
-    setResetSuccess(false);
-    setSeedingSuccess(false);
-    try {
-      await resetDemoData();
-
-      // Also reset session state to original
-      localStorage.removeItem('vigilen_session_user');
-      localStorage.removeItem('vigilen_session_org');
-
-      await refreshSession();
-      setResetSuccess(true);
-    } catch (err) {
-      console.error(err);
-      alert('Error resetting local data: ' + (err instanceof Error ? err.message : String(err)));
-    } finally {
-      setResetLoading(false);
-    }
+  const handleLocalReset = () => {
+    setConfirmRequest({
+      title: 'Reset to Default Sandbox',
+      description: 'Are you sure you want to reset the database? This will clear all current demo data.',
+      confirmLabel: 'Reset Data',
+      tone: 'danger',
+      onConfirm: async () => {
+        setResetLoading(true);
+        setResetSuccess(false);
+        setSeedingSuccess(false);
+        try {
+          await resetDemoData();
+          localStorage.removeItem('vigilen_session_user');
+          localStorage.removeItem('vigilen_session_org');
+          await refreshSession();
+          setResetSuccess(true);
+        } catch (err) {
+          console.error(err);
+          setToast({ type: 'error', message: 'Error resetting local data: ' + (err instanceof Error ? err.message : String(err)) });
+        } finally {
+          setResetLoading(false);
+        }
+      }
+    });
   };
 
   return (
@@ -601,10 +607,10 @@ export default function SettingsPage() {
                 {resetLoading ? 'Resetting...' : 'Reset to Default Sandbox'}
               </button>
             </div>
-            {seedingSuccess && (
+             {seedingSuccess && (
               <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>Seeding complete! 1,800+ demo compliance logs successfully loaded.</span>
+                <span>Seeding complete! 2,100+ demo compliance logs successfully loaded.</span>
               </p>
             )}
             {resetSuccess && (
@@ -617,6 +623,8 @@ export default function SettingsPage() {
         </div>
       )}
 
+      <ConfirmDialog request={confirmRequest} onCancel={() => setConfirmRequest(null)} />
+      <InlineToast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }

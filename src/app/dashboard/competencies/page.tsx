@@ -746,7 +746,7 @@ export default function CompetencyMatrixPage() {
     }
   };
 
-  const applyPeopleBulkUpdate = async () => {
+  const applyPeopleBulkUpdate = () => {
     if (selectedBulkPeople.length === 0) return;
     const updates: Partial<Person> = {};
     if (bulkPersonActive === 'active') updates.active = true;
@@ -758,127 +758,155 @@ export default function CompetencyMatrixPage() {
       setBulkMessage('Choose at least one people bulk edit value before applying.');
       return;
     }
-    if (!window.confirm(`Apply changes to ${selectedBulkPeople.length} people? Existing person update logging will be used.`)) return;
-    setLastPeopleUndo({ label: 'Undo people bulk edit', people: selectedBulkPeople });
-    try {
-      for (const person of selectedBulkPeople) {
-        await upsertPerson({
-          id: person.id,
-          first_name: person.first_name,
-          last_name: person.last_name,
-          display_name: person.display_name,
-          employee_number: person.employee_number || null,
-          email: person.email || null,
-          department: person.department || null,
-          role: person.role || null,
-          person_type: person.person_type,
-          active: person.active,
-          start_date: person.start_date || null,
-          end_date: person.end_date || null,
-          notes: person.notes || null,
-          ...updates
-        });
-      }
-      peopleSelection.clearSelection();
-      setBulkPersonActive('');
-      setBulkPersonDepartment('');
-      setBulkPersonRole('');
-      setBulkPersonType('');
-      setBulkMessage(`Updated ${selectedBulkPeople.length} people.`);
-    } catch (error) {
-      setBulkMessage(error instanceof Error ? error.message : 'Bulk people update failed.');
-    }
-  };
-
-  const undoPeopleBulkUpdate = async () => {
-    if (!lastPeopleUndo) return;
-    if (!window.confirm(`Restore previous values for ${lastPeopleUndo.people.length} people?`)) return;
-    try {
-      for (const person of lastPeopleUndo.people) {
-        await upsertPerson({
-          id: person.id,
-          first_name: person.first_name,
-          last_name: person.last_name,
-          display_name: person.display_name,
-          employee_number: person.employee_number || null,
-          email: person.email || null,
-          department: person.department || null,
-          role: person.role || null,
-          person_type: person.person_type,
-          active: person.active,
-          start_date: person.start_date || null,
-          end_date: person.end_date || null,
-          notes: person.notes || null
-        });
-      }
-      setLastPeopleUndo(null);
-      setBulkMessage('Previous people values restored.');
-    } catch (error) {
-      setBulkMessage(error instanceof Error ? error.message : 'People undo failed.');
-    }
-  };
-
-  const applyWorkspaceCompetencyStatus = async () => {
-    if (!selectedPerson || selectedWorkspaceRows.length === 0 || !bulkWorkspaceStatus) return;
-    if (!window.confirm(`Mark ${selectedWorkspaceRows.length} competency record(s) as ${bulkWorkspaceStatus} for ${selectedPerson.display_name}?`)) return;
-    setLastCompetencyUndo({
-      label: 'Undo person competency bulk edit',
-      rows: selectedWorkspaceRows.map(row => ({ typeId: row.type.id, record: row.cell?.record || null }))
-    });
-    try {
-      for (const row of selectedWorkspaceRows) {
-        await upsertCompetencyRecord({
-          id: row.cell?.record?.id,
-          person_id: selectedPerson.id,
-          competency_type_id: row.type.id,
-          status: bulkWorkspaceStatus as CompetencyStatus,
-          completed_date: row.cell?.record?.completed_date || null,
-          expiry_date: row.cell?.record?.expiry_date || null,
-          trainer: row.cell?.record?.trainer || null,
-          provider: row.cell?.record?.provider || null,
-          certificate_number: row.cell?.record?.certificate_number || null,
-          notes: row.cell?.record?.notes || null
-        });
-      }
-      workspaceSelection.clearSelection();
-      setBulkWorkspaceStatus('');
-      setBulkMessage(`Updated ${selectedWorkspaceRows.length} competency record(s).`);
-    } catch (error) {
-      setBulkMessage(error instanceof Error ? error.message : 'Bulk competency status update failed.');
-    }
-  };
-
-  const undoWorkspaceCompetencyStatus = async () => {
-    if (!selectedPerson || !lastCompetencyUndo) return;
-    if (!window.confirm(`Restore previous competency values for ${lastCompetencyUndo.rows.length} row(s)?`)) return;
-    try {
-      for (const row of lastCompetencyUndo.rows) {
-        if (row.record) {
-          await upsertCompetencyRecord({
-            id: row.record.id,
-            person_id: row.record.person_id,
-            competency_type_id: row.record.competency_type_id,
-            status: row.record.status,
-            completed_date: row.record.completed_date || null,
-            expiry_date: row.record.expiry_date || null,
-            trainer: row.record.trainer || null,
-            provider: row.record.provider || null,
-            certificate_number: row.record.certificate_number || null,
-            notes: row.record.notes || null
-          });
-        } else {
-          await upsertCompetencyRecord({
-            person_id: selectedPerson.id,
-            competency_type_id: row.typeId,
-            status: 'Missing'
-          });
+    setConfirmRequest({
+      title: 'Bulk Update Personnel',
+      description: `Apply changes to ${selectedBulkPeople.length} people? Existing person update logging will be used.`,
+      confirmLabel: 'Apply Changes',
+      tone: 'primary',
+      onConfirm: async () => {
+        setLastPeopleUndo({ label: 'Undo people bulk edit', people: selectedBulkPeople });
+        try {
+          for (const person of selectedBulkPeople) {
+            await upsertPerson({
+              id: person.id,
+              first_name: person.first_name,
+              last_name: person.last_name,
+              display_name: person.display_name,
+              employee_number: person.employee_number || null,
+              email: person.email || null,
+              department: person.department || null,
+              role: person.role || null,
+              person_type: person.person_type,
+              active: person.active,
+              start_date: person.start_date || null,
+              end_date: person.end_date || null,
+              notes: person.notes || null,
+              ...updates
+            });
+          }
+          peopleSelection.clearSelection();
+          setBulkPersonActive('');
+          setBulkPersonDepartment('');
+          setBulkPersonRole('');
+          setBulkPersonType('');
+          setBulkMessage(`Updated ${selectedBulkPeople.length} people.`);
+        } catch (error) {
+          setBulkMessage(error instanceof Error ? error.message : 'Bulk people update failed.');
         }
       }
-      setLastCompetencyUndo(null);
-      setBulkMessage('Previous competency values restored.');
-    } catch (error) {
-      setBulkMessage(error instanceof Error ? error.message : 'Competency undo failed.');
-    }
+    });
+  };
+
+  const undoPeopleBulkUpdate = () => {
+    if (!lastPeopleUndo) return;
+    setConfirmRequest({
+      title: 'Undo Personnel Bulk Edit',
+      description: `Restore previous values for ${lastPeopleUndo.people.length} people?`,
+      confirmLabel: 'Restore Values',
+      tone: 'warning',
+      onConfirm: async () => {
+        try {
+          for (const person of lastPeopleUndo.people) {
+            await upsertPerson({
+              id: person.id,
+              first_name: person.first_name,
+              last_name: person.last_name,
+              display_name: person.display_name,
+              employee_number: person.employee_number || null,
+              email: person.email || null,
+              department: person.department || null,
+              role: person.role || null,
+              person_type: person.person_type,
+              active: person.active,
+              start_date: person.start_date || null,
+              end_date: person.end_date || null,
+              notes: person.notes || null
+            });
+          }
+          setLastPeopleUndo(null);
+          setBulkMessage('Previous people values restored.');
+        } catch (error) {
+          setBulkMessage(error instanceof Error ? error.message : 'People undo failed.');
+        }
+      }
+    });
+  };
+
+  const applyWorkspaceCompetencyStatus = () => {
+    if (!selectedPerson || selectedWorkspaceRows.length === 0 || !bulkWorkspaceStatus) return;
+    setConfirmRequest({
+      title: 'Bulk Update Competency Status',
+      description: `Mark ${selectedWorkspaceRows.length} competency record(s) as ${bulkWorkspaceStatus} for ${selectedPerson.display_name}?`,
+      confirmLabel: 'Update Status',
+      tone: 'primary',
+      onConfirm: async () => {
+        setLastCompetencyUndo({
+          label: 'Undo person competency bulk edit',
+          rows: selectedWorkspaceRows.map(row => ({ typeId: row.type.id, record: row.cell?.record || null }))
+        });
+        try {
+          for (const row of selectedWorkspaceRows) {
+            await upsertCompetencyRecord({
+              id: row.cell?.record?.id,
+              person_id: selectedPerson.id,
+              competency_type_id: row.type.id,
+              status: bulkWorkspaceStatus as CompetencyStatus,
+              completed_date: row.cell?.record?.completed_date || null,
+              expiry_date: row.cell?.record?.expiry_date || null,
+              trainer: row.cell?.record?.trainer || null,
+              provider: row.cell?.record?.provider || null,
+              certificate_number: row.cell?.record?.certificate_number || null,
+              notes: row.cell?.record?.notes || null
+            });
+          }
+          workspaceSelection.clearSelection();
+          setBulkWorkspaceStatus('');
+          setBulkMessage(`Updated ${selectedWorkspaceRows.length} competency record(s).`);
+        } catch (error) {
+          setBulkMessage(error instanceof Error ? error.message : 'Bulk competency status update failed.');
+        }
+      }
+    });
+  };
+
+  const undoWorkspaceCompetencyStatus = () => {
+    if (!selectedPerson || !lastCompetencyUndo) return;
+    setConfirmRequest({
+      title: 'Undo Competency Bulk Edit',
+      description: `Restore previous competency values for ${lastCompetencyUndo.rows.length} row(s)?`,
+      confirmLabel: 'Restore Values',
+      tone: 'warning',
+      onConfirm: async () => {
+        try {
+          for (const row of lastCompetencyUndo.rows) {
+            if (row.record) {
+              await upsertCompetencyRecord({
+                id: row.record.id,
+                person_id: row.record.person_id,
+                competency_type_id: row.record.competency_type_id,
+                status: row.record.status,
+                completed_date: row.record.completed_date || null,
+                expiry_date: row.record.expiry_date || null,
+                trainer: row.record.trainer || null,
+                provider: row.record.provider || null,
+                certificate_number: row.record.certificate_number || null,
+                notes: row.record.notes || null
+              });
+            } else {
+              await upsertCompetencyRecord({
+                person_id: selectedPerson.id,
+                competency_type_id: row.typeId,
+                status: 'Missing'
+              });
+            }
+          }
+          setLastCompetencyUndo(null);
+          setBulkMessage('Previous competency values restored.');
+        } catch (error) {
+          setBulkMessage(error instanceof Error ? error.message : 'Competency undo failed.');
+        }
+      }
+    });
   };
 
   const [newPerson, setNewPerson] = useState({
@@ -1132,10 +1160,8 @@ export default function CompetencyMatrixPage() {
     }
   };
 
-  const handleMarkNotRequired = async () => {
+  const executeMarkNotRequired = async (notesVal?: string) => {
     if (!activeCell) return;
-    const confirmed = window.confirm('Mark this competency as not required for this person? The record is retained for history.');
-    if (!confirmed) return;
     const saved = await upsertCompetencyRecord({
       id: activeCell.record?.id,
       person_id: activeCell.person.id,
@@ -1146,18 +1172,33 @@ export default function CompetencyMatrixPage() {
       provider: activeCell.record?.provider || null,
       certificate_number: activeCell.record?.certificate_number || null,
       status: 'Not Required',
-      notes: recordForm.notes || activeCell.record?.notes || null
+      notes: notesVal || recordForm.notes || activeCell.record?.notes || null
     });
     setActiveCell({ ...activeCell, record: saved });
     setRecordForm({ ...recordForm, status: 'Not Required' });
     setFormMessage('Competency marked as not required.');
   };
 
-  const handleArchiveFromPerson = async () => {
+  const handleMarkNotRequired = () => {
     if (!activeCell) return;
-    const confirmed = window.confirm('Remove this competency from the active person view?\n\nThis keeps history by marking the competency record as Not Required.');
-    if (!confirmed) return;
-    await handleMarkNotRequired();
+    setConfirmRequest({
+      title: 'Mark Competency Not Required',
+      description: 'Mark this competency as not required for this person? The record is retained for history.',
+      confirmLabel: 'Mark Not Required',
+      tone: 'warning',
+      onConfirm: () => executeMarkNotRequired()
+    });
+  };
+
+  const handleArchiveFromPerson = () => {
+    if (!activeCell) return;
+    setConfirmRequest({
+      title: 'Remove Competency View',
+      description: 'Remove this competency from the active person view?\n\nThis keeps history by marking the competency record as Not Required.',
+      confirmLabel: 'Remove View',
+      tone: 'warning',
+      onConfirm: () => executeMarkNotRequired()
+    });
   };
 
   const handleCreateGapAction = async () => {
