@@ -55,16 +55,19 @@ import {
 export type ThemePreference = 'light' | 'midtone' | 'dark';
 export type VygilenceTheme = 'sentinel' | 'obsidian' | 'emerald-watch' | 'amber-beacon' | 'arc-reactor' | 'iron-ledger' | 'vanguard';
 export type InterfaceStyle = 'focused' | 'balanced' | 'command-centre' | 'executive';
+export type InterfaceDetailLevel = 'focused' | 'advanced';
 
 interface AppContextType {
   theme: ThemePreference;
   themePreference: ThemePreference;
   vygilenceTheme: VygilenceTheme;
   interfaceStyle: InterfaceStyle;
+  interfaceDetailLevel: InterfaceDetailLevel;
   toggleTheme: () => void;
   setThemePreference: (pref: ThemePreference) => void;
   setVygilenceTheme: (theme: VygilenceTheme) => void;
   setInterfaceStyle: (style: InterfaceStyle) => void;
+  setInterfaceDetailLevel: (level: InterfaceDetailLevel) => void;
 
   authUser: User | null;
   user: Profile | null;
@@ -262,6 +265,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [themePreference, setThemePreferenceState] = useState<ThemePreference>('dark');
   const [vygilenceTheme, setVygilenceThemeState] = useState<VygilenceTheme>('sentinel');
   const [interfaceStyle, setInterfaceStyleState] = useState<InterfaceStyle>('balanced');
+  const [interfaceDetailLevel, setInterfaceDetailLevelState] = useState<InterfaceDetailLevel>('advanced');
   const theme = themePreference;
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [user, setUser] = useState<Profile | null>(null);
@@ -376,9 +380,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       const storedStyle = localStorage.getItem(`vygilence_interface_style_${user.id}`) || 'balanced';
       setInterfaceStyleState(storedStyle as InterfaceStyle);
+
+      const detailLevelKey = `vygilence_detail_level_${user.id}_${organization.id}`;
+      const storedDetailLevel = localStorage.getItem(detailLevelKey);
+      if (storedDetailLevel === 'focused' || storedDetailLevel === 'advanced') {
+        setInterfaceDetailLevelState(storedDetailLevel as InterfaceDetailLevel);
+      } else {
+        setInterfaceDetailLevelState('advanced');
+      }
     } catch (error) {
       console.warn('Unable to load local appearance preferences.', error);
       setThemePreferenceState('dark');
+      setInterfaceDetailLevelState('advanced');
     }
   }, [organization, user]);
 
@@ -392,7 +405,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     root.dataset.theme = vygilenceTheme;
     root.dataset.style = interfaceStyle;
-  }, [theme, vygilenceTheme, interfaceStyle]);
+    root.dataset.detailLevel = interfaceDetailLevel;
+  }, [theme, vygilenceTheme, interfaceStyle, interfaceDetailLevel]);
 
   const loadWorkspaceCollections = async () => {
     const [
@@ -617,6 +631,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setInterfaceStyleState(s);
     const userId = user?.id || 'guest';
     localStorage.setItem(`vygilence_interface_style_${userId}`, s);
+  };
+
+  const setInterfaceDetailLevel = (level: InterfaceDetailLevel) => {
+    setInterfaceDetailLevelState(level);
+    if (typeof window === 'undefined' || !user || !organization) return;
+    try {
+      localStorage.setItem(`vygilence_detail_level_${user.id}_${organization.id}`, level);
+    } catch (error) {
+      console.warn('Unable to persist interface detail level preference.', error);
+    }
   };
 
   const toggleTheme = () => {
@@ -1265,10 +1289,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         themePreference,
         vygilenceTheme,
         interfaceStyle,
+        interfaceDetailLevel,
         toggleTheme,
         setThemePreference,
         setVygilenceTheme,
         setInterfaceStyle,
+        setInterfaceDetailLevel,
         authUser,
         user,
         organization,
@@ -1381,5 +1407,13 @@ export function useCurrentOrganization() {
     organization,
     hasOrganization,
     isLoading
+  };
+}
+
+export function useInterfaceDetailLevel() {
+  const { interfaceDetailLevel, setInterfaceDetailLevel } = useApp();
+  return {
+    interfaceDetailLevel,
+    setInterfaceDetailLevel
   };
 }

@@ -12,9 +12,11 @@ export default function SettingsPage() {
     themePreference,
     vygilenceTheme,
     interfaceStyle,
+    interfaceDetailLevel,
     setThemePreference,
     setVygilenceTheme,
     setInterfaceStyle,
+    setInterfaceDetailLevel,
     refreshSession,
     resetDemoData
   } = useApp();
@@ -497,6 +499,41 @@ export default function SettingsPage() {
                   );
                 })}
               </div>
+            </div>
+
+            {/* Interface Detail Level */}
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-2">Interface Detail Level</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {(['focused', 'advanced'] as const).map(option => {
+                  const levelNames = {
+                    focused: 'Focused View',
+                    advanced: 'Advanced View'
+                  };
+                  const levelDescs = {
+                    focused: 'Cleaner screens with advanced filters and tools available when needed.',
+                    advanced: 'Keep filters, saved views, columns and power tools visible.'
+                  };
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setInterfaceDetailLevel(option)}
+                      className={`flex flex-col p-3.5 rounded-lg border text-left transition-all text-xs cursor-pointer ${
+                        interfaceDetailLevel === option
+                          ? 'bg-indigo-500/5 border-indigo-650 ring-1 ring-indigo-650'
+                          : 'bg-muted/30 border-border hover:bg-muted/50 hover:border-border-hover'
+                      }`}
+                    >
+                      <span className="font-extrabold text-[12px] text-foreground capitalize">{levelNames[option]}</span>
+                      <span className="text-[10px] text-muted-foreground mt-1 leading-normal">{levelDescs[option]}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-2 leading-normal">
+                💡 Note: Focused View simplifies layouts by hiding secondary elements under a unified control, but retains 100% of the app's functionality.
+              </p>
             </div>
           </div>
 
