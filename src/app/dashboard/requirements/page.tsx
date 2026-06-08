@@ -50,6 +50,7 @@ const riskOptions: Requirement['risk_level'][] = ['Low', 'Medium', 'High', 'Crit
 const frequencyOptions: Requirement['review_frequency'][] = ['Weekly', 'Monthly', 'Quarterly', 'Annually', 'Custom'];
 const requirementStatusOptions: RequirementStatus[] = ['GREEN', 'AMBER', 'RED', 'GREY'];
 type RequirementView = 'active' | 'archive' | 'inactive' | 'actions';
+type DetailTab = 'overview' | 'evidence' | 'actions' | 'competencies' | 'history';
 
 const lifecycleLabel = (status?: RequirementLifecycleStatus) => status || 'ACTIVE';
 
@@ -293,6 +294,17 @@ export default function RequirementsPage() {
     }
   }, [globalDensity, requirementsViewStateKey]);
   const [selectedRequirement, setSelectedRequirement] = useState<Requirement | null>(null);
+  const [detailTab, setDetailTab] = useState<DetailTab>('overview');
+
+  // Detail layout preference: 'tabbed' shows one section at a time, 'full' shows all sections scrolling
+  const detailLayoutKey = `vygilence_detail_layout_${user?.id || 'anon'}_${organization?.id || 'default'}`;
+  const [detailLayout, setDetailLayout] = useState<'tabbed' | 'full'>(() => {
+    if (typeof window === 'undefined') return 'tabbed';
+    try { return (localStorage.getItem(detailLayoutKey) as 'tabbed' | 'full') || 'tabbed'; } catch { return 'tabbed'; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(detailLayoutKey, detailLayout); } catch { /* no-op */ }
+  }, [detailLayout, detailLayoutKey]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedPackId, setSelectedPackId] = useState(REQUIREMENT_TEMPLATE_PACKS[0]?.id || '');
@@ -374,6 +386,7 @@ export default function RequirementsPage() {
 
   const selectRequirement = (req: Requirement | null) => {
     setSelectedRequirement(req);
+    setDetailTab('overview');
     setShowAddActionForm(false);
     setActionTitle('');
     setActionDescription('');
@@ -2252,22 +2265,76 @@ export default function RequirementsPage() {
         <div className="bg-card border border-border rounded-xl p-6 shadow-sm sticky top-24">
           {selectedAssessed ? (
             <div className="space-y-6">
-              <div className="flex justify-between items-start border-b border-border/60 pb-4">
-                <div className="space-y-1">
+              <div className="flex justify-between items-start border-b border-border/60 pb-3">
+                <div className="space-y-1 min-w-0">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Requirement Detail</span>
-                  <h2 className="text-base font-extrabold">{selectedAssessed.title}</h2>
+                  <h2 className="text-base font-extrabold truncate">{selectedAssessed.title}</h2>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={() => openEditRequirement(selectedAssessed)}
                     className="px-2.5 py-1.5 bg-muted hover:bg-muted/80 border border-border rounded-md text-[10px] font-bold"
                   >
-                    Edit Requirement
+                    Edit
                   </button>
                   <button onClick={() => selectRequirement(null)} className="p-1 hover:bg-muted rounded">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
+              </div>
+
+              {/* Detail Tab Bar */}
+              <div className="flex items-center gap-1 border-b border-border/40 -mx-6 px-6 pb-0">
+                <div className="flex items-center gap-0.5 overflow-x-auto scrollbar-none flex-1">
+                  {([
+                    ['overview', 'Overview', null] as const,
+                    ['evidence', 'Evidence', (() => {
+                      const cov = selectedReadiness?.evidenceCoverage;
+                      if (!cov) return null;
+                      return cov.status === 'Fully Covered' ? '✓' : `${cov.coveredRequired}/${cov.totalRequired}`;
+                    })()] as const,
+                    ['actions', 'Actions', selectedActions.length > 0 ? String(activeActions.length) : null] as const,
+                    ['competencies', 'Competencies', selectedCompetencyTypes.length > 0 ? String(selectedCompetencyTypes.length) : null] as const,
+                    ['history', 'History', selectedReviews.length > 0 ? String(selectedReviews.length) : null] as const,
+                  ]).map(([tab, label, badge]) => (
+                    <button
+                      key={tab}
+                      onClick={() => setDetailTab(tab)}
+                      className={`relative px-2.5 py-2 text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                        detailTab === tab && detailLayout === 'tabbed'
+                          ? 'text-indigo-600 dark:text-indigo-400'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1">
+                        {label}
+                        {badge && (
+                          <span className={`inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[8px] font-bold rounded-full leading-none ${
+                            badge === '✓'
+                              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                              : 'bg-muted text-muted-foreground'
+                          }`}>
+                            {badge}
+                          </span>
+                        )}
+                      </span>
+                      {detailTab === tab && detailLayout === 'tabbed' && (
+                        <span className="absolute bottom-0 left-1 right-1 h-[2px] bg-indigo-600 dark:bg-indigo-400 rounded-full" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setDetailLayout(prev => prev === 'tabbed' ? 'full' : 'tabbed')}
+                  title={detailLayout === 'tabbed' ? 'Show all sections' : 'Show tabbed view'}
+                  className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors shrink-0 cursor-pointer"
+                >
+                  {detailLayout === 'tabbed' ? (
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg>
+                  ) : (
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /></svg>
+                  )}
+                </button>
               </div>
 
               {(editError || editSuccess) && (
@@ -2280,6 +2347,8 @@ export default function RequirementsPage() {
                 </div>
               )}
 
+              {(detailLayout === 'full' || detailTab === 'overview') && (
+              <>
               {isEditingRequirement ? (
                 <form onSubmit={handleSaveRequirementEdit} className="p-3 bg-muted/30 border border-border/70 rounded-lg space-y-3 text-[11px]">
                   <div>
@@ -2435,7 +2504,11 @@ export default function RequirementsPage() {
                   </button>
                 </div>
               </div>
+              </>
+              )}
 
+              {(detailLayout === 'full' || detailTab === 'evidence') && (
+              <>
               <div className="border-t border-border/60 pt-4 space-y-3">
                 <div>
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Evidence Coverage</span>
@@ -2590,7 +2663,11 @@ export default function RequirementsPage() {
                   </button>
                 </div>
               </div>
+              </>
+              )}
 
+              {(detailLayout === 'full' || detailTab === 'competencies') && (
+              <>
               <div className="border-t border-border/60 pt-4 space-y-3">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Linked Competency Types</span>
                 {selectedCompetencyTypes.length === 0 ? (
@@ -2634,7 +2711,11 @@ export default function RequirementsPage() {
                   </button>
                 </div>
               </div>
+              </>
+              )}
 
+              {(detailLayout === 'full' || detailTab === 'actions') && (
+              <>
               <div className="border-t border-border/60 pt-4 space-y-4">
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Requirement Actions</span>
@@ -2750,7 +2831,11 @@ export default function RequirementsPage() {
                   )}
                 </div>
               </div>
+              </>
+              )}
 
+              {(detailLayout === 'full' || detailTab === 'history') && (
+              <>
               <div className="border-t border-border/60 pt-4 space-y-3">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Review History</span>
                 {selectedReviews.length === 0 ? (
@@ -2782,6 +2867,8 @@ export default function RequirementsPage() {
                 <span className="font-bold uppercase tracking-widest block pt-2">Notes</span>
                 <p>Notes are captured through review entries and action descriptions.</p>
               </div>
+              </>
+              )}
             </div>
           ) : (
             <div className="h-96 flex flex-col items-center justify-center text-center text-muted-foreground gap-3 border border-dashed border-border rounded-xl bg-muted/10 p-6">
