@@ -2262,9 +2262,9 @@ export default function RequirementsPage() {
         </div>
         </div>
 
-        <div className="bg-card border border-border rounded-xl p-6 shadow-sm sticky top-24">
+        <div className="bg-card border border-border rounded-xl p-6 shadow-sm sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto">
           {selectedAssessed ? (
-            <div className="space-y-6">
+            <div className={detailLayout === 'tabbed' ? 'space-y-3' : 'space-y-6'}>
               <div className="flex justify-between items-start border-b border-border/60 pb-3">
                 <div className="space-y-1 min-w-0">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Requirement Detail</span>
@@ -2272,7 +2272,7 @@ export default function RequirementsPage() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
-                    onClick={() => openEditRequirement(selectedAssessed)}
+                    onClick={() => { openEditRequirement(selectedAssessed); setDetailTab('overview'); }}
                     className="px-2.5 py-1.5 bg-muted hover:bg-muted/80 border border-border rounded-md text-[10px] font-bold"
                   >
                     Edit
@@ -2509,7 +2509,7 @@ export default function RequirementsPage() {
 
               {(detailLayout === 'full' || detailTab === 'evidence') && (
               <>
-              <div className="border-t border-border/60 pt-4 space-y-3">
+              <div className={`space-y-3 ${detailLayout === 'full' ? 'border-t border-border/60 pt-4' : 'pt-2'}`}>
                 <div>
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Evidence Coverage</span>
                   <p className="text-xs font-bold mt-1">{selectedReadiness?.evidenceCoverage.summary || 'Not assessed'}</p>
@@ -2599,6 +2599,7 @@ export default function RequirementsPage() {
                               setActionTitle(`Provide evidence for: ${result.criterion.title}`);
                               setActionDescription(`Evidence criterion "${result.criterion.title}" is not covered.`);
                               setShowAddActionForm(true);
+                              setDetailTab('actions');
                             }}
                             className="text-[10px] text-indigo-500 font-bold hover:underline"
                           >
@@ -2668,7 +2669,7 @@ export default function RequirementsPage() {
 
               {(detailLayout === 'full' || detailTab === 'competencies') && (
               <>
-              <div className="border-t border-border/60 pt-4 space-y-3">
+              <div className={`space-y-3 ${detailLayout === 'full' ? 'border-t border-border/60 pt-4' : 'pt-2'}`}>
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Linked Competency Types</span>
                 {selectedCompetencyTypes.length === 0 ? (
                   <p className="text-[10px] text-muted-foreground italic">No competency types linked to this requirement.</p>
@@ -2716,7 +2717,7 @@ export default function RequirementsPage() {
 
               {(detailLayout === 'full' || detailTab === 'actions') && (
               <>
-              <div className="border-t border-border/60 pt-4 space-y-4">
+              <div className={`space-y-4 ${detailLayout === 'full' ? 'border-t border-border/60 pt-4' : 'pt-2'}`}>
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Requirement Actions</span>
                   <button
@@ -2836,7 +2837,7 @@ export default function RequirementsPage() {
 
               {(detailLayout === 'full' || detailTab === 'history') && (
               <>
-              <div className="border-t border-border/60 pt-4 space-y-3">
+              <div className={`space-y-3 ${detailLayout === 'full' ? 'border-t border-border/60 pt-4' : 'pt-2'}`}>
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Review History</span>
                 {selectedReviews.length === 0 ? (
                   <p className="text-[10px] text-muted-foreground italic">No reviews recorded.</p>
