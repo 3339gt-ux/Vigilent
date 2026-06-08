@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { useApp } from '@/context/AppContext';
+import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
+import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
 import { MatrixCell, ComplianceRequirement, EvidenceDocument, CellStatus } from '@/lib/types';
 import { isDemoMode } from '@/lib/env';
 import { exportCsv, exportDateStamp, ExportRow } from '@/lib/exportData';
@@ -68,6 +69,19 @@ export default function EvidenceMatrix() {
   // Layout states
   const [density, setDensity] = useState<'comfortable' | 'compact'>('comfortable');
   const [showFilters, setShowFilters] = useState(false);
+  const { interfaceDetailLevel } = useInterfaceDetailLevel();
+
+  const activeFiltersCount = useMemo(() => {
+    return [
+      selectedCategory !== 'All',
+      selectedTargetType !== 'All',
+      statusFilter !== 'All',
+      targetNameFilter !== 'All',
+      showOnlyGaps,
+      showOnlyStarredReqs,
+      showHiddenRows
+    ].filter(Boolean).length;
+  }, [selectedCategory, selectedTargetType, statusFilter, targetNameFilter, showOnlyGaps, showOnlyStarredReqs, showHiddenRows]);
 
   // Modal State for Cell Editing
   const [activeCell, setActiveCell] = useState<MatrixCell | null>(null);
@@ -656,167 +670,337 @@ export default function EvidenceMatrix() {
 
       {/* Filter Ribbon */}
       <div className="bg-card border border-border p-3 rounded-xl space-y-2.5 shadow-xs">
-        <div className="flex flex-col md:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              value={search}
-              onChange={event => setSearch(event.target.value)}
-              placeholder="Search requirements by title, description..."
-              className="w-full pl-9 pr-3 py-2 bg-muted border border-border rounded-lg text-xs outline-none text-foreground placeholder-muted-foreground"
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2 items-center">
-            <button
-              type="button"
-              onClick={() => setShowFilters(!showFilters)}
-              className={`px-3 py-2 border rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                showFilters || filterChips.length > 0
-                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-950/30 dark:border-indigo-900/50 dark:text-indigo-400'
-                  : 'bg-muted hover:bg-muted/80 border-border text-foreground'
-              }`}
-            >
-              Filters {(filterChips.length > 0) && <span className="bg-indigo-650 text-white dark:bg-indigo-600 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold">{filterChips.length}</span>}
-            </button>
-
-            <button
-              type="button"
-              disabled={hiddenMatrixRowIds.size === 0}
-              onClick={() => setShowHiddenRows(!showHiddenRows)}
-              className={`px-3 py-2 border rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                showHiddenRows
-                  ? 'bg-amber-500/10 border-amber-500/25 text-amber-700 dark:text-amber-400'
-                  : 'bg-muted hover:bg-muted/80 border-border text-foreground'
-              }`}
-            >
-              <span>Hidden rows ({hiddenMatrixRowIds.size})</span>
-            </button>
-
-            {hiddenMatrixRowIds.size > 0 && (
-              <button
-                type="button"
-                onClick={handleRestoreAllHiddenRows}
-                className="px-3 py-2 bg-muted hover:bg-rose-500/10 text-muted-foreground hover:text-rose-600 border border-border rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
-              >
-                Restore all hidden
-              </button>
-            )}
-
-            <DensityControls
-              density={density}
-              onDensityChange={setDensity}
-              globalDensity={globalDensity}
-              onGlobalDensityChange={nextDensity => {
-                setGlobalDensity(nextDensity);
-                setDensity(nextDensity);
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Collapsible advanced filters */}
-        {showFilters && (
-          <div className="border-t border-border/60 pt-3 mt-3 space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-              <StarredFilterSelect
-                label="Category"
-                value={selectedCategory}
-                onChange={setSelectedCategory}
-                options={['All', ...sortedCategories]}
-                isStarred={(opt) => isFavourite(`cat:${opt}`)}
-                onToggleStar={(opt) => toggleFavourite(`cat:${opt}`, opt, 'Category')}
-                allLabel="All Categories"
-              />
-              <StarredFilterSelect
-                label="Asset"
-                value={targetNameFilter}
-                onChange={setTargetNameFilter}
-                options={['All', ...sortedTargets]}
-                isStarred={(opt) => isFavourite(`target:${opt}`)}
-                onToggleStar={(opt) => toggleFavourite(`target:${opt}`, opt, 'Target Asset')}
-                allLabel="All Assets"
-              />
-              <StarredFilterSelect
-                label="Status"
-                value={statusFilter}
-                onChange={setStatusFilter}
-                options={['All', 'Compliant', 'Expiring Soon', 'Expired', 'Missing']}
-                isStarred={(opt) => isFavourite(`status:${opt}`)}
-                onToggleStar={(opt) => toggleFavourite(`status:${opt}`, opt, 'Status')}
-              />
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Asset Type</label>
-                <select
-                  value={selectedTargetType}
-                  onChange={event => setSelectedTargetType(event.target.value)}
-                  className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+        {interfaceDetailLevel === 'focused' ? (
+          // FOCUSED VIEW LAYOUT
+          <>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2 w-full">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    value={search}
+                    onChange={event => setSearch(event.target.value)}
+                    placeholder="Search requirements by title, description..."
+                    className="w-full pl-9 pr-3 py-2 bg-muted border border-border rounded-lg text-xs outline-none text-foreground placeholder-muted-foreground"
+                  />
+                </div>
+                <FiltersAndToolsButton
+                  isOpen={showFilters}
+                  onClick={() => setShowFilters(!showFilters)}
+                  activeFiltersCount={activeFiltersCount}
+                  onClearFilters={handleResetFilters}
+                />
+                {hiddenMatrixRowIds.size > 0 && (
+                  <div className="flex items-center gap-1 text-xs font-bold px-2 py-1 bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 rounded-lg shrink-0">
+                    <span className="text-[11px] text-amber-700 dark:text-amber-400">Hidden rows · {hiddenMatrixRowIds.size}</span>
+                    <button
+                      type="button"
+                      onClick={handleRestoreAllHiddenRows}
+                      className="text-[11px] text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 font-extrabold cursor-pointer focus:underline ml-1.5"
+                    >
+                      Restore all
+                    </button>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => exportMatrix('filtered')}
+                  className="px-3 py-2 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground text-xs flex items-center gap-1.5 cursor-pointer shrink-0 ml-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
                 >
-                  <option value="All">All Types</option>
-                  <option value="Vehicle">Vehicle</option>
-                  <option value="Personnel">Personnel / Driver</option>
-                  <option value="Facility">Facility</option>
-                </select>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export</span>
+                </button>
               </div>
             </div>
 
-            {/* Quick Toggle Checkboxes */}
-            <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-border/40 text-xs">
-              <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showOnlyGaps}
-                  onChange={e => setShowOnlyGaps(e.target.checked)}
-                  className="accent-indigo-650 w-3.5 h-3.5"
+            <AdvancedControlsPanel isOpen={showFilters} onClose={() => setShowFilters(false)}>
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={hiddenMatrixRowIds.size === 0}
+                      onClick={() => setShowHiddenRows(!showHiddenRows)}
+                      className={`px-3 py-2 border rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                        showHiddenRows
+                          ? 'bg-amber-500/10 border-amber-500/25 text-amber-700 dark:text-amber-400'
+                          : 'bg-muted hover:bg-muted/80 border-border text-foreground'
+                      }`}
+                    >
+                      <span>Show Hidden Rows ({hiddenMatrixRowIds.size})</span>
+                    </button>
+                    {hiddenMatrixRowIds.size > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleRestoreAllHiddenRows}
+                        className="px-3 py-2 bg-muted hover:bg-rose-500/10 text-muted-foreground hover:text-rose-600 border border-border rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                      >
+                        Restore all hidden
+                      </button>
+                    )}
+                  </div>
+
+                  <DensityControls
+                    density={density}
+                    onDensityChange={setDensity}
+                    globalDensity={globalDensity}
+                    onGlobalDensityChange={nextDensity => {
+                      setGlobalDensity(nextDensity);
+                      setDensity(nextDensity);
+                    }}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                  <StarredFilterSelect
+                    label="Category"
+                    value={selectedCategory}
+                    onChange={setSelectedCategory}
+                    options={['All', ...sortedCategories]}
+                    isStarred={(opt) => isFavourite(`cat:${opt}`)}
+                    onToggleStar={(opt) => toggleFavourite(`cat:${opt}`, opt, 'Category')}
+                    allLabel="All Categories"
+                  />
+                  <StarredFilterSelect
+                    label="Asset"
+                    value={targetNameFilter}
+                    onChange={setTargetNameFilter}
+                    options={['All', ...sortedTargets]}
+                    isStarred={(opt) => isFavourite(`target:${opt}`)}
+                    onToggleStar={(opt) => toggleFavourite(`target:${opt}`, opt, 'Target Asset')}
+                    allLabel="All Assets"
+                  />
+                  <StarredFilterSelect
+                    label="Status"
+                    value={statusFilter}
+                    onChange={setStatusFilter}
+                    options={['All', 'Compliant', 'Expiring Soon', 'Expired', 'Missing']}
+                    isStarred={(opt) => isFavourite(`status:${opt}`)}
+                    onToggleStar={(opt) => toggleFavourite(`status:${opt}`, opt, 'Status')}
+                  />
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Asset Type</label>
+                    <select
+                      value={selectedTargetType}
+                      onChange={event => setSelectedTargetType(event.target.value)}
+                      className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                    >
+                      <option value="All">All Types</option>
+                      <option value="Vehicle">Vehicle</option>
+                      <option value="Personnel">Personnel / Driver</option>
+                      <option value="Facility">Facility</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-border/40 text-xs">
+                  <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showOnlyGaps}
+                      onChange={e => setShowOnlyGaps(e.target.checked)}
+                      className="accent-indigo-650 w-3.5 h-3.5"
+                    />
+                    <span>Red/Amber Status Gaps only</span>
+                  </label>
+                  <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showOnlyStarredReqs}
+                      onChange={e => setShowOnlyStarredReqs(e.target.checked)}
+                      className="accent-indigo-650 w-3.5 h-3.5"
+                    />
+                    <span>Favourite Requirements only</span>
+                  </label>
+                  <label className={`flex items-center gap-2 font-semibold text-foreground cursor-pointer ${hiddenMatrixRowIds.size === 0 ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                    <input
+                      type="checkbox"
+                      disabled={hiddenMatrixRowIds.size === 0}
+                      checked={showHiddenRows}
+                      onChange={e => setShowHiddenRows(e.target.checked)}
+                      className="accent-indigo-650 w-3.5 h-3.5 disabled:cursor-not-allowed"
+                    />
+                    <span>Show hidden rows ({hiddenMatrixRowIds.size})</span>
+                  </label>
+                </div>
+
+                <SavedViewsBar
+                  views={allViews}
+                  activeViewId={activeViewId}
+                  onSelectView={handleSelectView}
+                  onSaveCurrent={handleSaveView}
+                  onDeleteCustom={deleteCustomView}
+                  isViewModified={isViewModified}
                 />
-                <span>Red/Amber Status Gaps only</span>
-              </label>
-              <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+              </div>
+            </AdvancedControlsPanel>
+          </>
+        ) : (
+          // ADVANCED VIEW LAYOUT
+          <>
+            <div className="flex flex-col md:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
-                  type="checkbox"
-                  checked={showOnlyStarredReqs}
-                  onChange={e => setShowOnlyStarredReqs(e.target.checked)}
-                  className="accent-indigo-650 w-3.5 h-3.5"
+                  value={search}
+                  onChange={event => setSearch(event.target.value)}
+                  placeholder="Search requirements by title, description..."
+                  className="w-full pl-9 pr-3 py-2 bg-muted border border-border rounded-lg text-xs outline-none text-foreground placeholder-muted-foreground"
                 />
-                <span>Favourite Requirements only</span>
-              </label>
-              <label className={`flex items-center gap-2 font-semibold text-foreground cursor-pointer ${hiddenMatrixRowIds.size === 0 ? 'opacity-40 cursor-not-allowed' : ''}`}>
-                <input
-                  type="checkbox"
+              </div>
+
+              <div className="flex flex-wrap gap-2 items-center">
+                <button
+                  type="button"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`px-3 py-2 border rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    showFilters || filterChips.length > 0
+                      ? 'bg-indigo-55 border-indigo-200 text-indigo-750 dark:bg-indigo-950/30 dark:border-indigo-900/50 dark:text-indigo-400'
+                      : 'bg-muted hover:bg-muted/80 border-border text-foreground'
+                  }`}
+                >
+                  Filters {(filterChips.length > 0) && <span className="bg-indigo-650 text-white dark:bg-indigo-600 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold">{filterChips.length}</span>}
+                </button>
+
+                <button
+                  type="button"
                   disabled={hiddenMatrixRowIds.size === 0}
-                  checked={showHiddenRows}
-                  onChange={e => setShowHiddenRows(e.target.checked)}
-                  className="accent-indigo-650 w-3.5 h-3.5 disabled:cursor-not-allowed"
-                />
-                <span>Show hidden rows ({hiddenMatrixRowIds.size})</span>
+                  onClick={() => setShowHiddenRows(!showHiddenRows)}
+                  className={`px-3 py-2 border rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                    showHiddenRows
+                      ? 'bg-amber-500/10 border-amber-500/25 text-amber-700 dark:text-amber-400'
+                      : 'bg-muted hover:bg-muted/80 border-border text-foreground'
+                  }`}
+                >
+                  <span>Hidden rows ({hiddenMatrixRowIds.size})</span>
+                </button>
+
                 {hiddenMatrixRowIds.size > 0 && (
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRestoreAllHiddenRows();
-                    }}
-                    className="ml-2 text-[10px] font-bold text-rose-600 hover:text-rose-700 hover:underline px-2 py-0.5 bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/20 rounded-md transition-colors cursor-pointer"
+                    onClick={handleRestoreAllHiddenRows}
+                    className="px-3 py-2 bg-muted hover:bg-rose-500/10 text-muted-foreground hover:text-rose-600 border border-border rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
                   >
                     Restore all hidden
                   </button>
                 )}
-              </label>
+
+                <DensityControls
+                  density={density}
+                  onDensityChange={setDensity}
+                  globalDensity={globalDensity}
+                  onGlobalDensityChange={nextDensity => {
+                    setGlobalDensity(nextDensity);
+                    setDensity(nextDensity);
+                  }}
+                />
+              </div>
             </div>
-          </div>
+
+            {/* Collapsible advanced filters */}
+            {showFilters && (
+              <div className="border-t border-border/60 pt-3 mt-3 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                  <StarredFilterSelect
+                    label="Category"
+                    value={selectedCategory}
+                    onChange={setSelectedCategory}
+                    options={['All', ...sortedCategories]}
+                    isStarred={(opt) => isFavourite(`cat:${opt}`)}
+                    onToggleStar={(opt) => toggleFavourite(`cat:${opt}`, opt, 'Category')}
+                    allLabel="All Categories"
+                  />
+                  <StarredFilterSelect
+                    label="Asset"
+                    value={targetNameFilter}
+                    onChange={setTargetNameFilter}
+                    options={['All', ...sortedTargets]}
+                    isStarred={(opt) => isFavourite(`target:${opt}`)}
+                    onToggleStar={(opt) => toggleFavourite(`target:${opt}`, opt, 'Target Asset')}
+                    allLabel="All Assets"
+                  />
+                  <StarredFilterSelect
+                    label="Status"
+                    value={statusFilter}
+                    onChange={setStatusFilter}
+                    options={['All', 'Compliant', 'Expiring Soon', 'Expired', 'Missing']}
+                    isStarred={(opt) => isFavourite(`status:${opt}`)}
+                    onToggleStar={(opt) => toggleFavourite(`status:${opt}`, opt, 'Status')}
+                  />
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Asset Type</label>
+                    <select
+                      value={selectedTargetType}
+                      onChange={event => setSelectedTargetType(event.target.value)}
+                      className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                    >
+                      <option value="All">All Types</option>
+                      <option value="Vehicle">Vehicle</option>
+                      <option value="Personnel">Personnel / Driver</option>
+                      <option value="Facility">Facility</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Quick Toggle Checkboxes */}
+                <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-border/40 text-xs">
+                  <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showOnlyGaps}
+                      onChange={e => setShowOnlyGaps(e.target.checked)}
+                      className="accent-indigo-650 w-3.5 h-3.5"
+                    />
+                    <span>Red/Amber Status Gaps only</span>
+                  </label>
+                  <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showOnlyStarredReqs}
+                      onChange={e => setShowOnlyStarredReqs(e.target.checked)}
+                      className="accent-indigo-650 w-3.5 h-3.5"
+                    />
+                    <span>Favourite Requirements only</span>
+                  </label>
+                  <label className={`flex items-center gap-2 font-semibold text-foreground cursor-pointer ${hiddenMatrixRowIds.size === 0 ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                    <input
+                      type="checkbox"
+                      disabled={hiddenMatrixRowIds.size === 0}
+                      checked={showHiddenRows}
+                      onChange={e => setShowHiddenRows(e.target.checked)}
+                      className="accent-indigo-650 w-3.5 h-3.5 disabled:cursor-not-allowed"
+                    />
+                    <span>Show hidden rows ({hiddenMatrixRowIds.size})</span>
+                    {hiddenMatrixRowIds.size > 0 && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRestoreAllHiddenRows();
+                        }}
+                        className="ml-2 text-[10px] font-bold text-rose-600 hover:text-rose-700 hover:underline px-2 py-0.5 bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/20 rounded-md transition-colors cursor-pointer"
+                      >
+                        Restore all hidden
+                      </button>
+                    )}
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* Saved Views Bar */}
+            <SavedViewsBar
+              views={allViews}
+              activeViewId={activeViewId}
+              onSelectView={handleSelectView}
+              onSaveCurrent={handleSaveView}
+              onDeleteCustom={deleteCustomView}
+              isViewModified={isViewModified}
+            />
+          </>
         )}
 
-        {/* Saved Views Bar */}
-        <SavedViewsBar
-          views={allViews}
-          activeViewId={activeViewId}
-          onSelectView={handleSelectView}
-          onSaveCurrent={handleSaveView}
-          onDeleteCustom={deleteCustomView}
-          isViewModified={isViewModified}
-        />
-
-        {/* Active chips */}
+        {/* Active chips (always visible below the toolbar) */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <ActiveFilterChips chips={filterChips} onClearAll={handleResetFilters} />
           {favourites.length > 0 && (
@@ -839,14 +1023,16 @@ export default function EvidenceMatrix() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
-        <button type="button" onClick={() => exportMatrix('filtered')} className="px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
-          <Download className="w-3.5 h-3.5" /> Export filtered
-        </button>
-        <button type="button" disabled={matrixRowSelection.selectedCount === 0} onClick={() => exportMatrix('selected')} className="px-3 py-1.5 bg-card hover:bg-muted disabled:opacity-40 border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
-          <Download className="w-3.5 h-3.5" /> Export selected
-        </button>
-      </div>
+      {interfaceDetailLevel === 'advanced' && (
+        <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
+          <button type="button" onClick={() => exportMatrix('filtered')} className="px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
+            <Download className="w-3.5 h-3.5" /> Export filtered
+          </button>
+          <button type="button" disabled={matrixRowSelection.selectedCount === 0} onClick={() => exportMatrix('selected')} className="px-3 py-1.5 bg-card hover:bg-muted disabled:opacity-40 border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
+            <Download className="w-3.5 h-3.5" /> Export selected
+          </button>
+        </div>
+      )}
 
       <BulkSelectionToolbar
         selectedCount={matrixRowSelection.selectedCount}

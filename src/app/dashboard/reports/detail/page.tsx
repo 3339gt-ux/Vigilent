@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { useApp } from '@/context/AppContext';
+import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
+import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
 import { dbService } from '@/lib/db';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -120,6 +121,8 @@ export default function ReportDetailPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({});
   const [showColumnDropdown, setShowColumnDropdown] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const { interfaceDetailLevel } = useInterfaceDetailLevel();
   const [generatedAt, setGeneratedAt] = useState('');
   const [overdueFilter, setOverdueFilter] = useState('All');
 
@@ -808,73 +811,145 @@ export default function ReportDetailPage() {
         <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-xs">
           {/* Custom controls row above table header */}
           <div className="p-4 border-b border-border/60 flex flex-wrap gap-4 items-center justify-between bg-muted/20 print:hidden text-xs">
-            <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="Search matching records..."
-                  value={searchQuery}
-                  onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                  className="w-full pl-9 pr-4 py-2 bg-muted rounded-xl border border-border outline-none text-xs text-foreground"
-                />
-              </div>
-            </div>
+            {interfaceDetailLevel === 'focused' ? (
+              // FOCUSED VIEW LAYOUT
+              <>
+                <div className="flex flex-wrap items-center gap-2 w-full">
+                  <div className="relative flex-1 min-w-[200px]">
+                    <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="Search matching records..."
+                      value={searchQuery}
+                      onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                      className="w-full pl-9 pr-4 py-2 bg-muted rounded-xl border border-border outline-none text-xs text-foreground"
+                    />
+                  </div>
+                  <FiltersAndToolsButton
+                    isOpen={showFilters}
+                    onClick={() => setShowFilters(!showFilters)}
+                    activeFiltersCount={0}
+                    onClearFilters={() => {}}
+                  />
+                </div>
 
-            <div className="flex items-center gap-4">
-              {/* Page Size Select */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-muted-foreground font-bold">Page Size:</span>
-                <select
-                  value={pageSize}
-                  onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                  className="px-2.5 py-1.5 bg-muted rounded-lg border border-border font-bold outline-none cursor-pointer text-foreground"
-                >
-                  <option value={5}>5</option>
-                  <option value={10}>10</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                </select>
-              </div>
+                <AdvancedControlsPanel isOpen={showFilters} onClose={() => setShowFilters(false)}>
+                  <div className="space-y-4 text-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      {/* Page Size Select */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-muted-foreground font-bold">Page Size:</span>
+                        <select
+                          value={pageSize}
+                          onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+                          className="px-2.5 py-1.5 bg-muted rounded-lg border border-border font-bold outline-none cursor-pointer text-foreground"
+                        >
+                          <option value={5}>5</option>
+                          <option value={10}>10</option>
+                          <option value={25}>25</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                        </select>
+                      </div>
 
-              {/* Column Visibility Selector */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowColumnDropdown(!showColumnDropdown)}
-                  className="px-3 py-1.5 bg-muted hover:bg-muted/80 text-foreground font-bold rounded-lg border border-border flex items-center gap-1.5 cursor-pointer"
-                >
-                  <SlidersHorizontal className="w-3.5 h-3.5" /> Columns
-                </button>
-
-                {showColumnDropdown && (
-                  <div className="absolute right-0 mt-2 w-48 bg-card border border-border rounded-xl shadow-lg p-3 z-40 space-y-2">
-                    <div className="flex justify-between items-center pb-1.5 border-b border-border/40">
-                      <span className="font-extrabold text-[10px] uppercase text-muted-foreground tracking-wider">Visible Columns</span>
-                      <button onClick={() => setShowColumnDropdown(false)} className="text-muted-foreground hover:text-foreground">✕</button>
-                    </div>
-                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                      {Object.keys(visibleColumns).map(colKey => (
-                        <label key={colKey} className="flex items-center gap-2 font-semibold text-xs cursor-pointer select-none text-foreground hover:text-indigo-650">
-                          <input
-                            type="checkbox"
-                            checked={visibleColumns[colKey] !== false}
-                            onChange={e => {
-                              setVisibleColumns(prev => ({
-                                ...prev,
-                                [colKey]: e.target.checked
-                              }));
-                            }}
-                            className="rounded border-border text-indigo-650 focus:ring-0 cursor-pointer"
-                          />
-                          <span className="capitalize">{colKey.replace('_', ' ')}</span>
-                        </label>
-                      ))}
+                      {/* Column Visibility Selector (rendered inline for simplicity inside the panel) */}
+                      <div className="space-y-2">
+                        <span className="font-extrabold text-[10px] uppercase text-muted-foreground tracking-wider block">Visible Columns</span>
+                        <div className="flex flex-wrap gap-3">
+                          {Object.keys(visibleColumns).map(colKey => (
+                            <label key={colKey} className="flex items-center gap-2 font-semibold text-xs cursor-pointer select-none text-foreground hover:text-indigo-650">
+                              <input
+                                type="checkbox"
+                                checked={visibleColumns[colKey] !== false}
+                                onChange={e => {
+                                  setVisibleColumns(prev => ({
+                                    ...prev,
+                                    [colKey]: e.target.checked
+                                  }));
+                                }}
+                                className="rounded border-border text-indigo-650 focus:ring-0 cursor-pointer"
+                              />
+                              <span className="capitalize">{colKey.replace('_', ' ')}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                )}
-              </div>
-            </div>
+                </AdvancedControlsPanel>
+              </>
+            ) : (
+              // ADVANCED VIEW LAYOUT
+              <>
+                <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="Search matching records..."
+                      value={searchQuery}
+                      onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                      className="w-full pl-9 pr-4 py-2 bg-muted rounded-xl border border-border outline-none text-xs text-foreground"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  {/* Page Size Select */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-muted-foreground font-bold">Page Size:</span>
+                    <select
+                      value={pageSize}
+                      onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+                      className="px-2.5 py-1.5 bg-muted rounded-lg border border-border font-bold outline-none cursor-pointer text-foreground"
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+
+                  {/* Column Visibility Selector */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowColumnDropdown(!showColumnDropdown)}
+                      className="px-3 py-1.5 bg-muted hover:bg-muted/80 text-foreground font-bold rounded-lg border border-border flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <SlidersHorizontal className="w-3.5 h-3.5" /> Columns
+                    </button>
+
+                    {showColumnDropdown && (
+                      <div className="absolute right-0 mt-2 w-48 bg-card border border-border rounded-xl shadow-lg p-3 z-40 space-y-2">
+                        <div className="flex justify-between items-center pb-1.5 border-b border-border/40">
+                          <span className="font-extrabold text-[10px] uppercase text-muted-foreground tracking-wider">Visible Columns</span>
+                          <button onClick={() => setShowColumnDropdown(false)} className="text-muted-foreground hover:text-foreground">✕</button>
+                        </div>
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                          {Object.keys(visibleColumns).map(colKey => (
+                            <label key={colKey} className="flex items-center gap-2 font-semibold text-xs cursor-pointer select-none text-foreground hover:text-indigo-650">
+                              <input
+                                type="checkbox"
+                                checked={visibleColumns[colKey] !== false}
+                                onChange={e => {
+                                  setVisibleColumns(prev => ({
+                                    ...prev,
+                                    [colKey]: e.target.checked
+                                  }));
+                                }}
+                                className="rounded border-border text-indigo-650 focus:ring-0 cursor-pointer"
+                              />
+                              <span className="capitalize">{colKey.replace('_', ' ')}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="p-4 border-b border-border/60 flex justify-between items-center bg-muted/5 text-xs">

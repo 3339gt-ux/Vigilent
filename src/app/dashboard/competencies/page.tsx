@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { useApp } from '@/context/AppContext';
+import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
+import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { buildCompetencyMatrix } from '@/lib/competencyEngine';
 import { COMPETENCY_TEMPLATE_PACKS } from '@/lib/competencyTemplates';
@@ -108,6 +109,22 @@ export default function CompetencyMatrixPage() {
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
   const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
+  const { interfaceDetailLevel } = useInterfaceDetailLevel();
+  const [showAdminTools, setShowAdminTools] = useState(false);
+
+  const activeFiltersCount = useMemo(() => {
+    return [
+      departmentFilter !== 'All',
+      roleFilter !== 'All',
+      personTypeFilter !== 'All',
+      typeFilter !== 'All',
+      statusFilter !== 'All',
+      showOnlyMissingExpired,
+      showOnlyExpiringSoon,
+      showOnlyFavourites,
+      showOnlyPeopleWithGaps
+    ].filter(Boolean).length;
+  }, [departmentFilter, roleFilter, personTypeFilter, typeFilter, statusFilter, showOnlyMissingExpired, showOnlyExpiringSoon, showOnlyFavourites, showOnlyPeopleWithGaps]);
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [workspaceSearch, setWorkspaceSearch] = useState('');
@@ -1243,200 +1260,406 @@ export default function CompetencyMatrixPage() {
         <div className="xl:col-span-2 space-y-4">
           {/* Main search and quick actions bar */}
           <div className="bg-card border border-border p-3 rounded-xl space-y-2.5 shadow-xs">
-            <div className="flex flex-col md:flex-row gap-3">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  value={search}
-                  onChange={event => setSearch(event.target.value)}
-                  placeholder="Search people by name, role, department..."
-                  className="w-full pl-9 pr-3 py-2 bg-muted border border-border rounded-lg text-xs outline-none text-foreground placeholder-muted-foreground"
-                />
-              </div>
-              <div className="flex flex-wrap gap-2 items-center">
-                <button
-                  type="button"
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={`px-3 py-2 border rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                    showFilters || filterChips.length > 0
-                      ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-950/30 dark:border-indigo-900/50 dark:text-indigo-400'
-                      : 'bg-muted hover:bg-muted/80 border-border text-foreground'
-                  }`}
-                >
-                  Filters {(filterChips.length > 0) && <span className="bg-indigo-650 text-white dark:bg-indigo-600 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold">{filterChips.length}</span>}
-                </button>
-
-                <DensityControls
-                  density={density}
-                  onDensityChange={setDensity}
-                  globalDensity={globalDensity}
-                  onGlobalDensityChange={nextDensity => {
-                    setGlobalDensity(nextDensity);
-                    setDensity(nextDensity);
-                  }}
-                />
-
-                <ColumnVisibilityControls
-                  columns={columnOptions}
-                  onToggleColumn={handleToggleColumn}
-                  onToggleAll={handleToggleAllColumns}
-                />
-              </div>
-            </div>
-
-            {/* Collapsible advanced filters */}
-            {showFilters && (
-              <div className="border-t border-border/60 pt-3 mt-3 space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                  <StarredFilterSelect
-                    label="Dept"
-                    value={departmentFilter}
-                    onChange={setDepartmentFilter}
-                    options={sortedDepartments}
-                    isStarred={(opt) => isFavourite(`dept:${opt}`)}
-                    onToggleStar={(opt) => toggleFavourite(`dept:${opt}`, opt, 'Department')}
-                  />
-                  <StarredFilterSelect
-                    label="Role"
-                    value={roleFilter}
-                    onChange={setRoleFilter}
-                    options={sortedRoles}
-                    isStarred={(opt) => isFavourite(`role:${opt}`)}
-                    onToggleStar={(opt) => toggleFavourite(`role:${opt}`, opt, 'Role')}
-                  />
-                  <StarredFilterSelect
-                    label="Category"
-                    value={typeFilter}
-                    onChange={setTypeFilter}
-                    options={['All', ...sortedCompetencyCategories]}
-                    isStarred={(opt) => isFavourite(`cat:${opt}`)}
-                    onToggleStar={(opt) => toggleFavourite(`cat:${opt}`, opt, 'Category')}
-                    allLabel="All Categories"
-                  />
-                  <StarredFilterSelect
-                    label="Status"
-                    value={statusFilter}
-                    onChange={setStatusFilter}
-                    options={['All', ...statusOptions]}
-                    isStarred={(opt) => isFavourite(`status:${opt}`)}
-                    onToggleStar={(opt) => toggleFavourite(`status:${opt}`, opt, 'Status')}
-                  />
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Emp Type</label>
-                    <select
-                      value={personTypeFilter}
-                      onChange={event => setPersonTypeFilter(event.target.value)}
-                      className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+            {interfaceDetailLevel === 'focused' ? (
+              // FOCUSED VIEW LAYOUT
+              <>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2 w-full">
+                    <div className="relative flex-1 min-w-[200px]">
+                      <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        value={search}
+                        onChange={event => setSearch(event.target.value)}
+                        placeholder="Search people by name, role, department..."
+                        className="w-full pl-9 pr-3 py-2 bg-muted border border-border rounded-lg text-xs outline-none text-foreground placeholder-muted-foreground"
+                      />
+                    </div>
+                    <FiltersAndToolsButton
+                      isOpen={showFilters}
+                      onClick={() => setShowFilters(!showFilters)}
+                      activeFiltersCount={activeFiltersCount}
+                      onClearFilters={handleResetFilters}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => exportPeople('filtered')}
+                      className="px-3 py-2 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground text-xs flex items-center gap-1.5 cursor-pointer shrink-0 ml-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
                     >
-                      <option value="All">All Types</option>
-                      {personTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Sort By</label>
-                    <select
-                      value={sortBy}
-                      onChange={event => setSortBy(event.target.value)}
-                      className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
-                    >
-                      <option value="name">Name (A-Z)</option>
-                      <option value="department">Department</option>
-                      <option value="gaps">Most Gaps (Expired + Missing)</option>
-                      <option value="expired">Most Expired</option>
-                      <option value="expiring">Expiring Soonest</option>
-                    </select>
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Export</span>
+                    </button>
                   </div>
                 </div>
 
-                {/* Quick Toggle Checkboxes */}
-                <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-border/40 text-xs">
-                  <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={showOnlyMissingExpired}
-                      onChange={e => setShowOnlyMissingExpired(e.target.checked)}
-                      className="accent-indigo-650 w-3.5 h-3.5"
-                    />
-                    <span>Missing / Expired only</span>
-                  </label>
-                  <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={showOnlyExpiringSoon}
-                      onChange={e => setShowOnlyExpiringSoon(e.target.checked)}
-                      className="accent-indigo-650 w-3.5 h-3.5"
-                    />
-                    <span>Expiring soon only</span>
-                  </label>
-                  <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={showOnlyFavourites}
-                      onChange={e => setShowOnlyFavourites(e.target.checked)}
-                      className="accent-indigo-650 w-3.5 h-3.5"
-                    />
-                    <span>Favourite Competencies only</span>
-                  </label>
-                  <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={showOnlyPeopleWithGaps}
-                      onChange={e => setShowOnlyPeopleWithGaps(e.target.checked)}
-                      className="accent-indigo-650 w-3.5 h-3.5"
-                    />
-                    <span>People with gaps only</span>
-                  </label>
-                </div>
-              </div>
-            )}
+                <AdvancedControlsPanel isOpen={showFilters} onClose={() => setShowFilters(false)}>
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+                      <div className="flex items-center gap-3">
+                        <DensityControls
+                          density={density}
+                          onDensityChange={setDensity}
+                          globalDensity={globalDensity}
+                          onGlobalDensityChange={nextDensity => {
+                            setGlobalDensity(nextDensity);
+                            setDensity(nextDensity);
+                          }}
+                        />
 
-            {/* Saved Views Bar */}
-            <SavedViewsBar
-              views={allViews}
-              activeViewId={activeViewId}
-              onSelectView={handleSelectView}
-              onSaveCurrent={handleSaveView}
-              onDeleteCustom={deleteCustomView}
-              isViewModified={isViewModified}
-            />
+                        <ColumnVisibilityControls
+                          columns={columnOptions}
+                          onToggleColumn={handleToggleColumn}
+                          onToggleAll={handleToggleAllColumns}
+                        />
+                      </div>
+                    </div>
 
-            {/* Category Collapsers / Favourites Bar */}
-            <div className="flex items-center gap-1.5 text-xs pt-1 border-t border-border/40 w-full min-w-0">
-              <span className="text-muted-foreground font-bold uppercase tracking-wider text-[10px] mr-1 shrink-0">Categories:</span>
-              <div className="flex flex-row overflow-x-auto whitespace-nowrap no-scrollbar py-1 gap-1.5 flex-1 min-w-0">
-                {categories.map(cat => {
-                  const isCollapsed = collapsedCategories.includes(cat);
-                  const count = activeTypes.filter(t => t.category === cat).length;
-                  if (count === 0) return null;
-                  const isStarred = isFavourite(`cat:${cat}`);
-                  return (
-                    <div
-                      key={cat}
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border transition-all shrink-0 ${
-                        isCollapsed
-                          ? 'bg-muted/30 border-border/50 text-muted-foreground'
-                          : 'bg-indigo-500/5 border-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-semibold'
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                      <StarredFilterSelect
+                        label="Dept"
+                        value={departmentFilter}
+                        onChange={setDepartmentFilter}
+                        options={sortedDepartments}
+                        isStarred={(opt) => isFavourite(`dept:${opt}`)}
+                        onToggleStar={(opt) => toggleFavourite(`dept:${opt}`, opt, 'Department')}
+                      />
+                      <StarredFilterSelect
+                        label="Role"
+                        value={roleFilter}
+                        onChange={setRoleFilter}
+                        options={sortedRoles}
+                        isStarred={(opt) => isFavourite(`role:${opt}`)}
+                        onToggleStar={(opt) => toggleFavourite(`role:${opt}`, opt, 'Role')}
+                      />
+                      <StarredFilterSelect
+                        label="Category"
+                        value={typeFilter}
+                        onChange={setTypeFilter}
+                        options={['All', ...sortedCompetencyCategories]}
+                        isStarred={(opt) => isFavourite(`cat:${opt}`)}
+                        onToggleStar={(opt) => toggleFavourite(`cat:${opt}`, opt, 'Category')}
+                        allLabel="All Categories"
+                      />
+                      <StarredFilterSelect
+                        label="Status"
+                        value={statusFilter}
+                        onChange={setStatusFilter}
+                        options={['All', ...statusOptions]}
+                        isStarred={(opt) => isFavourite(`status:${opt}`)}
+                        onToggleStar={(opt) => toggleFavourite(`status:${opt}`, opt, 'Status')}
+                      />
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Emp Type</label>
+                        <select
+                          value={personTypeFilter}
+                          onChange={event => setPersonTypeFilter(event.target.value)}
+                          className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                        >
+                          <option value="All">All Types</option>
+                          {personTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Sort By</label>
+                        <select
+                          value={sortBy}
+                          onChange={event => setSortBy(event.target.value)}
+                          className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                        >
+                          <option value="name">Name (A-Z)</option>
+                          <option value="department">Department</option>
+                          <option value="gaps">Most Gaps (Expired + Missing)</option>
+                          <option value="expired">Most Expired</option>
+                          <option value="expiring">Expiring Soonest</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-border/40 text-xs">
+                      <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={showOnlyMissingExpired}
+                          onChange={e => setShowOnlyMissingExpired(e.target.checked)}
+                          className="accent-indigo-650 w-3.5 h-3.5"
+                        />
+                        <span>Missing / Expired only</span>
+                      </label>
+                      <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={showOnlyExpiringSoon}
+                          onChange={e => setShowOnlyExpiringSoon(e.target.checked)}
+                          className="accent-indigo-650 w-3.5 h-3.5"
+                        />
+                        <span>Expiring soon only</span>
+                      </label>
+                      <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={showOnlyFavourites}
+                          onChange={e => setShowOnlyFavourites(e.target.checked)}
+                          className="accent-indigo-650 w-3.5 h-3.5"
+                        />
+                        <span>Favourite Competencies only</span>
+                      </label>
+                      <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={showOnlyPeopleWithGaps}
+                          onChange={e => setShowOnlyPeopleWithGaps(e.target.checked)}
+                          className="accent-indigo-650 w-3.5 h-3.5"
+                        />
+                        <span>People with gaps only</span>
+                      </label>
+                    </div>
+
+                    {/* Saved Views Bar */}
+                    <SavedViewsBar
+                      views={allViews}
+                      activeViewId={activeViewId}
+                      onSelectView={handleSelectView}
+                      onSaveCurrent={handleSaveView}
+                      onDeleteCustom={deleteCustomView}
+                      isViewModified={isViewModified}
+                    />
+
+                    {/* Category Collapsers inline inside panel */}
+                    <div className="flex items-center gap-1.5 text-xs pt-1 border-t border-border/40 w-full min-w-0">
+                      <span className="text-muted-foreground font-bold uppercase tracking-wider text-[10px] mr-1 shrink-0">Categories:</span>
+                      <div className="flex flex-row overflow-x-auto whitespace-nowrap no-scrollbar py-1 gap-1.5 flex-1 min-w-0">
+                        {categories.map(cat => {
+                          const isCollapsed = collapsedCategories.includes(cat);
+                          const count = activeTypes.filter(t => t.category === cat).length;
+                          if (count === 0) return null;
+                          const isStarred = isFavourite(`cat:${cat}`);
+                          return (
+                            <div
+                              key={cat}
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border transition-all shrink-0 ${
+                                isCollapsed
+                                  ? 'bg-muted/30 border-border/50 text-muted-foreground'
+                                  : 'bg-indigo-500/5 border-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-semibold'
+                              }`}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCollapsedCategories(prev =>
+                                    isCollapsed ? prev.filter(c => c !== cat) : [...prev, cat]
+                                  );
+                                }}
+                                className="hover:underline text-[10px] cursor-pointer"
+                              >
+                                {cat} ({count})
+                              </button>
+                              <FilterFavouriteButton isStarred={isStarred} onToggle={() => toggleFavourite(`cat:${cat}`, cat, 'Category')} />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </AdvancedControlsPanel>
+              </>
+            ) : (
+              // ADVANCED VIEW LAYOUT
+              <>
+                <div className="flex flex-col md:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      value={search}
+                      onChange={event => setSearch(event.target.value)}
+                      placeholder="Search people by name, role, department..."
+                      className="w-full pl-9 pr-3 py-2 bg-muted border border-border rounded-lg text-xs outline-none text-foreground placeholder-muted-foreground"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowFilters(!showFilters)}
+                      className={`px-3 py-2 border rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                        showFilters || filterChips.length > 0
+                          ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-950/30 dark:border-indigo-900/50 dark:text-indigo-400'
+                          : 'bg-muted hover:bg-muted/80 border-border text-foreground'
                       }`}
                     >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCollapsedCategories(prev =>
-                            isCollapsed ? prev.filter(c => c !== cat) : [...prev, cat]
-                          );
-                        }}
-                        className="hover:underline text-[10px] cursor-pointer"
-                      >
-                        {cat} ({count})
-                      </button>
-                      <FilterFavouriteButton isStarred={isStarred} onToggle={() => toggleFavourite(`cat:${cat}`, cat, 'Category')} />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+                      Filters {(filterChips.length > 0) && <span className="bg-indigo-650 text-white dark:bg-indigo-600 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold">{filterChips.length}</span>}
+                    </button>
 
-            {/* Active chips */}
+                    <DensityControls
+                      density={density}
+                      onDensityChange={setDensity}
+                      globalDensity={globalDensity}
+                      onGlobalDensityChange={nextDensity => {
+                        setGlobalDensity(nextDensity);
+                        setDensity(nextDensity);
+                      }}
+                    />
+
+                    <ColumnVisibilityControls
+                      columns={columnOptions}
+                      onToggleColumn={handleToggleColumn}
+                      onToggleAll={handleToggleAllColumns}
+                    />
+                  </div>
+                </div>
+
+                {/* Collapsible advanced filters */}
+                {showFilters && (
+                  <div className="border-t border-border/60 pt-3 mt-3 space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                      <StarredFilterSelect
+                        label="Dept"
+                        value={departmentFilter}
+                        onChange={setDepartmentFilter}
+                        options={sortedDepartments}
+                        isStarred={(opt) => isFavourite(`dept:${opt}`)}
+                        onToggleStar={(opt) => toggleFavourite(`dept:${opt}`, opt, 'Department')}
+                      />
+                      <StarredFilterSelect
+                        label="Role"
+                        value={roleFilter}
+                        onChange={setRoleFilter}
+                        options={sortedRoles}
+                        isStarred={(opt) => isFavourite(`role:${opt}`)}
+                        onToggleStar={(opt) => toggleFavourite(`role:${opt}`, opt, 'Role')}
+                      />
+                      <StarredFilterSelect
+                        label="Category"
+                        value={typeFilter}
+                        onChange={setTypeFilter}
+                        options={['All', ...sortedCompetencyCategories]}
+                        isStarred={(opt) => isFavourite(`cat:${opt}`)}
+                        onToggleStar={(opt) => toggleFavourite(`cat:${opt}`, opt, 'Category')}
+                        allLabel="All Categories"
+                      />
+                      <StarredFilterSelect
+                        label="Status"
+                        value={statusFilter}
+                        onChange={setStatusFilter}
+                        options={['All', ...statusOptions]}
+                        isStarred={(opt) => isFavourite(`status:${opt}`)}
+                        onToggleStar={(opt) => toggleFavourite(`status:${opt}`, opt, 'Status')}
+                      />
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Emp Type</label>
+                        <select
+                          value={personTypeFilter}
+                          onChange={event => setPersonTypeFilter(event.target.value)}
+                          className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                        >
+                          <option value="All">All Types</option>
+                          {personTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Sort By</label>
+                        <select
+                          value={sortBy}
+                          onChange={event => setSortBy(event.target.value)}
+                          className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                        >
+                          <option value="name">Name (A-Z)</option>
+                          <option value="department">Department</option>
+                          <option value="gaps">Most Gaps (Expired + Missing)</option>
+                          <option value="expired">Most Expired</option>
+                          <option value="expiring">Expiring Soonest</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Quick Toggle Checkboxes */}
+                    <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-border/40 text-xs">
+                      <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={showOnlyMissingExpired}
+                          onChange={e => setShowOnlyMissingExpired(e.target.checked)}
+                          className="accent-indigo-650 w-3.5 h-3.5"
+                        />
+                        <span>Missing / Expired only</span>
+                      </label>
+                      <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={showOnlyExpiringSoon}
+                          onChange={e => setShowOnlyExpiringSoon(e.target.checked)}
+                          className="accent-indigo-650 w-3.5 h-3.5"
+                        />
+                        <span>Expiring soon only</span>
+                      </label>
+                      <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={showOnlyFavourites}
+                          onChange={e => setShowOnlyFavourites(e.target.checked)}
+                          className="accent-indigo-650 w-3.5 h-3.5"
+                        />
+                        <span>Favourite Competencies only</span>
+                      </label>
+                      <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={showOnlyPeopleWithGaps}
+                          onChange={e => setShowOnlyPeopleWithGaps(e.target.checked)}
+                          className="accent-indigo-650 w-3.5 h-3.5"
+                        />
+                        <span>People with gaps only</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* Saved Views Bar */}
+                <SavedViewsBar
+                  views={allViews}
+                  activeViewId={activeViewId}
+                  onSelectView={handleSelectView}
+                  onSaveCurrent={handleSaveView}
+                  onDeleteCustom={deleteCustomView}
+                  isViewModified={isViewModified}
+                />
+
+                {/* Category Collapsers / Favourites Bar */}
+                <div className="flex items-center gap-1.5 text-xs pt-1 border-t border-border/40 w-full min-w-0">
+                  <span className="text-muted-foreground font-bold uppercase tracking-wider text-[10px] mr-1 shrink-0">Categories:</span>
+                  <div className="flex flex-row overflow-x-auto whitespace-nowrap no-scrollbar py-1 gap-1.5 flex-1 min-w-0">
+                    {categories.map(cat => {
+                      const isCollapsed = collapsedCategories.includes(cat);
+                      const count = activeTypes.filter(t => t.category === cat).length;
+                      if (count === 0) return null;
+                      const isStarred = isFavourite(`cat:${cat}`);
+                      return (
+                        <div
+                          key={cat}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border transition-all shrink-0 ${
+                            isCollapsed
+                              ? 'bg-muted/30 border-border/50 text-muted-foreground'
+                              : 'bg-indigo-500/5 border-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-semibold'
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCollapsedCategories(prev =>
+                                isCollapsed ? prev.filter(c => c !== cat) : [...prev, cat]
+                              );
+                            }}
+                            className="hover:underline text-[10px] cursor-pointer"
+                          >
+                            {cat} ({count})
+                          </button>
+                          <FilterFavouriteButton isStarred={isStarred} onToggle={() => toggleFavourite(`cat:${cat}`, cat, 'Category')} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Active chips (always visible below the toolbar) */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <ActiveFilterChips chips={filterChips} onClearAll={handleResetFilters} />
               {favourites.length > 0 && (
@@ -1465,14 +1688,16 @@ export default function CompetencyMatrixPage() {
             </div>
           )}
 
-          <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
-            <button type="button" onClick={() => exportPeople('filtered')} className="px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
-              <Download className="w-3.5 h-3.5" /> Export filtered people
-            </button>
-            <button type="button" disabled={selectedBulkPeople.length === 0} onClick={() => exportPeople('selected')} className="px-3 py-1.5 bg-card hover:bg-muted disabled:opacity-40 border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
-              <Download className="w-3.5 h-3.5" /> Export selected people
-            </button>
-          </div>
+          {interfaceDetailLevel === 'advanced' && (
+            <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
+              <button type="button" onClick={() => exportPeople('filtered')} className="px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
+                <Download className="w-3.5 h-3.5" /> Export filtered people
+              </button>
+              <button type="button" disabled={selectedBulkPeople.length === 0} onClick={() => exportPeople('selected')} className="px-3 py-1.5 bg-card hover:bg-muted disabled:opacity-40 border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
+                <Download className="w-3.5 h-3.5" /> Export selected people
+              </button>
+            </div>
+          )}
 
           <BulkSelectionToolbar
             selectedCount={peopleSelection.selectedCount}
@@ -1665,31 +1890,75 @@ export default function CompetencyMatrixPage() {
             <button className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg">Save Person</button>
           </form>
 
-          <form onSubmit={handleCreateType} className="bg-card border border-border rounded-xl p-4 space-y-3 text-xs">
-            <h2 className="text-sm font-extrabold">Add Competency Type</h2>
-            <input required placeholder="Title" value={newType.title} onChange={event => setNewType({ ...newType, title: event.target.value })} className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none" />
-            <select value={newType.category} onChange={event => setNewType({ ...newType, category: event.target.value as CompetencyCategory })} className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none">
-              {categories.map(category => <option key={category} value={category}>{category}</option>)}
-            </select>
-            <div className="grid grid-cols-3 gap-2">
-              <input type="number" min="0" value={newType.validity_period_months} onChange={event => setNewType({ ...newType, validity_period_months: event.target.value })} className="px-3 py-2 bg-muted border border-border rounded-lg outline-none" />
-              <input type="number" min="0" value={newType.refresher_period_months} onChange={event => setNewType({ ...newType, refresher_period_months: event.target.value })} className="px-3 py-2 bg-muted border border-border rounded-lg outline-none" />
-              <select value={newType.default_risk_level} onChange={event => setNewType({ ...newType, default_risk_level: event.target.value as RequirementRiskLevel })} className="px-2 py-2 bg-muted border border-border rounded-lg outline-none">
-                {riskLevels.map(level => <option key={level} value={level}>{level}</option>)}
-              </select>
-            </div>
-            <button className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg">Save Type</button>
-          </form>
+          {interfaceDetailLevel === 'focused' ? (
+            <div className="bg-card border border-border rounded-xl p-4 space-y-4">
+              <button
+                type="button"
+                onClick={() => setShowAdminTools(!showAdminTools)}
+                className="w-full flex items-center justify-between text-sm font-extrabold text-foreground cursor-pointer focus:outline-none"
+              >
+                <span>Administration tools</span>
+                <Plus className={`w-4 h-4 transition-transform duration-200 ${showAdminTools ? 'rotate-45' : ''}`} />
+              </button>
+              {showAdminTools && (
+                <div className="space-y-4 pt-4 border-t border-border animate-in fade-in duration-200">
+                  <form onSubmit={handleCreateType} className="space-y-3 text-xs">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Add Competency Type</h3>
+                    <input required placeholder="Title" value={newType.title} onChange={event => setNewType({ ...newType, title: event.target.value })} className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none" />
+                    <select value={newType.category} onChange={event => setNewType({ ...newType, category: event.target.value as CompetencyCategory })} className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none">
+                      {categories.map(category => <option key={category} value={category}>{category}</option>)}
+                    </select>
+                    <div className="grid grid-cols-3 gap-2">
+                      <input type="number" min="0" value={newType.validity_period_months} onChange={event => setNewType({ ...newType, validity_period_months: event.target.value })} className="px-3 py-2 bg-muted border border-border rounded-lg outline-none" />
+                      <input type="number" min="0" value={newType.refresher_period_months} onChange={event => setNewType({ ...newType, refresher_period_months: event.target.value })} className="px-3 py-2 bg-muted border border-border rounded-lg outline-none" />
+                      <select value={newType.default_risk_level} onChange={event => setNewType({ ...newType, default_risk_level: event.target.value as RequirementRiskLevel })} className="px-2 py-2 bg-muted border border-border rounded-lg outline-none">
+                        {riskLevels.map(level => <option key={level} value={level}>{level}</option>)}
+                      </select>
+                    </div>
+                    <button className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg cursor-pointer">Save Type</button>
+                  </form>
 
-          <div className="bg-card border border-border rounded-xl p-4 space-y-3 text-xs">
-            <h2 className="text-sm font-extrabold">Import Template Pack</h2>
-            <select value={selectedPackId} onChange={event => { setSelectedPackId(event.target.value); setImportMessage(''); }} className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none">
-              {COMPETENCY_TEMPLATE_PACKS.map(pack => <option key={pack.id} value={pack.id}>{pack.name}</option>)}
-            </select>
-            <p className="text-[11px] text-muted-foreground">{selectedPack?.description}</p>
-            <button onClick={handleImportPack} className="w-full py-2 bg-muted hover:bg-muted/80 border border-border font-bold rounded-lg">Import Pack</button>
-            {importMessage && <p className="text-[11px] text-emerald-500 font-semibold">{importMessage}</p>}
-          </div>
+                  <div className="space-y-3 text-xs pt-4 border-t border-border/40">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Import Template Pack</h3>
+                    <select value={selectedPackId} onChange={event => { setSelectedPackId(event.target.value); setImportMessage(''); }} className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none">
+                      {COMPETENCY_TEMPLATE_PACKS.map(pack => <option key={pack.id} value={pack.id}>{pack.name}</option>)}
+                    </select>
+                    <p className="text-[11px] text-muted-foreground">{selectedPack?.description}</p>
+                    <button onClick={handleImportPack} className="w-full py-2 bg-muted hover:bg-muted/80 border border-border font-bold rounded-lg cursor-pointer">Import Pack</button>
+                    {importMessage && <p className="text-[11px] text-emerald-500 font-semibold">{importMessage}</p>}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <form onSubmit={handleCreateType} className="bg-card border border-border rounded-xl p-4 space-y-3 text-xs">
+                <h2 className="text-sm font-extrabold">Add Competency Type</h2>
+                <input required placeholder="Title" value={newType.title} onChange={event => setNewType({ ...newType, title: event.target.value })} className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none" />
+                <select value={newType.category} onChange={event => setNewType({ ...newType, category: event.target.value as CompetencyCategory })} className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none">
+                  {categories.map(category => <option key={category} value={category}>{category}</option>)}
+                </select>
+                <div className="grid grid-cols-3 gap-2">
+                  <input type="number" min="0" value={newType.validity_period_months} onChange={event => setNewType({ ...newType, validity_period_months: event.target.value })} className="px-3 py-2 bg-muted border border-border rounded-lg outline-none" />
+                  <input type="number" min="0" value={newType.refresher_period_months} onChange={event => setNewType({ ...newType, refresher_period_months: event.target.value })} className="px-3 py-2 bg-muted border border-border rounded-lg outline-none" />
+                  <select value={newType.default_risk_level} onChange={event => setNewType({ ...newType, default_risk_level: event.target.value as RequirementRiskLevel })} className="px-2 py-2 bg-muted border border-border rounded-lg outline-none">
+                    {riskLevels.map(level => <option key={level} value={level}>{level}</option>)}
+                  </select>
+                </div>
+                <button className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg cursor-pointer">Save Type</button>
+              </form>
+
+              <div className="bg-card border border-border rounded-xl p-4 space-y-3 text-xs">
+                <h2 className="text-sm font-extrabold">Import Template Pack</h2>
+                <select value={selectedPackId} onChange={event => { setSelectedPackId(event.target.value); setImportMessage(''); }} className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none">
+                  {COMPETENCY_TEMPLATE_PACKS.map(pack => <option key={pack.id} value={pack.id}>{pack.name}</option>)}
+                </select>
+                <p className="text-[11px] text-muted-foreground">{selectedPack?.description}</p>
+                <button onClick={handleImportPack} className="w-full py-2 bg-muted hover:bg-muted/80 border border-border font-bold rounded-lg cursor-pointer">Import Pack</button>
+                {importMessage && <p className="text-[11px] text-emerald-500 font-semibold">{importMessage}</p>}
+              </div>
+            </>
+          )}
         </div>
       </div>
 

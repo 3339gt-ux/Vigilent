@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useApp } from '@/context/AppContext';
+import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
+import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
 import { useRouter } from 'next/navigation';
 import {
   History,
@@ -90,6 +91,8 @@ function getCategoryBadgeClass(category: string): string {
 
 export default function AuditTrailPage() {
   const { user } = useApp();
+  const { interfaceDetailLevel } = useInterfaceDetailLevel();
+  const [showFilters, setShowFilters] = useState(false);
   const router = useRouter();
 
   // Authentication & Authorization Gate
@@ -108,6 +111,18 @@ export default function AuditTrailPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [undoableOnly, setUndoableOnly] = useState(false);
+
+  const activeFiltersCount = useMemo(() => {
+    return [
+      selectedCategory !== 'All',
+      selectedSeverity !== 'All',
+      selectedActor !== 'All',
+      selectedActionType !== 'All',
+      startDate !== '',
+      endDate !== '',
+      undoableOnly
+    ].filter(Boolean).length;
+  }, [selectedCategory, selectedSeverity, selectedActor, selectedActionType, startDate, endDate, undoableOnly]);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -544,27 +559,29 @@ export default function AuditTrailPage() {
         </div>
 
         {/* Exports */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleExportCSV}
-              disabled={filteredEvents.length === 0}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 bg-card hover:bg-muted text-foreground text-xs font-bold rounded-lg border border-border shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Download className="w-3.5 h-3.5" /> Export CSV
-            </button>
-            <button
-              onClick={handleExportJSON}
-              disabled={filteredEvents.length === 0}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 bg-card hover:bg-muted text-foreground text-xs font-bold rounded-lg border border-border shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <FileText className="w-3.5 h-3.5" /> Export JSON
-            </button>
+        {interfaceDetailLevel === 'advanced' && (
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleExportCSV}
+                disabled={filteredEvents.length === 0}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 bg-card hover:bg-muted text-foreground text-xs font-bold rounded-lg border border-border shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Download className="w-3.5 h-3.5" /> Export CSV
+              </button>
+              <button
+                onClick={handleExportJSON}
+                disabled={filteredEvents.length === 0}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 bg-card hover:bg-muted text-foreground text-xs font-bold rounded-lg border border-border shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <FileText className="w-3.5 h-3.5" /> Export JSON
+              </button>
+            </div>
+            <span className="text-[10px] text-muted-foreground/75 text-center sm:text-left mt-0.5">
+              Exports include only the currently filtered events.
+            </span>
           </div>
-          <span className="text-[10px] text-muted-foreground/75 text-center sm:text-left mt-0.5">
-            Exports include only the currently filtered events.
-          </span>
-        </div>
+        )}
       </div>
 
       {/* Operation Toast Notification */}
@@ -653,135 +670,299 @@ export default function AuditTrailPage() {
 
       {/* Filtering Section */}
       <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
-        <div className="flex items-center gap-1.5 pb-2.5 border-b border-border/70">
-          <Filter className="w-4 h-4 text-indigo-500" />
-          <h2 className="text-xs font-bold uppercase tracking-wider text-foreground">Advanced Query Filters</h2>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
-          {/* Search bar */}
-          <div className="space-y-1">
-            <label htmlFor="search-input" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Search Term</label>
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 transform -translate-y-1/2" />
-              <input
-                id="search-input"
-                type="text"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                placeholder="Search description, user..."
-                className="w-full pl-9 pr-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none text-foreground font-semibold transition-all duration-150"
-              />
+        {interfaceDetailLevel === 'focused' ? (
+          // FOCUSED VIEW LAYOUT
+          <>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2 w-full">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    placeholder="Search description, user..."
+                    className="w-full pl-9 pr-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none text-foreground font-semibold transition-all duration-150"
+                  />
+                </div>
+                <FiltersAndToolsButton
+                  isOpen={showFilters}
+                  onClick={() => setShowFilters(!showFilters)}
+                  activeFiltersCount={activeFiltersCount}
+                  onClearFilters={clearFilters}
+                />
+                <button
+                  type="button"
+                  onClick={handleExportCSV}
+                  disabled={filteredEvents.length === 0}
+                  className="px-3 py-2 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground text-xs flex items-center gap-1.5 cursor-pointer shrink-0 ml-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-50"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export</span>
+                </button>
+              </div>
             </div>
-          </div>
 
-          {/* Category */}
-          <div className="space-y-1">
-            <label htmlFor="category-select" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Category</label>
-            <select
-              id="category-select"
-              value={selectedCategory}
-              onChange={e => setSelectedCategory(e.target.value)}
-              className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
-            >
-              {categories.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
+            <AdvancedControlsPanel isOpen={showFilters} onClose={() => setShowFilters(false)}>
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleExportJSON}
+                      disabled={filteredEvents.length === 0}
+                      className="px-3 py-1.5 bg-muted hover:bg-muted/80 border border-border rounded-lg text-xs font-bold transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <FileText className="w-3.5 h-3.5" /> Export JSON
+                    </button>
+                  </div>
+                </div>
 
-          {/* Actor */}
-          <div className="space-y-1">
-            <label htmlFor="actor-select" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Actor / User</label>
-            <select
-              id="actor-select"
-              value={selectedActor}
-              onChange={e => setSelectedActor(e.target.value)}
-              className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
-            >
-              <option value="All">All Users</option>
-              {uniqueActors.map(a => (
-                <option key={a} value={a}>{a}</option>
-              ))}
-            </select>
-          </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+                  {/* Category */}
+                  <div className="space-y-1">
+                    <label htmlFor="category-select-focused" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Category</label>
+                    <select
+                      id="category-select-focused"
+                      value={selectedCategory}
+                      onChange={e => setSelectedCategory(e.target.value)}
+                      className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
+                    >
+                      {categories.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
 
-          {/* Action Type */}
-          <div className="space-y-1">
-            <label htmlFor="action-type-select" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Action Type</label>
-            <select
-              id="action-type-select"
-              value={selectedActionType}
-              onChange={e => setSelectedActionType(e.target.value)}
-              className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
-            >
-              <option value="All">All Actions</option>
-              {uniqueActionTypes.map(t => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
+                  {/* Actor */}
+                  <div className="space-y-1">
+                    <label htmlFor="actor-select-focused" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Actor / User</label>
+                    <select
+                      id="actor-select-focused"
+                      value={selectedActor}
+                      onChange={e => setSelectedActor(e.target.value)}
+                      className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
+                    >
+                      <option value="All">All Users</option>
+                      {uniqueActors.map(a => (
+                        <option key={a} value={a}>{a}</option>
+                      ))}
+                    </select>
+                  </div>
 
-          {/* Date range start */}
-          <div className="space-y-1">
-            <label htmlFor="start-date" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Start Date</label>
-            <div className="relative">
-              <Calendar className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 transform -translate-y-1/2" />
-              <input
-                id="start-date"
-                type="date"
-                value={startDate}
-                onChange={e => setStartDate(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
-              />
+                  {/* Action Type */}
+                  <div className="space-y-1">
+                    <label htmlFor="action-type-select-focused" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Action Type</label>
+                    <select
+                      id="action-type-select-focused"
+                      value={selectedActionType}
+                      onChange={e => setSelectedActionType(e.target.value)}
+                      className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
+                    >
+                      <option value="All">All Actions</option>
+                      {uniqueActionTypes.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Severity */}
+                  <div className="space-y-1">
+                    <label htmlFor="severity-select-focused" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Severity</label>
+                    <select
+                      id="severity-select-focused"
+                      value={selectedSeverity}
+                      onChange={e => setSelectedSeverity(e.target.value)}
+                      className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
+                    >
+                      <option value="All">All Severities</option>
+                      <option value="info">Info</option>
+                      <option value="warning">Warning</option>
+                      <option value="critical">Critical</option>
+                    </select>
+                  </div>
+
+                  {/* Date range start */}
+                  <div className="space-y-1">
+                    <label htmlFor="start-date-focused" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Start Date</label>
+                    <div className="relative">
+                      <Calendar className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 transform -translate-y-1/2" />
+                      <input
+                        id="start-date-focused"
+                        type="date"
+                        value={startDate}
+                        onChange={e => setStartDate(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Date range end */}
+                  <div className="space-y-1">
+                    <label htmlFor="end-date-focused" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">End Date</label>
+                    <div className="relative">
+                      <Calendar className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 transform -translate-y-1/2" />
+                      <input
+                        id="end-date-focused"
+                        type="date"
+                        value={endDate}
+                        onChange={e => setEndDate(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Toggle controls */}
+                  <div className="flex flex-col justify-end">
+                    <label htmlFor="undoable-only-toggle-focused" className={`flex items-center gap-2 select-none h-9 px-3 bg-muted hover:bg-muted/80 border ${undoableOnly ? 'border-indigo-500/50 bg-indigo-500/5 text-indigo-600 dark:text-indigo-400' : 'border-border/80 text-foreground'} rounded-lg text-xs font-bold cursor-pointer transition-all duration-200`}>
+                      <input
+                        id="undoable-only-toggle-focused"
+                        type="checkbox"
+                        checked={undoableOnly}
+                        onChange={e => setUndoableOnly(e.target.checked)}
+                        className="accent-indigo-660 w-3.5 h-3.5 rounded cursor-pointer"
+                      />
+                      <span>Undoable Actions Only</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </AdvancedControlsPanel>
+          </>
+        ) : (
+          // ADVANCED VIEW LAYOUT
+          <>
+            <div className="flex items-center gap-1.5 pb-2.5 border-b border-border/70">
+              <Filter className="w-4 h-4 text-indigo-500" />
+              <h2 className="text-xs font-bold uppercase tracking-wider text-foreground">Advanced Query Filters</h2>
             </div>
-          </div>
 
-          {/* Date range end */}
-          <div className="space-y-1">
-            <label htmlFor="end-date" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">End Date</label>
-            <div className="relative">
-              <Calendar className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 transform -translate-y-1/2" />
-              <input
-                id="end-date"
-                type="date"
-                value={endDate}
-                onChange={e => setEndDate(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+              {/* Search bar */}
+              <div className="space-y-1">
+                <label htmlFor="search-input" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Search Term</label>
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 transform -translate-y-1/2" />
+                  <input
+                    id="search-input"
+                    type="text"
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    placeholder="Search description, user..."
+                    className="w-full pl-9 pr-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none text-foreground font-semibold transition-all duration-150"
+                  />
+                </div>
+              </div>
+
+              {/* Category */}
+              <div className="space-y-1">
+                <label htmlFor="category-select" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Category</label>
+                <select
+                  id="category-select"
+                  value={selectedCategory}
+                  onChange={e => setSelectedCategory(e.target.value)}
+                  className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
+                >
+                  {categories.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Actor */}
+              <div className="space-y-1">
+                <label htmlFor="actor-select" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Actor / User</label>
+                <select
+                  id="actor-select"
+                  value={selectedActor}
+                  onChange={e => setSelectedActor(e.target.value)}
+                  className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
+                >
+                  <option value="All">All Users</option>
+                  {uniqueActors.map(a => (
+                    <option key={a} value={a}>{a}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Action Type */}
+              <div className="space-y-1">
+                <label htmlFor="action-type-select" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Action Type</label>
+                <select
+                  id="action-type-select"
+                  value={selectedActionType}
+                  onChange={e => setSelectedActionType(e.target.value)}
+                  className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
+                >
+                  <option value="All">All Actions</option>
+                  {uniqueActionTypes.map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Date range start */}
+              <div className="space-y-1">
+                <label htmlFor="start-date" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Start Date</label>
+                <div className="relative">
+                  <Calendar className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 transform -translate-y-1/2" />
+                  <input
+                    id="start-date"
+                    type="date"
+                    value={startDate}
+                    onChange={e => setStartDate(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {/* Date range end */}
+              <div className="space-y-1">
+                <label htmlFor="end-date" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">End Date</label>
+                <div className="relative">
+                  <Calendar className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 transform -translate-y-1/2" />
+                  <input
+                    id="end-date"
+                    type="date"
+                    value={endDate}
+                    onChange={e => setEndDate(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {/* Severity */}
+              <div className="space-y-1">
+                <label htmlFor="severity-select" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Severity</label>
+                <select
+                  id="severity-select"
+                  value={selectedSeverity}
+                  onChange={e => setSelectedSeverity(e.target.value)}
+                  className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
+                >
+                  <option value="All">All Severities</option>
+                  <option value="info">Info</option>
+                  <option value="warning">Warning</option>
+                  <option value="critical">Critical</option>
+                </select>
+              </div>
+
+              {/* Toggle controls */}
+              <div className="flex flex-col justify-end">
+                <label htmlFor="undoable-only-toggle" className={`flex items-center gap-2 select-none h-9 px-3 bg-muted hover:bg-muted/80 border ${undoableOnly ? 'border-indigo-500/50 bg-indigo-500/5 text-indigo-600 dark:text-indigo-400' : 'border-border/80 text-foreground'} rounded-lg text-xs font-bold cursor-pointer transition-all duration-200`}>
+                  <input
+                    id="undoable-only-toggle"
+                    type="checkbox"
+                    checked={undoableOnly}
+                    onChange={e => setUndoableOnly(e.target.checked)}
+                    className="accent-indigo-600 w-3.5 h-3.5 rounded cursor-pointer"
+                  />
+                  <span>Undoable Actions Only</span>
+                </label>
+              </div>
             </div>
-          </div>
-
-          {/* Severity */}
-          <div className="space-y-1">
-            <label htmlFor="severity-select" className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Severity</label>
-            <select
-              id="severity-select"
-              value={selectedSeverity}
-              onChange={e => setSelectedSeverity(e.target.value)}
-              className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg text-xs outline-none font-semibold text-foreground transition-all duration-150 cursor-pointer"
-            >
-              <option value="All">All Severities</option>
-              <option value="info">Info</option>
-              <option value="warning">Warning</option>
-              <option value="critical">Critical</option>
-            </select>
-          </div>
-
-          {/* Toggle controls */}
-          <div className="flex flex-col justify-end">
-            <label htmlFor="undoable-only-toggle" className={`flex items-center gap-2 select-none h-9 px-3 bg-muted hover:bg-muted/80 border ${undoableOnly ? 'border-indigo-500/50 bg-indigo-500/5 text-indigo-600 dark:text-indigo-400' : 'border-border/80 text-foreground'} rounded-lg text-xs font-bold cursor-pointer transition-all duration-200`}>
-              <input
-                id="undoable-only-toggle"
-                type="checkbox"
-                checked={undoableOnly}
-                onChange={e => setUndoableOnly(e.target.checked)}
-                className="accent-indigo-600 w-3.5 h-3.5 rounded cursor-pointer"
-              />
-              <span>Undoable Actions Only</span>
-            </label>
-          </div>
-        </div>
+          </>
+        )}
 
         {/* Active Filter Badges */}
         {hasActiveFilters && (

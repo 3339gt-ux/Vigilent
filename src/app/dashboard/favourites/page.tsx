@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useApp } from '@/context/AppContext';
+import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
+import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
 import {
   Star,
   Search,
@@ -62,6 +63,17 @@ export default function FavouritesPage() {
   const [dateFilter, setDateFilter] = useState<DateFilterType>('All');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [showActionableOnly, setShowActionableOnly] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const { interfaceDetailLevel } = useInterfaceDetailLevel();
+
+  const activeFiltersCount = useMemo(() => {
+    return [
+      statusFilter !== 'All',
+      dateFilter !== 'All',
+      categoryFilter !== 'All',
+      showActionableOnly
+    ].filter(Boolean).length;
+  }, [statusFilter, dateFilter, categoryFilter, showActionableOnly]);
 
   // Modal & Toast states
   const [confirmItem, setConfirmItem] = useState<FavouriteItem | null>(null);
@@ -830,97 +842,212 @@ export default function FavouritesPage() {
 
       {/* Advanced Filter / Sort Ribbon */}
       <div className="bg-card border border-border p-3.5 rounded-xl shadow-xs space-y-3">
-        <div className="flex flex-col md:flex-row gap-3 items-center">
-          {/* Search */}
-          <div className="relative flex-1 w-full">
-            <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search favourites by name, details or type..."
-              className="w-full pl-9 pr-4 py-2 bg-muted border border-border/80 rounded-lg text-xs outline-none focus:border-indigo-500 text-foreground placeholder-muted-foreground"
-            />
-          </div>
+        {interfaceDetailLevel === 'focused' ? (
+          // FOCUSED VIEW LAYOUT
+          <>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2 w-full">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    placeholder="Search favourites by name, details or type..."
+                    className="w-full pl-9 pr-4 py-2 bg-muted border border-border/80 rounded-lg text-xs outline-none focus:border-indigo-500 text-foreground placeholder-muted-foreground"
+                  />
+                </div>
+                <FiltersAndToolsButton
+                  isOpen={showFilters}
+                  onClick={() => setShowFilters(!showFilters)}
+                  activeFiltersCount={activeFiltersCount}
+                  onClearFilters={handleResetFilters}
+                />
+              </div>
+            </div>
 
-          {/* Toggle actionable */}
-          <label className="flex items-center gap-2 font-semibold text-xs text-foreground cursor-pointer shrink-0 self-start md:self-center">
-            <input
-              type="checkbox"
-              checked={showActionableOnly}
-              onChange={e => setShowActionableOnly(e.target.checked)}
-              className="accent-indigo-650 w-3.5 h-3.5"
-            />
-            <span>Show actionable only (critical/due soon)</span>
-          </label>
-        </div>
+            <AdvancedControlsPanel isOpen={showFilters} onClose={() => setShowFilters(false)}>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold text-muted-foreground uppercase">Status</label>
+                    <select
+                      value={statusFilter}
+                      onChange={e => setStatusFilter(e.target.value as StatusFilterType)}
+                      className="bg-muted border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground font-semibold outline-none cursor-pointer w-full"
+                    >
+                      <option value="All">All Statuses</option>
+                      <option value="current">Valid / Current</option>
+                      <option value="due-soon">Due Soon</option>
+                      <option value="expired">Expired</option>
+                      <option value="missing">Missing Gaps</option>
+                      <option value="archived">Archived / Inactive</option>
+                      <option value="unknown">No Date / Unknown</option>
+                    </select>
+                  </div>
 
-        {/* Dropdowns */}
-        <div className="flex flex-wrap gap-2 items-center">
-          <div className="flex flex-col gap-1 min-w-[120px]">
-            <select
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value as StatusFilterType)}
-              className="bg-muted border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground font-semibold outline-none cursor-pointer"
-            >
-              <option value="All">All Statuses</option>
-              <option value="current">Valid / Current</option>
-              <option value="due-soon">Due Soon</option>
-              <option value="expired">Expired</option>
-              <option value="missing">Missing Gaps</option>
-              <option value="archived">Archived / Inactive</option>
-              <option value="unknown">No Date / Unknown</option>
-            </select>
-          </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold text-muted-foreground uppercase">Date Limits</label>
+                    <select
+                      value={dateFilter}
+                      onChange={e => setDateFilter(e.target.value as DateFilterType)}
+                      className="bg-muted border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground font-semibold outline-none cursor-pointer w-full"
+                    >
+                      <option value="All">All Date Limits</option>
+                      <option value="expired">Already Expired</option>
+                      <option value="7-days">Due within 7 Days</option>
+                      <option value="30-days">Due within 30 Days</option>
+                      <option value="90-days">Due within 90 Days</option>
+                      <option value="no-date">No Expiry Date</option>
+                    </select>
+                  </div>
 
-          <div className="flex flex-col gap-1 min-w-[120px]">
-            <select
-              value={dateFilter}
-              onChange={e => setDateFilter(e.target.value as DateFilterType)}
-              className="bg-muted border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground font-semibold outline-none cursor-pointer"
-            >
-              <option value="All">All Date Limits</option>
-              <option value="expired">Already Expired</option>
-              <option value="7-days">Due within 7 Days</option>
-              <option value="30-days">Due within 30 Days</option>
-              <option value="90-days">Due within 90 Days</option>
-              <option value="no-date">No Expiry Date</option>
-            </select>
-          </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold text-muted-foreground uppercase">Category</label>
+                    <select
+                      value={categoryFilter}
+                      onChange={e => setCategoryFilter(e.target.value)}
+                      className="bg-muted border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground font-semibold outline-none cursor-pointer w-full"
+                    >
+                      <option value="All">All Categories</option>
+                      {uniqueCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                    </select>
+                  </div>
 
-          <div className="flex flex-col gap-1 min-w-[120px]">
-            <select
-              value={categoryFilter}
-              onChange={e => setCategoryFilter(e.target.value)}
-              className="bg-muted border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground font-semibold outline-none cursor-pointer"
-            >
-              <option value="All">All Categories</option>
-              {uniqueCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-            </select>
-          </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold text-muted-foreground uppercase">Sort By</label>
+                    <select
+                      value={sortBy}
+                      onChange={e => setSortBy(e.target.value as SortOption)}
+                      className="bg-muted border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground font-semibold outline-none cursor-pointer w-full"
+                    >
+                      <option value="name">Name A-Z</option>
+                      <option value="module">Vygilence Module</option>
+                      <option value="status-priority">Status Priority</option>
+                      <option value="date-soonest">Due Date (Soonest)</option>
+                      <option value="type">Favourite Type</option>
+                    </select>
+                  </div>
+                </div>
 
-          <div className="flex flex-col gap-1 min-w-[120px]">
-            <select
-              value={sortBy}
-              onChange={e => setSortBy(e.target.value as SortOption)}
-              className="bg-muted border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground font-semibold outline-none cursor-pointer"
-            >
-              <option value="name">Name A-Z</option>
-              <option value="module">Vygilence Module</option>
-              <option value="status-priority">Status Priority</option>
-              <option value="date-soonest">Due Date (Soonest)</option>
-              <option value="type">Favourite Type</option>
-            </select>
-          </div>
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-border">
+                  <label className="flex items-center gap-2 font-semibold text-xs text-foreground cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={showActionableOnly}
+                      onChange={e => setShowActionableOnly(e.target.checked)}
+                      className="accent-indigo-660 w-3.5 h-3.5"
+                    />
+                    <span>Show actionable only (critical/due soon)</span>
+                  </label>
 
-          {(searchQuery || statusFilter !== 'All' || dateFilter !== 'All' || categoryFilter !== 'All' || showActionableOnly) && (
-            <button
-              onClick={handleResetFilters}
-              className="px-2.5 py-1.5 text-xs font-bold text-rose-600 hover:text-white hover:bg-rose-600 border border-rose-500/20 hover:border-transparent rounded-lg transition-colors cursor-pointer flex items-center gap-1"
-            >
-              Reset Filters
-            </button>
-          )}
-        </div>
+                  {activeFiltersCount > 0 && (
+                    <button
+                      onClick={handleResetFilters}
+                      className="px-2.5 py-1.5 text-xs font-bold text-rose-600 hover:text-white hover:bg-rose-600 border border-rose-500/20 hover:border-transparent rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                    >
+                      Reset Filters
+                    </button>
+                  )}
+                </div>
+              </div>
+            </AdvancedControlsPanel>
+          </>
+        ) : (
+          // ADVANCED VIEW LAYOUT
+          <>
+            <div className="flex flex-col md:flex-row gap-3 items-center">
+              {/* Search */}
+              <div className="relative flex-1 w-full">
+                <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search favourites by name, details or type..."
+                  className="w-full pl-9 pr-4 py-2 bg-muted border border-border/80 rounded-lg text-xs outline-none focus:border-indigo-500 text-foreground placeholder-muted-foreground"
+                />
+              </div>
+
+              {/* Toggle actionable */}
+              <label className="flex items-center gap-2 font-semibold text-xs text-foreground cursor-pointer shrink-0 self-start md:self-center">
+                <input
+                  type="checkbox"
+                  checked={showActionableOnly}
+                  onChange={e => setShowActionableOnly(e.target.checked)}
+                  className="accent-indigo-650 w-3.5 h-3.5"
+                />
+                <span>Show actionable only (critical/due soon)</span>
+              </label>
+            </div>
+
+            {/* Dropdowns */}
+            <div className="flex flex-wrap gap-2 items-center">
+              <div className="flex flex-col gap-1 min-w-[120px]">
+                <select
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value as StatusFilterType)}
+                  className="bg-muted border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground font-semibold outline-none cursor-pointer"
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="current">Valid / Current</option>
+                  <option value="due-soon">Due Soon</option>
+                  <option value="expired">Expired</option>
+                  <option value="missing">Missing Gaps</option>
+                  <option value="archived">Archived / Inactive</option>
+                  <option value="unknown">No Date / Unknown</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1 min-w-[120px]">
+                <select
+                  value={dateFilter}
+                  onChange={e => setDateFilter(e.target.value as DateFilterType)}
+                  className="bg-muted border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground font-semibold outline-none cursor-pointer"
+                >
+                  <option value="All">All Date Limits</option>
+                  <option value="expired">Already Expired</option>
+                  <option value="7-days">Due within 7 Days</option>
+                  <option value="30-days">Due within 30 Days</option>
+                  <option value="90-days">Due within 90 Days</option>
+                  <option value="no-date">No Expiry Date</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1 min-w-[120px]">
+                <select
+                  value={categoryFilter}
+                  onChange={e => setCategoryFilter(e.target.value)}
+                  className="bg-muted border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground font-semibold outline-none cursor-pointer"
+                >
+                  <option value="All">All Categories</option>
+                  {uniqueCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1 min-w-[120px]">
+                <select
+                  value={sortBy}
+                  onChange={e => setSortBy(e.target.value as SortOption)}
+                  className="bg-muted border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground font-semibold outline-none cursor-pointer"
+                >
+                  <option value="name">Name A-Z</option>
+                  <option value="module">Vygilence Module</option>
+                  <option value="status-priority">Status Priority</option>
+                  <option value="date-soonest">Due Date (Soonest)</option>
+                  <option value="type">Favourite Type</option>
+                </select>
+              </div>
+
+              {(searchQuery || statusFilter !== 'All' || dateFilter !== 'All' || categoryFilter !== 'All' || showActionableOnly) && (
+                <button
+                  onClick={handleResetFilters}
+                  className="px-2.5 py-1.5 text-xs font-bold text-rose-600 hover:text-white hover:bg-rose-600 border border-rose-500/20 hover:border-transparent rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                >
+                  Reset Filters
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Section Tabs */}
