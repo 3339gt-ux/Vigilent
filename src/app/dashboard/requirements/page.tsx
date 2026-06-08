@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { useApp } from '@/context/AppContext';
+import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
+import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
 import { REQUIREMENT_CATEGORY_GROUPS, flattenCategoryGroups } from '@/lib/categoryPresets';
 import { exportCsv, exportDateStamp, ExportRow } from '@/lib/exportData';
@@ -133,6 +134,18 @@ export default function RequirementsPage() {
   const [density, setDensity] = useState<'comfortable' | 'compact'>('comfortable');
   const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
+  const { interfaceDetailLevel } = useInterfaceDetailLevel();
+
+  const activeFiltersCount = useMemo(() => {
+    return [
+      selectedCategory !== 'All',
+      ownerFilter !== 'All',
+      selectedStatus !== 'All',
+      riskFilter !== 'All',
+      radarFilter !== 'All',
+      showOnlyFavourites
+    ].filter(Boolean).length;
+  }, [selectedCategory, ownerFilter, selectedStatus, riskFilter, radarFilter, showOnlyFavourites]);
   const [bulkRequirementCategory, setBulkRequirementCategory] = useState('');
   const [bulkRequirementOwner, setBulkRequirementOwner] = useState('');
   const [bulkRequirementStatus, setBulkRequirementStatus] = useState('');
@@ -1328,224 +1341,467 @@ export default function RequirementsPage() {
           {/* Advanced Filter Ribbon Controls */}
           <div className="flex flex-col gap-3 mb-4">
             <div className="bg-card border border-border rounded-xl p-2.5 shadow-xs space-y-2.5">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                {/* Search and Toggle Filter Button */}
-                <div className="flex items-center gap-2 w-full md:max-w-md">
-                  <div className="relative flex-1">
-                    <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      value={search}
-                      onChange={event => setSearch(event.target.value)}
-                      placeholder="Search requirements..."
-                      className="w-full pl-9 pr-4 py-2 bg-muted border border-border/80 rounded-lg text-xs outline-none focus:border-indigo-500"
-                    />
+              {interfaceDetailLevel === 'focused' ? (
+                // FOCUSED VIEW LAYOUT
+                <>
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2 w-full">
+                      <div className="relative flex-1 min-w-[200px]">
+                        <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          value={search}
+                          onChange={event => setSearch(event.target.value)}
+                          placeholder="Search requirements..."
+                          className="w-full pl-9 pr-4 py-2 bg-muted border border-border/80 rounded-lg text-xs outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <FiltersAndToolsButton
+                        isOpen={showFilters}
+                        onClick={() => setShowFilters(!showFilters)}
+                        activeFiltersCount={activeFiltersCount}
+                        onClearFilters={handleResetFilters}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => requirementView === 'actions' ? exportActions('filtered') : exportRequirements('filtered')}
+                        className="px-3 py-2 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground text-xs flex items-center gap-1.5 cursor-pointer shrink-0 ml-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Export</span>
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => setShowFilters(!showFilters)}
-                    className={`flex items-center gap-1.5 px-3 py-2 bg-muted hover:bg-muted/80 border border-border font-bold text-xs rounded-lg cursor-pointer transition-colors ${showFilters ? 'ring-2 ring-indigo-500/40' : ''}`}
-                  >
-                    <Filter className="w-4 h-4 text-indigo-500" />
-                    <span>Filters</span>
-                  </button>
 
-                  {/* Category Manager Dropdown inline */}
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setIsCatDropdownOpen(!isCatDropdownOpen)}
-                      className="bg-muted hover:bg-muted/80 border border-border rounded-lg px-3 py-2 text-xs text-foreground font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span>Category Manager</span>
-                      <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-                    </button>
+                  <AdvancedControlsPanel isOpen={showFilters} onClose={() => setShowFilters(false)}>
+                    <div className="space-y-4">
+                      {/* Density, Columns and Category Manager in a grid */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setIsCatDropdownOpen(!isCatDropdownOpen)}
+                            className="bg-muted hover:bg-muted/80 border border-border rounded-lg px-3 py-2 text-xs text-foreground font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5 text-muted-foreground" />
+                            <span>Category Manager</span>
+                            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                          </button>
 
-                    {isCatDropdownOpen && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={() => setIsCatDropdownOpen(false)} />
-                        <div className="absolute right-0 mt-1 w-64 bg-card solid-panel border border-border rounded-xl shadow-xl z-50 p-3 space-y-2.5">
-                          {categoryMessage && (
-                            <div className={`p-1.5 text-[10px] font-semibold border rounded-lg text-center animate-fade-in ${
-                              categoryMessage.toLowerCase().includes('could not') || categoryMessage.toLowerCase().includes('failed')
-                                ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
-                                : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                            }`}>
-                              {categoryMessage}
-                            </div>
+                          {isCatDropdownOpen && (
+                            <>
+                              <div className="fixed inset-0 z-40" onClick={() => setIsCatDropdownOpen(false)} />
+                              <div className="absolute left-0 mt-1 w-64 bg-card solid-panel border border-border rounded-xl shadow-xl z-50 p-3 space-y-2.5">
+                                {categoryMessage && (
+                                  <div className={`p-1.5 text-[10px] font-semibold border rounded-lg text-center animate-fade-in ${
+                                    categoryMessage.toLowerCase().includes('could not') || categoryMessage.toLowerCase().includes('failed')
+                                      ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
+                                      : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                                  }`}>
+                                    {categoryMessage}
+                                  </div>
+                                )}
+                                <div className="relative">
+                                  <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+                                  <input
+                                    type="text"
+                                    value={catSearchQuery}
+                                    onChange={(e) => setCatSearchQuery(e.target.value)}
+                                    placeholder="Search or add category..."
+                                    className="w-full pl-8 pr-3 py-1.5 bg-muted border border-border rounded-lg text-xs outline-none focus:border-indigo-500 transition-colors"
+                                    autoFocus
+                                  />
+                                </div>
+
+                                <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1">
+                                  {filteredCatOptions.length === 0 ? (
+                                    <p className="text-[10px] text-muted-foreground italic text-center py-2">No matching categories.</p>
+                                  ) : (
+                                    filteredCatOptions.map(catName => {
+                                      const isSelected = selectedCategory === catName;
+                                      const customCatObj = requirementCategories.find(c => c.name === catName && !c.is_system && c.active);
+                                      return (
+                                        <div
+                                          key={catName}
+                                          className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+                                            isSelected ? 'bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 font-bold' : 'hover:bg-muted text-foreground'
+                                          }`}
+                                          onClick={() => {
+                                            setSelectedCategory(catName);
+                                            setIsCatDropdownOpen(false);
+                                            setCatSearchQuery('');
+                                          }}
+                                        >
+                                          <span className="truncate flex-1">{catName}</span>
+                                          {customCatObj && (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                void handleArchiveRequirementCategory(customCatObj.id);
+                                              }}
+                                              className="text-muted-foreground hover:text-rose-500 p-0.5 rounded hover:bg-muted-foreground/10 transition-colors shrink-0 cursor-pointer"
+                                              title="Archive custom category"
+                                            >
+                                              <Archive className="w-3.5 h-3.5" />
+                                            </button>
+                                          )}
+                                        </div>
+                                      );
+                                    })
+                                  )}
+                                </div>
+
+                                {catSearchQuery.trim() && !filteredCatOptions.some(c => c.toLowerCase() === catSearchQuery.trim().toLowerCase()) && (
+                                  <div className="border-t border-border pt-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void handleCreateRequirementCategory(catSearchQuery.trim());
+                                        setIsCatDropdownOpen(false);
+                                        setCatSearchQuery('');
+                                      }}
+                                      className="w-full py-1.5 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 transition-colors animate-fade-in cursor-pointer"
+                                    >
+                                      <Plus className="w-3 h-3" /> Create Category &quot;{catSearchQuery.trim()}&quot;
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </>
                           )}
-                          <div className="relative">
-                            <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
-                            <input
-                              type="text"
-                              value={catSearchQuery}
-                              onChange={(e) => setCatSearchQuery(e.target.value)}
-                              placeholder="Search or add category..."
-                              className="w-full pl-8 pr-3 py-1.5 bg-muted border border-border rounded-lg text-xs outline-none focus:border-indigo-500 transition-colors"
-                              autoFocus
-                            />
-                          </div>
+                        </div>
 
-                          <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1">
-                            {filteredCatOptions.length === 0 ? (
-                              <p className="text-[10px] text-muted-foreground italic text-center py-2">No matching categories.</p>
-                            ) : (
-                              filteredCatOptions.map(catName => {
-                                const isSelected = selectedCategory === catName;
-                                const customCatObj = requirementCategories.find(c => c.name === catName && !c.is_system && c.active);
-                                return (
-                                  <div
-                                    key={catName}
-                                    className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
-                                      isSelected ? 'bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 font-bold' : 'hover:bg-muted text-foreground'
-                                    }`}
+                        <div className="flex items-center gap-3">
+                          <ColumnVisibilityControls
+                            columns={columnsOptions}
+                            onToggleColumn={handleToggleColumn}
+                            onToggleAll={handleToggleAllColumns}
+                          />
+
+                          <DensityControls
+                            density={density}
+                            onDensityChange={setDensity}
+                            globalDensity={globalDensity}
+                            onGlobalDensityChange={nextDensity => {
+                              setGlobalDensity(nextDensity);
+                              setDensity(nextDensity);
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Filter Selects */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                        <StarredFilterSelect
+                          label="Category"
+                          value={selectedCategory}
+                          onChange={setSelectedCategory}
+                          options={['All', ...sortedCategories]}
+                          isStarred={(opt) => isFavourite(`cat:${opt}`)}
+                          onToggleStar={(opt) => toggleFavourite(`cat:${opt}`, opt, 'Category')}
+                          allLabel="All Categories"
+                        />
+                        <StarredFilterSelect
+                          label="Owner"
+                          value={ownerFilter}
+                          onChange={setOwnerFilter}
+                          options={sortedOwners}
+                          isStarred={(opt) => isFavourite(`owner:${opt}`)}
+                          onToggleStar={(opt) => toggleFavourite(`owner:${opt}`, opt, 'Owner')}
+                          allLabel="All Owners"
+                        />
+                        <StarredFilterSelect
+                          label="Status"
+                          value={selectedStatus}
+                          onChange={(val) => setSelectedStatus(val as 'All' | 'Attention' | RequirementStatus)}
+                          options={['All', 'Attention', 'GREEN', 'AMBER', 'RED', 'GREY']}
+                          isStarred={(opt) => isFavourite(`status:${opt}`)}
+                          onToggleStar={(opt) => toggleFavourite(`status:${opt}`, opt, 'Status')}
+                          allLabel="All Statuses"
+                        />
+                        <StarredFilterSelect
+                          label="Risk Level"
+                          value={riskFilter}
+                          onChange={setRiskFilter}
+                          options={['All', 'Low', 'Medium', 'High', 'Critical']}
+                          isStarred={(opt) => isFavourite(`risk:${opt}`)}
+                          onToggleStar={(opt) => toggleFavourite(`risk:${opt}`, opt, 'Risk Level')}
+                          allLabel="All Risks"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                        <StarredFilterSelect
+                          label="Due Date Filter"
+                          value={radarFilter}
+                          onChange={setRadarFilter}
+                          options={['All', 'overdue', 'due-week', 'due30', 'due60', 'due90', 'actions']}
+                          isStarred={(opt) => isFavourite(`radar:${opt}`)}
+                          onToggleStar={(opt) => toggleFavourite(`radar:${opt}`, opt, 'Due Date Filter')}
+                          allLabel="No Date Filter"
+                        />
+                      </div>
+
+                      {/* Starred Toggles */}
+                      <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-border/40 text-xs">
+                        <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={showOnlyFavourites}
+                            onChange={e => setShowOnlyFavourites(e.target.checked)}
+                            className="accent-indigo-650 w-3.5 h-3.5"
+                          />
+                          <span>Favourite Requirements only</span>
+                        </label>
+                      </div>
+
+                      {/* Saved Views Bar */}
+                      <SavedViewsBar
+                        views={allViews}
+                        activeViewId={activeViewId}
+                        onSelectView={handleSelectView}
+                        onSaveCurrent={handleSaveView}
+                        onDeleteCustom={deleteCustomView}
+                        isViewModified={isViewModified}
+                      />
+
+                      {/* Secondary Export controls inside panel */}
+                      <div className="flex justify-end pt-2 border-t border-border/40">
+                        <button
+                          type="button"
+                          disabled={requirementView === 'actions' ? selectedBulkActions.length === 0 : selectedBulkRequirements.length === 0}
+                          onClick={() => requirementView === 'actions' ? exportActions('selected') : exportRequirements('selected')}
+                          className="px-3 py-1.5 bg-card hover:bg-muted disabled:opacity-40 border border-border rounded-lg font-bold text-foreground text-xs flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5" /> Export selected ({requirementView === 'actions' ? selectedBulkActions.length : selectedBulkRequirements.length})
+                        </button>
+                      </div>
+                    </div>
+                  </AdvancedControlsPanel>
+                </>
+              ) : (
+                // ADVANCED VIEW LAYOUT (Original)
+                <>
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    {/* Search and Toggle Filter Button */}
+                    <div className="flex items-center gap-2 w-full md:max-w-md">
+                      <div className="relative flex-1">
+                        <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          value={search}
+                          onChange={event => setSearch(event.target.value)}
+                          placeholder="Search requirements..."
+                          className="w-full pl-9 pr-4 py-2 bg-muted border border-border/80 rounded-lg text-xs outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <button
+                        onClick={() => setShowFilters(!showFilters)}
+                        className={`flex items-center gap-1.5 px-3 py-2 bg-muted hover:bg-muted/80 border border-border font-bold text-xs rounded-lg cursor-pointer transition-colors ${showFilters ? 'ring-2 ring-indigo-500/40' : ''}`}
+                      >
+                        <Filter className="w-4 h-4 text-indigo-500" />
+                        <span>Filters</span>
+                      </button>
+
+                      {/* Category Manager Dropdown inline */}
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setIsCatDropdownOpen(!isCatDropdownOpen)}
+                          className="bg-muted hover:bg-muted/80 border border-border rounded-lg px-3 py-2 text-xs text-foreground font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span>Category Manager</span>
+                          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                        </button>
+
+                        {isCatDropdownOpen && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setIsCatDropdownOpen(false)} />
+                            <div className="absolute right-0 mt-1 w-64 bg-card solid-panel border border-border rounded-xl shadow-xl z-50 p-3 space-y-2.5">
+                              {categoryMessage && (
+                                <div className={`p-1.5 text-[10px] font-semibold border rounded-lg text-center animate-fade-in ${
+                                  categoryMessage.toLowerCase().includes('could not') || categoryMessage.toLowerCase().includes('failed')
+                                    ? 'bg-rose-500/10 border-rose-500/20 text-rose-650 dark:text-rose-450'
+                                    : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-450'
+                                }`}>
+                                  {categoryMessage}
+                                </div>
+                              )}
+                              <div className="relative">
+                                <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+                                <input
+                                  type="text"
+                                  value={catSearchQuery}
+                                  onChange={(e) => setCatSearchQuery(e.target.value)}
+                                  placeholder="Search or add category..."
+                                  className="w-full pl-8 pr-3 py-1.5 bg-muted border border-border rounded-lg text-xs outline-none focus:border-indigo-500 transition-colors"
+                                  autoFocus
+                                />
+                              </div>
+
+                              <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1">
+                                {filteredCatOptions.length === 0 ? (
+                                  <p className="text-[10px] text-muted-foreground italic text-center py-2">No matching categories.</p>
+                                ) : (
+                                  filteredCatOptions.map(catName => {
+                                    const isSelected = selectedCategory === catName;
+                                    const customCatObj = requirementCategories.find(c => c.name === catName && !c.is_system && c.active);
+                                    return (
+                                      <div
+                                        key={catName}
+                                        className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+                                          isSelected ? 'bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 font-bold' : 'hover:bg-muted text-foreground'
+                                        }`}
+                                        onClick={() => {
+                                          setSelectedCategory(catName);
+                                          setIsCatDropdownOpen(false);
+                                          setCatSearchQuery('');
+                                        }}
+                                      >
+                                        <span className="truncate flex-1">{catName}</span>
+                                        {customCatObj && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              void handleArchiveRequirementCategory(customCatObj.id);
+                                            }}
+                                            className="text-muted-foreground hover:text-rose-500 p-0.5 rounded hover:bg-muted-foreground/10 transition-colors shrink-0 cursor-pointer"
+                                            title="Archive custom category"
+                                          >
+                                            <Archive className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    );
+                                  })
+                                )}
+                              </div>
+
+                              {catSearchQuery.trim() && !filteredCatOptions.some(c => c.toLowerCase() === catSearchQuery.trim().toLowerCase()) && (
+                                <div className="border-t border-border pt-2">
+                                  <button
+                                    type="button"
                                     onClick={() => {
-                                      setSelectedCategory(catName);
+                                      void handleCreateRequirementCategory(catSearchQuery.trim());
                                       setIsCatDropdownOpen(false);
                                       setCatSearchQuery('');
                                     }}
+                                    className="w-full py-1.5 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 transition-colors animate-fade-in cursor-pointer"
                                   >
-                                    <span className="truncate flex-1">{catName}</span>
-                                    {customCatObj && (
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          void handleArchiveRequirementCategory(customCatObj.id);
-                                        }}
-                                        className="text-muted-foreground hover:text-rose-500 p-0.5 rounded hover:bg-muted-foreground/10 transition-colors shrink-0 cursor-pointer"
-                                        title="Archive custom category"
-                                      >
-                                        <Archive className="w-3.5 h-3.5" />
-                                      </button>
-                                    )}
-                                  </div>
-                                );
-                              })
-                            )}
-                          </div>
-
-                          {catSearchQuery.trim() && !filteredCatOptions.some(c => c.toLowerCase() === catSearchQuery.trim().toLowerCase()) && (
-                            <div className="border-t border-border pt-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  void handleCreateRequirementCategory(catSearchQuery.trim());
-                                  setIsCatDropdownOpen(false);
-                                  setCatSearchQuery('');
-                                }}
-                                className="w-full py-1.5 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 transition-colors animate-fade-in cursor-pointer"
-                              >
-                                <Plus className="w-3 h-3" /> Create Category &quot;{catSearchQuery.trim()}&quot;
-                              </button>
+                                    <Plus className="w-3 h-3" /> Create Category &quot;{catSearchQuery.trim()}&quot;
+                                  </button>
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
 
-                {/* Density and Column Visibility Toggles */}
-                <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-                  <ColumnVisibilityControls
-                    columns={columnsOptions}
-                    onToggleColumn={handleToggleColumn}
-                    onToggleAll={handleToggleAllColumns}
-                  />
-
-                  <DensityControls
-                    density={density}
-                    onDensityChange={setDensity}
-                    globalDensity={globalDensity}
-                    onGlobalDensityChange={nextDensity => {
-                      setGlobalDensity(nextDensity);
-                      setDensity(nextDensity);
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Collapsible advanced filters */}
-              {showFilters && (
-                <div className="border-t border-border/60 pt-3 space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                    <StarredFilterSelect
-                      label="Category"
-                      value={selectedCategory}
-                      onChange={setSelectedCategory}
-                      options={['All', ...sortedCategories]}
-                      isStarred={(opt) => isFavourite(`cat:${opt}`)}
-                      onToggleStar={(opt) => toggleFavourite(`cat:${opt}`, opt, 'Category')}
-                      allLabel="All Categories"
-                    />
-                    <StarredFilterSelect
-                      label="Owner"
-                      value={ownerFilter}
-                      onChange={setOwnerFilter}
-                      options={sortedOwners}
-                      isStarred={(opt) => isFavourite(`owner:${opt}`)}
-                      onToggleStar={(opt) => toggleFavourite(`owner:${opt}`, opt, 'Owner')}
-                      allLabel="All Owners"
-                    />
-                    <StarredFilterSelect
-                      label="Status"
-                      value={selectedStatus}
-                      onChange={(val) => setSelectedStatus(val as 'All' | 'Attention' | RequirementStatus)}
-                      options={['All', 'Attention', 'GREEN', 'AMBER', 'RED', 'GREY']}
-                      isStarred={(opt) => isFavourite(`status:${opt}`)}
-                      onToggleStar={(opt) => toggleFavourite(`status:${opt}`, opt, 'Status')}
-                      allLabel="All Statuses"
-                    />
-                    <StarredFilterSelect
-                      label="Risk Level"
-                      value={riskFilter}
-                      onChange={setRiskFilter}
-                      options={['All', 'Low', 'Medium', 'High', 'Critical']}
-                      isStarred={(opt) => isFavourite(`risk:${opt}`)}
-                      onToggleStar={(opt) => toggleFavourite(`risk:${opt}`, opt, 'Risk Level')}
-                      allLabel="All Risks"
-                    />
-                  </div>
-
-                  {/* Second Row of Filters */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                    <StarredFilterSelect
-                      label="Due Date Filter"
-                      value={radarFilter}
-                      onChange={setRadarFilter}
-                      options={['All', 'overdue', 'due-week', 'due30', 'due60', 'due90', 'actions']}
-                      isStarred={(opt) => isFavourite(`radar:${opt}`)}
-                      onToggleStar={(opt) => toggleFavourite(`radar:${opt}`, opt, 'Due Date Filter')}
-                      allLabel="No Date Filter"
-                    />
-                  </div>
-
-                  {/* Quick Toggles */}
-                  <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-border/40 text-xs">
-                    <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={showOnlyFavourites}
-                        onChange={e => setShowOnlyFavourites(e.target.checked)}
-                        className="accent-indigo-650 w-3.5 h-3.5"
+                    {/* Density and Column Visibility Toggles */}
+                    <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                      <ColumnVisibilityControls
+                        columns={columnsOptions}
+                        onToggleColumn={handleToggleColumn}
+                        onToggleAll={handleToggleAllColumns}
                       />
-                      <span>Favourite Requirements only</span>
-                    </label>
+
+                      <DensityControls
+                        density={density}
+                        onDensityChange={setDensity}
+                        globalDensity={globalDensity}
+                        onGlobalDensityChange={nextDensity => {
+                          setGlobalDensity(nextDensity);
+                          setDensity(nextDensity);
+                        }}
+                      />
+                    </div>
                   </div>
-                </div>
+
+                  {/* Collapsible advanced filters */}
+                  {showFilters && (
+                    <div className="border-t border-border/60 pt-3 space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                        <StarredFilterSelect
+                          label="Category"
+                          value={selectedCategory}
+                          onChange={setSelectedCategory}
+                          options={['All', ...sortedCategories]}
+                          isStarred={(opt) => isFavourite(`cat:${opt}`)}
+                          onToggleStar={(opt) => toggleFavourite(`cat:${opt}`, opt, 'Category')}
+                          allLabel="All Categories"
+                        />
+                        <StarredFilterSelect
+                          label="Owner"
+                          value={ownerFilter}
+                          onChange={setOwnerFilter}
+                          options={sortedOwners}
+                          isStarred={(opt) => isFavourite(`owner:${opt}`)}
+                          onToggleStar={(opt) => toggleFavourite(`owner:${opt}`, opt, 'Owner')}
+                          allLabel="All Owners"
+                        />
+                        <StarredFilterSelect
+                          label="Status"
+                          value={selectedStatus}
+                          onChange={(val) => setSelectedStatus(val as 'All' | 'Attention' | RequirementStatus)}
+                          options={['All', 'Attention', 'GREEN', 'AMBER', 'RED', 'GREY']}
+                          isStarred={(opt) => isFavourite(`status:${opt}`)}
+                          onToggleStar={(opt) => toggleFavourite(`status:${opt}`, opt, 'Status')}
+                          allLabel="All Statuses"
+                        />
+                        <StarredFilterSelect
+                          label="Risk Level"
+                          value={riskFilter}
+                          onChange={setRiskFilter}
+                          options={['All', 'Low', 'Medium', 'High', 'Critical']}
+                          isStarred={(opt) => isFavourite(`risk:${opt}`)}
+                          onToggleStar={(opt) => toggleFavourite(`risk:${opt}`, opt, 'Risk Level')}
+                          allLabel="All Risks"
+                        />
+                      </div>
+
+                      {/* Second Row of Filters */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                        <StarredFilterSelect
+                          label="Due Date Filter"
+                          value={radarFilter}
+                          onChange={setRadarFilter}
+                          options={['All', 'overdue', 'due-week', 'due30', 'due60', 'due90', 'actions']}
+                          isStarred={(opt) => isFavourite(`radar:${opt}`)}
+                          onToggleStar={(opt) => toggleFavourite(`radar:${opt}`, opt, 'Due Date Filter')}
+                          allLabel="No Date Filter"
+                        />
+                      </div>
+
+                      {/* Quick Toggles */}
+                      <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-border/40 text-xs">
+                        <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={showOnlyFavourites}
+                            onChange={e => setShowOnlyFavourites(e.target.checked)}
+                            className="accent-indigo-650 w-3.5 h-3.5"
+                          />
+                          <span>Favourite Requirements only</span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Saved Views Bar */}
+                  <SavedViewsBar
+                    views={allViews}
+                    activeViewId={activeViewId}
+                    onSelectView={handleSelectView}
+                    onSaveCurrent={handleSaveView}
+                    onDeleteCustom={deleteCustomView}
+                    isViewModified={isViewModified}
+                  />
+                </>
               )}
 
-              {/* Saved Views Bar */}
-              <SavedViewsBar
-                views={allViews}
-                activeViewId={activeViewId}
-                onSelectView={handleSelectView}
-                onSaveCurrent={handleSaveView}
-                onDeleteCustom={deleteCustomView}
-                isViewModified={isViewModified}
-              />
-
-              {/* Active filter chips */}
+              {/* Active filter chips (always visible below the toolbar) */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <ActiveFilterChips chips={filterChips} onClearAll={handleResetFilters} />
                 {favourites.length > 0 && (
@@ -1578,27 +1834,30 @@ export default function RequirementsPage() {
             </div>
           )}
 
-          <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
-            {requirementView === 'actions' ? (
-              <>
-                <button type="button" onClick={() => exportActions('filtered')} className="px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
-                  <Download className="w-3.5 h-3.5" /> Export filtered
-                </button>
-                <button type="button" disabled={selectedBulkActions.length === 0} onClick={() => exportActions('selected')} className="px-3 py-1.5 bg-card hover:bg-muted disabled:opacity-40 border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
-                  <Download className="w-3.5 h-3.5" /> Export selected
-                </button>
-              </>
-            ) : (
-              <>
-                <button type="button" onClick={() => exportRequirements('filtered')} className="px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
-                  <Download className="w-3.5 h-3.5" /> Export filtered
-                </button>
-                <button type="button" disabled={selectedBulkRequirements.length === 0} onClick={() => exportRequirements('selected')} className="px-3 py-1.5 bg-card hover:bg-muted disabled:opacity-40 border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
-                  <Download className="w-3.5 h-3.5" /> Export selected
-                </button>
-              </>
-            )}
-          </div>
+          {/* Conditional rendering of export buttons for Advanced view */}
+          {interfaceDetailLevel === 'advanced' && (
+            <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
+              {requirementView === 'actions' ? (
+                <>
+                  <button type="button" onClick={() => exportActions('filtered')} className="px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
+                    <Download className="w-3.5 h-3.5" /> Export filtered
+                  </button>
+                  <button type="button" disabled={selectedBulkActions.length === 0} onClick={() => exportActions('selected')} className="px-3 py-1.5 bg-card hover:bg-muted disabled:opacity-40 border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
+                    <Download className="w-3.5 h-3.5" /> Export selected
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button type="button" onClick={() => exportRequirements('filtered')} className="px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
+                    <Download className="w-3.5 h-3.5" /> Export filtered
+                  </button>
+                  <button type="button" disabled={selectedBulkRequirements.length === 0} onClick={() => exportRequirements('selected')} className="px-3 py-1.5 bg-card hover:bg-muted disabled:opacity-40 border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
+                    <Download className="w-3.5 h-3.5" /> Export selected
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           {requirementView === 'actions' ? (
             <>

@@ -2,7 +2,8 @@
 
 import React, { useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
-import { useApp } from '@/context/AppContext';
+import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
+import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { BulkUploadConfigurationPanel } from '@/components/BulkUploadConfigurationPanel';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
@@ -109,6 +110,18 @@ export default function EvidenceVault() {
   const [density, setDensity] = useState<'comfortable' | 'compact'>('comfortable');
   const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
+  const { interfaceDetailLevel } = useInterfaceDetailLevel();
+
+  const activeFiltersCount = useMemo(() => {
+    return [
+      selectedCategory !== 'All',
+      selectedStatus !== 'All',
+      linkFilter !== 'All',
+      docTypeFilter !== 'All',
+      uploadedByFilter !== 'All',
+      showOnlyStarredDocs
+    ].filter(Boolean).length;
+  }, [selectedCategory, selectedStatus, linkFilter, docTypeFilter, uploadedByFilter, showOnlyStarredDocs]);
   const [bulkCategory, setBulkCategory] = useState('');
   const [bulkStatus, setBulkStatus] = useState('');
   const [bulkReviewDate, setBulkReviewDate] = useState('');
@@ -1692,238 +1705,482 @@ export default function EvidenceVault() {
           {/* Advanced Filter Ribbon Controls */}
           <div className="flex flex-col gap-3 mb-4">
             <div className="bg-card border border-border rounded-xl p-2.5 shadow-xs space-y-2.5">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                {/* Search and Toggle Filter Button */}
-                <div className="flex items-center gap-2 w-full md:max-w-md">
-                  <div className="relative flex-1">
-                    <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      id="vault-search"
-                      value={search}
-                      onChange={e => setSearch(e.target.value)}
-                      placeholder="Search documents or files..."
-                      className="w-full pl-9 pr-4 py-2 bg-muted border border-border/80 rounded-lg text-xs outline-none focus:border-indigo-500 transition-colors"
-                    />
-                  </div>
-                  <button
-                    onClick={() => setShowFilters(!showFilters)}
-                    className={`flex items-center gap-1.5 px-3 py-2 bg-muted hover:bg-muted/80 border border-border font-bold text-xs rounded-lg cursor-pointer transition-colors ${showFilters ? 'ring-2 ring-indigo-500/40' : ''}`}
-                  >
-                    <Filter className="w-4 h-4 text-indigo-500" />
-                    <span>Filters</span>
-                  </button>
-
-                  {/* Category Manager Dropdown inline */}
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setIsCatDropdownOpen(!isCatDropdownOpen)}
-                      className="bg-muted hover:bg-muted/80 border border-border rounded-lg px-3 py-2 text-xs text-foreground font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span>Category Manager</span>
-                      <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-                    </button>
-
-                    {isCatDropdownOpen && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={() => setIsCatDropdownOpen(false)} />
-                        <div className="absolute right-0 mt-1 w-64 bg-card solid-panel border border-border rounded-xl shadow-xl z-50 p-3 space-y-2.5">
-                          {categoryMessage && (
-                            <div className={`p-1.5 text-[10px] font-semibold border rounded-lg text-center animate-fade-in ${
-                              categoryMessage.toLowerCase().includes('could not') || categoryMessage.toLowerCase().includes('failed')
-                                ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
-                                : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                            }`}>
-                              {categoryMessage}
-                            </div>
-                          )}
-                          <div className="relative">
-                            <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
-                            <input
-                              type="text"
-                              value={catSearchQuery}
-                              onChange={(e) => setCatSearchQuery(e.target.value)}
-                              placeholder="Search or add category..."
-                              className="w-full pl-8 pr-3 py-1.5 bg-muted border border-border rounded-lg text-xs outline-none focus:border-indigo-500 transition-colors"
-                              autoFocus
-                            />
-                          </div>
-
-                          <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1">
-                            {filteredCatOptions.length === 0 ? (
-                              <p className="text-[10px] text-muted-foreground italic text-center py-2">No matching categories.</p>
-                            ) : (
-                              filteredCatOptions.map(catName => {
-                                const isSelected = selectedCategory === catName;
-                                const customCatObj = evidenceCategories.find(c => c.name === catName && !c.is_system && c.active);
-                                return (
-                                  <div
-                                    key={catName}
-                                    className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
-                                      isSelected ? 'bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 font-bold' : 'hover:bg-muted text-foreground font-semibold'
-                                    }`}
-                                    onClick={() => {
-                                      setSelectedCategory(catName);
-                                      setIsCatDropdownOpen(false);
-                                      setCatSearchQuery('');
-                                    }}
-                                  >
-                                    <span className="truncate flex-1">{catName}</span>
-                                    {customCatObj && (
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          void handleArchiveEvidenceCategory(customCatObj.id);
-                                        }}
-                                        className="text-muted-foreground hover:text-rose-500 p-0.5 rounded hover:bg-muted-foreground/10 transition-colors shrink-0 cursor-pointer"
-                                        title="Archive custom category"
-                                      >
-                                        <Archive className="w-3.5 h-3.5" />
-                                      </button>
-                                    )}
-                                  </div>
-                                );
-                              })
-                            )}
-                          </div>
-
-                          {catSearchQuery.trim() && !filteredCatOptions.some(c => c.toLowerCase() === catSearchQuery.trim().toLowerCase()) && (
-                            <div className="border-t border-border pt-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  void handleCreateEvidenceCategory(catSearchQuery.trim());
-                                  setIsCatDropdownOpen(false);
-                                  setCatSearchQuery('');
-                                }}
-                                className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 transition-colors animate-fade-in cursor-pointer"
-                              >
-                                <Plus className="w-3 h-3" /> Create Category &quot;{catSearchQuery.trim()}&quot;
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Density and Column Visibility Toggles */}
-                <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-                  <ColumnVisibilityControls
-                    columns={columnsOptions}
-                    onToggleColumn={handleToggleColumn}
-                    onToggleAll={handleToggleAllColumns}
-                  />
-
-                  <DensityControls
-                    density={density}
-                    onDensityChange={setDensity}
-                    globalDensity={globalDensity}
-                    onGlobalDensityChange={nextDensity => {
-                      setGlobalDensity(nextDensity);
-                      setDensity(nextDensity);
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Collapsible advanced filters */}
-              {showFilters && (
-                <div className="border-t border-border/60 pt-3 space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                    <StarredFilterSelect
-                      label="Category"
-                      value={selectedCategory}
-                      onChange={setSelectedCategory}
-                      options={['All', ...sortedCategories]}
-                      isStarred={(opt) => isFavourite(`cat:${opt}`)}
-                      onToggleStar={(opt) => toggleFavourite(`cat:${opt}`, opt, 'Category')}
-                      allLabel="All Categories"
-                    />
-                    <StarredFilterSelect
-                      label="Uploader"
-                      value={uploadedByFilter}
-                      onChange={setUploadedByFilter}
-                      options={sortedUploaders}
-                      isStarred={(opt) => isFavourite(`uploader:${opt}`)}
-                      onToggleStar={(opt) => toggleFavourite(`uploader:${opt}`, getUploaderName(opt), 'Uploader')}
-                      allLabel="All Uploaders"
-                    />
-                    <StarredFilterSelect
-                      label="Status"
-                      value={selectedStatus}
-                      onChange={setSelectedStatus}
-                      options={['All', 'Active', 'Expiring Soon', 'Expired', 'Unclassified']}
-                      isStarred={(opt) => isFavourite(`status:${opt}`)}
-                      onToggleStar={(opt) => toggleFavourite(`status:${opt}`, opt, 'Status')}
-                      allLabel="All Statuses"
-                    />
-                    <StarredFilterSelect
-                      label="Link Status"
-                      value={linkFilter}
-                      onChange={(val) => setLinkFilter(val as 'All' | 'Linked Only' | 'Unlinked Only')}
-                      options={['All', 'Linked Only', 'Unlinked Only']}
-                      isStarred={(opt) => isFavourite(`link:${opt}`)}
-                      onToggleStar={(opt) => toggleFavourite(`link:${opt}`, opt, 'Link Status')}
-                    />
-                  </div>
-
-                  {/* Second Row of Filters */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                    <StarredFilterSelect
-                      label="Doc Type"
-                      value={docTypeFilter}
-                      onChange={setDocTypeFilter}
-                      options={['All', 'PDF', 'Image', 'Spreadsheet', 'Document', 'Other']}
-                      isStarred={(opt) => isFavourite(`doctype:${opt}`)}
-                      onToggleStar={(opt) => toggleFavourite(`doctype:${opt}`, opt, 'Doc Type')}
-                      allLabel="All Doc Types"
-                    />
-
-                    <div className="flex flex-col gap-1">
-                      <label htmlFor="vault-sort-by" className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Sort By</label>
-                      <select
-                        id="vault-sort-by"
-                        value={sortBy}
-                        onChange={e => setSortBy(e.target.value as 'title' | 'expiry' | 'uploaded')}
-                        className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+              {interfaceDetailLevel === 'focused' ? (
+                // FOCUSED VIEW LAYOUT
+                <>
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2 w-full">
+                      <div className="relative flex-1 min-w-[200px]">
+                        <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          id="vault-search"
+                          value={search}
+                          onChange={e => setSearch(e.target.value)}
+                          placeholder="Search documents or files..."
+                          className="w-full pl-9 pr-4 py-2 bg-muted border border-border/80 rounded-lg text-xs outline-none focus:border-indigo-500 transition-colors"
+                        />
+                      </div>
+                      <FiltersAndToolsButton
+                        isOpen={showFilters}
+                        onClick={() => setShowFilters(!showFilters)}
+                        activeFiltersCount={activeFiltersCount}
+                        onClearFilters={handleResetFilters}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => exportDocuments('filtered')}
+                        className="px-3 py-2 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground text-xs flex items-center gap-1.5 cursor-pointer shrink-0 ml-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
                       >
-                        <option value="uploaded">Upload Date</option>
-                        <option value="title">Document Name</option>
-                        <option value="expiry">Expiry Date</option>
-                      </select>
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Export</span>
+                      </button>
                     </div>
                   </div>
 
-                  {/* Quick Toggles */}
-                  <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-border/40 text-xs">
-                    <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={showOnlyStarredDocs}
-                        onChange={e => setShowOnlyStarredDocs(e.target.checked)}
-                        className="accent-indigo-650 w-3.5 h-3.5"
+                  <AdvancedControlsPanel isOpen={showFilters} onClose={() => setShowFilters(false)}>
+                    <div className="space-y-4">
+                      {/* Density, Columns and Category Manager in a grid */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setIsCatDropdownOpen(!isCatDropdownOpen)}
+                            className="bg-muted hover:bg-muted/80 border border-border rounded-lg px-3 py-2 text-xs text-foreground font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5 text-muted-foreground" />
+                            <span>Category Manager</span>
+                            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                          </button>
+
+                          {isCatDropdownOpen && (
+                            <>
+                              <div className="fixed inset-0 z-40" onClick={() => setIsCatDropdownOpen(false)} />
+                              <div className="absolute left-0 mt-1 w-64 bg-card solid-panel border border-border rounded-xl shadow-xl z-50 p-3 space-y-2.5">
+                                {categoryMessage && (
+                                  <div className={`p-1.5 text-[10px] font-semibold border rounded-lg text-center animate-fade-in ${
+                                    categoryMessage.toLowerCase().includes('could not') || categoryMessage.toLowerCase().includes('failed')
+                                      ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
+                                      : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                                  }`}>
+                                    {categoryMessage}
+                                  </div>
+                                )}
+                                <div className="relative">
+                                  <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+                                  <input
+                                    type="text"
+                                    value={catSearchQuery}
+                                    onChange={(e) => setCatSearchQuery(e.target.value)}
+                                    placeholder="Search or add category..."
+                                    className="w-full pl-8 pr-3 py-1.5 bg-muted border border-border rounded-lg text-xs outline-none focus:border-indigo-500 transition-colors"
+                                    autoFocus
+                                  />
+                                </div>
+
+                                <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1">
+                                  {filteredCatOptions.length === 0 ? (
+                                    <p className="text-[10px] text-muted-foreground italic text-center py-2">No matching categories.</p>
+                                  ) : (
+                                    filteredCatOptions.map(catName => {
+                                      const isSelected = selectedCategory === catName;
+                                      const customCatObj = evidenceCategories.find(c => c.name === catName && !c.is_system && c.active);
+                                      return (
+                                        <div
+                                          key={catName}
+                                          className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+                                            isSelected ? 'bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 font-bold' : 'hover:bg-muted text-foreground font-semibold'
+                                          }`}
+                                          onClick={() => {
+                                            setSelectedCategory(catName);
+                                            setIsCatDropdownOpen(false);
+                                            setCatSearchQuery('');
+                                          }}
+                                        >
+                                          <span className="truncate flex-1">{catName}</span>
+                                          {customCatObj && (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                void handleArchiveEvidenceCategory(customCatObj.id);
+                                              }}
+                                              className="text-muted-foreground hover:text-rose-500 p-0.5 rounded hover:bg-muted-foreground/10 transition-colors shrink-0 cursor-pointer"
+                                              title="Archive custom category"
+                                            >
+                                              <Archive className="w-3.5 h-3.5" />
+                                            </button>
+                                          )}
+                                        </div>
+                                      );
+                                    })
+                                  )}
+                                </div>
+
+                                {catSearchQuery.trim() && !filteredCatOptions.some(c => c.toLowerCase() === catSearchQuery.trim().toLowerCase()) && (
+                                  <div className="border-t border-border pt-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void handleCreateEvidenceCategory(catSearchQuery.trim());
+                                        setIsCatDropdownOpen(false);
+                                        setCatSearchQuery('');
+                                      }}
+                                      className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 transition-colors animate-fade-in cursor-pointer"
+                                    >
+                                      <Plus className="w-3 h-3" /> Create Category &quot;{catSearchQuery.trim()}&quot;
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <ColumnVisibilityControls
+                            columns={columnsOptions}
+                            onToggleColumn={handleToggleColumn}
+                            onToggleAll={handleToggleAllColumns}
+                          />
+
+                          <DensityControls
+                            density={density}
+                            onDensityChange={setDensity}
+                            globalDensity={globalDensity}
+                            onGlobalDensityChange={nextDensity => {
+                              setGlobalDensity(nextDensity);
+                              setDensity(nextDensity);
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Filters grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                        <StarredFilterSelect
+                          label="Category"
+                          value={selectedCategory}
+                          onChange={setSelectedCategory}
+                          options={['All', ...sortedCategories]}
+                          isStarred={(opt) => isFavourite(`cat:${opt}`)}
+                          onToggleStar={(opt) => toggleFavourite(`cat:${opt}`, opt, 'Category')}
+                          allLabel="All Categories"
+                        />
+                        <StarredFilterSelect
+                          label="Uploader"
+                          value={uploadedByFilter}
+                          onChange={setUploadedByFilter}
+                          options={sortedUploaders}
+                          isStarred={(opt) => isFavourite(`uploader:${opt}`)}
+                          onToggleStar={(opt) => toggleFavourite(`uploader:${opt}`, getUploaderName(opt), 'Uploader')}
+                          allLabel="All Uploaders"
+                        />
+                        <StarredFilterSelect
+                          label="Status"
+                          value={selectedStatus}
+                          onChange={setSelectedStatus}
+                          options={['All', 'Active', 'Expiring Soon', 'Expired', 'Unclassified']}
+                          isStarred={(opt) => isFavourite(`status:${opt}`)}
+                          onToggleStar={(opt) => toggleFavourite(`status:${opt}`, opt, 'Status')}
+                          allLabel="All Statuses"
+                        />
+                        <StarredFilterSelect
+                          label="Link Status"
+                          value={linkFilter}
+                          onChange={(val) => setLinkFilter(val as 'All' | 'Linked Only' | 'Unlinked Only')}
+                          options={['All', 'Linked Only', 'Unlinked Only']}
+                          isStarred={(opt) => isFavourite(`link:${opt}`)}
+                          onToggleStar={(opt) => toggleFavourite(`link:${opt}`, opt, 'Link Status')}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                        <StarredFilterSelect
+                          label="Doc Type"
+                          value={docTypeFilter}
+                          onChange={setDocTypeFilter}
+                          options={['All', 'PDF', 'Image', 'Spreadsheet', 'Document', 'Other']}
+                          isStarred={(opt) => isFavourite(`doctype:${opt}`)}
+                          onToggleStar={(opt) => toggleFavourite(`doctype:${opt}`, opt, 'Doc Type')}
+                          allLabel="All Doc Types"
+                        />
+
+                        <div className="flex flex-col gap-1">
+                          <label htmlFor="vault-sort-by-focused" className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Sort By</label>
+                          <select
+                            id="vault-sort-by-focused"
+                            value={sortBy}
+                            onChange={e => setSortBy(e.target.value as 'title' | 'expiry' | 'uploaded')}
+                            className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                          >
+                            <option value="uploaded">Upload Date</option>
+                            <option value="title">Document Name</option>
+                            <option value="expiry">Expiry Date</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-border/40 text-xs">
+                        <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={showOnlyStarredDocs}
+                            onChange={e => setShowOnlyStarredDocs(e.target.checked)}
+                            className="accent-indigo-650 w-3.5 h-3.5"
+                          />
+                          <span>Favourite Documents only</span>
+                        </label>
+                      </div>
+
+                      {/* Saved Views Bar */}
+                      <SavedViewsBar
+                        views={allViews}
+                        activeViewId={activeViewId}
+                        onSelectView={handleSelectView}
+                        onSaveCurrent={handleSaveView}
+                        onDeleteCustom={deleteCustomView}
+                        isViewModified={isViewModified}
                       />
-                      <span>Favourite Documents only</span>
-                    </label>
+                    </div>
+                  </AdvancedControlsPanel>
+                </>
+              ) : (
+                // ADVANCED VIEW LAYOUT
+                <>
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    {/* Search and Toggle Filter Button */}
+                    <div className="flex items-center gap-2 w-full md:max-w-md">
+                      <div className="relative flex-1">
+                        <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          id="vault-search"
+                          value={search}
+                          onChange={e => setSearch(e.target.value)}
+                          placeholder="Search documents or files..."
+                          className="w-full pl-9 pr-4 py-2 bg-muted border border-border/80 rounded-lg text-xs outline-none focus:border-indigo-500 transition-colors"
+                        />
+                      </div>
+                      <button
+                        onClick={() => setShowFilters(!showFilters)}
+                        className={`flex items-center gap-1.5 px-3 py-2 bg-muted hover:bg-muted/80 border border-border font-bold text-xs rounded-lg cursor-pointer transition-colors ${showFilters ? 'ring-2 ring-indigo-500/40' : ''}`}
+                      >
+                        <Filter className="w-4 h-4 text-indigo-500" />
+                        <span>Filters</span>
+                      </button>
+
+                      {/* Category Manager Dropdown inline */}
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setIsCatDropdownOpen(!isCatDropdownOpen)}
+                          className="bg-muted hover:bg-muted/80 border border-border rounded-lg px-3 py-2 text-xs text-foreground font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span>Category Manager</span>
+                          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                        </button>
+
+                        {isCatDropdownOpen && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setIsCatDropdownOpen(false)} />
+                            <div className="absolute right-0 mt-1 w-64 bg-card solid-panel border border-border rounded-xl shadow-xl z-50 p-3 space-y-2.5">
+                              {categoryMessage && (
+                                <div className={`p-1.5 text-[10px] font-semibold border rounded-lg text-center animate-fade-in ${
+                                  categoryMessage.toLowerCase().includes('could not') || categoryMessage.toLowerCase().includes('failed')
+                                    ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
+                                    : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                                }`}>
+                                  {categoryMessage}
+                                </div>
+                              )}
+                              <div className="relative">
+                                <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+                                <input
+                                  type="text"
+                                  value={catSearchQuery}
+                                  onChange={(e) => setCatSearchQuery(e.target.value)}
+                                  placeholder="Search or add category..."
+                                  className="w-full pl-8 pr-3 py-1.5 bg-muted border border-border rounded-lg text-xs outline-none focus:border-indigo-500 transition-colors"
+                                  autoFocus
+                                />
+                              </div>
+
+                              <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1">
+                                {filteredCatOptions.length === 0 ? (
+                                  <p className="text-[10px] text-muted-foreground italic text-center py-2">No matching categories.</p>
+                                ) : (
+                                  filteredCatOptions.map(catName => {
+                                    const isSelected = selectedCategory === catName;
+                                    const customCatObj = evidenceCategories.find(c => c.name === catName && !c.is_system && c.active);
+                                    return (
+                                      <div
+                                        key={catName}
+                                        className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+                                          isSelected ? 'bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 font-bold' : 'hover:bg-muted text-foreground font-semibold'
+                                        }`}
+                                        onClick={() => {
+                                          setSelectedCategory(catName);
+                                          setIsCatDropdownOpen(false);
+                                          setCatSearchQuery('');
+                                        }}
+                                      >
+                                        <span className="truncate flex-1">{catName}</span>
+                                        {customCatObj && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              void handleArchiveEvidenceCategory(customCatObj.id);
+                                            }}
+                                            className="text-muted-foreground hover:text-rose-500 p-0.5 rounded hover:bg-muted-foreground/10 transition-colors shrink-0 cursor-pointer"
+                                            title="Archive custom category"
+                                          >
+                                            <Archive className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    );
+                                  })
+                                )}
+                              </div>
+
+                              {catSearchQuery.trim() && !filteredCatOptions.some(c => c.toLowerCase() === catSearchQuery.trim().toLowerCase()) && (
+                                <div className="border-t border-border pt-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      void handleCreateEvidenceCategory(catSearchQuery.trim());
+                                      setIsCatDropdownOpen(false);
+                                      setCatSearchQuery('');
+                                    }}
+                                    className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 transition-colors animate-fade-in cursor-pointer"
+                                  >
+                                    <Plus className="w-3 h-3" /> Create Category &quot;{catSearchQuery.trim()}&quot;
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Density and Column Visibility Toggles */}
+                    <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                      <ColumnVisibilityControls
+                        columns={columnsOptions}
+                        onToggleColumn={handleToggleColumn}
+                        onToggleAll={handleToggleAllColumns}
+                      />
+
+                      <DensityControls
+                        density={density}
+                        onDensityChange={setDensity}
+                        globalDensity={globalDensity}
+                        onGlobalDensityChange={nextDensity => {
+                          setGlobalDensity(nextDensity);
+                          setDensity(nextDensity);
+                        }}
+                      />
+                    </div>
                   </div>
-                </div>
+
+                  {/* Collapsible advanced filters */}
+                  {showFilters && (
+                    <div className="border-t border-border/60 pt-3 space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                        <StarredFilterSelect
+                          label="Category"
+                          value={selectedCategory}
+                          onChange={setSelectedCategory}
+                          options={['All', ...sortedCategories]}
+                          isStarred={(opt) => isFavourite(`cat:${opt}`)}
+                          onToggleStar={(opt) => toggleFavourite(`cat:${opt}`, opt, 'Category')}
+                          allLabel="All Categories"
+                        />
+                        <StarredFilterSelect
+                          label="Uploader"
+                          value={uploadedByFilter}
+                          onChange={setUploadedByFilter}
+                          options={sortedUploaders}
+                          isStarred={(opt) => isFavourite(`uploader:${opt}`)}
+                          onToggleStar={(opt) => toggleFavourite(`uploader:${opt}`, getUploaderName(opt), 'Uploader')}
+                          allLabel="All Uploaders"
+                        />
+                        <StarredFilterSelect
+                          label="Status"
+                          value={selectedStatus}
+                          onChange={setSelectedStatus}
+                          options={['All', 'Active', 'Expiring Soon', 'Expired', 'Unclassified']}
+                          isStarred={(opt) => isFavourite(`status:${opt}`)}
+                          onToggleStar={(opt) => toggleFavourite(`status:${opt}`, opt, 'Status')}
+                          allLabel="All Statuses"
+                        />
+                        <StarredFilterSelect
+                          label="Link Status"
+                          value={linkFilter}
+                          onChange={(val) => setLinkFilter(val as 'All' | 'Linked Only' | 'Unlinked Only')}
+                          options={['All', 'Linked Only', 'Unlinked Only']}
+                          isStarred={(opt) => isFavourite(`link:${opt}`)}
+                          onToggleStar={(opt) => toggleFavourite(`link:${opt}`, opt, 'Link Status')}
+                        />
+                      </div>
+
+                      {/* Second Row of Filters */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                        <StarredFilterSelect
+                          label="Doc Type"
+                          value={docTypeFilter}
+                          onChange={setDocTypeFilter}
+                          options={['All', 'PDF', 'Image', 'Spreadsheet', 'Document', 'Other']}
+                          isStarred={(opt) => isFavourite(`doctype:${opt}`)}
+                          onToggleStar={(opt) => toggleFavourite(`doctype:${opt}`, opt, 'Doc Type')}
+                          allLabel="All Doc Types"
+                        />
+
+                        <div className="flex flex-col gap-1">
+                          <label htmlFor="vault-sort-by" className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Sort By</label>
+                          <select
+                            id="vault-sort-by"
+                            value={sortBy}
+                            onChange={e => setSortBy(e.target.value as 'title' | 'expiry' | 'uploaded')}
+                            className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                          >
+                            <option value="uploaded">Upload Date</option>
+                            <option value="title">Document Name</option>
+                            <option value="expiry">Expiry Date</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Quick Toggles */}
+                      <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-border/40 text-xs">
+                        <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={showOnlyStarredDocs}
+                            onChange={e => setShowOnlyStarredDocs(e.target.checked)}
+                            className="accent-indigo-650 w-3.5 h-3.5"
+                          />
+                          <span>Favourite Documents only</span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Saved Views Bar */}
+                  <SavedViewsBar
+                    views={allViews}
+                    activeViewId={activeViewId}
+                    onSelectView={handleSelectView}
+                    onSaveCurrent={handleSaveView}
+                    onDeleteCustom={deleteCustomView}
+                    isViewModified={isViewModified}
+                  />
+                </>
               )}
 
-              {/* Saved Views Bar */}
-              <SavedViewsBar
-                views={allViews}
-                activeViewId={activeViewId}
-                onSelectView={handleSelectView}
-                onSaveCurrent={handleSaveView}
-                onDeleteCustom={deleteCustomView}
-                isViewModified={isViewModified}
-              />
-
-              {/* Active filter chips */}
+              {/* Active filter chips (always visible below the toolbar) */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <ActiveFilterChips chips={filterChips} onClearAll={handleResetFilters} />
                 {favourites.length > 0 && (
@@ -1952,14 +2209,17 @@ export default function EvidenceVault() {
             </div>
           )}
 
-          <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
-            <button type="button" onClick={() => exportDocuments('filtered')} className="px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
-              <Download className="w-3.5 h-3.5" /> Export filtered
-            </button>
-            <button type="button" disabled={selectedDocs.length === 0} onClick={() => exportDocuments('selected')} className="px-3 py-1.5 bg-card hover:bg-muted disabled:opacity-40 border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
-              <Download className="w-3.5 h-3.5" /> Export selected
-            </button>
-          </div>
+          {/* Conditional rendering of export buttons for Advanced view */}
+          {interfaceDetailLevel === 'advanced' && (
+            <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
+              <button type="button" onClick={() => exportDocuments('filtered')} className="px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
+                <Download className="w-3.5 h-3.5" /> Export filtered
+              </button>
+              <button type="button" disabled={selectedDocs.length === 0} onClick={() => exportDocuments('selected')} className="px-3 py-1.5 bg-card hover:bg-muted disabled:opacity-40 border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
+                <Download className="w-3.5 h-3.5" /> Export selected
+              </button>
+            </div>
+          )}
 
           <BulkSelectionToolbar
             selectedCount={documentSelection.selectedCount}
