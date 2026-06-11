@@ -655,4 +655,27 @@ export interface AssetStatusSummary {
   compliancePercent: number;
 }
 
+export interface AssetHistoryEvent {
+  id: string;
+  organisation_id: string;
+  asset_id: string;
+  asset_check_assignment_id: string | null;
+  asset_check_record_id: string | null;
+  event_type: 'service' | 'repair' | 'defect' | 'inspection' | 'calibration' | 'part_replacement' | 'incident' | 'maintenance' | 'document_added' | 'check_completed' | 'general';
+  event_date: string;
+  title: string;
+  description: string | null;
+  status: string;
+  cost: number | null;
+  performed_by: string | null;
+  supplier: string | null;
+  odometer_or_hours: number | null;
+  evidence_document_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+}
+
+
 

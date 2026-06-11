@@ -56,7 +56,8 @@ import {
   AssetCheckAssignment,
   AssetCheckRecord,
   AssetCheckEvidenceLink,
-  AssetRequirementLink
+  AssetRequirementLink,
+  AssetHistoryEvent
 } from '@/lib/types';
 export type ThemePreference = 'light' | 'midtone' | 'dark';
 export type VygilenceTheme = 'sentinel' | 'obsidian' | 'emerald-watch' | 'amber-beacon' | 'arc-reactor' | 'iron-ledger' | 'vanguard';
@@ -196,6 +197,7 @@ interface AppContextType {
   assetCheckRecords: AssetCheckRecord[];
   assetCheckEvidenceLinks: AssetCheckEvidenceLink[];
   assetRequirementLinks: AssetRequirementLink[];
+  assetHistoryEvents: AssetHistoryEvent[];
   createAsset: (asset: Omit<Asset, 'id' | 'created_at' | 'updated_at'>) => Promise<Asset>;
   updateAsset: (assetId: string, updates: Partial<Asset>) => Promise<Asset>;
   deleteAsset: (assetId: string) => Promise<void>;
@@ -204,6 +206,7 @@ interface AppContextType {
   updateAssetCheckAssignment: (assignmentId: string, updates: Partial<AssetCheckAssignment>) => Promise<AssetCheckAssignment>;
   createAssetCheckRecord: (record: Omit<AssetCheckRecord, 'id' | 'created_at' | 'updated_at'>) => Promise<AssetCheckRecord>;
   linkAssetCheckEvidence: (assignmentId: string, recordId: string, documentId: string, assetId: string) => Promise<AssetCheckEvidenceLink>;
+  createAssetHistoryEvent: (event: Omit<AssetHistoryEvent, 'id' | 'created_at' | 'updated_at'>) => Promise<AssetHistoryEvent>;
 
   readinessReport: ReadinessReport;
   competencySummary: CompetencySummary;
@@ -325,6 +328,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [assetCheckRecords, setAssetCheckRecords] = useState<AssetCheckRecord[]>([]);
   const [assetCheckEvidenceLinks, setAssetCheckEvidenceLinks] = useState<AssetCheckEvidenceLink[]>([]);
   const [assetRequirementLinks, setAssetRequirementLinks] = useState<AssetRequirementLink[]>([]);
+  const [assetHistoryEvents, setAssetHistoryEvents] = useState<AssetHistoryEvent[]>([]);
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -394,6 +398,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setAssetCheckRecords([]);
     setAssetCheckEvidenceLinks([]);
     setAssetRequirementLinks([]);
+    setAssetHistoryEvents([]);
   };
 
   // Load appearance preferences per user and organisation.
@@ -506,6 +511,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let recordRows: AssetCheckRecord[] = [];
     let evidenceLinkRows: AssetCheckEvidenceLink[] = [];
     let requirementLinkRows: AssetRequirementLink[] = [];
+    let historyEventRows: AssetHistoryEvent[] = [];
     try {
       [
         assetRows,
@@ -513,14 +519,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         assignmentRows,
         recordRows,
         evidenceLinkRows,
-        requirementLinkRows
+        requirementLinkRows,
+        historyEventRows
       ] = await Promise.all([
         dbService.getAssets(),
         dbService.getAssetCheckTypes(),
         dbService.getAssetCheckAssignments(),
         dbService.getAssetCheckRecords(),
         dbService.getAssetCheckEvidenceLinks(),
-        dbService.getAssetRequirementLinks()
+        dbService.getAssetRequirementLinks(),
+        dbService.getAssetHistoryEvents()
       ]);
     } catch (error) {
       console.error('Asset Matrix data is unavailable. Core workspace data will continue loading.', error);
@@ -558,6 +566,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setAssetCheckRecords(recordRows);
     setAssetCheckEvidenceLinks(evidenceLinkRows);
     setAssetRequirementLinks(requirementLinkRows);
+    setAssetHistoryEvents(historyEventRows);
   };
 
   const loadDemoData = async () => {
@@ -640,6 +649,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setAssetCheckRecords([]);
       setAssetCheckEvidenceLinks([]);
       setAssetRequirementLinks([]);
+      setAssetHistoryEvents([]);
       return;
     }
 
@@ -1425,6 +1435,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return res;
   };
 
+  const createAssetHistoryEvent: AppContextType['createAssetHistoryEvent'] = async (event) => {
+    const res = await dbService.createAssetHistoryEvent(event);
+    const updated = await dbService.getAssetHistoryEvents();
+    setAssetHistoryEvents(updated);
+    return res;
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -1533,6 +1550,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         assetCheckRecords,
         assetCheckEvidenceLinks,
         assetRequirementLinks,
+        assetHistoryEvents,
         createAsset,
         updateAsset,
         deleteAsset,
@@ -1541,6 +1559,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         updateAssetCheckAssignment,
         createAssetCheckRecord,
         linkAssetCheckEvidence,
+        createAssetHistoryEvent,
 
         readinessReport: readinessReport || emptyReadinessReport,
         competencySummary,

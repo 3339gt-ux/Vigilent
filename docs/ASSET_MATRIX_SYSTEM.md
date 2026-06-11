@@ -14,27 +14,29 @@ graph TD
     C[Asset Check Types] -->|templated in| B
     B -->|logged via| D[Asset Check Records]
     D -->|linked to| E[Evidence Documents]
+    A -->|logs timeline| G[Asset History Events]
     C -->|optionally mapped to| F[Compliance Requirements]
 ```
 
 - **Assets**: The physical items being tracked (e.g., forklift, delivery truck).
 - **Asset Check Types**: Templates defining compliance checks (e.g., annual safety test, weekly inspection, calibration).
 - **Asset Check Assignments**: Active compliance schedules tracking when the next check is due.
-- **Asset Check Records**: Dated logs of completed checks. Database immutability is not currently enforced.
+- **Asset Check Records**: Dated logs of completed checks.
 - **Asset Check Evidence Links**: Secure mappings tying completions to vault documents.
+- **Asset History Events**: Timeline log tracking repairs, maintenance, calibration adjustments, and general asset events.
 
 ---
 
 ## 2. Database Schema
 
-The database model is defined in `supabase/migrations/20260611000000_asset_matrix_system.sql` and appended to `supabase/schema.sql`.
+The database model is defined in `supabase/migrations/20260611000000_asset_matrix_system.sql` & `supabase/migrations/20260611000001_asset_matrix_improvements.sql` and appended to `supabase/schema.sql`.
 
 ### Tables
 
 #### `assets`
 - `id` (uuid, primary key)
 - `organisation_id` (uuid, foreign key to organizations)
-- `asset_number` (text; uniqueness is not currently enforced)
+- `asset_number` (text)
 - `name` (text, e.g. "HGV Truck #01")
 - `asset_type` (text, e.g. "Vehicle")
 - `category` (text, e.g. "HGV")
@@ -99,8 +101,21 @@ The database model is defined in `supabase/migrations/20260611000000_asset_matri
 - `organisation_id` (uuid)
 - `asset_id` (uuid)
 - `asset_check_assignment_id` (uuid)
-- `asset_check_record_id` (uuid, references asset_check_records)
+- `asset_check_record_id` (uuid, references asset_check_records, nullable)
 - `document_id` (uuid, references evidence_documents)
+
+#### `asset_history_events`
+- `id` (uuid, primary key)
+- `organisation_id` (uuid)
+- `asset_id` (uuid, references assets)
+- `event_type` (text, e.g. `'repair' | 'maintenance' | 'audit' | 'status_change'`)
+- `event_date` (date)
+- `title` (text)
+- `description` (text)
+- `performed_by` (text)
+- `cost` (numeric, nullable)
+- `notes` (text, nullable)
+- Timestamps: `created_at`, `updated_at`
 
 ---
 
@@ -109,32 +124,49 @@ The database model is defined in `supabase/migrations/20260611000000_asset_matri
 All asset tables enable RLS and use organisation membership checks:
 - **`SELECT`**: Allowed for authenticated users if `public.is_organization_member(organisation_id)` is true.
 - **`INSERT/UPDATE/DELETE`**: Allowed for authenticated users if `public.can_write_organization(organisation_id)` is true.
-- Relationship policies also require referenced assets, check types, records, evidence documents, and requirements to belong to the same organisation.
-- Performance indexes are added to `organisation_id` and references (`asset_id`, `asset_check_type_id`) to optimize reads.
-
-The migration is local repository SQL only. It has not been applied remotely by this implementation review.
+- Foreign key cascading deletes ensure that when an asset is deleted, its check assignments, records, and history are cleaned up securely.
+- Performance indexes are added to `organisation_id` and reference columns to optimize reads.
 
 ---
 
 ## 4. Compliance Calculation Engine
 
-The calculation engine located at `src/lib/assetEngine.ts` supplies the canonical check status hierarchy used by the matrix, dashboard, and asset report:
+The calculation engine located at `src/lib/assetEngine.ts` supplies the canonical check status hierarchy:
 
-1. **`Archived` / `Inactive` / `Not Required` / `Unknown`**: Excluded from active assurance totals.
-2. **`Expired`**: The latest validity date has passed.
-3. **`Overdue`**: The due date has passed or the latest check result failed.
-4. **`Due Soon`**: The validity/due date falls within the configured warning window.
-5. **`Valid`**: A completed check remains valid beyond the warning window.
-6. **`Missing`**: A required completion or required evidence link is absent.
+1. **`Expired`**: The latest validity date has passed.
+2. **`Overdue`**: The due date has passed or the check is required but never completed.
+3. **`Expiring Soon`**: The due date falls within the configured warning window.
+4. **`Compliant`**: A completed check remains valid beyond the warning window.
+5. **`Missing`**: A required compliance check has no historical completion.
+6. **`N/A`**: The check is marked as not required.
 
 ---
 
-## 5. Integrations & UX
+## 5. UI & UX Improvements
 
-- **Global Search**: Search records scan matching asset numbers, registration numbers, makes, models, and titles. Results support deep-linking directly into details.
-- **Reporting Hub**: Aggregates metrics to build status distributions and registers all assets for compliance tracking.
-- **Evidence**: Check completion can link an existing private Evidence Vault document. Direct upload and unlink controls are not implemented in the Asset Matrix.
-- **Archiving**: The current decommission control archives the asset and retains history. A restore UI is not yet implemented.
-- **Audit Logging**: Asset create/update/archive operations use existing activity logging. Check-type, assignment, completion, and evidence-link audit coverage remains incomplete.
-- **Requirements**: Optional requirement-link storage exists, but asset checks do not alter requirement readiness scores.
-- **Actions**: The current asset action display is a title-based convenience view, not a persisted asset/action relationship.
+### Grid Display Modes
+- **`Detailed`**: Displays full cells with title, date, check warning badge, and check action items.
+- **`Compact`**: Rotated headers, compact cells showing status badges only.
+- **`Status only`**: Micro-badges to compress screen space for high-volume fleets.
+- **Column Grouping**: Columns can be dynamically grouped/sorted by Category or Risk level.
+
+### Large Workspace Modal
+A workspace layout (`grid-cols-1 lg:grid-cols-[280px_1fr] lg:data-[has-active=true]:grid-cols-[280px_1fr_380px]`) featuring:
+- **Sidebar**: Complete metadata form, archive controls, status indicators.
+- **Checks Tab**: Add/remove schedules, toggle required state.
+- **Evidence Tab**: Link/unlink vault files, drag & drop uploads.
+- **Requirements Tab**: Map compliance frameworks.
+- **Actions Tab**: Register corrective actions.
+- **History Tab**: Combined timeline of scheduled checks and ad-hoc history logs (repairs, maintenance, costs).
+- **Notes Tab**: Full notes textarea editor.
+- **Right Side Form Pane**: Contextual forms to record checks or log repair/maintenance events immediately.
+
+---
+
+## 6. Integration Suite
+
+- **Dashboard**: Signals expiring/overdue assets in the Attention Centre and provides quick-action buttons.
+- **Reports**: "Locations & Assets" tab with maintenance history logs, repairs timeline, cost summary metrics, and CSV/PDF export options.
+- **Global Search**: Indexes assets, check assignments, and history events; supports deep-linking into the workspace.
+- **Audit Trail**: Logs all asset edits, check creations, completions, and edits securely.
+- **Evidence Vault**: Shows asset links in the detail sidebar for documents mapped to checks.

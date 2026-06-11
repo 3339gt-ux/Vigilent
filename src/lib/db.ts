@@ -46,7 +46,8 @@ import {
   AssetCheckAssignment,
   AssetCheckRecord,
   AssetCheckEvidenceLink,
-  AssetRequirementLink
+  AssetRequirementLink,
+  AssetHistoryEvent
 } from './types';
 import { calculateCompetencyStatus } from './competencyEngine';
 
@@ -1512,6 +1513,72 @@ const MOCK_ASSET_REQUIREMENT_LINKS: AssetRequirementLink[] = [
   }
 ];
 
+const MOCK_ASSET_HISTORY_EVENTS: AssetHistoryEvent[] = [
+  {
+    id: 'evt-asset-scania-tax',
+    organisation_id: MOCK_ORG.id,
+    asset_id: 'asset-scania-01',
+    asset_check_assignment_id: 'asg-scania-tax',
+    asset_check_record_id: 'rec-scania-tax-2025',
+    event_type: 'check_completed',
+    event_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+    title: 'Road Tax Checked',
+    description: 'Road Tax recorded as complete for Scania R450 (181-D-12345). Expiry 2026-06-30.',
+    status: 'Completed',
+    cost: null,
+    performed_by: MOCK_PROFILE.full_name,
+    supplier: null,
+    odometer_or_hours: null,
+    evidence_document_id: null,
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'evt-asset-scania-tax-asg',
+    organisation_id: MOCK_ORG.id,
+    asset_id: 'asset-scania-01',
+    asset_check_assignment_id: 'asg-scania-tax',
+    asset_check_record_id: null,
+    event_type: 'general',
+    event_date: new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString(),
+    title: 'Road Tax Check Assigned',
+    description: 'Road Tax check assigned to Scania R450 (181-D-12345). Warning window: 30 days.',
+    status: 'Active',
+    cost: null,
+    performed_by: MOCK_PROFILE.full_name,
+    supplier: null,
+    odometer_or_hours: null,
+    evidence_document_id: null,
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'evt-asset-forklift-loler',
+    organisation_id: MOCK_ORG.id,
+    asset_id: 'asset-forklift-03',
+    asset_check_assignment_id: 'asg-forklift-loler',
+    asset_check_record_id: 'rec-forklift-loler-2025',
+    event_type: 'inspection',
+    event_date: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
+    title: 'LOLER Inspection Logged',
+    description: 'LOLER Forklift Certificate logged as complete for Toyota 2.5T Forklift (#FLT-03). Expiry 2026-05-30 (Expired).',
+    status: 'Expired',
+    cost: null,
+    performed_by: 'External Safety Inspector',
+    supplier: 'SafeLift Certifiers',
+    odometer_or_hours: null,
+    evidence_document_id: 'doc-loler-flt3',
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
+    archived_at: null
+  }
+];
+
 // Helper to check localStorage browser availability
 export const getStorageItem = (key: string, defaultVal: any) => {
   requireDemoMode();
@@ -1565,6 +1632,7 @@ export const initMockDb = () => {
     localStorage.setItem('vigilen_asset_check_records', JSON.stringify(MOCK_ASSET_CHECK_RECORDS));
     localStorage.setItem('vigilen_asset_check_evidence_links', JSON.stringify(MOCK_ASSET_CHECK_EVIDENCE_LINKS));
     localStorage.setItem('vigilen_asset_requirement_links', JSON.stringify(MOCK_ASSET_REQUIREMENT_LINKS));
+    localStorage.setItem('vigilen_asset_history_events', JSON.stringify(MOCK_ASSET_HISTORY_EVENTS));
     
     localStorage.setItem('vigilen_initialized', 'true');
   }
@@ -5544,6 +5612,56 @@ export const dbService = {
       initMockDb();
       const links = getStorageItem('vigilen_asset_requirement_links', MOCK_ASSET_REQUIREMENT_LINKS);
       return links.filter((l: AssetRequirementLink) => l.organisation_id === orgId);
+    }
+  },
+
+  async getAssetHistoryEvents(assetId?: string): Promise<AssetHistoryEvent[]> {
+    const profile = await this.getProfile();
+    const orgId = requireAssetOrganizationId(profile);
+    if (shouldUseSupabase()) {
+      let query = supabase!.from('asset_history_events').select('*').eq('organisation_id', orgId);
+      if (assetId) {
+        query = query.eq('asset_id', assetId);
+      }
+      query = query.order('event_date', { ascending: false });
+      const { data, error } = await query;
+      if (error) throwSupabaseError('asset_history_events.select', error);
+      return data || [];
+    } else {
+      initMockDb();
+      const events = getStorageItem('vigilen_asset_history_events', MOCK_ASSET_HISTORY_EVENTS);
+      let filtered = events.filter((e: AssetHistoryEvent) => e.organisation_id === orgId);
+      if (assetId) {
+        filtered = filtered.filter((e: AssetHistoryEvent) => e.asset_id === assetId);
+      }
+      return filtered.sort((a: AssetHistoryEvent, b: AssetHistoryEvent) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime());
+    }
+  },
+
+  async createAssetHistoryEvent(event: Omit<AssetHistoryEvent, 'id' | 'created_at' | 'updated_at'>): Promise<AssetHistoryEvent> {
+    const profile = await this.getProfile();
+    const orgId = requireAssetOrganizationId(profile);
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('asset_history_events')
+        .insert([{ ...event, organisation_id: orgId }])
+        .select()
+        .single();
+      if (error) throwSupabaseError('asset_history_events.insert', error);
+      return data;
+    } else {
+      initMockDb();
+      const events = getStorageItem('vigilen_asset_history_events', MOCK_ASSET_HISTORY_EVENTS);
+      const newEvent: AssetHistoryEvent = {
+        ...event,
+        id: `evt-${Math.random().toString(36).substr(2, 9)}`,
+        organisation_id: orgId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      events.push(newEvent);
+      setStorageItem('vigilen_asset_history_events', events);
+      return newEvent;
     }
   },
 
