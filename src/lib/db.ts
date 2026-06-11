@@ -5557,13 +5557,20 @@ export const dbService = {
   },
 
   async linkAssetCheckEvidence(
-    assignmentId: string,
-    recordId: string,
+    assignmentId: string | null,
+    recordId: string | null,
     documentId: string,
     assetId: string
   ): Promise<AssetCheckEvidenceLink> {
     const profile = await this.getProfile();
     const orgId = requireAssetOrganizationId(profile);
+    const [assetRows, documentRows] = await Promise.all([this.getAssets(), this.getDocuments()]);
+    if (!assetRows.some((asset: Asset) => asset.id === assetId)) {
+      throw new Error('Asset is not available in the active organisation.');
+    }
+    if (!documentRows.some((document: EvidenceDocument) => document.id === documentId)) {
+      throw new Error('Evidence document is not available in the active organisation.');
+    }
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('asset_check_evidence_links')
@@ -5596,6 +5603,50 @@ export const dbService = {
       setStorageItem('vigilen_asset_check_evidence_links', links);
       return newLink;
     }
+  },
+
+  async unlinkAssetCheckEvidence(linkId: string): Promise<void> {
+    const profile = await this.getProfile();
+    const orgId = requireAssetOrganizationId(profile);
+    if (shouldUseSupabase()) {
+      const { error } = await supabase!
+        .from('asset_check_evidence_links')
+        .delete()
+        .eq('id', linkId)
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('asset_check_evidence_links.delete', error);
+    } else {
+      initMockDb();
+      const links = getStorageItem('vigilen_asset_check_evidence_links', MOCK_ASSET_CHECK_EVIDENCE_LINKS);
+      setStorageItem(
+        'vigilen_asset_check_evidence_links',
+        links.filter((l: AssetCheckEvidenceLink) => !(l.id === linkId && l.organisation_id === orgId))
+      );
+    }
+  },
+
+  async uploadAssetEvidence(assetId: string, assignmentId: string | null, recordId: string | null, file: File): Promise<EvidenceDocument> {
+    const assetRows = await this.getAssets();
+    if (!assetRows.some((asset: Asset) => asset.id === assetId)) {
+      throw new Error('Asset is not available in the active organisation.');
+    }
+    const title = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim() || file.name;
+    const doc = await this.uploadDocumentFile({
+      file,
+      title,
+      category: 'Assets',
+      expiry_date: null,
+      issue_date: new Date().toISOString().split('T')[0],
+      metadata: {
+        source: 'asset_assurance',
+        asset_id: assetId,
+        assignment_id: assignmentId || undefined
+      },
+      tags: ['asset'],
+      status: 'Unclassified'
+    });
+    await this.linkAssetCheckEvidence(assignmentId, recordId, doc.id, assetId);
+    return doc;
   },
 
   async getAssetRequirementLinks(): Promise<AssetRequirementLink[]> {
@@ -5638,13 +5689,25 @@ export const dbService = {
     }
   },
 
-  async createAssetHistoryEvent(event: Omit<AssetHistoryEvent, 'id' | 'created_at' | 'updated_at'>): Promise<AssetHistoryEvent> {
+  async createAssetHistoryEvent(
+    event: Omit<AssetHistoryEvent, 'id' | 'organisation_id' | 'created_by' | 'created_at' | 'updated_at' | 'archived_at'>
+  ): Promise<AssetHistoryEvent> {
     const profile = await this.getProfile();
     const orgId = requireAssetOrganizationId(profile);
+    const assetRows = await this.getAssets();
+    if (!assetRows.some((asset: Asset) => asset.id === event.asset_id)) {
+      throw new Error('Asset is not available in the active organisation.');
+    }
+    const scopedEvent = {
+      ...event,
+      organisation_id: orgId,
+      created_by: profile.id,
+      archived_at: null
+    };
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('asset_history_events')
-        .insert([{ ...event, organisation_id: orgId }])
+        .insert([scopedEvent])
         .select()
         .single();
       if (error) throwSupabaseError('asset_history_events.insert', error);
@@ -5653,9 +5716,8 @@ export const dbService = {
       initMockDb();
       const events = getStorageItem('vigilen_asset_history_events', MOCK_ASSET_HISTORY_EVENTS);
       const newEvent: AssetHistoryEvent = {
-        ...event,
+        ...scopedEvent,
         id: `evt-${Math.random().toString(36).substr(2, 9)}`,
-        organisation_id: orgId,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };

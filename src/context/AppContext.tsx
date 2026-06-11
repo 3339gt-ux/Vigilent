@@ -205,8 +205,12 @@ interface AppContextType {
   createAssetCheckAssignment: (assignment: Omit<AssetCheckAssignment, 'id' | 'created_at' | 'updated_at'>) => Promise<AssetCheckAssignment>;
   updateAssetCheckAssignment: (assignmentId: string, updates: Partial<AssetCheckAssignment>) => Promise<AssetCheckAssignment>;
   createAssetCheckRecord: (record: Omit<AssetCheckRecord, 'id' | 'created_at' | 'updated_at'>) => Promise<AssetCheckRecord>;
-  linkAssetCheckEvidence: (assignmentId: string, recordId: string, documentId: string, assetId: string) => Promise<AssetCheckEvidenceLink>;
-  createAssetHistoryEvent: (event: Omit<AssetHistoryEvent, 'id' | 'created_at' | 'updated_at'>) => Promise<AssetHistoryEvent>;
+  linkAssetCheckEvidence: (assignmentId: string | null, recordId: string | null, documentId: string, assetId: string) => Promise<AssetCheckEvidenceLink>;
+  unlinkAssetCheckEvidence: (linkId: string) => Promise<void>;
+  uploadAssetEvidence: (assetId: string, assignmentId: string | null, recordId: string | null, file: File) => Promise<EvidenceDocument>;
+  createAssetHistoryEvent: (
+    event: Omit<AssetHistoryEvent, 'id' | 'organisation_id' | 'created_by' | 'created_at' | 'updated_at' | 'archived_at'>
+  ) => Promise<AssetHistoryEvent>;
 
   readinessReport: ReadinessReport;
   competencySummary: CompetencySummary;
@@ -519,19 +523,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
         assignmentRows,
         recordRows,
         evidenceLinkRows,
-        requirementLinkRows,
-        historyEventRows
+        requirementLinkRows
       ] = await Promise.all([
         dbService.getAssets(),
         dbService.getAssetCheckTypes(),
         dbService.getAssetCheckAssignments(),
         dbService.getAssetCheckRecords(),
         dbService.getAssetCheckEvidenceLinks(),
-        dbService.getAssetRequirementLinks(),
-        dbService.getAssetHistoryEvents()
+        dbService.getAssetRequirementLinks()
       ]);
     } catch (error) {
       console.error('Asset Matrix data is unavailable. Core workspace data will continue loading.', error);
+    }
+    try {
+      historyEventRows = await dbService.getAssetHistoryEvents();
+    } catch (error) {
+      console.error('Asset history is unavailable. Existing Asset Matrix data will continue loading.', error);
     }
 
     setRequirements(reqs);
@@ -1435,6 +1442,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return res;
   };
 
+  const unlinkAssetCheckEvidence: AppContextType['unlinkAssetCheckEvidence'] = async (linkId) => {
+    await dbService.unlinkAssetCheckEvidence(linkId);
+    const updated = await dbService.getAssetCheckEvidenceLinks();
+    setAssetCheckEvidenceLinks(updated);
+  };
+
+  const uploadAssetEvidence: AppContextType['uploadAssetEvidence'] = async (assetId, assignmentId, recordId, file) => {
+    const doc = await dbService.uploadAssetEvidence(assetId, assignmentId, recordId, file);
+    const [updatedLinks, updatedDocs] = await Promise.all([
+      dbService.getAssetCheckEvidenceLinks(),
+      dbService.getDocuments()
+    ]);
+    setAssetCheckEvidenceLinks(updatedLinks);
+    setDocuments(updatedDocs);
+    return doc;
+  };
+
   const createAssetHistoryEvent: AppContextType['createAssetHistoryEvent'] = async (event) => {
     const res = await dbService.createAssetHistoryEvent(event);
     const updated = await dbService.getAssetHistoryEvents();
@@ -1559,6 +1583,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         updateAssetCheckAssignment,
         createAssetCheckRecord,
         linkAssetCheckEvidence,
+        unlinkAssetCheckEvidence,
+        uploadAssetEvidence,
         createAssetHistoryEvent,
 
         readinessReport: readinessReport || emptyReadinessReport,
