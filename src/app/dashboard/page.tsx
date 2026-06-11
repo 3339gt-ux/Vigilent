@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useApp } from '@/context/AppContext';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
@@ -11,35 +10,44 @@ import { isDemoMode } from '@/lib/env';
 import type { Action, CompetencyCategory, RequirementRiskLevel, ReviewFrequency } from '@/lib/types';
 import { buildAssetMatrix } from '@/lib/assetEngine';
 import {
-  ArrowRight,
-  CheckCircle2,
   Clock,
   FileSpreadsheet,
-  ShieldAlert,
-  TrendingUp,
   Upload,
-  Calendar,
   AlertTriangle,
   FileText,
   ChevronRight,
   X,
   Briefcase,
-  ShieldCheck
+  ShieldCheck,
+  Building2,
+  List,
+  Network,
+  ClipboardList,
+  UserCheck,
+  FolderLock,
+  Grid,
+  FolderArchive,
+  BarChart3
 } from 'lucide-react';
 
 const scoreTone = (score: number | null) => {
   if (score === null) return 'text-muted-foreground';
-  if (score >= 80) return 'text-emerald-500';
+  if (score >= 90) return 'text-emerald-500';
+  if (score >= 75) return 'text-indigo-500 dark:text-indigo-400';
   if (score >= 50) return 'text-amber-500';
   return 'text-rose-500';
 };
 
-const bgScoreTone = (score: number | null) => {
-  if (score === null) return 'bg-muted/10 text-muted-foreground border-border/40';
-  if (score >= 80) return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
-  if (score >= 50) return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
-  return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
+
+const getHealthState = (score: number | null) => {
+  if (score === null) return 'N/A';
+  if (score >= 90) return 'Excellent';
+  if (score >= 75) return 'Good';
+  if (score >= 50) return 'Fair';
+  if (score >= 30) return 'Poor';
+  return 'Critical';
 };
+
 
 type RadarItem = {
   id: string;
@@ -53,41 +61,20 @@ type RadarItem = {
 };
 
 type DashboardModal = 'requirement' | 'competency' | 'action' | 'audit-pack' | null;
-type DashboardTab = 'overview' | 'upcoming-history';
-
-type DashboardRecordTarget = {
-  type: RadarItem['type'];
-  link?: string;
-  action?: Action;
-};
-
-const flyoutPanelClass = 'bg-card solid-panel text-foreground border border-border rounded-xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 z-[80]';
-const requirementRiskLevels: RequirementRiskLevel[] = ['Low', 'Medium', 'High', 'Critical'];
-const reviewFrequencies: ReviewFrequency[] = ['Weekly', 'Monthly', 'Quarterly', 'Annually', 'Custom'];
-const competencyCategories: CompetencyCategory[] = [
-  'Safety',
-  'Equipment & Vehicle',
-  'Transport',
-  'Security',
-  'Quality & Compliance',
-  'Environmental',
-  'Operational',
-  'Professional',
-  'Industry Certification',
-  'Other'
-];
+type ViewMode = 'system' | 'list';
 
 export default function DashboardPage() {
   const {
     organization,
+    user,
     readinessReport,
     readinessScore,
     stats,
     competencySummary,
     documents,
     actions,
+    auditPacks,
     frameworkRequirements,
-    requirementDocuments,
     requirementActions,
     actionUpdates,
     actionDocuments,
@@ -116,33 +103,34 @@ export default function DashboardPage() {
     assetCategories
   } = useApp();
 
-  const router = useRouter();
-  const dashboardTabStorageKey = `vygilence_dashboard_tab_${organization?.id || 'workspace'}`;
-  const [isFocusMode, setIsFocusMode] = useState(false);
-  const [dashboardTab, setDashboardTab] = useState<DashboardTab>('overview');
-  const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('system');
+  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
 
+  // Form states - Quick Evidence Upload
   const [uploadTitle, setUploadTitle] = useState('');
-  const [uploadCategory, setUploadCategory] = useState('Vehicle');
-  const [uploadFileName, setUploadFileName] = useState('');
+  const [uploadCategory, setUploadCategory] = useState('General');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadExpiry, setUploadExpiry] = useState('');
+  const [uploadContextType, setUploadContextType] = useState<'general' | 'requirement' | 'asset' | 'competency'>('general');
+  const [uploadContextTargetId, setUploadContextTargetId] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [uploadSuccess, setUploadSuccess] = useState('');
+
+  // Demo Reset States
+  const [isResettingDemo, setIsResettingDemo] = useState(false);
   const [resetMessage, setResetMessage] = useState('');
   const [resetError, setResetError] = useState('');
-  const [isResettingDemo, setIsResettingDemo] = useState(false);
+
+  // Modal States
   const [selectedAction, setSelectedAction] = useState<Action | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [activeFlyout, setActiveFlyout] = useState<string | null>(null);
-  const [activeDashboardPanel, setActiveDashboardPanel] = useState<string | null>(null);
-  const [selectedAttentionItem, setSelectedAttentionItem] = useState<string | null>(null);
-  const [expandedRadarBucket, setExpandedRadarBucket] = useState<string | null>(null);
   const [activeQuickActionModal, setActiveQuickActionModal] = useState<DashboardModal>(null);
   const [quickActionMessage, setQuickActionMessage] = useState('');
   const [quickActionError, setQuickActionError] = useState('');
   const [isQuickActionSaving, setIsQuickActionSaving] = useState(false);
+
+  // Quick Action Form states
   const [requirementForm, setRequirementForm] = useState({
     title: '',
     category: 'Operations',
@@ -172,69 +160,62 @@ export default function DashboardPage() {
     requirementIds: [] as string[]
   });
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const stored = localStorage.getItem(dashboardTabStorageKey);
-    if (stored === 'overview' || stored === 'upcoming-history') {
-      setDashboardTab(stored);
-    }
-  }, [dashboardTabStorageKey]);
+  // Unique Lists
+  const requirementRiskLevels: RequirementRiskLevel[] = ['Low', 'Medium', 'High', 'Critical'];
+  const reviewFrequencies: ReviewFrequency[] = ['Weekly', 'Monthly', 'Quarterly', 'Annually', 'Custom'];
+  const competencyCategories: CompetencyCategory[] = [
+    'Safety',
+    'Equipment & Vehicle',
+    'Transport',
+    'Security',
+    'Quality & Compliance',
+    'Environmental',
+    'Operational',
+    'Professional',
+    'Industry Certification',
+    'Other'
+  ];
 
-  useEffect(() => {
-    const handleOutsideClick = () => {
-      setExpandedRadarBucket(null);
-      setActiveDashboardPanel(null);
-      setActiveFlyout(null);
-    };
-    document.addEventListener('click', handleOutsideClick);
-    return () => {
-      document.removeEventListener('click', handleOutsideClick);
-    };
-  }, []);
+  // Derived state calculators
+  const unclassifiedDocs = useMemo(() => documents.filter(doc => doc.status === 'Unclassified'), [documents]);
+  const classifiedDocsCount = documents.length - unclassifiedDocs.length;
+  const docProgress = documents.length > 0 ? Math.round((classifiedDocsCount / documents.length) * 100) : 0;
 
-  const updateDashboardTab = (tab: DashboardTab) => {
-    setDashboardTab(tab);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(dashboardTabStorageKey, tab);
-    }
-  };
+  const activeRequirements = useMemo(
+    () => frameworkRequirements.filter(requirement => (requirement.lifecycle_status || 'ACTIVE') === 'ACTIVE'),
+    [frameworkRequirements]
+  );
+  const reqProgress = stats.activeRequirements > 0
+    ? Math.round((stats.compliantCount / stats.activeRequirements) * 100)
+    : 0;
 
-  // Status counters for Requirements
-  const reqGreen = useMemo(() => readinessReport.requirements.filter(r => r.status === 'GREEN').length, [readinessReport.requirements]);
-  const reqAmber = useMemo(() => readinessReport.requirements.filter(r => r.status === 'AMBER').length, [readinessReport.requirements]);
-  const reqRed = useMemo(() => readinessReport.requirements.filter(r => r.status === 'RED').length, [readinessReport.requirements]);
-  const reqGrey = useMemo(() => readinessReport.requirements.filter(r => !['GREEN', 'AMBER', 'RED'].includes(r.status)).length, [readinessReport.requirements]);
-
-  const openActions = readinessReport.openActionItems.length;
-  const unclassifiedDocs = documents.filter(document => document.status === 'Unclassified');
-  const selectedActionRequirements = selectedAction
-    ? frameworkRequirements.filter(requirement =>
-        requirementActions.some(link => link.action_id === selectedAction.id && link.requirement_id === requirement.id)
-      )
-    : [];
-  const currentSelectedAction = selectedAction
-    ? actions.find(action => action.id === selectedAction.id) || selectedAction
-    : null;
+  const activeActionsCount = actions.filter(action => action.status === 'Open' || action.status === 'In Progress').length;
 
   const assetMatrixCells = useMemo(
-    () => buildAssetMatrix(
-      assets,
-      assetCheckTypes,
-      assetCheckAssignments,
-      assetCheckRecords,
-      assetCheckEvidenceLinks
-    ),
+    () => buildAssetMatrix(assets, assetCheckTypes, assetCheckAssignments, assetCheckRecords, assetCheckEvidenceLinks),
     [assets, assetCheckTypes, assetCheckAssignments, assetCheckRecords, assetCheckEvidenceLinks]
   );
 
-  const getAssignmentStatus = (assignmentId: string): 'Compliant' | 'Expiring Soon' | 'Expired' | 'Missing' | 'N/A' => {
+  const getAssignmentStatus = useCallback((assignmentId: string): 'Compliant' | 'Expiring Soon' | 'Expired' | 'Missing' | 'N/A' => {
     const status = assetMatrixCells.find(cell => cell.assignment?.id === assignmentId)?.status;
     if (status === 'valid') return 'Compliant';
     if (status === 'due_soon') return 'Expiring Soon';
     if (status === 'expired' || status === 'overdue') return 'Expired';
     if (status === 'missing') return 'Missing';
     return 'N/A';
-  };
+  }, [assetMatrixCells]);
+
+  const totalAssetChecks = useMemo(() => {
+    return (assetCheckAssignments || []).filter(a => a.active && a.required).length;
+  }, [assetCheckAssignments]);
+
+  const compliantAssetChecks = useMemo(() => {
+    return (assetCheckAssignments || []).filter(a => a.active && a.required && getAssignmentStatus(a.id) === 'Compliant').length;
+  }, [assetCheckAssignments, getAssignmentStatus]);
+
+  const assetProgress = totalAssetChecks > 0
+    ? Math.round((compliantAssetChecks / totalAssetChecks) * 100)
+    : 100;
 
   const overdueAssetChecks = useMemo(() => {
     return (assetCheckAssignments || [])
@@ -254,7 +235,7 @@ export default function DashboardPage() {
           }
         };
       });
-  }, [assetCheckAssignments, assets, assetCheckTypes, assetMatrixCells]);
+  }, [assetCheckAssignments, assets, assetCheckTypes, getAssignmentStatus]);
 
   const upcomingAssetChecks = useMemo(() => {
     return (assetCheckAssignments || [])
@@ -274,111 +255,7 @@ export default function DashboardPage() {
           }
         };
       });
-  }, [assetCheckAssignments, assets, assetCheckTypes, assetMatrixCells]);
-
-  // Setup list for Attention Centre
-  const overdueAndUpcoming = [
-    ...readinessReport.overdue.map(item => ({ ...item, isOverdue: true, link: `/dashboard/requirements?id=${item.requirement.id}` })),
-    ...readinessReport.upcomingDue.map(item => ({ ...item, isOverdue: false, link: `/dashboard/requirements?id=${item.requirement.id}` })),
-    ...overdueAssetChecks,
-    ...upcomingAssetChecks
-  ];
-
-  // Derived progress values for Readiness Breakdown (Section 3)
-  const reqProgress = stats.activeRequirements > 0
-    ? Math.round((stats.compliantCount / stats.activeRequirements) * 100)
-    : 0;
-
-  const compProgress = competencySummary.compliancePercent || 0;
-
-  const classifiedDocsCount = documents.length - unclassifiedDocs.length;
-  const docProgress = documents.length > 0
-    ? Math.round((classifiedDocsCount / documents.length) * 100)
-    : 0;
-
-  const reviewedCount = Math.max(0, stats.activeRequirements - readinessReport.overdue.length);
-  const reviewProgress = stats.activeRequirements > 0
-    ? Math.round((reviewedCount / stats.activeRequirements) * 100)
-    : 0;
-
-  const completedActionsCount = actions.filter(a => a.status === 'Complete' || a.status === 'Cancelled').length;
-  const actionProgress = actions.length > 0
-    ? Math.round((completedActionsCount / actions.length) * 100)
-    : 0;
-
-  const activeActionsCount = actions.filter(action => action.status === 'Open' || action.status === 'In Progress').length;
-  const activeRequirements = useMemo(
-    () => frameworkRequirements.filter(requirement => (requirement.lifecycle_status || 'ACTIVE') === 'ACTIVE'),
-    [frameworkRequirements]
-  );
-
-  const totalAssetChecks = useMemo(() => {
-    return (assetCheckAssignments || []).filter(a => a.active && a.required).length;
-  }, [assetCheckAssignments]);
-
-  const compliantAssetChecks = useMemo(() => {
-    return (assetCheckAssignments || []).filter(a => a.active && a.required && getAssignmentStatus(a.id) === 'Compliant').length;
-  }, [assetCheckAssignments, assetMatrixCells]);
-
-  const assetProgress = totalAssetChecks > 0
-    ? Math.round((compliantAssetChecks / totalAssetChecks) * 100)
-    : 100;
-
-  const assetCategoryCompliance = useMemo(() => {
-    if (!assetCategories || !assets || !assetCheckAssignments) return [];
-    
-    // Group categories by parent
-    const parents = assetCategories.filter(c => c.active && !c.parent_id);
-    
-    return parents.map(parent => {
-      // Find all subcategories (including itself)
-      const subCategoryIds = assetCategories
-        .filter(c => c.active && (c.id === parent.id || c.parent_id === parent.id))
-        .map(c => c.id);
-        
-      // Find assets in these categories
-      const categoryAssets = assets.filter(a => a.status === 'active' && a.category_id && subCategoryIds.includes(a.category_id));
-      const assetIds = categoryAssets.map(a => a.id);
-      
-      // Find assignments for these assets
-      const categoryAssignments = assetCheckAssignments.filter(
-        asg => asg.active && asg.required && assetIds.includes(asg.asset_id)
-      );
-      
-      const total = categoryAssignments.length;
-      const compliant = categoryAssignments.filter(
-        asg => getAssignmentStatus(asg.id) === 'Compliant'
-      ).length;
-      
-      const percent = total > 0 ? Math.round((compliant / total) * 100) : 100;
-      
-      return {
-        id: parent.id,
-        name: parent.name,
-        total,
-        compliant,
-        percent
-      };
-    });
-  }, [assetCategories, assets, assetCheckAssignments, assetMatrixCells]);
-
-  // Additional counts/helpers for Phase 2
-  const getHealthState = (score: number | null) => {
-    if (score === null) return 'N/A';
-    if (score >= 90) return 'Excellent';
-    if (score >= 75) return 'Good';
-    if (score >= 50) return 'Fair';
-    if (score >= 30) return 'Poor';
-    return 'Critical';
-  };
-
-  const formatShortDate = (dateStr: string) => {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    const day = d.getDate();
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${day} ${months[d.getMonth()]}`;
-  };
+  }, [assetCheckAssignments, assets, assetCheckTypes, getAssignmentStatus]);
 
   const today = useMemo(() => {
     const t = new Date();
@@ -394,131 +271,36 @@ export default function DashboardPage() {
     }).length;
   }, [actions, today]);
 
-  const dueThisWeekCount = useMemo(() => {
-    const endOfWeek = new Date(today);
-    endOfWeek.setDate(today.getDate() + 7);
-    return actions.filter(a => {
-      if (a.status !== 'Open' && a.status !== 'In Progress') return false;
-      const d = a.target_due_date || a.due_date;
-      if (!d) return false;
-      const dVal = new Date(d);
-      return dVal >= today && dVal <= endOfWeek;
-    }).length;
-  }, [actions, today]);
-
-  // Aggregate compliance events
-  const complianceEvents = useMemo(() => {
-    const list: Array<{
-      date: Date;
-      dateStr: string;
-      type: string;
-      title: string;
-      description: string;
-      link: string;
-      action?: Action;
-    }> = [];
-
-    // 1. Requirement Reviews
-    frameworkRequirements.forEach(req => {
-      if (req.next_due_date) {
-        list.push({
-          date: new Date(req.next_due_date),
-          dateStr: req.next_due_date,
-          type: 'Review',
-          title: req.title,
-          description: `Review due for requirement: ${req.title}`,
-          link: `/dashboard/requirements?id=${req.id}`
-        });
-      }
+  // Aggregate due & overdue list
+  const overdueAndUpcoming = useMemo(() => {
+    return [
+      ...readinessReport.overdue.map(item => ({
+        ...item,
+        id: `req-overdue-${item.requirement.id}`,
+        isOverdue: true,
+        link: `/dashboard/requirements?id=${item.requirement.id}`
+      })),
+      ...readinessReport.upcomingDue.map(item => ({
+        ...item,
+        id: `req-upcoming-${item.requirement.id}`,
+        isOverdue: false,
+        link: `/dashboard/requirements?id=${item.requirement.id}`
+      })),
+      ...overdueAssetChecks,
+      ...upcomingAssetChecks
+    ].sort((a, b) => {
+      const dateA = a.requirement.next_due_date ? new Date(a.requirement.next_due_date).getTime() : Infinity;
+      const dateB = b.requirement.next_due_date ? new Date(b.requirement.next_due_date).getTime() : Infinity;
+      return dateA - dateB;
     });
+  }, [readinessReport, overdueAssetChecks, upcomingAssetChecks]);
 
-    // 2. Competency Expiries
-    competencyRecords.forEach(rec => {
-      if (rec.expiry_date) {
-        const cType = competencyTypes.find(t => t.id === rec.competency_type_id);
-        const person = people.find(p => p.id === rec.person_id);
-        list.push({
-          date: new Date(rec.expiry_date),
-          dateStr: rec.expiry_date,
-          type: 'Competency Expiry',
-          title: `${cType?.title || 'Competency'} expiry`,
-          description: `Expiry for ${person?.display_name || 'Staff member'}`,
-          link: `/dashboard/competencies?status=Gap&search=${encodeURIComponent(person?.display_name || '')}`
-        });
-      }
-    });
+  // Safe Workspace Activity
+  const safeActivity = useMemo(() => {
+    return (auditLogs || []).slice(0, 5);
+  }, [auditLogs]);
 
-    // 3. Evidence Expiries
-    documents.forEach(doc => {
-      if (doc.expiry_date) {
-        list.push({
-          date: new Date(doc.expiry_date),
-          dateStr: doc.expiry_date,
-          type: 'Evidence Expiry',
-          title: doc.title,
-          description: `Document expiry: ${doc.title}`,
-          link: `/dashboard/vault`
-        });
-      }
-    });
-
-    // 4. Actions Due
-    actions.forEach(action => {
-      if (action.status === 'Open' || action.status === 'In Progress') {
-        const dStr = action.target_due_date || action.due_date;
-        if (dStr) {
-          list.push({
-            date: new Date(dStr),
-            dateStr: dStr,
-            type: 'Action Due',
-            title: action.title,
-            description: `Gap action due: ${action.title}`,
-            action,
-            link: '#action'
-          });
-        }
-      }
-    });
-
-    return list
-      .filter(e => e.date >= today)
-      .sort((a, b) => a.date.getTime() - b.date.getTime());
-  }, [frameworkRequirements, competencyRecords, competencyTypes, people, documents, actions, today]);
-
-  const openDashboardRecord = (target: DashboardRecordTarget) => {
-    setActiveFlyout(null);
-    setActiveDashboardPanel(null);
-    setSelectedAttentionItem(null);
-    setExpandedRadarBucket(null);
-    if (target.action) {
-      setSelectedAction(target.action);
-      return;
-    }
-    if (target.link) {
-      router.push(target.link);
-    }
-  };
-
-  const openComplianceEvent = (event: { link: string; action?: Action }) => {
-    openDashboardRecord({
-      type: 'Review',
-      link: event.link === '#action' ? undefined : event.link,
-      action: event.action
-    });
-  };
-
-  const openRadarItem = (item: RadarItem) => {
-    openDashboardRecord(item);
-  };
-
-  const openAttentionAction = (action: Action) => {
-    setSelectedAttentionItem(`action-${action.id}`);
-    setActiveFlyout(null);
-    setActiveDashboardPanel(null);
-    setExpandedRadarBucket(null);
-    setSelectedAction(action);
-  };
-
+  // Timeline / Radar Buckets
   const radarBuckets = useMemo(() => {
     const addDays = (d: Date, days: number) => {
       const r = new Date(d);
@@ -526,8 +308,6 @@ export default function DashboardPage() {
       return r;
     };
     const day30 = addDays(today, 30);
-    const day60 = addDays(today, 60);
-    const day90 = addDays(today, 90);
     const items: RadarItem[] = [];
 
     frameworkRequirements.forEach(req => {
@@ -587,103 +367,132 @@ export default function DashboardPage() {
       });
     });
 
-    (assetCheckAssignments || []).forEach(asg => {
-      if (!asg.active || !asg.required || !asg.next_due_date) return;
-      const asset = (assets || []).find(a => a.id === asg.asset_id);
-      const checkType = (assetCheckTypes || []).find(ct => ct.id === asg.asset_check_type_id);
-      items.push({
-        id: `asset-asg-${asg.id}`,
-        title: `${checkType?.title || 'Check'} - ${asset?.name || 'Asset'}`,
-        type: 'Review',
-        dueDate: asg.next_due_date,
-        status: getAssignmentStatus(asg.id) === 'Expired' ? 'RED' : getAssignmentStatus(asg.id) === 'Expiring Soon' ? 'AMBER' : 'GREEN',
-        owner: asset?.name || 'Asset Check',
-        link: `/dashboard/matrix?asset=${asset?.id}`
-      });
-    });
+    return items
+      .filter(item => {
+        const d = new Date(item.dueDate);
+        return d >= today && d <= day30;
+      })
+      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+  }, [frameworkRequirements, documents, competencyRecords, competencyTypes, people, actions, today]);
 
-    const sortByDate = (a: RadarItem, b: RadarItem) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-    return {
-      overdue: items.filter(item => new Date(item.dueDate) < today).sort(sortByDate),
-      due30: items.filter(item => {
-        const due = new Date(item.dueDate);
-        return due >= today && due <= day30;
-      }).sort(sortByDate),
-      due60: items.filter(item => {
-        const due = new Date(item.dueDate);
-        return due > day30 && due <= day60;
-      }).sort(sortByDate),
-      due90: items.filter(item => {
-        const due = new Date(item.dueDate);
-        return due > day60 && due <= day90;
-      }).sort(sortByDate)
-    };
-  }, [actions, competencyRecords, competencyTypes, documents, frameworkRequirements, people, today, assets, assetCheckTypes, assetCheckAssignments, assetMatrixCells]);
-
-  const radarRows: Array<{
-    label: string;
-    items: RadarItem[];
-    styleClass: string;
-  }> = [
-    { label: 'Overdue', items: radarBuckets.overdue, styleClass: 'text-rose-500 font-bold' },
-    { label: 'Due 30 Days', items: radarBuckets.due30, styleClass: 'text-amber-500 font-semibold' },
-    { label: 'Due 60 Days', items: radarBuckets.due60, styleClass: 'text-foreground/80' },
-    { label: 'Due 90 Days', items: radarBuckets.due90, styleClass: 'text-foreground/60' }
-  ];
-
-  const quickActions = [
-    {
-      label: 'Upload Evidence',
-      description: 'Upload files and link them to compliance requirements.',
-      icon: <Upload className="w-5 h-5" />,
-      onClick: () => setIsUploadModalOpen(true)
-    },
-    {
-      label: 'Create Requirement',
-      description: 'Define new compliance objectives and criteria.',
-      icon: <ShieldCheck className="w-5 h-5" />,
-      onClick: () => setActiveQuickActionModal('requirement')
-    },
-    {
-      label: 'Create Competency',
-      description: 'Assign training, certifications, and skills to staff.',
-      icon: <Briefcase className="w-5 h-5" />,
-      onClick: () => setActiveQuickActionModal('competency')
-    },
-    {
-      label: 'Create Action',
-      description: 'Track compliance tasks and action items.',
-      icon: <FileSpreadsheet className="w-5 h-5" />,
-      onClick: () => setActiveQuickActionModal('action')
-    },
-    {
-      label: 'Build Audit Pack',
-      description: 'Compile active requirements and evidence into a PDF.',
-      icon: <FileText className="w-5 h-5" />,
-      onClick: () => setActiveQuickActionModal('audit-pack')
+  // Smart suggestions
+  const smartSuggestions = useMemo(() => {
+    const list: string[] = [];
+    if (overdueAssetChecks.length > 0) {
+      list.push(`Record checklist logs for ${overdueAssetChecks.length} overdue checks in the Asset Matrix.`);
     }
-  ];
+    if (stats.expiredCount > 0) {
+      list.push(`Provide current files for ${stats.expiredCount} expired framework requirements.`);
+    }
+    if (unclassifiedDocs.length > 0) {
+      list.push(`Assign details and classifications to ${unclassifiedDocs.length} vault documents.`);
+    }
+    if (overdueActionsCount > 0) {
+      list.push(`Update progress or close out ${overdueActionsCount} overdue gap action tasks.`);
+    }
+    if (list.length === 0) {
+      list.push("All modules aligned. Your compliance posture is currently optimal.");
+    }
+    return list;
+  }, [overdueAssetChecks, stats, unclassifiedDocs, overdueActionsCount]);
 
-  const renderQuickActions = () => (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-2.5">
-      {quickActions.map(action => (
-        <button
-          key={action.label}
-          onClick={action.onClick}
-          className="w-full p-3 bg-card/60 dark:bg-muted/10 hover:bg-card hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:hover:shadow-[0_8px_30px_rgb(0,0,0,0.2)] hover:border-indigo-500/40 border border-border/80 rounded-2xl text-left transition-all duration-300 group flex items-start gap-3.5 shadow-xs min-h-[84px] cursor-pointer"
-        >
-          <div className="p-2.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl group-hover:scale-105 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300 shrink-0">
-            {action.icon}
-          </div>
-          <div className="space-y-1 min-w-0 flex-1">
-            <span className="font-extrabold text-foreground text-xs block leading-none tracking-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors duration-300">{action.label}</span>
-            <p className="text-[10px] text-muted-foreground leading-normal font-medium line-clamp-2">{action.description}</p>
-          </div>
-        </button>
-      ))}
-    </div>
-  );
+  // Central Map Satellite Nodes configuration
+  const satelliteNodes = useMemo(() => {
+    return [
+      {
+        id: 'requirements',
+        name: 'Requirements',
+        icon: <ClipboardList className="w-5 h-5" />,
+        count: stats.activeRequirements,
+        warnings: stats.expiredCount,
+        path: '/dashboard/requirements',
+        pos: 'left-[50%] top-[10%] -translate-x-1/2 -translate-y-1/2',
+        color: stats.expiredCount > 0 ? 'border-rose-500/40 text-rose-600 dark:text-rose-400' : 'border-border text-foreground',
+        description: 'Assurance Objectives',
+        actionLabel: 'View Objectives'
+      },
+      {
+        id: 'competencies',
+        name: 'Competencies',
+        icon: <UserCheck className="w-5 h-5" />,
+        count: people.length,
+        warnings: competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').length,
+        path: '/dashboard/competencies',
+        pos: 'left-[82%] top-[28%] -translate-x-1/2 -translate-y-1/2',
+        color: competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').length > 0 ? 'border-amber-500/40 text-amber-600 dark:text-amber-400' : 'border-border text-foreground',
+        description: 'Personnel matrix',
+        actionLabel: 'View Matrix'
+      },
+      {
+        id: 'vault',
+        name: 'Evidence Vault',
+        icon: <FolderLock className="w-5 h-5" />,
+        count: documents.length,
+        warnings: unclassifiedDocs.length,
+        path: '/dashboard/vault',
+        pos: 'left-[82%] top-[72%] -translate-x-1/2 -translate-y-1/2',
+        color: unclassifiedDocs.length > 0 ? 'border-amber-500/40 text-amber-600 dark:text-amber-400' : 'border-border text-foreground',
+        description: 'Audit evidence repository',
+        actionLabel: 'Open Vault'
+      },
+      {
+        id: 'matrix',
+        name: 'Asset Matrix',
+        icon: <Grid className="w-5 h-5" />,
+        count: assets.length,
+        warnings: overdueAssetChecks.length,
+        path: '/dashboard/matrix',
+        pos: 'left-[50%] top-[90%] -translate-x-1/2 -translate-y-1/2',
+        color: overdueAssetChecks.length > 0 ? 'border-rose-500/40 text-rose-600 dark:text-rose-400' : 'border-border text-foreground',
+        description: 'Equipment & facility checks',
+        actionLabel: 'Open Matrix'
+      },
+      {
+        id: 'audit-packs',
+        name: 'Audit Packs',
+        icon: <FolderArchive className="w-5 h-5" />,
+        count: auditPacks.length,
+        warnings: 0,
+        path: '/dashboard/audit-packs',
+        pos: 'left-[18%] top-[72%] -translate-x-1/2 -translate-y-1/2',
+        color: 'border-border text-foreground',
+        description: 'Readiness reports compiler',
+        actionLabel: 'Configure Packs'
+      },
+      {
+        id: 'reports',
+        name: 'Reports',
+        icon: <BarChart3 className="w-5 h-5" />,
+        count: 5,
+        warnings: 0,
+        path: '/dashboard/reports',
+        pos: 'left-[18%] top-[28%] -translate-x-1/2 -translate-y-1/2',
+        color: 'border-border text-foreground',
+        description: 'Performance overview analytics',
+        actionLabel: 'Open Analytics'
+      }
+    ];
+  }, [stats, people, competencyRecords, documents, unclassifiedDocs, assets, overdueAssetChecks, auditPacks]);
 
+  // Asset Categories list compliance progress
+  const assetCategoryCompliance = useMemo(() => {
+    if (!assetCategories || !assets || !assetCheckAssignments) return [];
+    const parents = assetCategories.filter(c => c.active && !c.parent_id);
+    return parents.map(parent => {
+      const subCategoryIds = assetCategories
+        .filter(c => c.active && (c.id === parent.id || c.parent_id === parent.id))
+        .map(c => c.id);
+      const categoryAssets = assets.filter(a => a.status === 'active' && a.category_id && subCategoryIds.includes(a.category_id));
+      const assetIds = categoryAssets.map(a => a.id);
+      const categoryAssignments = assetCheckAssignments.filter(asg => asg.active && asg.required && assetIds.includes(asg.asset_id));
+      const total = categoryAssignments.length;
+      const compliant = categoryAssignments.filter(asg => getAssignmentStatus(asg.id) === 'Compliant').length;
+      const percent = total > 0 ? Math.round((compliant / total) * 100) : 100;
+      return { id: parent.id, name: parent.name, total, compliant, percent };
+    });
+  }, [assetCategories, assets, assetCheckAssignments, getAssignmentStatus]);
+
+  // Quick action creates
   const handleQuickUpload = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!uploadTitle || !uploadFile) return;
@@ -698,13 +507,17 @@ export default function DashboardPage() {
         category: uploadCategory,
         expiry_date: uploadExpiry || null,
         issue_date: new Date().toISOString().split('T')[0],
-        metadata: {}
+        metadata: {
+          source: 'dashboard_quick_uploader',
+          context_type: uploadContextType,
+          context_target_id: uploadContextTargetId || undefined
+        }
       });
 
       setUploadTitle('');
-      setUploadFileName('');
       setUploadFile(null);
       setUploadExpiry('');
+      setUploadContextTargetId('');
       setUploadSuccess('Document uploaded successfully.');
       setTimeout(() => {
         setIsUploadModalOpen(false);
@@ -715,26 +528,6 @@ export default function DashboardPage() {
     } finally {
       setIsUploading(false);
     }
-  };
-
-  const handleResetDemoData = async () => {
-    setIsResettingDemo(true);
-    setResetMessage('');
-    setResetError('');
-    try {
-      await resetDemoData();
-      setResetMessage('Demo sample data has been reset.');
-    } catch (err) {
-      setResetError(err instanceof Error ? err.message : 'Unable to reset demo data.');
-    } finally {
-      setIsResettingDemo(false);
-    }
-  };
-
-  const closeDashboardModal = () => {
-    setActiveQuickActionModal(null);
-    setQuickActionMessage('');
-    setQuickActionError('');
   };
 
   const handleCreateRequirement = async (event: React.FormEvent) => {
@@ -763,6 +556,7 @@ export default function DashboardPage() {
         description: ''
       });
       setQuickActionMessage('Requirement created.');
+      setTimeout(() => closeDashboardModal(), 1200);
     } catch (error) {
       setQuickActionError(error instanceof Error ? error.message : 'Unable to create requirement.');
     } finally {
@@ -795,6 +589,7 @@ export default function DashboardPage() {
         description: ''
       });
       setQuickActionMessage('Competency created.');
+      setTimeout(() => closeDashboardModal(), 1200);
     } catch (error) {
       setQuickActionError(error instanceof Error ? error.message : 'Unable to create competency.');
     } finally {
@@ -816,8 +611,15 @@ export default function DashboardPage() {
         due_date: actionForm.due_date || null,
         status: 'Open'
       });
-      setActionForm({ requirement_id: '', title: '', description: '', owner: '', due_date: '' });
-      setQuickActionMessage('Action created.');
+      setActionForm({
+        requirement_id: '',
+        title: '',
+        description: '',
+        owner: '',
+        due_date: ''
+      });
+      setQuickActionMessage('Corrective Action created.');
+      setTimeout(() => closeDashboardModal(), 1200);
     } catch (error) {
       setQuickActionError(error instanceof Error ? error.message : 'Unable to create action.');
     } finally {
@@ -832,16 +634,19 @@ export default function DashboardPage() {
     setQuickActionError('');
     setQuickActionMessage('');
     try {
-      const requirementDocIds = Array.from(new Set(
-        auditPackForm.requirementIds.flatMap(requirementId =>
-          requirementDocuments
-            .filter(link => link.requirement_id === requirementId)
-            .map(link => link.document_id)
-        )
-      )).filter(documentId => documents.some(document => document.id === documentId && document.status !== 'deleted'));
-      await createPack(auditPackForm.name.trim(), auditPackForm.description.trim(), auditPackForm.requirementIds, requirementDocIds);
-      setAuditPackForm({ name: '', description: '', requirementIds: [] });
-      setQuickActionMessage('Audit pack saved as Draft.');
+      await createPack(
+        auditPackForm.name.trim(),
+        auditPackForm.description.trim() || '',
+        auditPackForm.requirementIds,
+        []
+      );
+      setAuditPackForm({
+        name: '',
+        description: '',
+        requirementIds: []
+      });
+      setQuickActionMessage('Draft Audit Pack saved.');
+      setTimeout(() => closeDashboardModal(), 1200);
     } catch (error) {
       setQuickActionError(error instanceof Error ? error.message : 'Unable to create audit pack.');
     } finally {
@@ -849,906 +654,610 @@ export default function DashboardPage() {
     }
   };
 
+  const handleResetDemoData = async () => {
+    setIsResettingDemo(true);
+    setResetMessage('');
+    setResetError('');
+    try {
+      await resetDemoData();
+      setResetMessage('Demo sample data has been reset.');
+    } catch (err) {
+      setResetError(err instanceof Error ? err.message : 'Unable to reset demo data.');
+    } finally {
+      setIsResettingDemo(false);
+    }
+  };
+
+  const closeDashboardModal = () => {
+    setActiveQuickActionModal(null);
+    setQuickActionMessage('');
+    setQuickActionError('');
+  };
+
+  // Helper variables for ActionDetailDrawer
+  const selectedActionRequirements = selectedAction
+    ? frameworkRequirements.filter(requirement =>
+        requirementActions.some(link => link.action_id === selectedAction.id && link.requirement_id === requirement.id)
+      )
+    : [];
+  const currentSelectedAction = selectedAction
+    ? actions.find(action => action.id === selectedAction.id) || selectedAction
+    : null;
+
   return (
-    <div className="space-y-8" data-selected-attention-item={selectedAttentionItem || undefined}>
-      {/* Header and Reset Controls */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 animate-fade-in">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight" id="dashboard-heading">Compliance Workspace</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Real-time compliance intelligence and readiness status for <strong>{organization?.name}</strong>.
+    <div className="space-y-8 animate-in fade-in duration-300">
+      {/* 1. Header greeting strip */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card/60 backdrop-blur-xs border border-border/80 rounded-2xl p-6 shadow-xs">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-black tracking-tight" id="dashboard-heading">
+            Welcome back, {user?.full_name?.split(' ')[0] || 'User'}
+          </h1>
+          <p className="text-xs text-muted-foreground flex items-center gap-1.5 font-semibold">
+            <Building2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+            Active workspace: <strong className="text-foreground">{organization?.name}</strong>
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {/* Focus Mode Toggle */}
-          <div className="flex items-center bg-muted border border-border rounded-lg p-0.5 mr-1 shrink-0">
-            <button
-              onClick={() => setIsFocusMode(false)}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
-                !isFocusMode
-                  ? 'bg-card text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Overview
-            </button>
-            <button
-              onClick={() => setIsFocusMode(true)}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
-                isFocusMode
-                  ? 'bg-card text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Focus
-            </button>
-          </div>
-
+        <div className="flex items-center gap-3 shrink-0 w-full md:w-auto">
           {isDemoMode && (
             <button
               onClick={handleResetDemoData}
               disabled={isResettingDemo}
-              className="px-3.5 py-2 bg-muted hover:bg-muted/85 border border-border text-foreground font-semibold text-xs rounded-lg transition-all shrink-0"
+              className="flex-1 md:flex-initial px-3.5 py-2 bg-muted hover:bg-muted/80 border border-border text-foreground font-bold text-xs rounded-xl transition-all cursor-pointer"
             >
-              {isResettingDemo ? 'Resetting...' : 'Reset Sample Data'}
+              {isResettingDemo ? 'Resetting...' : 'Reset Demo Data'}
             </button>
           )}
           <button
             onClick={() => setIsUploadModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-md shadow-indigo-600/15 transition-all shrink-0"
+            className="flex-1 md:flex-initial flex items-center justify-center gap-2 px-4 py-2 bg-indigo-650 hover:bg-indigo-750 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/10 transition-all cursor-pointer"
           >
-            <Upload className="w-4 h-4" /> Upload Evidence
+            <Upload className="w-4 h-4" /> Quick Upload
           </button>
         </div>
       </div>
 
       {(resetMessage || resetError) && (
-        <div className={`p-3 rounded-xl border text-xs font-semibold ${resetError ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600'}`}>
+        <div className={`p-3.5 rounded-xl border text-xs font-bold ${resetError ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600'}`}>
           {resetError || resetMessage}
         </div>
       )}
 
-      <section className="bg-card border border-border rounded-xl p-4 space-y-3 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Quick Actions</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">High-frequency compliance operations without leaving the dashboard.</p>
+      {/* 2. Top KPI strip */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+        {/* KPI 1: Overall Compliance */}
+        <div className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md transition-all space-y-2.5">
+          <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Compliance Health</span>
+          <div className="flex items-baseline gap-1.5">
+            <span className={`text-2xl font-black ${scoreTone(readinessScore)}`}>{readinessScore}%</span>
+            <span className="text-[10px] text-muted-foreground font-bold leading-none">Score</span>
           </div>
-          <div className="flex bg-muted border border-border rounded-lg p-0.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => updateDashboardTab('overview')}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
-                dashboardTab === 'overview' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Main Overview
-            </button>
-            <button
-              type="button"
-              onClick={() => updateDashboardTab('upcoming-history')}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
-                dashboardTab === 'upcoming-history' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Upcoming / History
-            </button>
+          <span className="text-[10px] text-muted-foreground block font-bold">Current Snapshot</span>
+        </div>
+
+        {/* KPI 2: Requirements */}
+        <div className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md transition-all space-y-2.5">
+          <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Requirements</span>
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl font-black text-foreground">{stats.compliantCount}</span>
+            <span className="text-muted-foreground text-xs font-bold">/ {stats.activeRequirements}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-full bg-muted h-1 rounded-full overflow-hidden">
+              <div className="bg-emerald-500 h-1 rounded-full" style={{ width: `${reqProgress}%` }} />
+            </div>
+            <span className="text-[9px] font-bold text-muted-foreground">{reqProgress}%</span>
           </div>
         </div>
-        {renderQuickActions()}
-      </section>
 
-      {/* SECTION 1 — EXECUTIVE SUMMARY (hidden in Focus mode) */}
-      {!isFocusMode && dashboardTab === 'overview' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Card 1: Overall Readiness */}
-          <div className="bg-card border border-border p-5 rounded-xl flex items-center justify-between hover:shadow-md transition-all">
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Compliance Health</span>
-              <span className="text-2xl font-extrabold block text-foreground leading-tight">{getHealthState(readinessScore)}</span>
-              <span className={`text-xs font-bold block ${scoreTone(readinessScore)}`}>{readinessScore}% score</span>
-            </div>
-            <div className={`p-3 rounded-xl border ${bgScoreTone(readinessScore)}`}>
-              <TrendingUp className="w-5 h-5" />
-            </div>
+        {/* KPI 3: Evidence Coverage */}
+        <div className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md transition-all space-y-2.5">
+          <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Evidence Coverage</span>
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl font-black text-foreground">{classifiedDocsCount}</span>
+            <span className="text-muted-foreground text-xs font-bold">/ {documents.length}</span>
           </div>
-
-          {/* Card 2: Requirements */}
-          <div
-            onClick={() => router.push('/dashboard/requirements?status=Attention')}
-            onMouseEnter={() => {
-              setActiveDashboardPanel('requirements-summary');
-              setExpandedRadarBucket(null);
-              setActiveFlyout(null);
-            }}
-            onMouseLeave={() => setActiveDashboardPanel(current => current === 'requirements-summary' ? null : current)}
-            className="relative group bg-card border border-border p-5 rounded-xl flex items-center justify-between hover:shadow-md hover:border-indigo-500/40 transition-all cursor-pointer"
-          >
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Requirements</span>
-              <span className="text-3xl font-extrabold block text-foreground">{stats.activeRequirements}</span>
-              <span className="text-[10px] text-muted-foreground block">{stats.compliantCount} fully compliant</span>
+          <div className="flex items-center gap-1.5">
+            <div className="w-full bg-muted h-1 rounded-full overflow-hidden">
+              <div className="bg-indigo-500 h-1 rounded-full" style={{ width: `${docProgress}%` }} />
             </div>
-            <div className="p-3 rounded-xl border bg-muted/10 text-muted-foreground border-border/40">
-              <ShieldCheck className="w-5 h-5 text-indigo-500" />
-            </div>
-
-            {/* Smart Hover Panel */}
-            {(activeDashboardPanel === 'requirements-summary' || activeFlyout === 'requirements-summary') && (
-            <div className={`absolute left-0 top-full mt-2 w-64 p-4 ${flyoutPanelClass} transition-all duration-200`} onClick={e => e.stopPropagation()}>
-              <h4 className="font-extrabold text-xs uppercase tracking-wider text-muted-foreground mb-2">Requirements Summary</h4>
-              <div className="space-y-1 text-xs">
-                <Link href="/dashboard/requirements?status=GREEN" className="flex justify-between hover:bg-muted/50 p-1.5 rounded transition-colors">
-                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Green</span>
-                  <span className="font-bold">{reqGreen}</span>
-                </Link>
-                <Link href="/dashboard/requirements?status=AMBER" className="flex justify-between hover:bg-muted/50 p-1.5 rounded transition-colors">
-                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500" /> Amber</span>
-                  <span className="font-bold">{reqAmber}</span>
-                </Link>
-                <Link href="/dashboard/requirements?status=RED" className="flex justify-between hover:bg-muted/50 p-1.5 rounded transition-colors">
-                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-500" /> Red</span>
-                  <span className="font-bold">{reqRed}</span>
-                </Link>
-                <Link href="/dashboard/requirements?status=GREY" className="flex justify-between hover:bg-muted/50 p-1.5 rounded transition-colors">
-                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-zinc-400" /> Grey</span>
-                  <span className="font-bold">{reqGrey}</span>
-                </Link>
-              </div>
-              <div className="border-t border-border mt-3 pt-2">
-                <Link href="/dashboard/requirements?status=Attention" className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center justify-between hover:underline">
-                  View Requirements <ArrowRight className="w-3 h-3" />
-                </Link>
-              </div>
-            </div>
-            )}
+            <span className="text-[9px] font-bold text-muted-foreground">{docProgress}%</span>
           </div>
+        </div>
 
-          {/* Card 3: Competencies */}
-          <div
-            onClick={() => router.push('/dashboard/competencies?status=Gap')}
-            onMouseEnter={() => {
-              setActiveDashboardPanel('competencies-summary');
-              setExpandedRadarBucket(null);
-              setActiveFlyout(null);
-            }}
-            onMouseLeave={() => setActiveDashboardPanel(current => current === 'competencies-summary' ? null : current)}
-            className="relative group bg-card border border-border p-5 rounded-xl flex items-center justify-between hover:shadow-md hover:border-indigo-500/40 transition-all cursor-pointer"
-          >
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Competencies</span>
-              <span className={`text-3xl font-extrabold block ${scoreTone(competencySummary.compliancePercent)}`}>
-                {competencySummary.compliancePercent}%
+        {/* KPI 4: Personnel Training */}
+        <div className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md transition-all space-y-2.5">
+          <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Personnel Training</span>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-black text-foreground">{competencySummary.compliancePercent}%</span>
+          </div>
+          <span className="text-[10px] text-muted-foreground block font-bold truncate">Active certifications</span>
+        </div>
+
+        {/* KPI 5: Action Tasks */}
+        <div className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md transition-all space-y-2.5">
+          <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Open Tasks / Gaps</span>
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl font-black text-foreground">{activeActionsCount}</span>
+            {overdueActionsCount > 0 && (
+              <span className="text-rose-500 text-[10px] font-black uppercase bg-rose-500/10 border border-rose-500/20 px-1 rounded">
+                {overdueActionsCount} Exp
               </span>
-              <span className="text-[10px] text-muted-foreground block">{competencySummary.missing} missing / {competencySummary.expired} expired</span>
-            </div>
-            <div className="p-3 rounded-xl border bg-muted/10 text-muted-foreground border-border/40">
-              <Briefcase className="w-5 h-5 text-indigo-500" />
-            </div>
-
-            {/* Smart Hover Panel */}
-            {(activeDashboardPanel === 'competencies-summary' || activeFlyout === 'competencies-summary') && (
-            <div className={`absolute left-0 top-full mt-2 w-64 p-4 ${flyoutPanelClass} transition-all duration-200`} onClick={e => e.stopPropagation()}>
-              <h4 className="font-extrabold text-xs uppercase tracking-wider text-muted-foreground mb-2">Competencies Summary</h4>
-              <div className="space-y-1 text-xs">
-                <Link href="/dashboard/competencies?status=Missing" className="flex justify-between hover:bg-muted/50 p-1.5 rounded transition-colors">
-                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-500" /> Missing</span>
-                  <span className="font-bold text-rose-600 dark:text-rose-400">{competencySummary.missing}</span>
-                </Link>
-                <Link href="/dashboard/competencies?status=Expired" className="flex justify-between hover:bg-muted/50 p-1.5 rounded transition-colors">
-                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-600" /> Expired</span>
-                  <span className="font-bold text-rose-600 dark:text-rose-400">{competencySummary.expired}</span>
-                </Link>
-                <Link href="/dashboard/competencies?status=Expiring Soon" className="flex justify-between hover:bg-muted/50 p-1.5 rounded transition-colors">
-                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500" /> Expiring Soon</span>
-                  <span className="font-bold text-amber-600 dark:text-amber-400">{competencySummary.expiringSoon}</span>
-                </Link>
-              </div>
-              <div className="border-t border-border mt-3 pt-2">
-                <Link href="/dashboard/competencies?status=Gap" className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center justify-between hover:underline">
-                  View Competencies <ArrowRight className="w-3 h-3" />
-                </Link>
-              </div>
-            </div>
             )}
           </div>
+          <span className="text-[10px] text-muted-foreground block font-bold">Actions pending</span>
+        </div>
 
-          {/* Card 4: Open Actions */}
-          <div
-            onClick={() => router.push('/dashboard/requirements?filter=actions')}
-            onMouseEnter={() => {
-              setActiveDashboardPanel('actions-summary');
-              setExpandedRadarBucket(null);
-              setActiveFlyout(null);
-            }}
-            onMouseLeave={() => setActiveDashboardPanel(current => current === 'actions-summary' ? null : current)}
-            className="relative group bg-card border border-border p-5 rounded-xl flex items-center justify-between hover:shadow-md hover:border-indigo-500/40 transition-all cursor-pointer"
-          >
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Open Actions</span>
-              <span className="text-3xl font-extrabold block text-indigo-500">{openActions}</span>
-              <span className="text-[10px] text-muted-foreground block">{activeActionsCount} active tasks</span>
+        {/* KPI 6: Asset Assurance */}
+        <div className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md transition-all space-y-2.5">
+          <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Asset Assurance</span>
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl font-black text-foreground">{compliantAssetChecks}</span>
+            <span className="text-muted-foreground text-xs font-bold">/ {totalAssetChecks}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-full bg-muted h-1 rounded-full overflow-hidden">
+              <div className="bg-indigo-500 h-1 rounded-full" style={{ width: `${assetProgress}%` }} />
             </div>
-            <div className="p-3 rounded-xl border bg-muted/10 text-muted-foreground border-border/40">
-              <FileSpreadsheet className="w-5 h-5 text-indigo-500" />
-            </div>
-
-            {/* Smart Hover Panel */}
-            {(activeDashboardPanel === 'actions-summary' || activeFlyout === 'actions-summary') && (
-            <div className={`absolute right-0 top-full mt-2 w-64 p-4 ${flyoutPanelClass} transition-all duration-200`} onClick={e => e.stopPropagation()}>
-              <h4 className="font-extrabold text-xs uppercase tracking-wider text-muted-foreground mb-2">Actions Summary</h4>
-              <div className="space-y-1 text-xs">
-                <Link href="/dashboard/requirements?filter=actions" className="flex justify-between hover:bg-muted/50 p-1.5 rounded transition-colors">
-                  <span>Open Actions</span>
-                  <span className="font-bold text-indigo-600 dark:text-indigo-400">{openActions}</span>
-                </Link>
-                <Link href="/dashboard/requirements?filter=overdue" className="flex justify-between hover:bg-muted/50 p-1.5 rounded transition-colors">
-                  <span className="text-rose-500">Overdue</span>
-                  <span className="font-bold text-rose-600 dark:text-rose-400">{overdueActionsCount}</span>
-                </Link>
-                <Link href="/dashboard/requirements?filter=due-week" className="flex justify-between hover:bg-muted/50 p-1.5 rounded transition-colors">
-                  <span className="text-amber-500 font-medium">Due This Week</span>
-                  <span className="font-bold text-amber-600 dark:text-amber-400">{dueThisWeekCount}</span>
-                </Link>
-              </div>
-              <div className="border-t border-border mt-3 pt-2">
-                <Link href="/dashboard/requirements?filter=actions" className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center justify-between hover:underline">
-                  View Actions <ArrowRight className="w-3 h-3" />
-                </Link>
-              </div>
-            </div>
-            )}
+            <span className="text-[9px] font-bold text-muted-foreground">{assetProgress}%</span>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Main Grid Layout (Conditional on Focus Mode) */}
-      {isFocusMode ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-8 animate-fade-in">
-            {/* Focus Mode Daily Workbench Attention Centre */}
-            <div className="bg-card border border-border rounded-xl p-6 space-y-6">
+      {/* 3. Core content grid with Sidebar Live Rail */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        {/* Main Central compliance program map */}
+        <div className="lg:col-span-3 space-y-6">
+          <div className="bg-card border border-border rounded-2xl shadow-xs overflow-hidden">
+            {/* Header controls for central overview */}
+            <div className="p-5 border-b border-border/60 bg-muted/20 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <div>
-                <h2 className="text-base font-extrabold text-foreground">Daily Workbench</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">High-priority compliance items and deadlines for today.</p>
+                <h3 className="text-sm font-extrabold text-foreground">Compliance Program Overview</h3>
+                <p className="text-xs text-muted-foreground">Interactive program maps and status monitoring of system modules.</p>
               </div>
-
-              {readinessReport.topRisks.length === 0 && overdueAndUpcoming.length === 0 && readinessReport.openActionItems.length === 0 ? (
-                <div className="text-center py-12 text-xs text-muted-foreground flex flex-col items-center justify-center gap-3 bg-muted/10 border border-dashed border-border rounded-xl">
-                  <CheckCircle2 className="w-8 h-8 text-emerald-500" />
-                  <span className="font-semibold text-foreground text-sm">System Healthy</span>
-                  <span>No outstanding issues require immediate attention.</span>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {/* Section 1: Critical Issues */}
-                  {readinessReport.topRisks.length > 0 && (
-                    <div className="space-y-3">
-                      <h3 className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-widest flex items-center gap-1.5 border-b border-rose-500/10 pb-1.5">
-                        <ShieldAlert className="w-3.5 h-3.5" />
-                        Critical Issues ({readinessReport.topRisks.length})
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {readinessReport.topRisks.slice(0, 4).map(item => (
-                          <Link
-                            key={item.requirement.id}
-                            href={`/dashboard/requirements?id=${item.requirement.id}`}
-                            className="relative group block p-3.5 bg-rose-500/5 dark:bg-rose-500/10 hover:bg-rose-500/10 dark:hover:bg-rose-500/15 border border-rose-500/20 rounded-xl flex gap-2.5 items-start text-xs transition-colors cursor-pointer"
-                          >
-                            <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                            <div className="min-w-0 flex-1">
-                              <span className="font-bold text-foreground block truncate" title={item.requirement.title}>{item.requirement.title}</span>
-                              <span className="text-[9px] text-muted-foreground block truncate">{item.requirement.category} • {item.requirement.risk_level} Risk</span>
-                              <span className="text-[9px] text-rose-600 dark:text-rose-400 mt-1 block truncate">
-                                {item.reasons.find(r => r.level === 'RED' || r.level === 'AMBER')?.message || 'Gap warning detected.'}
-                              </span>
-                            </div>
-
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Section 2: Upcoming Deadlines */}
-                  {overdueAndUpcoming.length > 0 && (
-                    <div className="space-y-3">
-                      <h3 className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest flex items-center gap-1.5 border-b border-amber-500/10 pb-1.5">
-                        <Clock className="w-3.5 h-3.5" />
-                        Upcoming Deadlines ({overdueAndUpcoming.length})
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {overdueAndUpcoming.slice(0, 4).map(item => (
-                          <Link
-                            key={item.requirement.id}
-                            href={`/dashboard/requirements?id=${item.requirement.id}`}
-                            className="relative group block p-3.5 bg-amber-500/5 dark:bg-amber-500/10 hover:bg-amber-500/10 dark:hover:bg-amber-500/15 border border-amber-500/20 rounded-xl flex gap-2.5 items-start text-xs transition-colors cursor-pointer"
-                          >
-                            <Calendar className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                            <div className="min-w-0 flex-1">
-                              <span className="font-bold text-foreground block truncate" title={item.requirement.title}>{item.requirement.title}</span>
-                              <span className="text-[9px] text-muted-foreground block font-medium">
-                                Review Due: <strong className={item.isOverdue ? 'text-rose-500 font-bold' : 'text-amber-500 font-bold'}>{item.requirement.next_due_date || 'None'}</strong>
-                              </span>
-                              <span className={`text-[8px] font-bold uppercase block mt-1 ${item.isOverdue ? 'text-rose-600 dark:text-rose-400 font-extrabold' : 'text-amber-600 dark:text-amber-400'}`}>
-                                {item.isOverdue ? 'Overdue' : 'Due Soon'}
-                              </span>
-                            </div>
-
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Section 3: Open Actions */}
-                  {readinessReport.openActionItems.length > 0 && (
-                    <div className="space-y-3">
-                      <h3 className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest flex items-center gap-1.5 border-b border-indigo-500/10 pb-1.5">
-                        <FileSpreadsheet className="w-3.5 h-3.5" />
-                        Linked Actions ({openActions})
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {readinessReport.openActionItems.slice(0, 4).map(item => (
-                          <button
-                            key={item.action.id}
-                            onClick={() => openAttentionAction(item.action)}
-                            className="relative group w-full text-left p-3.5 bg-muted/40 hover:bg-muted/65 border border-border/80 rounded-xl flex gap-2.5 items-start text-xs transition-colors cursor-pointer"
-                          >
-                            <FileSpreadsheet className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
-                            <div className="min-w-0 flex-1">
-                              <span className="font-bold text-foreground block truncate" title={item.action.title}>{item.action.title}</span>
-                              <span className="text-[9px] text-muted-foreground block truncate">
-                                {item.requirements.map(r => r.title).join(', ') || 'No linked requirement'}
-                              </span>
-                              {item.action.due_date && <span className="text-[8px] text-indigo-600 dark:text-indigo-400 font-bold block mt-1">Due: {item.action.due_date}</span>}
-                            </div>
-
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Right Column: Timeline in Focus Mode */}
-          <div className="space-y-6">
-            <div className="bg-card border border-border rounded-xl p-6 space-y-6 shadow-sm">
-              <div>
-                <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Compliance Timeline</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">Chronological workload view.</p>
-              </div>
-              <div className="space-y-4">
-                {complianceEvents.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic text-center py-6">No upcoming events scheduled.</p>
-                ) : (
-                  <div className="relative border-l border-border pl-4 ml-3 space-y-6 py-2">
-                    {complianceEvents.slice(0, 8).map((event, idx) => (
-                      <div key={idx} className="relative text-xs group">
-                        <div className="absolute -left-[22px] top-1 w-3.5 h-3.5 rounded-full border-2 border-card bg-indigo-500 ring-4 ring-indigo-500/10 group-hover:scale-110 transition-transform" />
-                        <div className="space-y-1">
-                          <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 block uppercase tracking-wider">
-                            {formatShortDate(event.dateStr)} • {event.type}
-                          </span>
-                          <button
-                            onClick={() => openComplianceEvent(event)}
-                            className="font-bold text-foreground hover:text-indigo-600 dark:hover:text-indigo-400 text-left transition-colors cursor-pointer"
-                          >
-                            {event.title}
-                          </button>
-                          <p className="text-muted-foreground text-[10px] leading-relaxed mt-0.5">{event.description}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        /* Overview Mode (Regular 3-Column Split Layout) */
-        <div className="grid grid-cols-1 gap-8 animate-fade-in">
-          {/* Left Side: Attention Centre, Readiness Breakdown, Timeline */}
-          <div className={`space-y-8 ${dashboardTab === 'overview' ? '' : 'hidden'}`}>
-            {/* Attention Centre */}
-            <div className="bg-card border border-border rounded-xl p-6 space-y-6">
-              <div>
-                <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Attention Centre</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">Urgent compliance issues, review dates, and linked actions requiring attention.</p>
-              </div>
-
-              {readinessReport.topRisks.length === 0 && overdueAndUpcoming.length === 0 && readinessReport.openActionItems.length === 0 ? (
-                <div className="text-center py-12 text-xs text-muted-foreground flex flex-col items-center justify-center gap-3 bg-muted/10 border border-dashed border-border rounded-xl">
-                  <CheckCircle2 className="w-8 h-8 text-emerald-500" />
-                  <span className="font-semibold text-foreground text-sm">System Healthy</span>
-                  <span>No outstanding issues require immediate attention.</span>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* Column 1: Critical Issues */}
-                  <div className="space-y-3">
-                    <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                      <ShieldAlert className="w-3.5 h-3.5 text-rose-500" />
-                      Critical Issues ({readinessReport.topRisks.length})
-                    </h3>
-                    <div className="space-y-2">
-                      {readinessReport.topRisks.length === 0 ? (
-                        <p className="text-[10px] text-muted-foreground italic py-3 bg-muted/15 border border-dashed border-border rounded-lg text-center">No risk alerts.</p>
-                      ) : (
-                        readinessReport.topRisks.slice(0, 3).map(item => (
-                          <Link
-                            key={item.requirement.id}
-                            href={`/dashboard/requirements?id=${item.requirement.id}`}
-                            className="relative group block p-3 bg-rose-500/5 dark:bg-rose-500/10 hover:bg-rose-500/10 dark:hover:bg-rose-500/15 border border-rose-500/20 rounded-xl flex gap-2 items-start text-xs transition-colors cursor-pointer animate-slide-in"
-                          >
-                            <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                            <div className="min-w-0 flex-1">
-                              <span className="font-bold text-foreground block truncate">{item.requirement.title}</span>
-                              <span className="text-[9px] text-muted-foreground block truncate">{item.requirement.category} • {item.requirement.risk_level} Risk</span>
-                              <span className="text-[9px] text-rose-600 dark:text-rose-400 mt-1 block truncate">
-                                {item.reasons.find(r => r.level === 'RED' || r.level === 'AMBER')?.message || 'Gap warning detected.'}
-                              </span>
-                            </div>
-
-                          </Link>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Column 2: Upcoming Deadlines */}
-                  <div className="space-y-3">
-                    <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-amber-500" />
-                      Deadlines ({overdueAndUpcoming.length})
-                    </h3>
-                    <div className="space-y-2">
-                      {overdueAndUpcoming.length === 0 ? (
-                        <p className="text-[10px] text-muted-foreground italic py-3 bg-muted/15 border border-dashed border-border rounded-lg text-center">No overdue items.</p>
-                      ) : (
-                        overdueAndUpcoming.slice(0, 3).map(item => (
-                          <Link
-                            key={item.requirement.id}
-                            href={item.link || `/dashboard/requirements?id=${item.requirement.id}`}
-                            className="relative group block p-3 bg-amber-500/5 dark:bg-amber-500/10 hover:bg-amber-500/10 dark:hover:bg-amber-500/15 border border-amber-500/20 rounded-xl flex gap-2 items-start text-xs transition-colors cursor-pointer"
-                          >
-                            <Calendar className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                            <div className="min-w-0 flex-1">
-                              <span className="font-bold text-foreground block truncate">{item.requirement.title}</span>
-                              <span className="text-[9px] text-muted-foreground block font-medium">
-                                Review Due: <strong className={item.isOverdue ? 'text-rose-500 font-bold' : 'text-amber-500 font-bold'}>{item.requirement.next_due_date || 'None'}</strong>
-                              </span>
-                              <span className={`text-[8px] font-bold uppercase block mt-1 ${item.isOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                                {item.isOverdue ? 'Overdue' : 'Due Soon'}
-                              </span>
-                            </div>
-
-                          </Link>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Column 3: Open Actions */}
-                  <div className="space-y-3">
-                    <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                      <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-500" />
-                      Linked Actions ({openActions})
-                    </h3>
-                    <div className="space-y-2">
-                      {readinessReport.openActionItems.length === 0 ? (
-                        <p className="text-[10px] text-muted-foreground italic py-3 bg-muted/15 border border-dashed border-border rounded-lg text-center">No open actions.</p>
-                      ) : (
-                        readinessReport.openActionItems.slice(0, 3).map(item => (
-                          <button
-                            key={item.action.id}
-                            onClick={() => openAttentionAction(item.action)}
-                            className="relative group w-full text-left p-3 bg-muted/40 hover:bg-muted/65 border border-border/80 rounded-xl flex gap-2 items-start text-xs transition-colors cursor-pointer"
-                          >
-                            <FileSpreadsheet className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
-                            <div className="min-w-0 flex-1">
-                              <span className="font-bold text-foreground block truncate">{item.action.title}</span>
-                              <span className="text-[9px] text-muted-foreground block truncate">
-                                {item.requirements.map(r => r.title).join(', ') || 'No linked requirement'}
-                              </span>
-                              {item.action.due_date && <span className="text-[8px] text-indigo-600 dark:text-indigo-400 font-bold block mt-1">Due: {item.action.due_date}</span>}
-                            </div>
-
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Readiness Breakdown */}
-            <div className="bg-card border border-border rounded-xl p-6 space-y-6">
-              <div>
-                <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Readiness Breakdown</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">Calculated score status across compliance pillars.</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                <div className="flex flex-col items-center justify-center p-4 bg-muted/20 border border-border/60 rounded-2xl relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-xl pointer-events-none"></div>
-                  <div className="relative w-36 h-36 flex items-center justify-center shrink-0">
-                    <svg className="w-full h-full transform -rotate-90">
-                      <circle cx="72" cy="72" r="56" stroke="currentColor" className="text-muted/10" strokeWidth="10" fill="transparent" />
-                      <circle
-                        cx="72"
-                        cy="72"
-                        r="56"
-                        stroke="currentColor"
-                        className={scoreTone(readinessScore)}
-                        strokeWidth="10"
-                        fill="transparent"
-                        strokeDasharray={2 * Math.PI * 56}
-                        strokeDashoffset={2 * Math.PI * 56 * (1 - (readinessScore ?? 0) / 100)}
-                        style={{ transition: 'stroke-dashoffset 0.5s ease' }}
-                      />
-                    </svg>
-                    <div className="absolute flex flex-col items-center">
-                      <span className="text-4xl font-extrabold">{readinessScore}%</span>
-                      <span className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest mt-0.5">Readiness</span>
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-center text-muted-foreground leading-normal max-w-xs mt-4">
-                    {readinessReport.explanation}
-                  </p>
-                </div>
-
-                <div className="space-y-4">
-                  {/* Progress Pillars */}
-                  <div className="space-y-1 text-xs">
-                    <div className="flex justify-between font-bold">
-                      <span>Requirements Coverage</span>
-                      <span className={scoreTone(reqProgress)}>{reqProgress}%</span>
-                    </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${reqProgress}%` }} />
-                    </div>
-                    <div className="flex justify-between text-[9px] text-muted-foreground">
-                      <span>{stats.compliantCount} compliant</span>
-                      <span>{stats.activeRequirements} active</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1 text-xs">
-                    <div className="flex justify-between font-bold">
-                      <span>Competency Verification</span>
-                      <span className={scoreTone(compProgress)}>{compProgress}%</span>
-                    </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${compProgress}%` }} />
-                    </div>
-                    <div className="flex justify-between text-[9px] text-muted-foreground">
-                      <span>{competencySummary.missing} missing / {competencySummary.expired} expired</span>
-                      <span>{competencySummary.upcomingRenewals.length} upcoming renewals</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1 text-xs">
-                    <div className="flex justify-between font-bold">
-                      <span>Evidence Classification</span>
-                      <span className={scoreTone(docProgress)}>{docProgress}%</span>
-                    </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${docProgress}%` }} />
-                    </div>
-                    <div className="flex justify-between text-[9px] text-muted-foreground">
-                      <span>{classifiedDocsCount} classified documents</span>
-                      <span>{unclassifiedDocs.length} unclassified files</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1 text-xs">
-                    <div className="flex justify-between font-bold">
-                      <span>Review Cadence</span>
-                      <span className={scoreTone(reviewProgress)}>{reviewProgress}%</span>
-                    </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${reviewProgress}%` }} />
-                    </div>
-                    <div className="flex justify-between text-[9px] text-muted-foreground">
-                      <span>{reviewedCount} reviewed on schedule</span>
-                      <span>{readinessReport.overdue.length} overdue reviews</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1 text-xs">
-                    <div className="flex justify-between font-bold">
-                      <span>Task Resolution</span>
-                      <span className={scoreTone(actionProgress)}>{actionProgress}%</span>
-                    </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${actionProgress}%` }} />
-                    </div>
-                    <div className="flex justify-between text-[9px] text-muted-foreground">
-                      <span>{completedActionsCount} actions resolved</span>
-                      <span>{openActions} actions open</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1 text-xs border-t border-border/30 pt-3">
-                    <div className="flex justify-between font-bold">
-                      <span>Asset Check Assurance</span>
-                      <span className={scoreTone(assetProgress)}>{assetProgress}%</span>
-                    </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${assetProgress}%` }} />
-                    </div>
-                    <div className="flex justify-between text-[9px] text-muted-foreground">
-                      <span>{compliantAssetChecks} compliant checks</span>
-                      <span>{totalAssetChecks} total checks</span>
-                    </div>
-                    {assetCategoryCompliance.length > 0 && (
-                      <div className="flex flex-wrap gap-x-2 gap-y-0.5 pt-1 text-[9px] text-muted-foreground">
-                        {assetCategoryCompliance.map(cat => (
-                          <span key={cat.id} className="font-semibold">
-                            {cat.name}: <span className={scoreTone(cat.percent)}>{cat.percent}%</span>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Compliance Timeline (Main Section in Overview Mode) */}
-            <div className="bg-card border border-border rounded-xl p-6 space-y-6">
-              <div>
-                <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Compliance Timeline</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">Upcoming reviews, expiries, audits, and deadlines in chronological order.</p>
-              </div>
-
-              <div className="space-y-4">
-                {complianceEvents.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic text-center py-6">No upcoming events scheduled.</p>
-                ) : (
-                  <div className="relative border-l border-border pl-4 ml-3 space-y-6 py-2">
-                    {complianceEvents.slice(0, 10).map((event, idx) => (
-                      <div key={idx} className="relative text-xs group">
-                        <div className="absolute -left-[22px] top-1 w-3.5 h-3.5 rounded-full border-2 border-card bg-indigo-500 ring-4 ring-indigo-500/10 group-hover:scale-110 transition-transform" />
-                        <div className="space-y-1">
-                          <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 block uppercase tracking-wider">
-                            {formatShortDate(event.dateStr)} • {event.type}
-                          </span>
-                          <button
-                            onClick={() => openComplianceEvent(event)}
-                            className="font-bold text-foreground hover:text-indigo-600 dark:hover:text-indigo-400 text-left transition-colors cursor-pointer"
-                          >
-                            {event.title}
-                          </button>
-                          <p className="text-muted-foreground text-[10px] leading-relaxed mt-0.5">{event.description}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column: Quick Actions, Compliance Radar, Upcoming, Recent Activity */}
-          <div className={`space-y-8 ${dashboardTab === 'upcoming-history' ? '' : 'hidden'}`}>
-            {/* Compliance Radar Panel */}
-            <div className="bg-card border border-border rounded-xl p-6 space-y-4 shadow-sm">
-              <div>
-                <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Compliance Radar</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">Hover or click a row to view specific due and overdue tasks.</p>
-              </div>
-              <div className="space-y-3">
-                {radarRows.map(row => {
-                  const radarDescriptions: Record<string, string> = {
-                    'Overdue': 'Active requirements, expired evidence, overdue actions, or competency gaps past schedule.',
-                    'Due 30 Days': 'Requirements, evidence, and actions due for scheduled review or renewal in 30 days.',
-                    'Due 60 Days': 'Requirements, evidence, and actions due for scheduled review or renewal in 30 to 60 days.',
-                    'Due 90 Days': 'Requirements, evidence, and actions due for scheduled review or renewal in 60 to 90 days.'
-                  };
-                  const filterParamMap: Record<string, string> = {
-                    'Overdue': 'overdue',
-                    'Due 30 Days': 'due30',
-                    'Due 60 Days': 'due60',
-                    'Due 90 Days': 'due90'
-                  };
-                  return (
-                    <div key={row.label} className="relative">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setExpandedRadarBucket(current => current === row.label ? null : row.label);
-                          setActiveDashboardPanel(null);
-                          setActiveFlyout(null);
-                        }}
-                        className="w-full text-left relative group flex items-center justify-between p-3.5 bg-muted/40 hover:bg-muted/75 hover:border-indigo-500/20 focus-visible:ring-2 focus-visible:ring-indigo-600 border border-border/80 rounded-xl cursor-pointer transition-all duration-200 outline-none"
-                        aria-expanded={expandedRadarBucket === row.label}
-                        aria-haspopup="true"
-                        aria-label={`View ${row.label} compliance items. Contains ${row.items.length} items.`}
-                      >
-                        <span className="font-extrabold text-foreground/85 group-hover:text-indigo-650 dark:group-hover:text-indigo-400 transition-colors">{row.label}</span>
-                        <div className="flex items-center gap-1.5">
-                          <span className={`${row.styleClass} px-2.5 py-0.5 bg-card border border-border/50 rounded-full text-[10px] font-extrabold group-hover:scale-105 transition-transform`}>
-                            {row.items.length}
-                          </span>
-                          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
-                        </div>
-                      </button>
-
-                      {/* Popover content (opens to the left) */}
-                      {expandedRadarBucket === row.label && (
-                        <div
-                          className={`absolute right-full mr-3 top-0 w-80 max-w-[min(20rem,calc(100vw-2rem))] p-4 ${flyoutPanelClass} transition-all duration-200 space-y-3 z-30`}
-                          onClick={e => e.stopPropagation()}
-                        >
-                          <div className="flex flex-col gap-1 border-b border-border/80 pb-2">
-                            <div className="flex items-center justify-between">
-                              <span className="font-extrabold text-foreground text-xs">{row.label} Workload</span>
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{row.items.length} item{row.items.length === 1 ? '' : 's'}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => setExpandedRadarBucket(null)}
-                                  className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-indigo-600"
-                                  aria-label={`Close ${row.label} workload`}
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </div>
-                            </div>
-                            <p className="text-[9px] text-muted-foreground leading-normal mt-0.5">
-                              {radarDescriptions[row.label]}
-                            </p>
-                          </div>
-                          <div className="max-h-60 overflow-y-auto pr-1 space-y-2">
-                            {row.items.length === 0 ? (
-                              <p className="text-[10px] text-muted-foreground italic text-center py-4">No tasks found in this timeframe.</p>
-                            ) : (
-                              row.items.slice(0, 10).map(item => (
-                                <button
-                                  key={item.id}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openRadarItem(item);
-                                  }}
-                                  className="w-full text-left p-2.5 bg-muted/30 hover:bg-muted/70 hover:border-indigo-500/30 border border-border/50 rounded-lg flex flex-col gap-1 text-[11px] transition-all duration-150 cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-600 outline-none"
-                                >
-                                  <div className="flex items-start justify-between gap-1.5 w-full">
-                                    <span className="font-bold text-foreground truncate max-w-[170px]" title={item.title}>
-                                      {item.title}
-                                    </span>
-                                    <span className={`px-1.5 py-0.5 rounded-[4px] text-[8px] font-extrabold shrink-0 border uppercase tracking-wider ${
-                                      item.type === 'Requirement' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20' :
-                                      item.type === 'Evidence' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' :
-                                      item.type === 'Competency' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' :
-                                      'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
-                                    }`}>
-                                      {item.type}
-                                    </span>
-                                  </div>
-                                  <div className="flex justify-between items-center text-[9px] text-muted-foreground">
-                                    <span>Due: {formatShortDate(item.dueDate)}</span>
-                                    <span className="font-semibold truncate max-w-[95px]">{item.owner || 'Unassigned'}</span>
-                                  </div>
-                                </button>
-                              ))
-                            )}
-                            {row.items.length > 10 && (
-                              <p className="text-[9px] text-muted-foreground italic text-center pt-1 font-medium">{row.items.length - 10} more items available via filters.</p>
-                            )}
-                          </div>
-                          <div className="border-t border-border/80 pt-2 text-center">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setExpandedRadarBucket(null);
-                                router.push(`/dashboard/requirements?filter=${filterParamMap[row.label]}`);
-                              }}
-                              className="w-full text-center text-[10px] font-black text-indigo-600 hover:text-indigo-750 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline cursor-pointer py-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 rounded"
-                            >
-                              View Filtered Requirements →
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Upcoming Compliance Events Panel (Compact) */}
-            <div className="bg-card border border-border rounded-xl p-6 space-y-4 shadow-sm">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Upcoming</h2>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Quick workload preview.</p>
-                </div>
-                <span className="text-[10px] font-extrabold text-muted-foreground">
-                  {complianceEvents.length} item{complianceEvents.length === 1 ? '' : 's'}
-                </span>
-              </div>
-              <div className="space-y-3">
-                {complianceEvents.slice(0, 3).map((event, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => openComplianceEvent(event)}
-                    className="w-full flex gap-3 items-center justify-between text-left text-xs p-2.5 bg-muted/30 hover:bg-muted/60 border border-border rounded-xl transition-colors"
-                  >
-                    <div className="min-w-0">
-                      <span className="font-bold block text-foreground truncate">{event.title}</span>
-                      <span className="text-[9px] text-muted-foreground">{event.type} • {event.description}</span>
-                    </div>
-                    <span className="shrink-0 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full">
-                      {formatShortDate(event.dateStr)}
-                    </span>
-                  </button>
-                ))}
-                {complianceEvents.length === 0 && (
-                  <p className="text-xs text-muted-foreground italic text-center py-2">No upcoming events.</p>
-                )}
-              </div>
-            </div>
-
-            {/* Recent Activity Rework */}
-            <div className="bg-card border border-border rounded-xl p-6 space-y-4">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Recent Activity</h2>
-                  <p className="text-xs text-muted-foreground mt-0.5">Continuous tracking of compliance logs.</p>
-                </div>
+              <div className="flex items-center bg-muted border border-border p-0.5 rounded-lg shrink-0">
                 <button
-                  onClick={() => setIsActivityModalOpen(true)}
-                  className="text-[10px] font-extrabold text-indigo-600 dark:text-indigo-400 hover:underline"
+                  onClick={() => setViewMode('system')}
+                  className={`px-3 py-1.5 rounded-md text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    viewMode === 'system' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  aria-label="View graphical system map"
                 >
-                  View Full Activity →
+                  <Network className="w-3.5 h-3.5" /> System View
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`px-3 py-1.5 rounded-md text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    viewMode === 'list' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  aria-label="View list format"
+                >
+                  <List className="w-3.5 h-3.5" /> List View
                 </button>
               </div>
+            </div>
 
-              <div className="relative border-l border-border pl-4 ml-2 space-y-5 py-2">
-                {auditLogs.slice(0, 5).map(log => (
-                  <div key={log.id} className="text-xs relative">
-                    <div className="absolute -left-[21px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-card bg-indigo-500 ring-4 ring-indigo-500/15" />
-                    <div className="space-y-0.5">
-                      <span className="font-bold block text-foreground leading-normal">{log.action}</span>
-                      <p className="text-muted-foreground text-[10px] leading-relaxed">{log.details}</p>
-                      <span className="text-[9px] text-muted-foreground/80 block pt-0.5">
-                        {new Date(log.created_at).toLocaleString()}
-                      </span>
-                    </div>
+            {/* Central content depending on toggle */}
+            <div className="p-6">
+              {viewMode === 'system' ? (
+                /* Interactive graphical system map layout */
+                <div className="w-full max-w-[600px] aspect-[4/3] mx-auto relative select-none">
+                  {/* Background SVG connections */}
+                  <svg viewBox="0 0 600 450" className="absolute inset-0 w-full h-full pointer-events-none">
+                    {/* Glowing effect filter definition */}
+                    <defs>
+                      <filter id="core-glow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feGaussianBlur stdDeviation="6" result="blur" />
+                        <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                      </filter>
+                    </defs>
+
+                    {/* Connecting lines from Core to satellites */}
+                    {satelliteNodes.map(node => {
+                      const isHovered = hoveredNode === node.id;
+                      // Extract target coords from lines
+                      let tx = 300, ty = 225;
+                      if (node.id === 'requirements') { tx = 300; ty = 45; }
+                      else if (node.id === 'competencies') { tx = 480; ty = 112.5; }
+                      else if (node.id === 'vault') { tx = 480; ty = 337.5; }
+                      else if (node.id === 'matrix') { tx = 300; ty = 405; }
+                      else if (node.id === 'audit-packs') { tx = 120; ty = 337.5; }
+                      else if (node.id === 'reports') { tx = 120; ty = 112.5; }
+
+                      return (
+                        <g key={node.id}>
+                          <line
+                            x1="300"
+                            y1="225"
+                            x2={tx}
+                            y2={ty}
+                            className={`transition-all duration-300 stroke-2 ${
+                              isHovered
+                                ? 'stroke-indigo-500 opacity-90 stroke-[2.5]'
+                                : 'stroke-indigo-500/20 dark:stroke-indigo-500/10'
+                            }`}
+                          />
+                          {isHovered && (
+                            <line
+                              x1="300"
+                              y1="225"
+                              x2={tx}
+                              y2={ty}
+                              className="stroke-indigo-400 opacity-50 stroke-[5] animate-pulse pointer-events-none"
+                              filter="url(#core-glow)"
+                            />
+                          )}
+                        </g>
+                      );
+                    })}
+                  </svg>
+
+                  {/* Central glowing core node */}
+                  <div
+                    className="absolute left-[50%] top-[50%] -translate-x-1/2 -translate-y-1/2 z-10 w-24 h-24 rounded-full bg-indigo-650/10 border-2 border-indigo-500 text-indigo-500 flex flex-col items-center justify-center shadow-lg shadow-indigo-500/15 animate-in zoom-in duration-300 select-none cursor-default"
+                    style={{ filter: 'drop-shadow(0 0 10px rgba(99, 102, 241, 0.2))' }}
+                  >
+                    <ShieldCheck className="w-8 h-8" />
+                    <span className="text-[10px] font-black uppercase tracking-widest mt-1 text-center select-none">Vygilence</span>
+                    <span className="text-[8px] text-muted-foreground/80 font-bold select-none">Hub</span>
                   </div>
-                ))}
-              </div>
+
+                  {/* Absolute positioned module nodes */}
+                  {satelliteNodes.map(node => {
+                    return (
+                      <Link
+                        key={node.id}
+                        href={node.path}
+                        id={`program-node-${node.id}`}
+                        onMouseEnter={() => setHoveredNode(node.id)}
+                        onMouseLeave={() => setHoveredNode(null)}
+                        onFocus={() => setHoveredNode(node.id)}
+                        onBlur={() => setHoveredNode(null)}
+                        className={`absolute ${node.pos} w-20 h-20 md:w-24 md:h-24 rounded-full bg-card border-2 flex flex-col items-center justify-center text-center transition-all duration-300 shadow-xs hover:scale-105 hover:shadow-lg hover:border-indigo-500/80 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${node.color}`}
+                        title={`${node.name}: ${node.description}`}
+                      >
+                        <div className="relative">
+                          {node.icon}
+                          {node.warnings > 0 && (
+                            <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 border-2 border-card text-[8px] font-black text-white flex items-center justify-center animate-pulse">
+                              {node.warnings}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[9px] md:text-[10px] font-extrabold uppercase mt-1 tracking-tight truncate max-w-[80px]">
+                          {node.name}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground font-semibold">
+                          {node.count} {node.id === 'competencies' ? 'staff' : node.id === 'vault' ? 'files' : node.id === 'reports' ? 'types' : 'active'}
+                        </span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* Tabular List View of Workspace modules */
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-border/80 text-muted-foreground font-bold uppercase tracking-wider">
+                        <th className="p-3">Module</th>
+                        <th className="p-3">Overview Context</th>
+                        <th className="p-3 text-center">Active Items</th>
+                        <th className="p-3 text-center">Alert Gaps</th>
+                        <th className="p-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {satelliteNodes.map(node => (
+                        <tr key={node.id} className="hover:bg-muted/30 transition-colors">
+                          <td className="p-3 font-bold text-foreground flex items-center gap-2">
+                            <span className="text-indigo-500">{node.icon}</span>
+                            {node.name}
+                          </td>
+                          <td className="p-3 text-muted-foreground">{node.description}</td>
+                          <td className="p-3 text-center font-bold">{node.count}</td>
+                          <td className="p-3 text-center">
+                            {node.warnings > 0 ? (
+                              <span className="inline-block px-2.5 py-0.5 text-[10px] font-bold bg-rose-500/10 text-rose-600 rounded-full border border-rose-500/20">
+                                {node.warnings} Issues
+                              </span>
+                            ) : (
+                              <span className="inline-block px-2.5 py-0.5 text-[10px] font-bold bg-emerald-500/10 text-emerald-600 rounded-full border border-emerald-500/20">
+                                Compliant
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right">
+                            <Link
+                              href={node.path}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-muted hover:bg-muted/80 text-foreground font-bold rounded-lg transition-colors border border-border/80"
+                            >
+                              {node.actionLabel} <ChevronRight className="w-3 h-3" />
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Quick actions panel */}
+          <section className="bg-card border border-border rounded-2xl p-5 space-y-3.5 shadow-xs">
+            <div>
+              <h3 className="text-sm font-extrabold text-foreground">Program Quick Actions</h3>
+              <p className="text-xs text-muted-foreground">High-frequency compliance operations and records registration.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+              {[
+                { label: 'Upload Evidence', desc: 'Add file to vault', icon: <Upload className="w-4 h-4" />, onClick: () => setIsUploadModalOpen(true) },
+                { label: 'Create Requirement', desc: 'Add new compliance goal', icon: <ShieldCheck className="w-4 h-4" />, onClick: () => setActiveQuickActionModal('requirement') },
+                { label: 'Create Competency', desc: 'Add skills / training', icon: <Briefcase className="w-4 h-4" />, onClick: () => setActiveQuickActionModal('competency') },
+                { label: 'Create Action', desc: 'Register gap items', icon: <FileSpreadsheet className="w-4 h-4" />, onClick: () => setActiveQuickActionModal('action') },
+                { label: 'Build Audit Pack', desc: 'Export compliance pack', icon: <FileText className="w-4 h-4" />, onClick: () => setActiveQuickActionModal('audit-pack') }
+              ].map(action => (
+                <button
+                  key={action.label}
+                  onClick={action.onClick}
+                  className="p-3 bg-muted/40 hover:bg-card hover:border-indigo-500/40 hover:shadow-xs border border-border rounded-xl text-left transition-all duration-200 group flex flex-col justify-between min-h-[96px] cursor-pointer"
+                >
+                  <div className="p-2 bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-all shrink-0">
+                    {action.icon}
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="font-extrabold text-foreground text-[11px] block group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{action.label}</span>
+                    <p className="text-[9px] text-muted-foreground line-clamp-1">{action.desc}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {/* Quick upload drop zone section */}
+          <div className="bg-card border border-border rounded-2xl p-5 shadow-xs">
+            <h3 className="text-sm font-extrabold text-foreground">Discreet Evidence Drops</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Quickly upload private audit evidence directly from the landing desk.</p>
+            <div className="mt-4 border-2 border-dashed border-border/80 hover:border-indigo-500/40 rounded-xl p-6 text-center bg-muted/10">
+              <EvidenceDropzone
+                label="Drag & drop evidence files here to upload"
+                helperText={`Files remain secure and require context confirmation. Max ${formatMaxEvidenceUploadSize()}.`}
+                buttonLabel="Browse Documents"
+                compact
+                multiple
+                onUpload={async (file, updateStatus) => {
+                  updateStatus('saving record');
+                  const doc = await uploadDocument({
+                    file,
+                    title: file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim() || file.name,
+                    category: 'General',
+                    expiry_date: null,
+                    issue_date: new Date().toISOString().split('T')[0],
+                    metadata: { source: 'dashboard_quick_dropper' }
+                  });
+                  return doc;
+                }}
+                onComplete={docs => setUploadSuccess(`Uploaded ${docs.length} document${docs.length === 1 ? '' : 's'} successfully.`)}
+                findDuplicates={findPossibleDuplicateDocuments}
+              />
             </div>
           </div>
         </div>
-      )}
 
-      {/* Upload Evidence Modal Overlay */}
+        {/* Right-side live intelligence rail */}
+        <aside className="space-y-6">
+          {/* Rail Section 1: Circular Compliance gauge */}
+          <div className="bg-card border border-border rounded-2xl p-5 shadow-xs space-y-4">
+            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Compliance Snapshot</span>
+            <div className="flex flex-col items-center justify-center space-y-2 py-2">
+              <div className="relative w-24 h-24 flex items-center justify-center">
+                {/* SVG Circular progress */}
+                <svg className="w-full h-full transform -rotate-90">
+                  <circle
+                    cx="48"
+                    cy="48"
+                    r="40"
+                    className="stroke-muted"
+                    strokeWidth="6"
+                    fill="transparent"
+                  />
+                  <circle
+                    cx="48"
+                    cy="48"
+                    r="40"
+                    className="stroke-indigo-600 transition-all duration-500"
+                    strokeWidth="6"
+                    fill="transparent"
+                    strokeDasharray={`${2 * Math.PI * 40}`}
+                    strokeDashoffset={`${(2 * Math.PI * 40) - (readinessScore / 100) * (2 * Math.PI * 40)}`}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="absolute flex flex-col items-center justify-center">
+                  <span className="text-xl font-black text-foreground">{readinessScore}%</span>
+                  <span className="text-[8px] font-bold text-muted-foreground uppercase">Ready</span>
+                </div>
+              </div>
+              <div className="text-center">
+                <span className="text-xs font-bold block">{getHealthState(readinessScore)} health</span>
+                <span className="text-[9px] text-muted-foreground">{stats.compliantCount} of {stats.activeRequirements} objectives met</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Rail Section 2: Due & Overdue items */}
+          <div className="bg-card border border-border rounded-2xl p-5 shadow-xs space-y-4">
+            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Due & Overdue</span>
+            <div className="space-y-3">
+              {overdueAndUpcoming.slice(0, 5).map(item => (
+                <Link
+                  key={item.id}
+                  href={item.link}
+                  className="flex items-start gap-2.5 p-2 bg-muted/30 hover:bg-muted/65 border border-border/60 rounded-xl transition-colors text-xs outline-none focus-visible:ring-1 focus-visible:ring-indigo-500"
+                >
+                  {item.isOverdue ? (
+                    <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                  ) : (
+                    <Clock className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <span className="font-bold block text-foreground truncate">{item.requirement.title}</span>
+                    <span className="text-[10px] text-muted-foreground block truncate">{item.requirement.category}</span>
+                    <span className={`text-[9px] font-extrabold ${item.isOverdue ? 'text-rose-500' : 'text-amber-500'}`}>
+                      Due: {item.requirement.next_due_date || 'N/A'}
+                    </span>
+                  </div>
+                </Link>
+              ))}
+              {overdueAndUpcoming.length === 0 && (
+                <p className="text-[10px] text-muted-foreground italic text-center py-4">No pending items due.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Rail Section 3: Recent Safe Activity */}
+          <div className="bg-card border border-border rounded-2xl p-5 shadow-xs space-y-4">
+            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Recent Workspace Activity</span>
+            <div className="space-y-3 relative border-l border-border pl-3.5 ml-1.5 py-1">
+              {safeActivity.map(log => (
+                <div key={log.id} className="text-[11px] relative space-y-0.5">
+                  <div className="absolute -left-[18.5px] top-1.5 w-2 h-2 rounded-full border border-card bg-indigo-500" />
+                  <span className="font-bold block text-foreground truncate" title={log.action}>{log.action}</span>
+                  <p className="text-muted-foreground text-[10px] leading-relaxed line-clamp-2">{log.details}</p>
+                </div>
+              ))}
+              {safeActivity.length === 0 && (
+                <p className="text-[10px] text-muted-foreground italic text-center py-4">No recent activities.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Rail Section 4: Expiring Soon */}
+          <div className="bg-card border border-border rounded-2xl p-5 shadow-xs space-y-4">
+            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Expiring within 30 Days</span>
+            <div className="space-y-2.5">
+              {radarBuckets.slice(0, 5).map(item => (
+                <div key={item.id} className="flex justify-between items-center text-xs p-2 bg-muted/20 rounded-lg">
+                  <div className="min-w-0">
+                    <span className="font-bold text-foreground block truncate max-w-[120px]">{item.title}</span>
+                    <span className="text-[9px] text-muted-foreground block">{item.type}</span>
+                  </div>
+                  <span className="text-[9px] font-bold text-amber-500">{item.dueDate}</span>
+                </div>
+              ))}
+              {radarBuckets.length === 0 && (
+                <p className="text-[10px] text-muted-foreground italic text-center py-4">No exipries in 30 days.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Rail Section 5: Smart Suggestions */}
+          <div className="bg-card border border-border rounded-2xl p-5 shadow-xs space-y-4">
+            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Smart Focus Suggestions</span>
+            <div className="space-y-2">
+              {smartSuggestions.map((suggestion, idx) => (
+                <div key={idx} className="flex gap-2 p-2 bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/15 rounded-xl text-xs text-indigo-650 dark:text-indigo-300 font-semibold leading-relaxed">
+                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0" />
+                  <span>{suggestion}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      {/* 4. Lower Dashboard Panels */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {/* Panel 1: Requirement Status Distribution */}
+        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs space-y-4">
+          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Requirement Status Distribution</span>
+          <div className="space-y-3 py-2 text-xs">
+            {[
+              { label: 'Compliant (Green)', count: stats.compliantCount, color: 'bg-emerald-500', pct: stats.activeRequirements > 0 ? Math.round((stats.compliantCount / stats.activeRequirements) * 100) : 0 },
+              { label: 'Expiring Soon (Amber)', count: stats.expiringSoonCount, color: 'bg-amber-500', pct: stats.activeRequirements > 0 ? Math.round((stats.expiringSoonCount / stats.activeRequirements) * 100) : 0 },
+              { label: 'Expired (Red)', count: stats.expiredCount, color: 'bg-rose-500', pct: stats.activeRequirements > 0 ? Math.round((stats.expiredCount / stats.activeRequirements) * 100) : 0 },
+              { label: 'Not Assessed (Grey)', count: stats.activeRequirements - (stats.compliantCount + stats.expiringSoonCount + stats.expiredCount), color: 'bg-zinc-500', pct: stats.activeRequirements > 0 ? Math.round(((stats.activeRequirements - (stats.compliantCount + stats.expiringSoonCount + stats.expiredCount)) / stats.activeRequirements) * 100) : 0 }
+            ].map(item => (
+              <div key={item.label} className="space-y-1.5">
+                <div className="flex justify-between items-center font-bold">
+                  <span className="flex items-center gap-1.5">
+                    <span className={`w-2.5 h-2.5 rounded-full ${item.color}`} />
+                    {item.label}
+                  </span>
+                  <span className="text-muted-foreground">{item.count}</span>
+                </div>
+                <div className="w-full bg-muted h-2 rounded-full overflow-hidden">
+                  <div className={`${item.color} h-2 rounded-full`} style={{ width: `${item.pct}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Panel 2: Asset Compliance Categories */}
+        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs space-y-4">
+          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Asset Category Health</span>
+          <div className="space-y-3 py-1 text-xs">
+            {assetCategoryCompliance.map(category => (
+              <div key={category.id} className="space-y-1.5">
+                <div className="flex justify-between items-center font-bold">
+                  <span>{category.name}</span>
+                  <span className="text-muted-foreground">{category.compliant} / {category.total} checks</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-full bg-muted h-2 rounded-full overflow-hidden">
+                    <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${category.percent}%` }} />
+                  </div>
+                  <span className="font-extrabold text-[10px] text-muted-foreground w-8 text-right">{category.percent}%</span>
+                </div>
+              </div>
+            ))}
+            {assetCategoryCompliance.length === 0 && (
+              <p className="text-[10px] text-muted-foreground italic text-center py-6">No parent asset categories defined.</p>
+            )}
+          </div>
+        </div>
+
+        {/* Panel 3: Risk Level Areas */}
+        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs space-y-4">
+          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Top Risk Gaps</span>
+          <div className="space-y-3 text-xs">
+            {[
+              { label: 'Critical Risk Items', count: frameworkRequirements.filter(r => r.risk_level === 'Critical' && r.status !== 'GREEN').length, color: 'text-rose-600 bg-rose-500/10 border-rose-500/20' },
+              { label: 'High Risk Items', count: frameworkRequirements.filter(r => r.risk_level === 'High' && r.status !== 'GREEN').length, color: 'text-rose-500 bg-rose-500/5 border-rose-500/15' },
+              { label: 'Medium Risk Items', count: frameworkRequirements.filter(r => r.risk_level === 'Medium' && r.status !== 'GREEN').length, color: 'text-amber-600 bg-amber-500/10 border-amber-500/20' },
+              { label: 'Low Risk Items', count: frameworkRequirements.filter(r => r.risk_level === 'Low' && r.status !== 'GREEN').length, color: 'text-zinc-600 bg-zinc-500/10 border-zinc-500/20' }
+            ].map(item => (
+              <div key={item.label} className="flex justify-between items-center p-2.5 bg-muted/20 border border-border rounded-xl">
+                <span className="font-bold text-foreground">{item.label}</span>
+                <span className={`px-2 py-0.5 text-[10px] font-black rounded-md border ${item.color}`}>
+                  {item.count} pending
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 5. Modals and Quick-Upload dialogs */}
       {isUploadModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-card solid-panel border border-border w-full max-w-lg rounded-2xl p-6 relative shadow-2xl space-y-4 animate-scale-in">
+          <div className="bg-card solid-panel border border-border w-full max-w-md rounded-2xl p-6 relative shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <button
-              onClick={() => {
-                setIsUploadModalOpen(false);
-                setUploadError('');
-                setUploadSuccess('');
-              }}
+              onClick={() => setIsUploadModalOpen(false)}
               className="absolute top-4 right-4 p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
 
-            <div className="space-y-1">
-              <h3 className="text-base font-extrabold text-foreground">Upload Evidence Document</h3>
-              <p className="text-xs text-muted-foreground">Attach a document to private storage and assign a category.</p>
+            <div className="flex items-center gap-3 border-b border-border/60 pb-3 mb-2">
+              <div className="p-2 bg-indigo-500/10 text-indigo-500 rounded-xl">
+                <Upload className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-extrabold text-foreground">Upload Evidence Document</h3>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Files are private and scoped to this organisation.</p>
+              </div>
             </div>
 
             <form onSubmit={handleQuickUpload} className="space-y-4 text-xs">
@@ -1760,114 +1269,177 @@ export default function DashboardPage() {
                   id="quick-title"
                   type="text"
                   required
+                  placeholder="e.g. Annual Fleet Insurance Cert"
                   value={uploadTitle}
                   onChange={event => setUploadTitle(event.target.value)}
-                  placeholder="e.g., Training certificate"
                   className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label htmlFor="quick-file" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-                    File
-                  </label>
-                  <input
-                    id="quick-file"
-                    type="file"
-                    required
-                    accept={evidenceAcceptAttribute}
-                    onChange={event => {
-                      const file = event.target.files?.[0] || null;
-                      setUploadFile(file);
-                      setUploadFileName(file?.name || '');
-                    }}
-                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
-                  />
-                  <span className="text-[9px] text-muted-foreground block mt-1 truncate">
-                    {uploadFileName || `Max ${formatMaxEvidenceUploadSize()}`}
-                  </span>
-                </div>
-
-                <div>
-                  <label htmlFor="quick-cat" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-                    Category Scope
+                  <label htmlFor="quick-category" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Doc Category
                   </label>
                   <select
-                    id="quick-cat"
+                    id="quick-category"
                     value={uploadCategory}
                     onChange={event => setUploadCategory(event.target.value)}
                     className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
                   >
+                    <option value="General">General</option>
                     <option value="Vehicle">Vehicle</option>
                     <option value="Driver">Driver</option>
                     <option value="Facility">Facility</option>
-                    <option value="General">General</option>
                   </select>
+                </div>
+
+                <div>
+                  <label htmlFor="quick-expiry" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Expiry Date <span className="text-[9px] font-normal text-muted-foreground">(Optional)</span>
+                  </label>
+                  <input
+                    id="quick-expiry"
+                    type="date"
+                    value={uploadExpiry}
+                    onChange={event => setUploadExpiry(event.target.value)}
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
+                  />
                 </div>
               </div>
 
               <div>
-                <label htmlFor="quick-expiry" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-                  Expiry Date <span className="text-[10px] font-normal text-muted-foreground">(Optional)</span>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                  File Attachment
                 </label>
                 <input
-                  id="quick-expiry"
-                  type="date"
-                  value={uploadExpiry}
-                  onChange={event => setUploadExpiry(event.target.value)}
-                  className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
+                  type="file"
+                  required
+                  accept={evidenceAcceptAttribute}
+                  onChange={e => {
+                    const file = e.target.files?.[0] || null;
+                    setUploadFile(file);
+                    if (file && !uploadTitle) {
+                      setUploadTitle(file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim());
+                    }
+                  }}
+                  className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none"
                 />
               </div>
 
-              <div className="border-t border-border pt-3.5">
-                <EvidenceDropzone
-                  label="Drag & drop files here to upload"
-                  helperText={`Applies category and optional expiry. Max ${formatMaxEvidenceUploadSize()} per file.`}
-                  buttonLabel="Choose files"
-                  compact
-                  multiple
-                  onUpload={async (file, updateStatus) => {
-                    updateStatus('saving record');
-                    const doc = await uploadDocument({
-                      file,
-                      title: file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim() || file.name,
-                      category: uploadCategory,
-                      expiry_date: uploadExpiry || null,
-                      issue_date: new Date().toISOString().split('T')[0],
-                      metadata: { source: 'dashboard_quick_dropzone' }
-                    });
-                    return doc;
-                  }}
-                  onComplete={docs => setUploadSuccess(`Uploaded ${docs.length} document${docs.length === 1 ? '' : 's'} successfully.`)}
-                  findDuplicates={findPossibleDuplicateDocuments}
-                />
+              {/* Context Selector */}
+              <div className="border-t border-border/50 pt-3 space-y-3">
+                <div>
+                  <label htmlFor="upload-context" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Link Evidence Context
+                  </label>
+                  <select
+                    id="upload-context"
+                    value={uploadContextType}
+                    onChange={e => {
+                      setUploadContextType(e.target.value as 'general' | 'requirement' | 'asset' | 'competency');
+                      setUploadContextTargetId('');
+                    }}
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
+                  >
+                    <option value="general">Evidence Vault Only</option>
+                    <option value="requirement">Link to Requirement</option>
+                    <option value="asset">Link to Asset Check</option>
+                    <option value="competency">Link to Competency Record</option>
+                  </select>
+                </div>
+
+                {uploadContextType === 'requirement' && (
+                  <div>
+                    <label htmlFor="context-req-target" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                      Select Requirement Target
+                    </label>
+                    <select
+                      id="context-req-target"
+                      required
+                      value={uploadContextTargetId}
+                      onChange={e => setUploadContextTargetId(e.target.value)}
+                      className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
+                    >
+                      <option value="">Choose requirement...</option>
+                      {activeRequirements.map(req => (
+                        <option key={req.id} value={req.id}>{req.title}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {uploadContextType === 'asset' && (
+                  <div>
+                    <label htmlFor="context-asset-target" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                      Select Asset Check Target
+                    </label>
+                    <select
+                      id="context-asset-target"
+                      required
+                      value={uploadContextTargetId}
+                      onChange={e => setUploadContextTargetId(e.target.value)}
+                      className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
+                    >
+                      <option value="">Choose asset check assignment...</option>
+                      {(assetCheckAssignments || []).filter(a => a.active && a.required).map(asg => {
+                        const asset = assets.find(a => a.id === asg.asset_id);
+                        const checkType = assetCheckTypes.find(ct => ct.id === asg.asset_check_type_id);
+                        return (
+                          <option key={asg.id} value={asg.id}>
+                            {checkType?.title || 'Check'} - {asset?.name || 'Asset'}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
+
+                {uploadContextType === 'competency' && (
+                  <div>
+                    <label htmlFor="context-comp-target" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                      Select Competency Record Target
+                    </label>
+                    <select
+                      id="context-comp-target"
+                      required
+                      value={uploadContextTargetId}
+                      onChange={e => setUploadContextTargetId(e.target.value)}
+                      className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
+                    >
+                      <option value="">Choose competency record...</option>
+                      {competencyRecords.map(rec => {
+                        const p = people.find(item => item.id === rec.person_id);
+                        const ct = competencyTypes.find(item => item.id === rec.competency_type_id);
+                        return (
+                          <option key={rec.id} value={rec.id}>
+                            {ct?.title || 'Competency'} - {p?.display_name || 'Staff'}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
               </div>
 
               {uploadError && (
-                <div className="p-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-300 text-[11px]">
+                <div className="p-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-300 text-[11px] font-semibold">
                   {uploadError}
                 </div>
               )}
 
               {uploadSuccess && (
-                <div className="p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 text-[11px]">
+                <div className="p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 text-[11px] font-semibold">
                   {uploadSuccess}
                 </div>
               )}
 
               <button
-                id="quick-upload-submit-btn"
                 type="submit"
                 disabled={isUploading || !uploadTitle || !uploadFile}
-                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/50 text-white font-semibold rounded-lg flex items-center justify-center gap-2 shadow-md shadow-indigo-600/10 transition-all duration-200"
+                className="w-full py-2.5 bg-indigo-650 hover:bg-indigo-755 disabled:opacity-50 text-white font-bold rounded-lg flex items-center justify-center gap-2 shadow-md"
               >
-                {isUploading ? 'Uploading...' : (
-                  <>
-                    <Upload className="w-4 h-4" />
-                    Upload Document
-                  </>
-                )}
+                {isUploading ? 'Uploading...' : 'Confirm Upload'}
               </button>
             </form>
           </div>
@@ -1913,7 +1485,7 @@ export default function DashboardPage() {
                   <input type="date" value={requirementForm.next_due_date} onChange={event => setRequirementForm({ ...requirementForm, next_due_date: event.target.value })} className="px-3 py-2 bg-muted border border-border rounded-lg outline-none" />
                 </div>
                 <textarea placeholder="Description" value={requirementForm.description} onChange={event => setRequirementForm({ ...requirementForm, description: event.target.value })} rows={3} className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none resize-none" />
-                <button disabled={isQuickActionSaving || !requirementForm.title.trim()} className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-bold rounded-lg">
+                <button disabled={isQuickActionSaving || !requirementForm.title.trim()} className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-bold rounded-lg cursor-pointer">
                   {isQuickActionSaving ? 'Creating...' : 'Create Requirement'}
                 </button>
               </form>
@@ -1932,7 +1504,7 @@ export default function DashboardPage() {
                   </select>
                 </div>
                 <textarea placeholder="Description" value={competencyForm.description} onChange={event => setCompetencyForm({ ...competencyForm, description: event.target.value })} rows={3} className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none resize-none" />
-                <button disabled={isQuickActionSaving || !competencyForm.title.trim()} className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-bold rounded-lg">
+                <button disabled={isQuickActionSaving || !competencyForm.title.trim()} className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-bold rounded-lg cursor-pointer">
                   {isQuickActionSaving ? 'Creating...' : 'Create Competency'}
                 </button>
               </form>
@@ -1950,7 +1522,7 @@ export default function DashboardPage() {
                   <input type="date" value={actionForm.due_date} onChange={event => setActionForm({ ...actionForm, due_date: event.target.value })} className="px-3 py-2 bg-muted border border-border rounded-lg outline-none" />
                 </div>
                 <textarea placeholder="Description" value={actionForm.description} onChange={event => setActionForm({ ...actionForm, description: event.target.value })} rows={3} className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none resize-none" />
-                <button disabled={isQuickActionSaving || !actionForm.requirement_id || !actionForm.title.trim()} className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-bold rounded-lg">
+                <button disabled={isQuickActionSaving || !actionForm.requirement_id || !actionForm.title.trim()} className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-bold rounded-lg cursor-pointer">
                   {isQuickActionSaving ? 'Creating...' : 'Create Action'}
                 </button>
               </form>
@@ -1983,7 +1555,7 @@ export default function DashboardPage() {
                     </label>
                   ))}
                 </div>
-                <button disabled={isQuickActionSaving || !auditPackForm.name.trim() || auditPackForm.requirementIds.length === 0} className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-bold rounded-lg">
+                <button disabled={isQuickActionSaving || !auditPackForm.name.trim() || auditPackForm.requirementIds.length === 0} className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-bold rounded-lg cursor-pointer">
                   {isQuickActionSaving ? 'Saving...' : 'Save Draft Audit Pack'}
                 </button>
               </form>
@@ -1994,45 +1566,6 @@ export default function DashboardPage() {
                 {quickActionError || quickActionMessage}
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* View Full Activity Modal */}
-      {isActivityModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-card solid-panel border border-border w-full max-w-2xl rounded-2xl p-6 relative shadow-2xl space-y-4 flex flex-col max-h-[80vh]">
-            <button
-              onClick={() => setIsActivityModalOpen(false)}
-              className="absolute top-4 right-4 p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <div className="space-y-1">
-              <h3 className="text-base font-extrabold text-foreground">Compliance Activity Log</h3>
-              <p className="text-xs text-muted-foreground">Historical trail of changes, updates, evidence uploads, and system resets.</p>
-            </div>
-
-            <div className="overflow-y-auto pr-1 flex-1 relative border border-border rounded-xl p-4 bg-muted/20">
-              <div className="relative border-l border-border pl-4 ml-2 space-y-5 py-2">
-                {auditLogs.map(log => (
-                  <div key={log.id} className="text-xs relative">
-                    <div className="absolute -left-[21px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-card bg-indigo-500 ring-4 ring-indigo-500/15" />
-                    <div className="space-y-0.5">
-                      <span className="font-bold block text-foreground leading-normal">{log.action}</span>
-                      <p className="text-muted-foreground text-[10px] leading-relaxed">{log.details}</p>
-                      <span className="text-[9px] text-muted-foreground/80 block pt-0.5">
-                        {new Date(log.created_at).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-                {auditLogs.length === 0 && (
-                  <p className="text-xs text-muted-foreground italic text-center py-6">No activity records found.</p>
-                )}
-              </div>
-            </div>
           </div>
         </div>
       )}
