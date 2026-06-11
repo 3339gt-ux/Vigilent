@@ -5542,6 +5542,12 @@ export const dbService = {
   async createAsset(asset: Omit<Asset, 'id' | 'created_at' | 'updated_at'>): Promise<Asset> {
     const profile = await this.getProfile();
     const orgId = requireAssetOrganizationId(profile);
+    if (asset.category_id) {
+      const categories = await this.getAssetCategories();
+      if (!categories.some((category: AssetCategory) => category.id === asset.category_id && category.active)) {
+        throw new Error('Asset category is not available in the active organisation.');
+      }
+    }
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('assets')
@@ -5574,6 +5580,12 @@ export const dbService = {
     const safeUpdates = { ...updates };
     delete safeUpdates.id;
     delete safeUpdates.organisation_id;
+    if (safeUpdates.category_id) {
+      const categories = await this.getAssetCategories();
+      if (!categories.some((category: AssetCategory) => category.id === safeUpdates.category_id && category.active)) {
+        throw new Error('Asset category is not available in the active organisation.');
+      }
+    }
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('assets')
@@ -5991,6 +6003,12 @@ export const dbService = {
   async createAssetCategory(category: Omit<AssetCategory, 'id' | 'created_at' | 'updated_at'>): Promise<AssetCategory> {
     const profile = await this.getProfile();
     const orgId = requireAssetOrganizationId(profile);
+    if (category.parent_id) {
+      const categories = await this.getAssetCategories();
+      if (!categories.some((parent: AssetCategory) => parent.id === category.parent_id && parent.active && !parent.parent_id)) {
+        throw new Error('Parent category is not available in the active organisation.');
+      }
+    }
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('asset_categories')
@@ -6021,6 +6039,12 @@ export const dbService = {
     const safeUpdates = { ...updates };
     delete safeUpdates.id;
     delete safeUpdates.organisation_id;
+    if (safeUpdates.parent_id) {
+      const categories = await this.getAssetCategories();
+      if (!categories.some((parent: AssetCategory) => parent.id === safeUpdates.parent_id && parent.active && !parent.parent_id)) {
+        throw new Error('Parent category is not available in the active organisation.');
+      }
+    }
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('asset_categories')

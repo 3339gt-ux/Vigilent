@@ -157,7 +157,7 @@ The calculation engine located at `src/lib/assetEngine.ts` supplies the canonica
 
 ### Collapsible Category Tree Sidebar
 - **Hierarchical Sidebar**: Renders parent categories and child subcategories on the left of the Matrix table page with active counts and direct filter tags.
-- **Category Manager Modal**: Full CRUD category management (create parent categories, add child subcategories, reorder, update name, archive/restore categories).
+- **Category Manager Modal**: Create parent categories and child subcategories, update names, and archive/restore categories. Manual reordering is not implemented.
 
 ### Centered Floating Workspace Modal
 - Centered floating layout containing an asset workspace, featuring sidebar metadata detail forms, interactive tabs, contextual action rails, and Escape key down listener for fast navigation.
@@ -187,6 +187,6 @@ The calculation engine located at `src/lib/assetEngine.ts` supplies the canonica
 
 - **Dashboard**: Signals expiring/overdue assets in the Attention Centre and provides quick-action buttons; groups asset status metrics by taxonomy categories.
 - **Reports**: "Locations & Assets" tab with maintenance history logs, repairs timeline, cost summary metrics, and category filtering/grouping.
-- **Global Search**: Indexes assets, taxonomy categories, check assignments, and history events; supports deep-linking with `?asset=ASSET_ID` or `?category=CATEGORY_ID`.
-- **Audit Trail**: Logs all asset edits, check creations, completions, and edits securely.
+- **Global Search**: Indexes active asset and taxonomy-category metadata; supports deep-linking with `?asset=ASSET_ID` or `?category=CATEGORY_ID`.
+- **Audit Trail**: Asset create/update/archive uses existing activity logging. Taxonomy, check completion, history, and evidence-link audit coverage remains incomplete.
 - **Evidence Vault**: Displays linked assets list in the document detail sidebar with click backlinks (`/dashboard/matrix?asset=ASSET_ID`) to auto-open the asset details, and unlinking capability.

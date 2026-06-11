@@ -95,7 +95,8 @@ export function GlobalSearchPanel({ dropdownAlign = 'sm:right-0 sm:top-full sm:m
     competencyTypes, 
     documents, 
     auditPacks,
-    assets
+    assets,
+    assetCategories
   } = useApp();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -385,6 +386,23 @@ export function GlobalSearchPanel({ dropdownAlign = 'sm:right-0 sm:top-full sm:m
         relevanceScore: getRelevance(a.name, a.registration_number),
         additionalInfo: { created_at: a.created_at }
       })));
+
+      const categoryMatches = (assetCategories || []).filter(category =>
+        category.active &&
+        ((category.name || '').toLowerCase().includes(term) ||
+         (category.description || '').toLowerCase().includes(term))
+      );
+      localResults.push(...categoryMatches.map(category => ({
+        id: category.id,
+        title: category.name,
+        description: category.description || `Asset Category: ${category.name}`,
+        type: 'asset' as const,
+        status: 'Active',
+        category: 'Category',
+        path: `/dashboard/matrix?category=${category.id}`,
+        relevanceScore: getRelevance(category.name, category.description),
+        additionalInfo: { created_at: category.created_at }
+      })));
     }
 
     // Sort
@@ -408,7 +426,7 @@ export function GlobalSearchPanel({ dropdownAlign = 'sm:right-0 sm:top-full sm:m
     }
 
     return localResults.slice(0, 50);
-  }, [frameworkRequirements, actions, people, competencyTypes, documents, auditPacks, assets, isOwnerOrAdmin]);
+  }, [frameworkRequirements, actions, people, competencyTypes, documents, auditPacks, assets, assetCategories, isOwnerOrAdmin]);
 
   // Main Search Fetch Effect
   useEffect(() => {

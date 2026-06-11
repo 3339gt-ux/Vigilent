@@ -528,7 +528,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       [
         assetRows,
-        assetCategoryRows,
         checkTypeRows,
         assignmentRows,
         recordRows,
@@ -536,7 +535,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         requirementLinkRows
       ] = await Promise.all([
         dbService.getAssets(),
-        dbService.getAssetCategories(),
         dbService.getAssetCheckTypes(),
         dbService.getAssetCheckAssignments(),
         dbService.getAssetCheckRecords(),
@@ -545,6 +543,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ]);
     } catch (error) {
       console.error('Asset Matrix data is unavailable. Core workspace data will continue loading.', error);
+    }
+    try {
+      assetCategoryRows = await dbService.getAssetCategories();
+    } catch (error) {
+      console.error('Asset taxonomy is unavailable. Existing Asset Matrix data will continue loading.', error);
     }
     try {
       historyEventRows = await dbService.getAssetHistoryEvents();

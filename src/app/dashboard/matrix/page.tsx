@@ -3052,8 +3052,8 @@ export default function AssetMatrix() {
                 >
                   <option value="general">General Asset Record</option>
                   <option value="check">Asset Compliance Check</option>
-                  <option value="requirement">Asset Requirement</option>
-                  <option value="action">Asset Action / Task</option>
+                  <option value="requirement">Organisation Requirement</option>
+                  <option value="action">Organisation Action / Task</option>
                   <option value="history">Maintenance / Repair Log Event</option>
                 </select>
               </div>
@@ -3138,23 +3138,12 @@ export default function AssetMatrix() {
 
               {linkingTarget === 'history' && (
                 <div>
-                  <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-                    Log against:
-                  </label>
-                  <select
-                    value={linkingTargetId}
-                    onChange={(e) => setLinkingTargetId(e.target.value)}
-                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg outline-none cursor-pointer"
-                  >
-                    <option value="new">-- Create New Maintenance History Log --</option>
-                    {assetHistoryEvents
-                      .filter(ev => ev.asset_id === activeAsset.id)
-                      .map(ev => (
-                        <option key={ev.id} value={ev.id}>
-                          {ev.title} ({new Date(ev.event_date).toLocaleDateString()})
-                        </option>
-                      ))}
-                  </select>
+                  <span className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    History destination
+                  </span>
+                  <div className="w-full px-3 py-2 bg-muted border border-border/80 rounded-lg text-foreground">
+                    Create a new maintenance history entry linked to this evidence document.
+                  </div>
                 </div>
               )}
 

@@ -17,6 +17,64 @@ create table if not exists public.asset_categories (
 -- Add category_id to public.assets table
 alter table public.assets add column if not exists category_id uuid references public.asset_categories(id) on delete set null;
 
+-- Enforce same-organisation parent and asset/category relationships at the database layer.
+-- Invalid legacy references are detached without deleting either the asset or category row.
+update public.asset_categories child
+set parent_id = null
+where parent_id is not null
+  and not exists (
+      select 1
+      from public.asset_categories parent
+      where parent.id = child.parent_id
+        and parent.organisation_id = child.organisation_id
+  );
+
+update public.assets asset
+set category_id = null
+where category_id is not null
+  and not exists (
+      select 1
+      from public.asset_categories category
+      where category.id = asset.category_id
+        and category.organisation_id = asset.organisation_id
+  );
+
+create unique index if not exists asset_categories_org_id_uidx
+    on public.asset_categories (organisation_id, id);
+
+alter table public.asset_categories
+    drop constraint if exists asset_categories_parent_id_fkey;
+alter table public.assets
+    drop constraint if exists assets_category_id_fkey;
+
+do $$
+begin
+    if not exists (
+        select 1 from pg_constraint
+        where conname = 'asset_categories_parent_same_org_fk'
+          and conrelid = 'public.asset_categories'::regclass
+    ) then
+        alter table public.asset_categories
+            add constraint asset_categories_parent_same_org_fk
+            foreign key (organisation_id, parent_id)
+            references public.asset_categories (organisation_id, id)
+            on delete restrict;
+    end if;
+
+    if not exists (
+        select 1 from pg_constraint
+        where conname = 'assets_category_same_org_fk'
+          and conrelid = 'public.assets'::regclass
+    ) then
+        alter table public.assets
+            add constraint assets_category_same_org_fk
+            foreign key (organisation_id, category_id)
+            references public.asset_categories (organisation_id, id)
+            on delete restrict;
+    end if;
+end
+$$;
+
 -- Enable Row Level Security (RLS)
 alter table public.asset_categories enable row level security;
 
