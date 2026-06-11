@@ -82,7 +82,7 @@ const getBadgeStyle = (type: GlobalSearchResult['type']) => {
   }
 };
 
-export function GlobalSearchPanel({ dropdownAlign = 'right-0 top-full mt-2' }: { dropdownAlign?: string }) {
+export function GlobalSearchPanel({ dropdownAlign = 'sm:right-0 sm:top-full sm:mt-2' }: { dropdownAlign?: string }) {
   const { 
     user, 
     frameworkRequirements, 
@@ -121,11 +121,14 @@ export function GlobalSearchPanel({ dropdownAlign = 'right-0 top-full mt-2' }: {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
         togglePanel();
+      } else if (e.key === 'Escape' && isOpen) {
+        e.preventDefault();
+        setIsOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePanel]);
+  }, [isOpen, togglePanel]);
 
   // Click outside to close
   useEffect(() => {
@@ -153,7 +156,7 @@ export function GlobalSearchPanel({ dropdownAlign = 'right-0 top-full mt-2' }: {
 
   // Debounce query (1-second delay)
   useEffect(() => {
-    if (!query.trim()) {
+    if (query.trim().length < 2) {
       setDebouncedQuery('');
       setResults([]);
       return;
@@ -507,7 +510,7 @@ export function GlobalSearchPanel({ dropdownAlign = 'right-0 top-full mt-2' }: {
 
       {/* Pop-down panel */}
       {isOpen && (
-        <div className={`absolute ${dropdownAlign} w-[min(38rem,calc(100vw-2rem))] bg-card border border-border rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-3 duration-200 flex flex-col text-xs`}>
+        <div className={`fixed left-4 right-4 top-28 w-auto sm:absolute sm:left-auto sm:w-[min(38rem,calc(100vw-2rem))] ${dropdownAlign} bg-card border border-border rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-3 duration-200 flex flex-col text-xs`}>
           {/* Header Input */}
           <div className="p-3 border-b border-border/70 flex items-center gap-2 bg-muted/20">
             <Search className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -597,15 +600,15 @@ export function GlobalSearchPanel({ dropdownAlign = 'right-0 top-full mt-2' }: {
               </div>
             )}
 
-            {!isLoading && !error && query && results.length === 0 && (
+            {!isLoading && !error && query.trim().length >= 2 && results.length === 0 && (
               <div className="p-8 text-center text-muted-foreground border border-dashed border-border rounded-xl font-medium">
                 No matching records found for &quot;<span className="font-bold text-foreground">{query}</span>&quot; in this organisation.
               </div>
             )}
 
-            {!isLoading && !error && !query && (
+            {!isLoading && !error && query.trim().length < 2 && (
               <div className="p-8 text-center text-muted-foreground/80 leading-relaxed font-semibold">
-                Type query above to search workspace records.<br />
+                Type at least two characters to search workspace record metadata.<br />
                 <span className="text-[10px] text-muted-foreground/60 block mt-1">
                   Note: Evidence files are searched by name and category (content text is not indexed).
                 </span>
@@ -615,11 +618,12 @@ export function GlobalSearchPanel({ dropdownAlign = 'right-0 top-full mt-2' }: {
             {!isLoading && !error && results.length > 0 && results.map((result, idx) => {
               const isFocused = idx === focusedIdx;
               return (
-                <div
+                <button
+                  type="button"
                   key={`${result.type}-${result.id}`}
                   onClick={() => openResult(result)}
                   onMouseEnter={() => setFocusedIdx(idx)}
-                  className={`p-2.5 rounded-xl border transition-all duration-150 cursor-pointer flex items-start justify-between gap-3 ${
+                  className={`w-full p-2.5 rounded-xl border text-left transition-all duration-150 cursor-pointer flex items-start justify-between gap-3 ${
                     isFocused
                       ? 'border-indigo-500/40 bg-indigo-500/5 dark:bg-indigo-950/20 shadow-xs'
                       : 'border-border/40 bg-transparent hover:bg-muted/30'
@@ -668,7 +672,7 @@ export function GlobalSearchPanel({ dropdownAlign = 'right-0 top-full mt-2' }: {
                     <span>Inspect</span>
                     <ExternalLink className="w-3 h-3" />
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>

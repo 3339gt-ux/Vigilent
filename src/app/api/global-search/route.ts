@@ -4,15 +4,38 @@ import { GlobalSearchResult } from '@/lib/types';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const SEARCH_TYPES = new Set([
+  'all',
+  'requirements',
+  'actions',
+  'people',
+  'evidence',
+  'competencies',
+  'audit-packs',
+  'reports',
+  'audit-trail'
+]);
+const SEARCH_SORTS = new Set(['relevance', 'recent', 'type', 'status']);
+const MAX_RESULTS = 50;
+
+const normalizeFilterTerm = (value: string) =>
+  value
+    .trim()
+    .slice(0, 100)
+    .replace(/[,%():"\\]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const query = searchParams.get('q') || '';
-    const tabType = searchParams.get('type') || 'all'; // 'all', 'requirements', 'actions', 'people', 'evidence', 'competencies', 'audit-packs', 'reports', 'audit-trail'
-    const sortBy = searchParams.get('sort') || 'relevance'; // 'relevance', 'recent', 'type', 'status'
+    const query = normalizeFilterTerm(searchParams.get('q') || '');
+    const requestedType = searchParams.get('type') || 'all';
+    const requestedSort = searchParams.get('sort') || 'relevance';
+    const tabType = SEARCH_TYPES.has(requestedType) ? requestedType : 'all';
+    const sortBy = SEARCH_SORTS.has(requestedSort) ? requestedSort : 'relevance';
 
-    if (!query.trim()) {
+    if (query.length < 2) {
       return NextResponse.json({ results: [] });
     }
 
@@ -44,7 +67,7 @@ export async function GET(request: Request) {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('organization_id, role')
+      .select('organization_id')
       .eq('id', user.id)
       .single();
 
@@ -53,11 +76,21 @@ export async function GET(request: Request) {
     }
 
     const orgId = profile.organization_id;
-    const userRole = profile.role;
-    const isAdmin = userRole === 'Owner' || userRole === 'Admin';
+    const { data: membership, error: membershipError } = await supabase
+      .from('organization_members')
+      .select('role')
+      .eq('organization_id', orgId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (membershipError || !membership) {
+      return NextResponse.json({ error: 'Unauthorized: No organization membership' }, { status: 403 });
+    }
+
+    const isAdmin = membership.role === 'Owner' || membership.role === 'Admin';
 
     // Prepare search term
-    const term = query.trim();
+    const term = query;
 
     // Query promises
     const promises: Promise<GlobalSearchResult[]>[] = [];
@@ -313,7 +346,7 @@ export async function GET(request: Request) {
       });
     }
 
-    return NextResponse.json({ results: allResults });
+    return NextResponse.json({ results: allResults.slice(0, MAX_RESULTS) });
   } catch (err) {
     console.error('Unhandled global search API error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

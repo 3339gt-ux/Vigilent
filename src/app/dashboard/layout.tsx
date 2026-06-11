@@ -435,7 +435,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </span>
             </div>
             <div className="flex items-center gap-3">
-              <GlobalSearchPanel dropdownAlign="right-0 top-full mt-2" />
+              <GlobalSearchPanel dropdownAlign="sm:right-0 sm:top-full sm:mt-2" />
             </div>
           </header>
 
@@ -454,7 +454,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
 
             <div className="flex items-center gap-1.5">
-              <GlobalSearchPanel dropdownAlign="right-0 top-full mt-2" />
+              <GlobalSearchPanel dropdownAlign="sm:right-0 sm:top-full sm:mt-2" />
               <NotificationBell dropdownAlign="right-0 top-full mt-2" />
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
