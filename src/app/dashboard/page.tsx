@@ -112,7 +112,8 @@ export default function DashboardPage() {
     assetCheckTypes,
     assetCheckAssignments,
     assetCheckRecords,
-    assetCheckEvidenceLinks
+    assetCheckEvidenceLinks,
+    assetCategories
   } = useApp();
 
   const router = useRouter();
@@ -310,6 +311,56 @@ export default function DashboardPage() {
     () => frameworkRequirements.filter(requirement => (requirement.lifecycle_status || 'ACTIVE') === 'ACTIVE'),
     [frameworkRequirements]
   );
+
+  const totalAssetChecks = useMemo(() => {
+    return (assetCheckAssignments || []).filter(a => a.active && a.required).length;
+  }, [assetCheckAssignments]);
+
+  const compliantAssetChecks = useMemo(() => {
+    return (assetCheckAssignments || []).filter(a => a.active && a.required && getAssignmentStatus(a.id) === 'Compliant').length;
+  }, [assetCheckAssignments, assetMatrixCells]);
+
+  const assetProgress = totalAssetChecks > 0
+    ? Math.round((compliantAssetChecks / totalAssetChecks) * 100)
+    : 100;
+
+  const assetCategoryCompliance = useMemo(() => {
+    if (!assetCategories || !assets || !assetCheckAssignments) return [];
+    
+    // Group categories by parent
+    const parents = assetCategories.filter(c => c.active && !c.parent_id);
+    
+    return parents.map(parent => {
+      // Find all subcategories (including itself)
+      const subCategoryIds = assetCategories
+        .filter(c => c.active && (c.id === parent.id || c.parent_id === parent.id))
+        .map(c => c.id);
+        
+      // Find assets in these categories
+      const categoryAssets = assets.filter(a => a.status === 'active' && a.category_id && subCategoryIds.includes(a.category_id));
+      const assetIds = categoryAssets.map(a => a.id);
+      
+      // Find assignments for these assets
+      const categoryAssignments = assetCheckAssignments.filter(
+        asg => asg.active && asg.required && assetIds.includes(asg.asset_id)
+      );
+      
+      const total = categoryAssignments.length;
+      const compliant = categoryAssignments.filter(
+        asg => getAssignmentStatus(asg.id) === 'Compliant'
+      ).length;
+      
+      const percent = total > 0 ? Math.round((compliant / total) * 100) : 100;
+      
+      return {
+        id: parent.id,
+        name: parent.name,
+        total,
+        compliant,
+        percent
+      };
+    });
+  }, [assetCategories, assets, assetCheckAssignments, assetMatrixCells]);
 
   // Additional counts/helpers for Phase 2
   const getHealthState = (score: number | null) => {
@@ -1422,6 +1473,29 @@ export default function DashboardPage() {
                       <span>{completedActionsCount} actions resolved</span>
                       <span>{openActions} actions open</span>
                     </div>
+                  </div>
+
+                  <div className="space-y-1 text-xs border-t border-border/30 pt-3">
+                    <div className="flex justify-between font-bold">
+                      <span>Asset Check Assurance</span>
+                      <span className={scoreTone(assetProgress)}>{assetProgress}%</span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${assetProgress}%` }} />
+                    </div>
+                    <div className="flex justify-between text-[9px] text-muted-foreground">
+                      <span>{compliantAssetChecks} compliant checks</span>
+                      <span>{totalAssetChecks} total checks</span>
+                    </div>
+                    {assetCategoryCompliance.length > 0 && (
+                      <div className="flex flex-wrap gap-x-2 gap-y-0.5 pt-1 text-[9px] text-muted-foreground">
+                        {assetCategoryCompliance.map(cat => (
+                          <span key={cat.id} className="font-semibold">
+                            {cat.name}: <span className={scoreTone(cat.percent)}>{cat.percent}%</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

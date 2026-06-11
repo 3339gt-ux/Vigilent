@@ -9,7 +9,7 @@ import { BulkUploadConfigurationPanel } from '@/components/BulkUploadConfigurati
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
 import { EVIDENCE_CATEGORY_GROUPS, flattenCategoryGroups } from '@/lib/categoryPresets';
 import { exportCsv, exportDateStamp, ExportRow } from '@/lib/exportData';
-import { Action, EvidenceDocument } from '@/lib/types';
+import { Action, EvidenceDocument, Asset } from '@/lib/types';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import { calculateEvidenceFileHash } from '@/lib/evidenceStorage';
 import {
@@ -90,7 +90,10 @@ export default function EvidenceVault() {
     uploadActionAttachment,
     evidenceCategories,
     upsertEvidenceCategory,
-    archiveEvidenceCategory
+    archiveEvidenceCategory,
+    assets,
+    assetCheckEvidenceLinks,
+    unlinkAssetCheckEvidence
   } = useApp();
 
   // Search & Filter state
@@ -1183,6 +1186,9 @@ export default function EvidenceVault() {
   const selectedDocumentActions = selectedDocumentActionLinks
     .map(link => actions.find(action => action.id === link.action_id))
     .filter((action): action is Action => Boolean(action));
+  const selectedDocumentAssetLinks = selectedDoc
+    ? assetCheckEvidenceLinks.filter(link => link.document_id === selectedDoc.id)
+    : [];
   const selectedDocumentCriterionMatches = selectedDoc
     ? requirementEvidenceCriterionMatches.filter(match => match.document_id === selectedDoc.id && match.match_status !== 'Rejected')
     : [];
@@ -2837,6 +2843,53 @@ export default function EvidenceVault() {
                             >
                               Open linked action
                             </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-border/60 pt-4 space-y-4">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Linked Assets</span>
+                {selectedDocumentAssetLinks.length === 0 ? (
+                  <p className="text-[10px] text-muted-foreground italic">This record is not linked to any assets.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {selectedDocumentAssetLinks.map(link => {
+                      const asset = assets.find(item => item.id === link.asset_id);
+                      if (!asset) return null;
+                      return (
+                        <div key={link.id} className="p-3 bg-muted/50 border border-border/60 rounded-lg text-[11px] space-y-2">
+                          <div className="flex justify-between gap-3">
+                            <div className="min-w-0">
+                              <span className="font-bold block truncate">{asset.name}</span>
+                              <span className="text-[10px] text-muted-foreground block truncate">
+                                Type: {asset.asset_type} {asset.registration_number ? `| Reg: ${asset.registration_number}` : ''}
+                              </span>
+                            </div>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await unlinkAssetCheckEvidence(link.id);
+                                  setToast({ type: 'success', message: 'Successfully unlinked evidence from asset.' });
+                                } catch (err) {
+                                  setToast({ type: 'error', message: 'Failed to unlink evidence.' });
+                                }
+                              }}
+                              className="text-rose-500 font-bold shrink-0 text-[10px]"
+                            >
+                              Unlink
+                            </button>
+                          </div>
+                          <div className="flex items-center justify-end text-[10px]">
+                            <a
+                              href={`/dashboard/matrix?asset=${asset.id}`}
+                              className="px-2 py-1 bg-indigo-500/10 text-indigo-500 font-bold rounded hover:bg-indigo-500/20"
+                            >
+                              Go to Asset Workspace
+                            </a>
                           </div>
                         </div>
                       );

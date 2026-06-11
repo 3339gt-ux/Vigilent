@@ -345,6 +345,30 @@ export async function GET(request: Request) {
         })) as GlobalSearchResult[];
       };
       promises.push(getAssets());
+
+      const getAssetCategories = async (): Promise<GlobalSearchResult[]> => {
+        const { data, error } = await supabase
+          .from('asset_categories')
+          .select('id, name, description, active, created_at')
+          .eq('organisation_id', orgId)
+          .eq('active', true)
+          .or(`name.ilike.%${term}%,description.ilike.%${term}%`)
+          .limit(20);
+
+        if (error || !data) return [];
+        return data.map(c => ({
+          id: c.id,
+          title: c.name,
+          description: c.description || `Asset Category: ${c.name}`,
+          type: 'asset' as const,
+          status: 'Active',
+          category: 'Category',
+          path: `/dashboard/matrix?category=${c.id}`,
+          relevanceScore: getRelevance(c.name, c.description, term),
+          additionalInfo: { created_at: c.created_at }
+        })) as GlobalSearchResult[];
+      };
+      promises.push(getAssetCategories());
     }
 
     // Await all database queries

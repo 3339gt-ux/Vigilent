@@ -540,9 +540,23 @@ export interface GlobalSearchResult {
   additionalInfo?: Record<string, any>;
 }
 
+export interface AssetCategory {
+  id: string;
+  organisation_id: string;
+  parent_id: string | null;
+  name: string;
+  description: string | null;
+  sort_order: number;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+}
+
 export interface Asset {
   id: string;
   organisation_id: string;
+  category_id: string | null;
   asset_number: string | null;
   name: string;
   asset_type: string;

@@ -52,6 +52,7 @@ import {
   RequirementCompetencyType,
   RequirementTemplateItem,
   Asset,
+  AssetCategory,
   AssetCheckType,
   AssetCheckAssignment,
   AssetCheckRecord,
@@ -192,6 +193,7 @@ interface AppContextType {
   
   // Asset Assurance System State & Operations
   assets: Asset[];
+  assetCategories: AssetCategory[];
   assetCheckTypes: AssetCheckType[];
   assetCheckAssignments: AssetCheckAssignment[];
   assetCheckRecords: AssetCheckRecord[];
@@ -201,6 +203,10 @@ interface AppContextType {
   createAsset: (asset: Omit<Asset, 'id' | 'created_at' | 'updated_at'>) => Promise<Asset>;
   updateAsset: (assetId: string, updates: Partial<Asset>) => Promise<Asset>;
   deleteAsset: (assetId: string) => Promise<void>;
+  createAssetCategory: (category: Omit<AssetCategory, 'id' | 'created_at' | 'updated_at'>) => Promise<AssetCategory>;
+  updateAssetCategory: (categoryId: string, updates: Partial<AssetCategory>) => Promise<AssetCategory>;
+  deleteAssetCategory: (categoryId: string) => Promise<void>;
+  restoreAssetCategory: (categoryId: string) => Promise<AssetCategory>;
   createAssetCheckType: (checkType: Omit<AssetCheckType, 'id' | 'created_at' | 'updated_at'>) => Promise<AssetCheckType>;
   createAssetCheckAssignment: (assignment: Omit<AssetCheckAssignment, 'id' | 'created_at' | 'updated_at'>) => Promise<AssetCheckAssignment>;
   updateAssetCheckAssignment: (assignmentId: string, updates: Partial<AssetCheckAssignment>) => Promise<AssetCheckAssignment>;
@@ -327,6 +333,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   
   // Asset state hooks
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [assetCategories, setAssetCategories] = useState<AssetCategory[]>([]);
   const [assetCheckTypes, setAssetCheckTypes] = useState<AssetCheckType[]>([]);
   const [assetCheckAssignments, setAssetCheckAssignments] = useState<AssetCheckAssignment[]>([]);
   const [assetCheckRecords, setAssetCheckRecords] = useState<AssetCheckRecord[]>([]);
@@ -397,6 +404,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setAuditLogs([]);
     setNotifications([]);
     setAssets([]);
+    setAssetCategories([]);
     setAssetCheckTypes([]);
     setAssetCheckAssignments([]);
     setAssetCheckRecords([]);
@@ -510,6 +518,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ]);
 
     let assetRows: Asset[] = [];
+    let assetCategoryRows: AssetCategory[] = [];
     let checkTypeRows: AssetCheckType[] = [];
     let assignmentRows: AssetCheckAssignment[] = [];
     let recordRows: AssetCheckRecord[] = [];
@@ -519,6 +528,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       [
         assetRows,
+        assetCategoryRows,
         checkTypeRows,
         assignmentRows,
         recordRows,
@@ -526,6 +536,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         requirementLinkRows
       ] = await Promise.all([
         dbService.getAssets(),
+        dbService.getAssetCategories(),
         dbService.getAssetCheckTypes(),
         dbService.getAssetCheckAssignments(),
         dbService.getAssetCheckRecords(),
@@ -568,6 +579,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setNotifications(notificationRows);
     // Assets
     setAssets(assetRows);
+    setAssetCategories(assetCategoryRows);
     setAssetCheckTypes(checkTypeRows);
     setAssetCheckAssignments(assignmentRows);
     setAssetCheckRecords(recordRows);
@@ -925,7 +937,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       'vigilen_competency_record_documents',
       'vigilen_requirement_competency_types',
       'vigilen_requirement_categories',
-      'vigilen_evidence_categories'
+      'vigilen_evidence_categories',
+      'vigilen_assets',
+      'vigilen_asset_categories',
+      'vigilen_asset_check_types',
+      'vigilen_asset_check_assignments',
+      'vigilen_asset_check_records',
+      'vigilen_asset_check_evidence_links',
+      'vigilen_asset_requirement_links',
+      'vigilen_asset_history_events'
     ].forEach(key => localStorage.removeItem(key));
 
     initMockDb();
@@ -1459,6 +1479,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return doc;
   };
 
+  const createAssetCategory: AppContextType['createAssetCategory'] = async (category) => {
+    const res = await dbService.createAssetCategory(category);
+    const updated = await dbService.getAssetCategories();
+    setAssetCategories(updated);
+    return res;
+  };
+
+  const updateAssetCategory: AppContextType['updateAssetCategory'] = async (categoryId, updates) => {
+    const res = await dbService.updateAssetCategory(categoryId, updates);
+    const updated = await dbService.getAssetCategories();
+    setAssetCategories(updated);
+    return res;
+  };
+
+  const deleteAssetCategory: AppContextType['deleteAssetCategory'] = async (categoryId) => {
+    await dbService.deleteAssetCategory(categoryId);
+    const updated = await dbService.getAssetCategories();
+    setAssetCategories(updated);
+  };
+
+  const restoreAssetCategory: AppContextType['restoreAssetCategory'] = async (categoryId) => {
+    const res = await dbService.restoreAssetCategory(categoryId);
+    const updated = await dbService.getAssetCategories();
+    setAssetCategories(updated);
+    return res;
+  };
+
   const createAssetHistoryEvent: AppContextType['createAssetHistoryEvent'] = async (event) => {
     const res = await dbService.createAssetHistoryEvent(event);
     const updated = await dbService.getAssetHistoryEvents();
@@ -1569,6 +1616,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         // Asset Assurance System
         assets,
+        assetCategories,
         assetCheckTypes,
         assetCheckAssignments,
         assetCheckRecords,
@@ -1578,6 +1626,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createAsset,
         updateAsset,
         deleteAsset,
+        createAssetCategory,
+        updateAssetCategory,
+        deleteAssetCategory,
+        restoreAssetCategory,
         createAssetCheckType,
         createAssetCheckAssignment,
         updateAssetCheckAssignment,

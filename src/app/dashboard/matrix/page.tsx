@@ -27,7 +27,11 @@ import {
   Activity,
   FileCheck,
   Info,
-  ShieldAlert
+  ShieldAlert,
+  Upload,
+  ArrowRight,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import {
   useSavedViews,
@@ -51,6 +55,8 @@ export default function AssetMatrix() {
     assetCheckEvidenceLinks,
     assetRequirementLinks,
     assetHistoryEvents,
+    assetCategories,
+    actionObjectLinks,
     documents,
     actions,
     frameworkRequirements,
@@ -64,7 +70,14 @@ export default function AssetMatrix() {
     linkAssetCheckEvidence,
     unlinkAssetCheckEvidence,
     uploadAssetEvidence,
-    createAssetHistoryEvent
+    createAssetHistoryEvent,
+    uploadDocument,
+    linkDocumentToRequirement,
+    linkDocumentToAction,
+    createAssetCategory,
+    updateAssetCategory,
+    deleteAssetCategory,
+    restoreAssetCategory
   } = useApp();
 
   // Search and Filters
@@ -86,12 +99,22 @@ export default function AssetMatrix() {
   const [activeCell, setActiveCell] = useState<{ asset: Asset; checkType: AssetCheckType; assignment?: AssetCheckAssignment } | null>(null);
   const [showAddAssetModal, setShowAddAssetModal] = useState(false);
   const [showAddCheckTypeModal, setShowAddCheckTypeModal] = useState(false);
+
+  // Category Manager & Tree States
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatParentId, setNewCatParentId] = useState<string>('');
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
+  const [editingCatName, setEditingCatName] = useState('');
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>(null);
   const [toast, setToast] = useState<ToastState>(null);
 
   // Form states - New Asset
   const [newAssetName, setNewAssetName] = useState('');
   const [newAssetType, setNewAssetType] = useState('Vehicle');
+  const [newAssetCategoryId, setNewAssetCategoryId] = useState<string | null>(null);
   const [newAssetNumber, setNewAssetNumber] = useState('');
   const [newAssetReg, setNewAssetReg] = useState('');
   const [newAssetSerial, setNewAssetSerial] = useState('');
@@ -125,6 +148,7 @@ export default function AssetMatrix() {
   const [isEditingAsset, setIsEditingAsset] = useState(false);
   const [editedAssetName, setEditedAssetName] = useState('');
   const [editedAssetType, setEditedAssetType] = useState('Vehicle');
+  const [editedAssetCategoryId, setEditedAssetCategoryId] = useState<string | null>(null);
   const [editedAssetNumber, setEditedAssetNumber] = useState('');
   const [editedAssetReg, setEditedAssetReg] = useState('');
   const [editedAssetSerial, setEditedAssetSerial] = useState('');
@@ -148,6 +172,22 @@ export default function AssetMatrix() {
 
   // Workspace Evidence linking states
   const [selectedDocIdForWorkspace, setSelectedDocIdForWorkspace] = useState('');
+
+  // Drag and Drop & Context-linking modal states
+  const [isWorkspaceDragging, setIsWorkspaceDragging] = useState(false);
+  const [showLinkingModal, setShowLinkingModal] = useState(false);
+  const [droppedFile, setDroppedFile] = useState<File | null>(null);
+  const [isLinkingProgress, setIsLinkingProgress] = useState(false);
+  const [linkingTarget, setLinkingTarget] = useState<'general' | 'check' | 'requirement' | 'action' | 'history'>('general');
+  const [linkingTargetId, setLinkingTargetId] = useState<string>('');
+  const [linkingFormTitle, setLinkingFormTitle] = useState('');
+  const [linkingFormCategory, setLinkingFormCategory] = useState('Assets');
+  const [linkingFormIssueDate, setLinkingFormIssueDate] = useState(new Date().toISOString().split('T')[0]);
+  const [linkingFormExpiryDate, setLinkingFormExpiryDate] = useState('');
+  const [linkingFormValidFrom, setLinkingFormValidFrom] = useState('');
+  const [linkingFormValidUntil, setLinkingFormValidUntil] = useState('');
+  const [linkingFormNotes, setLinkingFormNotes] = useState('');
+  const [linkingFormPerformedBy, setLinkingFormPerformedBy] = useState('');
 
   const { interfaceDetailLevel } = useInterfaceDetailLevel();
 
@@ -200,6 +240,7 @@ export default function AssetMatrix() {
     if (activeAsset) {
       setEditedAssetName(activeAsset.name || '');
       setEditedAssetType(activeAsset.asset_type || 'Vehicle');
+      setEditedAssetCategoryId(activeAsset.category_id || null);
       setEditedAssetNumber(activeAsset.asset_number || '');
       setEditedAssetReg(activeAsset.registration_number || '');
       setEditedAssetSerial(activeAsset.serial_number || '');
@@ -295,22 +336,58 @@ export default function AssetMatrix() {
   // URL Deep Link check
   useEffect(() => {
     if (typeof window === 'undefined' || assets.length === 0) return;
-    const assetId = new URLSearchParams(window.location.search).get('asset');
-    if (!assetId) return;
-    const matchedAsset = assets.find(asset => asset.id === assetId);
-    if (matchedAsset) {
-      setActiveAsset(matchedAsset);
-      setActiveTab('overview');
+    const params = new URLSearchParams(window.location.search);
+    const assetId = params.get('asset');
+    if (assetId) {
+      const matchedAsset = assets.find(asset => asset.id === assetId);
+      if (matchedAsset) {
+        setActiveAsset(matchedAsset);
+        setActiveTab('overview');
+      }
+    }
+    const categoryId = params.get('category');
+    if (categoryId) {
+      setSelectedCategory(categoryId);
     }
   }, [assets]);
+
+  // Escape key down listener to close modals
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showLinkingModal) {
+          setShowLinkingModal(false);
+          setDroppedFile(null);
+        } else if (activeAsset) {
+          setActiveAsset(null);
+          setActiveCell(null);
+          setShowAddHistoryInWorkspace(false);
+          setIsEditingAsset(false);
+        } else if (showCategoryManager) {
+          setShowCategoryManager(false);
+        } else if (showAddAssetModal) {
+          setShowAddAssetModal(false);
+        } else if (showAddCheckTypeModal) {
+          setShowAddCheckTypeModal(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeAsset, showLinkingModal, showCategoryManager, showAddAssetModal, showAddCheckTypeModal]);
 
   // Filter Assets (Rows)
   const filteredAssets = useMemo(() => {
     return assets.filter(asset => {
       if (asset.status === 'archived') return false;
 
-      // Category filter
-      const matchesCategory = selectedCategory === 'All' || asset.category === selectedCategory;
+      // Category filter including subcategories
+      const allowedCatIds = selectedCategory !== 'All'
+        ? [selectedCategory, ...assetCategories.filter(c => c.active && c.parent_id === selectedCategory).map(c => c.id)]
+        : [];
+      const matchesCategory = selectedCategory === 'All' ||
+        (asset.category_id && allowedCatIds.includes(asset.category_id)) ||
+        (!asset.category_id && asset.category === selectedCategory);
       // Type filter
       const matchesType = selectedType === 'All' || asset.asset_type === selectedType;
       // Search term matching
@@ -385,6 +462,7 @@ export default function AssetMatrix() {
         name: newAssetName,
         asset_type: newAssetType,
         category: newAssetType, // Simple mapping
+        category_id: newAssetCategoryId || null,
         asset_number: newAssetNumber || null,
         registration_number: newAssetReg || null,
         serial_number: newAssetSerial || null,
@@ -442,6 +520,58 @@ export default function AssetMatrix() {
     setNewAssetDept('');
     setNewAssetOwner('');
     setNewAssetNotes('');
+    setNewAssetCategoryId(null);
+  };
+
+  // Category CRUD Handlers
+  const handleCreateCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCatName) return;
+    try {
+      await createAssetCategory({
+        organisation_id: organization?.id || '',
+        name: newCatName,
+        parent_id: newCatParentId || null,
+        active: true,
+        archived_at: null,
+        description: null,
+        sort_order: 0
+      });
+      setToast({ type: 'success', message: `Category "${newCatName}" created.` });
+      setNewCatName('');
+      setNewCatParentId('');
+    } catch {
+      setToast({ type: 'error', message: 'Failed to create category.' });
+    }
+  };
+
+  const handleUpdateCategory = async (catId: string, name: string) => {
+    if (!name) return;
+    try {
+      await updateAssetCategory(catId, { name });
+      setToast({ type: 'success', message: 'Category updated.' });
+      setEditingCatId(null);
+    } catch {
+      setToast({ type: 'error', message: 'Failed to update category.' });
+    }
+  };
+
+  const handleArchiveCategory = async (catId: string) => {
+    try {
+      await deleteAssetCategory(catId);
+      setToast({ type: 'success', message: 'Category archived.' });
+    } catch {
+      setToast({ type: 'error', message: 'Failed to archive category.' });
+    }
+  };
+
+  const handleRestoreCategory = async (catId: string) => {
+    try {
+      await restoreAssetCategory(catId);
+      setToast({ type: 'success', message: 'Category restored.' });
+    } catch {
+      setToast({ type: 'error', message: 'Failed to restore category.' });
+    }
   };
 
   // Add Custom Check Type
@@ -497,6 +627,127 @@ export default function AssetMatrix() {
       setNewCheckDesc('');
     } catch {
       setToast({ type: 'error', message: 'Failed to create compliance check type.' });
+    }
+  };
+
+  const handleStartLinkingFlow = (
+    file: File,
+    target: 'general' | 'check' | 'requirement' | 'action' | 'history' = 'general',
+    targetId: string = ''
+  ) => {
+    setDroppedFile(file);
+    setLinkingTarget(target);
+    setLinkingTargetId(targetId);
+    setLinkingFormTitle(file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim() || file.name);
+    setLinkingFormCategory('Assets');
+    setLinkingFormIssueDate(new Date().toISOString().split('T')[0]);
+    setLinkingFormExpiryDate('');
+    setLinkingFormValidFrom('');
+    setLinkingFormValidUntil('');
+    setLinkingFormNotes('');
+    setLinkingFormPerformedBy('');
+    setShowLinkingModal(true);
+  };
+
+  const handleFinishLinkingFlow = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!droppedFile || !activeAsset) return;
+    setIsLinkingProgress(true);
+    setToast({ type: 'info', message: `Uploading "${droppedFile.name}" and establishing context links...` });
+
+    try {
+      // 1. Upload to Evidence Vault using context-specific details
+      const doc = await uploadDocument({
+        file: droppedFile,
+        title: linkingFormTitle || droppedFile.name,
+        category: linkingFormCategory || 'Assets',
+        expiry_date: linkingFormExpiryDate || null,
+        issue_date: linkingFormIssueDate || null,
+        metadata: {
+          source: 'asset_assurance',
+          asset_id: activeAsset.id,
+          linking_target: linkingTarget,
+          linking_target_id: linkingTargetId || undefined,
+          performed_by: linkingFormPerformedBy || undefined,
+          valid_from: linkingFormValidFrom || undefined,
+          valid_until: linkingFormValidUntil || undefined,
+          notes: linkingFormNotes || undefined
+        },
+        tags: ['asset', `asset-${activeAsset.id}`]
+      });
+
+      // 2. Perform target-specific associations
+      if (linkingTarget === 'general') {
+        // Link to asset general record
+        await linkAssetCheckEvidence(null, null, doc.id, activeAsset.id);
+      } else if (linkingTarget === 'check') {
+        // Link to a check assignment/record
+        const asgId = linkingTargetId;
+        const asg = assetCheckAssignments.find(a => a.id === asgId);
+        if (asg) {
+          // Log check completion
+          const record = await createAssetCheckRecord({
+            organisation_id: organization?.id || '',
+            asset_id: activeAsset.id,
+            asset_check_type_id: asg.asset_check_type_id,
+            asset_check_assignment_id: asg.id,
+            completed_at: linkingFormIssueDate || new Date().toISOString().split('T')[0],
+            valid_from: linkingFormValidFrom || null,
+            valid_until: linkingFormValidUntil || linkingFormExpiryDate || null,
+            result_status: 'Pass',
+            performed_by: linkingFormPerformedBy || user?.full_name || 'System Operator',
+            reference: null,
+            notes: linkingFormNotes || 'Check completed via evidence upload linking.'
+          });
+
+          // Link evidence to the record and assignment
+          await linkAssetCheckEvidence(asg.id, record.id, doc.id, activeAsset.id);
+        } else {
+          // Just link generally to assignment if no assignment record matches
+          await linkAssetCheckEvidence(asgId || null, null, doc.id, activeAsset.id);
+        }
+      } else if (linkingTarget === 'requirement') {
+        if (linkingTargetId) {
+          await linkDocumentToRequirement(linkingTargetId, doc.id);
+        }
+        await linkAssetCheckEvidence(null, null, doc.id, activeAsset.id);
+      } else if (linkingTarget === 'action') {
+        if (linkingTargetId) {
+          await linkDocumentToAction(linkingTargetId, doc.id);
+        }
+        await linkAssetCheckEvidence(null, null, doc.id, activeAsset.id);
+      } else if (linkingTarget === 'history') {
+        // Create a new history event with evidence_document_id
+        await createAssetHistoryEvent({
+          asset_id: activeAsset.id,
+          asset_check_assignment_id: null,
+          asset_check_record_id: null,
+          event_type: 'maintenance',
+          event_date: linkingFormIssueDate || new Date().toISOString().split('T')[0],
+          title: linkingFormTitle,
+          description: linkingFormNotes || null,
+          status: 'completed',
+          cost: null,
+          performed_by: linkingFormPerformedBy || user?.full_name || 'System Operator',
+          supplier: null,
+          odometer_or_hours: null,
+          evidence_document_id: doc.id
+        });
+        // Also link generally to the asset
+        await linkAssetCheckEvidence(null, null, doc.id, activeAsset.id);
+      } else {
+        // fallback linking general
+        await linkAssetCheckEvidence(null, null, doc.id, activeAsset.id);
+      }
+
+      setToast({ type: 'success', message: 'Evidence uploaded and successfully linked.' });
+      setShowLinkingModal(false);
+      setDroppedFile(null);
+    } catch (err) {
+      console.error(err);
+      setToast({ type: 'error', message: 'Failed to process evidence linking.' });
+    } finally {
+      setIsLinkingProgress(false);
     }
   };
 
@@ -679,10 +930,11 @@ export default function AssetMatrix() {
   const filterChips = useMemo(() => {
     const chips = [];
     if (selectedCategory !== 'All') {
+      const cat = assetCategories.find(c => c.id === selectedCategory);
       chips.push({
         key: 'category',
         label: 'Category',
-        valueLabel: selectedCategory,
+        valueLabel: cat ? cat.name : selectedCategory,
         onClear: () => setSelectedCategory('All')
       });
     }
@@ -723,7 +975,20 @@ export default function AssetMatrix() {
           className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
         >
           <option value="All">All Categories</option>
-          {categoriesList.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+          {assetCategories
+            .filter(c => c.active && !c.parent_id)
+            .map(parent => (
+              <optgroup key={parent.id} label={parent.name}>
+                <option value={parent.id}>{parent.name} (All Parent)</option>
+                {assetCategories
+                  .filter(sub => sub.active && sub.parent_id === parent.id)
+                  .map(sub => (
+                    <option key={sub.id} value={sub.id}>
+                      {sub.name}
+                    </option>
+                  ))}
+              </optgroup>
+            ))}
         </select>
       </div>
 
@@ -1006,8 +1271,153 @@ export default function AssetMatrix() {
         itemLabel="assets"
       />
 
-      {/* Grid Container */}
-      <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
+      {/* 2-Column Taxonomy and Table Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* Category Tree Sidebar */}
+        <div className={`lg:col-span-3 bg-card border border-border rounded-xl p-4 space-y-4 transition-all duration-300 ${isSidebarCollapsed ? 'lg:col-span-1' : ''}`}>
+          <div className="flex justify-between items-center pb-2 border-b border-border/80">
+            {!isSidebarCollapsed && (
+              <span className="font-black text-xs uppercase text-foreground tracking-wider flex items-center gap-1.5">
+                <Settings className="w-3.5 h-3.5" /> Taxonomy Tree
+              </span>
+            )}
+            <div className="flex gap-1.5 ml-auto">
+              {!isSidebarCollapsed && (
+                <button
+                  type="button"
+                  onClick={() => setShowCategoryManager(true)}
+                  className="p-1 hover:bg-muted text-indigo-650 dark:text-indigo-400 rounded transition-colors text-[10px] font-bold uppercase tracking-wider"
+                  title="Manage Categories"
+                >
+                  Manage
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                className="p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded transition-colors"
+                title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+              >
+                {isSidebarCollapsed ? '→' : '←'}
+              </button>
+            </div>
+          </div>
+
+          {!isSidebarCollapsed ? (
+            <div className="space-y-2.5 text-xs">
+              {/* All Categories Item */}
+              <button
+                type="button"
+                onClick={() => setSelectedCategory('All')}
+                className={`w-full flex justify-between items-center p-2 rounded-lg font-bold transition-all text-left ${
+                  selectedCategory === 'All'
+                    ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                    : 'hover:bg-muted/50 text-foreground'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <span className="w-4 h-4 rounded bg-indigo-500/10 text-indigo-500 flex items-center justify-center font-black">★</span>
+                  All Categories
+                </span>
+                <span className="bg-muted px-1.5 py-0.5 rounded-md text-[9px] font-bold text-muted-foreground">
+                  {assets.filter(a => a.status === 'active').length}
+                </span>
+              </button>
+
+              {/* Tree structure */}
+              <div className="space-y-1 pl-1">
+                {assetCategories
+                  .filter(c => c.active && !c.parent_id)
+                  .map(parent => {
+                    const isExpanded = expandedCategories[parent.id] !== false; // default expanded
+                    const subcats = assetCategories.filter(c => c.active && c.parent_id === parent.id);
+                    const parentAndSubIds = [parent.id, ...subcats.map(s => s.id)];
+                    const assetCount = assets.filter(a => a.status === 'active' && a.category_id && parentAndSubIds.includes(a.category_id)).length;
+                    const isSelected = selectedCategory === parent.id;
+
+                    return (
+                      <div key={parent.id} className="space-y-1">
+                        <div
+                          className={`flex justify-between items-center p-1.5 rounded-lg transition-all ${
+                            isSelected
+                              ? 'bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 font-bold'
+                              : 'hover:bg-muted/40 text-foreground'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            {subcats.length > 0 ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedCategories({
+                                    ...expandedCategories,
+                                    [parent.id]: !isExpanded
+                                  });
+                                }}
+                                className="p-0.5 hover:bg-muted text-muted-foreground hover:text-foreground rounded transition-colors"
+                              >
+                                {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                              </button>
+                            ) : (
+                              <span className="w-4.5 block" />
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCategory(parent.id)}
+                              className="text-left truncate font-semibold flex-1 hover:underline text-xs"
+                            >
+                              {parent.name}
+                            </button>
+                          </div>
+                          <span className="bg-muted/50 px-1 py-0.5 rounded text-[8px] font-extrabold text-muted-foreground shrink-0 ml-1">
+                            {assetCount}
+                          </span>
+                        </div>
+
+                        {/* Subcategories */}
+                        {isExpanded && subcats.length > 0 && (
+                          <div className="pl-5 border-l border-border/60 ml-2.5 space-y-1">
+                            {subcats.map(sub => {
+                              const subIsSelected = selectedCategory === sub.id;
+                              const subAssetCount = assets.filter(a => a.status === 'active' && a.category_id === sub.id).length;
+                              return (
+                                <button
+                                  key={sub.id}
+                                  type="button"
+                                  onClick={() => setSelectedCategory(sub.id)}
+                                  className={`w-full flex justify-between items-center p-1 rounded-md text-left transition-all ${
+                                    subIsSelected
+                                      ? 'text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-500/5'
+                                      : 'hover:text-foreground text-muted-foreground'
+                                  }`}
+                                >
+                                  <span className="truncate flex-1 hover:underline text-[11px]">• {sub.name}</span>
+                                  <span className="text-[8px] text-muted-foreground bg-muted/30 px-1 rounded shrink-0 ml-1">
+                                    {subAssetCount}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3 py-6 text-center text-muted-foreground font-bold">
+              <span className="text-lg">📁</span>
+              <span className="text-[8px] uppercase tracking-wider vertical-text">Taxonomy</span>
+            </div>
+          )}
+        </div>
+
+        {/* Right side container */}
+        <div className={`lg:col-span-9 ${isSidebarCollapsed ? 'lg:col-span-11' : ''} transition-all duration-300`}>
+          {/* Grid Container */}
+          <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-auto max-h-[64vh] relative">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
@@ -1192,6 +1602,9 @@ export default function AssetMatrix() {
         </div>
       </div>
 
+        </div>
+      </div>
+
       {/* Legend */}
       <div className="bg-card border border-border p-4 rounded-xl text-xs text-muted-foreground flex flex-wrap gap-6 items-center">
         <span className="font-bold text-foreground">Assurance Indicators:</span>
@@ -1203,8 +1616,32 @@ export default function AssetMatrix() {
 
       {/* Asset Workspace Drawer (Right Slideout Wide Overlay) */}
       {activeAsset && (
-        <div className="fixed inset-0 z-40 bg-black/60 flex justify-end">
-          <div className="w-full max-w-7xl bg-card border-l border-border h-full flex flex-col shadow-2xl relative animate-in slide-in-from-right duration-250">
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsWorkspaceDragging(true);
+          }}
+          onDragLeave={() => setIsWorkspaceDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setIsWorkspaceDragging(false);
+            const file = e.dataTransfer.files?.[0];
+            if (file) {
+              handleStartLinkingFlow(file, 'general');
+            }
+          }}
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 lg:p-6"
+        >
+          <div className="w-full max-w-7xl h-[88vh] bg-card border border-border rounded-2xl flex flex-col shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-200">
+            {isWorkspaceDragging && (
+              <div className="absolute inset-0 bg-indigo-500/10 backdrop-blur-xs border-4 border-dashed border-indigo-500 rounded-2xl z-50 flex flex-col items-center justify-center text-center p-6 text-indigo-700 dark:text-indigo-300 transition-all">
+                <Upload className="w-16 h-16 animate-bounce" />
+                <h3 className="text-lg font-black mt-4">Drop Evidence File Here</h3>
+                <p className="text-xs mt-1 text-indigo-600 dark:text-indigo-400">
+                  Drop PDF, images, or documents to automatically initiate the evidence-linking flow.
+                </p>
+              </div>
+            )}
 
             {/* Drawer Header */}
             <div className="p-4 border-b border-border flex justify-between items-center bg-muted/20">
@@ -1270,6 +1707,20 @@ export default function AssetMatrix() {
                         </span>
                       </div>
                       <div>
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Category / Taxonomy</span>
+                        <span className="font-extrabold text-foreground">
+                          {(() => {
+                            const cat = assetCategories.find(c => c.id === activeAsset.category_id);
+                            if (!cat) return 'Unassigned';
+                            if (cat.parent_id) {
+                              const parent = assetCategories.find(p => p.id === cat.parent_id);
+                              return `${parent?.name || 'Category'} → ${cat.name}`;
+                            }
+                            return cat.name;
+                          })()}
+                        </span>
+                      </div>
+                      <div>
                         <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Department / Team</span>
                         <span className="font-extrabold text-foreground">{activeAsset.department || '—'}</span>
                       </div>
@@ -1297,6 +1748,7 @@ export default function AssetMatrix() {
                             name: editedAssetName,
                             asset_type: editedAssetType,
                             category: editedAssetType,
+                            category_id: editedAssetCategoryId,
                             asset_number: editedAssetNumber || null,
                             registration_number: editedAssetReg || null,
                             serial_number: editedAssetSerial || null,
@@ -1316,6 +1768,7 @@ export default function AssetMatrix() {
                             name: editedAssetName,
                             asset_type: editedAssetType,
                             category: editedAssetType,
+                            category_id: editedAssetCategoryId,
                             asset_number: editedAssetNumber || null,
                             registration_number: editedAssetReg || null,
                             serial_number: editedAssetSerial || null,
@@ -1341,6 +1794,30 @@ export default function AssetMatrix() {
                           onChange={(e) => setEditedAssetName(e.target.value)}
                           className="w-full px-2.5 py-1.5 bg-muted border border-border focus:border-indigo-500 rounded-md outline-none"
                         />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider mb-1 block">Category / Taxonomy</label>
+                        <select
+                          value={editedAssetCategoryId || ''}
+                          onChange={(e) => setEditedAssetCategoryId(e.target.value || null)}
+                          className="w-full px-2 py-1.5 bg-muted border border-border focus:border-indigo-500 rounded-md outline-none cursor-pointer text-xs"
+                        >
+                          <option value="">-- Unassigned / General --</option>
+                          {assetCategories
+                            .filter(c => c.active && !c.parent_id)
+                            .map(parent => (
+                              <optgroup key={parent.id} label={parent.name}>
+                                <option value={parent.id}>{parent.name} (Parent)</option>
+                                {assetCategories
+                                  .filter(sub => sub.active && sub.parent_id === parent.id)
+                                  .map(sub => (
+                                    <option key={sub.id} value={sub.id}>
+                                      &nbsp;&nbsp;{sub.name}
+                                    </option>
+                                  ))}
+                              </optgroup>
+                            ))}
+                        </select>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
@@ -1514,50 +1991,184 @@ export default function AssetMatrix() {
                         'N/A': 0
                       } as Record<'Compliant' | 'Expiring Soon' | 'Expired' | 'Missing' | 'N/A', number>
                     );
-                    const linkedEvidenceCount = assetCheckEvidenceLinks.filter(link => link.asset_id === activeAsset.id).length;
-                    const historyCount = assetHistoryEvents.filter(event => event.asset_id === activeAsset.id).length;
+                    
+                    const totalRequired = assignments.filter(a => a.required).length;
+                    const overallAssurance = totalRequired > 0 ? Math.round((statusCounts.Compliant / totalRequired) * 100) : 100;
+
+                    const nextDueAsg = assignments
+                      .filter(a => a.required && a.next_due_date)
+                      .sort((a, b) => new Date(a.next_due_date!).getTime() - new Date(b.next_due_date!).getTime())[0];
+                    const nextDueCheckType = nextDueAsg ? assetCheckTypes.find(ct => ct.id === nextDueAsg.asset_check_type_id) : null;
+
+                    const expiredAsg = assignments
+                      .filter(a => a.required && getAssignmentStatus(a) === 'Expired')
+                      .sort((a, b) => new Date(a.next_due_date || 0).getTime() - new Date(b.next_due_date || 0).getTime())[0];
+                    const missingAsg = assignments.filter(a => a.required && getAssignmentStatus(a) === 'Missing')[0];
+                    const urgentAsg = expiredAsg || missingAsg;
+                    const urgentCheckType = urgentAsg ? assetCheckTypes.find(ct => ct.id === urgentAsg.asset_check_type_id) : null;
 
                     return (
-                      <div className="space-y-4">
-                        <div>
-                          <h4 className="text-xs font-extrabold text-foreground uppercase tracking-wider">Asset Overview</h4>
-                          <p className="text-[11px] text-muted-foreground mt-1">
-                            Current scheduled-check standing and linked record totals for this asset.
-                          </p>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="border border-border rounded-xl p-3 bg-muted/20">
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Assigned Checks</span>
-                            <span className="block text-xl font-black text-foreground mt-1">{assignments.length}</span>
-                          </div>
-                          <div className="border border-border rounded-xl p-3 bg-muted/20">
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Linked Evidence</span>
-                            <span className="block text-xl font-black text-foreground mt-1">{linkedEvidenceCount}</span>
-                          </div>
-                          <div className="border border-border rounded-xl p-3 bg-muted/20">
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">History Entries</span>
-                            <span className="block text-xl font-black text-foreground mt-1">{historyCount}</span>
-                          </div>
-                          <div className="border border-border rounded-xl p-3 bg-muted/20">
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Requires Attention</span>
-                            <span className="block text-xl font-black text-foreground mt-1">
-                              {statusCounts.Expired + statusCounts.Missing + statusCounts['Expiring Soon']}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="border border-border rounded-xl divide-y divide-border bg-card">
-                          {[
-                            ['Compliant', statusCounts.Compliant, 'text-emerald-600 dark:text-emerald-400'],
-                            ['Due Soon', statusCounts['Expiring Soon'], 'text-amber-600 dark:text-amber-400'],
-                            ['Expired / Overdue', statusCounts.Expired, 'text-rose-600 dark:text-rose-400'],
-                            ['Missing', statusCounts.Missing, 'text-zinc-600 dark:text-zinc-400']
-                          ].map(([label, count, colour]) => (
-                            <div key={String(label)} className="flex items-center justify-between px-3.5 py-2.5 text-xs">
-                              <span className="font-semibold text-muted-foreground">{label}</span>
-                              <span className={`font-black ${colour}`}>{count}</span>
+                      <div className="space-y-5">
+                        {/* Overall Assurance Banner */}
+                        <div className="bg-card border border-border p-4 rounded-xl flex items-center justify-between shadow-xs">
+                          <div className="space-y-1.5 flex-1 pr-6">
+                            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Asset Compliance Standing</span>
+                            <div className="flex items-center gap-3">
+                              <h4 className="text-base font-black text-foreground">{activeAsset.name}</h4>
+                              <span className="text-[10px] font-bold text-muted-foreground">Assurance Level</span>
                             </div>
-                          ))}
+                            <div className="w-full bg-muted h-2 rounded-full overflow-hidden mt-2 flex">
+                              <div
+                                style={{ width: `${overallAssurance}%` }}
+                                className={`h-full transition-all ${
+                                  overallAssurance >= 90 ? 'bg-emerald-500' :
+                                  overallAssurance >= 70 ? 'bg-amber-500' :
+                                  'bg-rose-500'
+                                }`}
+                              />
+                            </div>
+                          </div>
+                          <div className="text-center shrink-0 pl-4 border-l border-border/80">
+                            <span className="text-2xl font-black text-foreground">{overallAssurance}%</span>
+                            <span className="text-[9px] text-muted-foreground block font-bold uppercase mt-0.5">Assurance Score</span>
+                          </div>
                         </div>
+
+                        {/* Next Due & Most Urgent side-by-side */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                          {nextDueAsg && nextDueCheckType ? (
+                            <div className="border border-border/80 rounded-xl p-3.5 bg-muted/10 space-y-2">
+                              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Next Due Check</span>
+                              <div className="flex justify-between items-start">
+                                <span className="font-extrabold text-xs text-foreground block truncate max-w-[150px]">{nextDueCheckType.title}</span>
+                                <span className="text-[10px] text-rose-500 font-bold">{new Date(nextDueAsg.next_due_date!).toLocaleDateString()}</span>
+                              </div>
+                              <p className="text-[10px] text-muted-foreground leading-normal line-clamp-1">{nextDueCheckType.description || 'No description logged.'}</p>
+                            </div>
+                          ) : (
+                            <div className="border border-border/80 rounded-xl p-3.5 bg-muted/10 flex items-center justify-center text-center">
+                              <span className="text-[10px] text-muted-foreground italic">No upcoming compliance checks scheduled.</span>
+                            </div>
+                          )}
+
+                          {urgentAsg && urgentCheckType ? (
+                            <div className="border border-rose-500/10 rounded-xl p-3.5 bg-rose-500/5 space-y-2">
+                              <span className="text-[9px] font-black text-rose-500 uppercase tracking-wider block">Most Urgent Issue</span>
+                              <div className="flex justify-between items-start">
+                                <span className="font-extrabold text-xs text-foreground block truncate max-w-[150px]">{urgentCheckType.title}</span>
+                                <span className="text-[10px] text-rose-500 font-black uppercase tracking-wider">{getAssignmentStatus(urgentAsg)}</span>
+                              </div>
+                              <p className="text-[10px] text-muted-foreground leading-normal line-clamp-1">{urgentCheckType.description || 'Action required to restore compliance.'}</p>
+                            </div>
+                          ) : (
+                            <div className="border border-emerald-500/10 rounded-xl p-3.5 bg-emerald-500/5 flex items-center justify-center text-center">
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">All active compliance checks are up to date!</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Action Toolbar */}
+                        <div className="bg-card border border-border p-3 rounded-xl flex flex-wrap gap-2 items-center justify-between text-xs">
+                          <span className="font-extrabold text-muted-foreground text-[10px] uppercase tracking-widest">Asset Tools:</span>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setActiveTab('evidence')}
+                              className="px-2.5 py-1.5 bg-indigo-650 hover:bg-indigo-700 text-white rounded-lg font-bold shadow-sm transition-all text-[10px] cursor-pointer"
+                            >
+                              Add Evidence
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowAddHistoryInWorkspace(true);
+                                setActiveCell(null);
+                              }}
+                              className="px-2.5 py-1.5 bg-muted hover:bg-muted/80 text-foreground border border-border rounded-lg font-bold transition-all text-[10px] cursor-pointer"
+                            >
+                              Add History
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setActiveTab('checks')}
+                              className="px-2.5 py-1.5 bg-muted hover:bg-muted/80 text-foreground border border-border rounded-lg font-bold transition-all text-[10px] cursor-pointer"
+                            >
+                              Complete Check
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Assigned Checks Card Grid */}
+                        <div className="space-y-2.5">
+                          <h4 className="text-xs font-black text-foreground uppercase tracking-wider">Scheduled Check Assignments</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                            {assignments.map(asg => {
+                              const ct = assetCheckTypes.find(t => t.id === asg.asset_check_type_id);
+                              if (!ct) return null;
+                              const status = getAssignmentStatus(asg);
+                              return (
+                                <div
+                                  key={asg.id}
+                                  onClick={() => {
+                                    setActiveCell({ asset: activeAsset, checkType: ct, assignment: asg });
+                                    setActiveTab('checks');
+                                  }}
+                                  onDragOver={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                  }}
+                                  onDrop={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const file = e.dataTransfer.files?.[0];
+                                    if (file) {
+                                      handleStartLinkingFlow(file, 'check', asg.id);
+                                    }
+                                  }}
+                                  className="border border-border p-3.5 rounded-xl bg-card hover:border-indigo-400 cursor-pointer transition-all space-y-3.5 relative group flex flex-col justify-between"
+                                >
+                                  {/* Card Header */}
+                                  <div className="flex justify-between items-start gap-2">
+                                    <div className="min-w-0">
+                                      <span className="font-extrabold text-xs text-foreground block truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400">{ct.title}</span>
+                                      <span className="text-[8px] text-muted-foreground uppercase font-bold tracking-wider">{ct.category}</span>
+                                    </div>
+                                    <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border shrink-0 ${
+                                      status === 'Compliant' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' :
+                                      status === 'Expiring Soon' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
+                                      status === 'Expired' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' :
+                                      'bg-zinc-500/10 border-zinc-500/20 text-zinc-500'
+                                    }`}>
+                                      {status}
+                                    </span>
+                                  </div>
+
+                                  {/* Dates & Freq */}
+                                  <div className="text-[10px] text-muted-foreground space-y-1 pt-1 border-t border-border/40">
+                                    <div className="flex justify-between">
+                                      <span>Frequency:</span>
+                                      <span className="font-bold text-foreground">{asg.frequency_value} {asg.frequency_unit}</span>
+                                    </div>
+                                    {asg.next_due_date && (
+                                      <div className="flex justify-between">
+                                        <span>Next Due Date:</span>
+                                        <span className={`font-bold ${status === 'Expired' ? 'text-rose-500' : 'text-foreground'}`}>
+                                          {new Date(asg.next_due_date).toLocaleDateString()}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Drag drop help overlay */}
+                                  <div className="absolute inset-0 bg-indigo-500/5 border border-dashed border-indigo-500/40 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[10px] text-indigo-600 dark:text-indigo-400 font-extrabold pointer-events-none backdrop-blur-xs">
+                                    Drop File here to log check
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
                       </div>
                     );
                   })()}
@@ -2276,22 +2887,412 @@ export default function AssetMatrix() {
                   </div>
                 )}
 
-                {/* STATE 3: Default Empty State */}
-                {!activeCell && !showAddHistoryInWorkspace && (
-                  <div className="h-full flex flex-col items-center justify-center text-center p-6 text-muted-foreground/60 space-y-3 border border-dashed border-border rounded-xl bg-card/20">
-                    <ClipboardList className="w-12 h-12 text-muted-foreground/30" />
-                    <div>
-                      <span className="text-xs font-bold text-foreground block">Action Workspace</span>
-                      <span className="text-[10px] leading-relaxed mt-1 block">
-                        Select a check assignment on the left, or log a maintenance repair event to perform assurance updates.
-                      </span>
+                {/* STATE 3: Default Empty State (Dynamic Action Cards) */}
+                {!activeCell && !showAddHistoryInWorkspace && (() => {
+                  const assetHistory = assetHistoryEvents.filter(e => e.asset_id === activeAsset.id);
+                  const activeAssignments = assetCheckAssignments.filter(a => a.asset_id === activeAsset.id && a.active && a.required);
+                  const overdueCount = activeAssignments.filter(a => getAssignmentStatus(a) === 'Expired').length;
+                  const missingCount = activeAssignments.filter(a => getAssignmentStatus(a) === 'Missing').length;
+
+                  return (
+                    <div className="space-y-4">
+                      <div>
+                        <h4 className="font-black text-sm text-foreground">Quick Action Workspace</h4>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Select a check cell to log compliance or choose a quick action below.</p>
+                      </div>
+
+                      <div className="space-y-3">
+                        {/* Action Card 1: Log Maintenance */}
+                        <button
+                          type="button"
+                          onClick={() => setShowAddHistoryInWorkspace(true)}
+                          className="w-full text-left p-3.5 bg-card hover:bg-muted/40 border border-border rounded-xl transition-all shadow-xs cursor-pointer group space-y-1 block"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-extrabold text-xs text-indigo-600 dark:text-indigo-400 group-hover:underline flex items-center gap-1.5">
+                              <Activity className="w-3.5 h-3.5" /> Log Maintenance Event
+                            </span>
+                            <ArrowRight className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                          <p className="text-[10px] text-muted-foreground leading-normal">
+                            Record a repair, service, inspection, calibration, or incident cost.
+                          </p>
+                        </button>
+
+                        {/* Action Card 2: Assurance Gaps */}
+                        {(overdueCount > 0 || missingCount > 0) && (
+                          <div className="p-3.5 bg-rose-500/5 border border-rose-500/10 rounded-xl space-y-2">
+                            <span className="font-extrabold text-xs text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                              <ShieldAlert className="w-3.5 h-3.5" /> Attention Required
+                            </span>
+                            <p className="text-[10px] text-muted-foreground leading-normal">
+                              This asset has <span className="text-rose-500 font-bold">{overdueCount} overdue</span> and <span className="text-rose-500 font-bold">{missingCount} missing</span> checks. Click a card in the Overview or Checks tab to resolve.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Action Card 3: Recent Activity */}
+                        <div className="p-3.5 bg-card border border-border rounded-xl space-y-2">
+                          <span className="font-extrabold text-[10px] text-muted-foreground uppercase tracking-widest block">
+                            Recent Maintenance Activity
+                          </span>
+                          {assetHistory.length === 0 ? (
+                            <p className="text-[10px] text-muted-foreground italic leading-normal">
+                              No history events logged for this asset.
+                            </p>
+                          ) : (
+                            (() => {
+                              const lastEvent = assetHistory[0];
+                              return (
+                                <div className="space-y-1">
+                                  <span className="font-extrabold text-xs text-foreground block truncate">{lastEvent.title}</span>
+                                  <div className="flex justify-between text-[9px] text-muted-foreground">
+                                    <span>{new Date(lastEvent.event_date).toLocaleDateString()} • {lastEvent.event_type}</span>
+                                    {lastEvent.cost && <span className="font-bold text-foreground">€{lastEvent.cost}</span>}
+                                  </div>
+                                </div>
+                              );
+                            })()
+                          )}
+                        </div>
+
+                        {/* Action Card 4: Quick Links */}
+                        <div className="p-3.5 bg-card border border-border rounded-xl space-y-2 text-xs">
+                          <span className="font-extrabold text-[10px] text-muted-foreground uppercase tracking-widest block">
+                            Quick Links
+                          </span>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveTab('evidence');
+                              }}
+                              className="px-2 py-1.5 bg-muted hover:bg-muted/80 text-foreground border border-border rounded-lg text-[10px] font-bold text-center cursor-pointer"
+                            >
+                              Upload Evidence
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setActiveTab('actions')}
+                              className="px-2 py-1.5 bg-muted hover:bg-muted/80 text-foreground border border-border rounded-lg text-[10px] font-bold text-center cursor-pointer"
+                            >
+                              Open Actions
+                            </button>
+                          </div>
+                        </div>
+
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
               </div>
-
             </div>
+
+          </div>
+        </div>
+      )}
+
+      {showLinkingModal && droppedFile && activeAsset && (
+        <div className="fixed inset-0 z-[80] bg-black/65 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-border flex justify-between items-center bg-muted/20">
+              <div>
+                <h3 className="text-sm font-extrabold text-foreground">Link Evidence Document</h3>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Bind uploaded evidence to a specific context.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLinkingModal(false);
+                  setDroppedFile(null);
+                }}
+                className="p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleFinishLinkingFlow} className="p-5 space-y-4 text-xs overflow-y-auto max-h-[75vh]">
+              {/* File Info */}
+              <div className="p-3 bg-muted/30 border border-border rounded-lg flex items-center gap-2.5">
+                <FileText className="w-6 h-6 text-indigo-500 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <span className="font-extrabold text-xs text-foreground block truncate">{droppedFile.name}</span>
+                  <span className="text-[9px] text-muted-foreground block">
+                    {(droppedFile.size / 1024).toFixed(1)} KB • Private Vault Storage
+                  </span>
+                </div>
+              </div>
+
+              {/* Target Selector */}
+              <div>
+                <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                  What does this evidence relate to?
+                </label>
+                <select
+                  value={linkingTarget}
+                  onChange={(e) => {
+                    const val = e.target.value as any;
+                    setLinkingTarget(val);
+                    if (val === 'check') {
+                      const firstAsg = assetCheckAssignments.find(a => a.asset_id === activeAsset.id && a.active);
+                      setLinkingTargetId(firstAsg ? firstAsg.id : '');
+                    } else if (val === 'history') {
+                      setLinkingTargetId('new');
+                    } else if (val === 'requirement') {
+                      setLinkingTargetId(frameworkRequirements[0]?.id || '');
+                    } else if (val === 'action') {
+                      setLinkingTargetId(actions[0]?.id || '');
+                    } else {
+                      setLinkingTargetId('');
+                    }
+                  }}
+                  className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg outline-none cursor-pointer"
+                >
+                  <option value="general">General Asset Record</option>
+                  <option value="check">Asset Compliance Check</option>
+                  <option value="requirement">Asset Requirement</option>
+                  <option value="action">Asset Action / Task</option>
+                  <option value="history">Maintenance / Repair Log Event</option>
+                </select>
+              </div>
+
+              {/* Conditional Target Options */}
+              {linkingTarget === 'check' && (
+                <div>
+                  <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Select Assigned Check
+                  </label>
+                  <select
+                    value={linkingTargetId}
+                    required
+                    onChange={(e) => {
+                      setLinkingTargetId(e.target.value);
+                      const asg = assetCheckAssignments.find(a => a.id === e.target.value);
+                      if (asg) {
+                        const checkType = assetCheckTypes.find(ct => ct.id === asg.asset_check_type_id);
+                        if (checkType && checkType.default_frequency_value && checkType.default_frequency_unit) {
+                          setLinkingFormValidUntil(calculateNextDueDate(linkingFormIssueDate, checkType.default_frequency_value, checkType.default_frequency_unit));
+                        }
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg outline-none cursor-pointer"
+                  >
+                    <option value="" disabled>-- Select Assigned Check --</option>
+                    {assetCheckAssignments
+                      .filter(a => a.asset_id === activeAsset.id && a.active && a.required)
+                      .map(asg => {
+                        const checkType = assetCheckTypes.find(ct => ct.id === asg.asset_check_type_id);
+                        return (
+                          <option key={asg.id} value={asg.id}>
+                            {checkType?.title || 'Unknown Check'} (Status: {getAssignmentStatus(asg)})
+                          </option>
+                        );
+                      })}
+                  </select>
+                </div>
+              )}
+
+              {linkingTarget === 'requirement' && (
+                <div>
+                  <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Select Requirement
+                  </label>
+                  <select
+                    value={linkingTargetId}
+                    required
+                    onChange={(e) => setLinkingTargetId(e.target.value)}
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg outline-none cursor-pointer"
+                  >
+                    <option value="" disabled>-- Select Requirement --</option>
+                    {frameworkRequirements.map(req => (
+                      <option key={req.id} value={req.id}>
+                        {req.title} ({req.category})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {linkingTarget === 'action' && (
+                <div>
+                  <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Select Action Item
+                  </label>
+                  <select
+                    value={linkingTargetId}
+                    required
+                    onChange={(e) => setLinkingTargetId(e.target.value)}
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg outline-none cursor-pointer"
+                  >
+                    <option value="" disabled>-- Select Action --</option>
+                    {actions.map(act => (
+                      <option key={act.id} value={act.id}>
+                        {act.title} (Status: {act.status})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {linkingTarget === 'history' && (
+                <div>
+                  <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Log against:
+                  </label>
+                  <select
+                    value={linkingTargetId}
+                    onChange={(e) => setLinkingTargetId(e.target.value)}
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg outline-none cursor-pointer"
+                  >
+                    <option value="new">-- Create New Maintenance History Log --</option>
+                    {assetHistoryEvents
+                      .filter(ev => ev.asset_id === activeAsset.id)
+                      .map(ev => (
+                        <option key={ev.id} value={ev.id}>
+                          {ev.title} ({new Date(ev.event_date).toLocaleDateString()})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Context inputs */}
+              <div className="space-y-3.5 pt-2 border-t border-border/60">
+                <div>
+                  <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Document Title / Friendly Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={linkingFormTitle}
+                    onChange={(e) => setLinkingFormTitle(e.target.value)}
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                      Completion / Issue Date
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={linkingFormIssueDate}
+                      onChange={(e) => {
+                        setLinkingFormIssueDate(e.target.value);
+                        if (linkingTarget === 'check' && linkingTargetId) {
+                          const asg = assetCheckAssignments.find(a => a.id === linkingTargetId);
+                          if (asg) {
+                            const checkType = assetCheckTypes.find(ct => ct.id === asg.asset_check_type_id);
+                            if (checkType && checkType.default_frequency_value && checkType.default_frequency_unit) {
+                              setLinkingFormValidUntil(calculateNextDueDate(e.target.value, checkType.default_frequency_value, checkType.default_frequency_unit));
+                            }
+                          }
+                        }
+                      }}
+                      className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg outline-none cursor-pointer"
+                    />
+                  </div>
+
+                  {linkingTarget === 'check' ? (
+                    <div>
+                      <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                        Expiry / Valid Until Date
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={linkingFormValidUntil}
+                        onChange={(e) => setLinkingFormValidUntil(e.target.value)}
+                        className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg outline-none cursor-pointer"
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                        Expiry Date (Optional)
+                      </label>
+                      <input
+                        type="date"
+                        value={linkingFormExpiryDate}
+                        onChange={(e) => setLinkingFormExpiryDate(e.target.value)}
+                        className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg outline-none cursor-pointer"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                      {linkingTarget === 'check' ? 'Inspector / Performed By' : 'Performed By / Supplier'}
+                    </label>
+                    <input
+                      type="text"
+                      value={linkingFormPerformedBy}
+                      onChange={(e) => setLinkingFormPerformedBy(e.target.value)}
+                      placeholder="e.g. Inspector John / Garage ABC"
+                      className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                      Document Category
+                    </label>
+                    <select
+                      value={linkingFormCategory}
+                      onChange={(e) => setLinkingFormCategory(e.target.value)}
+                      className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg outline-none cursor-pointer"
+                    >
+                      <option value="Assets">Assets & Maintenance</option>
+                      <option value="Training">Training & Competency</option>
+                      <option value="Certificates">Certificates & Licenses</option>
+                      <option value="General">General Records</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Notes / Reference Info
+                  </label>
+                  <textarea
+                    value={linkingFormNotes}
+                    onChange={(e) => setLinkingFormNotes(e.target.value)}
+                    placeholder="Enter certificates serials, repair notes, and details..."
+                    rows={3}
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg outline-none resize-none leading-normal"
+                  />
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex gap-2 pt-3 border-t border-border/60">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowLinkingModal(false);
+                    setDroppedFile(null);
+                  }}
+                  className="w-1/2 py-2 bg-muted hover:bg-muted/80 text-foreground font-bold border border-border rounded-lg text-center cursor-pointer"
+                  disabled={isLinkingProgress}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLinkingProgress}
+                  className="w-1/2 py-2 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  {isLinkingProgress ? 'Processing...' : 'Upload & Link'}
+                </button>
+              </div>
+
+            </form>
           </div>
         </div>
       )}
@@ -2506,6 +3507,34 @@ export default function AssetMatrix() {
                     <option value="Facility">Facility</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label htmlFor="new-asset-category-id" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                  Taxonomy Category
+                </label>
+                <select
+                  id="new-asset-category-id"
+                  value={newAssetCategoryId || ''}
+                  onChange={e => setNewAssetCategoryId(e.target.value || null)}
+                  className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none cursor-pointer"
+                >
+                  <option value="">-- Unassigned / General --</option>
+                  {assetCategories
+                    .filter(c => c.active && !c.parent_id)
+                    .map(parent => (
+                      <optgroup key={parent.id} label={parent.name}>
+                        <option value={parent.id}>{parent.name} (Parent)</option>
+                        {assetCategories
+                          .filter(sub => sub.active && sub.parent_id === parent.id)
+                          .map(sub => (
+                            <option key={sub.id} value={sub.id}>
+                              &nbsp;&nbsp;{sub.name}
+                            </option>
+                          ))}
+                      </optgroup>
+                    ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-3 gap-2">
@@ -2812,6 +3841,230 @@ export default function AssetMatrix() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Category Manager */}
+      {showCategoryManager && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-card solid-panel border border-border w-full max-w-2xl rounded-2xl p-6 relative shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+            <button
+              onClick={() => setShowCategoryManager(false)}
+              className="absolute top-4 right-4 p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-2 border-b border-border pb-3 mb-4 shrink-0">
+              <Settings className="w-5 h-5 text-indigo-500" />
+              <div>
+                <h3 className="text-base font-extrabold text-foreground">Manage Taxonomy Categories</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Create, edit, archive and restore categories used for asset organization.</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto flex-1 pr-1 text-xs">
+              {/* Left Column: Create Form */}
+              <div className="space-y-4">
+                <h4 className="font-extrabold text-xs text-foreground border-b border-border pb-1">Create Category</h4>
+                
+                <form onSubmit={handleCreateCategory} className="space-y-3.5">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                      Category Name
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newCatName}
+                      onChange={e => setNewCatName(e.target.value)}
+                      placeholder="e.g. Heavy Duty Fleet, Depot B Equipment"
+                      className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                      Parent Category (Optional)
+                    </label>
+                    <select
+                      value={newCatParentId}
+                      onChange={e => setNewCatParentId(e.target.value)}
+                      className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none cursor-pointer"
+                    >
+                      <option value="">-- None (Create Parent Category) --</option>
+                      {assetCategories
+                        .filter(c => c.active && !c.parent_id)
+                        .map(parent => (
+                          <option key={parent.id} value={parent.id}>
+                            {parent.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-2 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md transition-all cursor-pointer text-center"
+                  >
+                    Add Category
+                  </button>
+                </form>
+              </div>
+
+              {/* Right Column: List & Actions */}
+              <div className="space-y-4 flex flex-col h-full overflow-hidden">
+                <h4 className="font-extrabold text-xs text-foreground border-b border-border pb-1 shrink-0">Active Tree</h4>
+                
+                <div className="space-y-2.5 overflow-y-auto max-h-[35vh] flex-1 pr-1">
+                  {assetCategories.filter(c => c.active && !c.parent_id).length === 0 ? (
+                    <p className="text-[10px] text-muted-foreground italic">No taxonomy categories registered.</p>
+                  ) : (
+                    assetCategories
+                      .filter(c => c.active && !c.parent_id)
+                      .map(parent => {
+                        const subcats = assetCategories.filter(sub => sub.active && sub.parent_id === parent.id);
+                        return (
+                          <div key={parent.id} className="space-y-1.5 p-2 bg-muted/20 border border-border/40 rounded-lg">
+                            <div className="flex justify-between items-center">
+                              {editingCatId === parent.id ? (
+                                <div className="flex gap-1 items-center flex-1">
+                                  <input
+                                    type="text"
+                                    value={editingCatName}
+                                    onChange={e => setEditingCatName(e.target.value)}
+                                    className="px-2 py-0.5 bg-muted border border-border rounded text-xs outline-none flex-1 font-bold"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateCategory(parent.id, editingCatName)}
+                                    className="px-2 py-0.5 bg-indigo-600 text-white rounded text-[10px] font-bold"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingCatId(null)}
+                                    className="px-1.5 py-0.5 bg-muted border border-border rounded text-[10px] text-muted-foreground"
+                                  >
+                                    X
+                                  </button>
+                                </div>
+                              ) : (
+                                <>
+                                  <span className="font-extrabold text-foreground">{parent.name}</span>
+                                  <div className="flex gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingCatId(parent.id);
+                                        setEditingCatName(parent.name);
+                                      }}
+                                      className="text-[9px] font-bold text-muted-foreground hover:text-indigo-600 hover:underline"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleArchiveCategory(parent.id)}
+                                      className="text-[9px] font-bold text-rose-500 hover:underline"
+                                    >
+                                      Archive
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+
+                            {/* Subcategories list */}
+                            {subcats.length > 0 && (
+                              <div className="pl-3 border-l border-border/60 ml-1 space-y-1">
+                                {subcats.map(sub => (
+                                  <div key={sub.id} className="flex justify-between items-center text-[11px] text-muted-foreground">
+                                    {editingCatId === sub.id ? (
+                                      <div className="flex gap-1 items-center flex-1 py-0.5">
+                                        <input
+                                          type="text"
+                                          value={editingCatName}
+                                          onChange={e => setEditingCatName(e.target.value)}
+                                          className="px-2 py-0.5 bg-muted border border-border rounded text-[10px] outline-none flex-1"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => handleUpdateCategory(sub.id, editingCatName)}
+                                          className="px-1.5 py-0.5 bg-indigo-650 text-white rounded text-[9px] font-bold"
+                                        >
+                                          Save
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditingCatId(null)}
+                                          className="px-1 py-0.5 bg-muted border border-border rounded text-[9px]"
+                                        >
+                                          X
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <span>- {sub.name}</span>
+                                        <div className="flex gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setEditingCatId(sub.id);
+                                              setEditingCatName(sub.name);
+                                            }}
+                                            className="text-[9px] font-bold text-muted-foreground hover:text-indigo-600 hover:underline"
+                                          >
+                                            Edit
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleArchiveCategory(sub.id)}
+                                            className="text-[9px] font-bold text-rose-500 hover:underline"
+                                          >
+                                            Archive
+                                          </button>
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                  )}
+                </div>
+
+                {/* Archived section */}
+                <div className="border-t border-border/60 pt-3 mt-1 shrink-0">
+                  <h5 className="font-extrabold text-[10px] text-muted-foreground uppercase tracking-widest block mb-2">Archived Categories</h5>
+                  <div className="space-y-1.5 overflow-y-auto max-h-[15vh]">
+                    {assetCategories.filter(c => !c.active).length === 0 ? (
+                      <p className="text-[9px] text-muted-foreground italic">No archived categories.</p>
+                    ) : (
+                      assetCategories
+                        .filter(c => !c.active)
+                        .map(cat => (
+                          <div key={cat.id} className="flex justify-between items-center p-1.5 bg-muted/10 border border-border/30 rounded text-[10px]">
+                            <span className="text-muted-foreground">{cat.name} {cat.parent_id && '(Subcategory)'}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRestoreCategory(cat.id)}
+                              className="text-[9px] font-bold text-indigo-650 hover:underline"
+                            >
+                              Restore
+                            </button>
+                          </div>
+                        ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

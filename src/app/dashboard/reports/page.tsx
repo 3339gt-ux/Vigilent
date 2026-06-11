@@ -390,10 +390,13 @@ export default function ReportsPage() {
     assetCheckTypes,
     assetCheckAssignments,
     assetCheckRecords,
-    assetCheckEvidenceLinks
+    assetCheckEvidenceLinks,
+    assetCategories
   } = useApp();
 
   const router = useRouter();
+
+  const [selectedAssetCategoryId, setSelectedAssetCategoryId] = useState<string>('All');
 
   // Loading admin trail logs
   const [auditTrailEvents, setAuditTrailEvents] = useState<AuditTrailEvent[]>([]);
@@ -401,7 +404,13 @@ export default function ReportsPage() {
 
   // Assets Report Calculations
   const assetMetrics = useMemo(() => {
-    const activeAssets = (assets || []).filter(asset => asset.status === 'active');
+    const activeAssets = (assets || [])
+      .filter(asset => asset.status === 'active')
+      .filter(asset => {
+        if (selectedAssetCategoryId === 'All') return true;
+        const allowedCatIds = [selectedAssetCategoryId, ...assetCategories.filter(c => c.active && c.parent_id === selectedAssetCategoryId).map(c => c.id)];
+        return asset.category_id && allowedCatIds.includes(asset.category_id);
+      });
     const cells = buildAssetMatrix(
       assets || [],
       assetCheckTypes || [],
@@ -443,7 +452,7 @@ export default function ReportsPage() {
       overdueCount,
       assetsSummaryList
     };
-  }, [assets, assetCheckTypes, assetCheckAssignments, assetCheckRecords, assetCheckEvidenceLinks]);
+  }, [assets, assetCheckTypes, assetCheckAssignments, assetCheckRecords, assetCheckEvidenceLinks, selectedAssetCategoryId, assetCategories]);
 
   // State Management
   const [activeTab, setActiveTab] = useState<TabType>('executive');
@@ -3107,9 +3116,38 @@ export default function ReportsPage() {
           </div>
         )}
 
-        {/* Tab 7: Locations & Assets */}
         {activeTab === 'locations-assets' && (
           <div className="space-y-6">
+            {/* Category Filter Toolbar */}
+            <div className="bg-card border border-border p-3.5 rounded-xl flex items-center justify-between shadow-xs text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-muted-foreground uppercase tracking-widest text-[9px]">Filter Report by Category:</span>
+                <select
+                  value={selectedAssetCategoryId}
+                  onChange={(e) => setSelectedAssetCategoryId(e.target.value)}
+                  className="bg-muted border border-border rounded-lg px-2.5 py-1.5 outline-none cursor-pointer font-bold text-foreground text-xs"
+                >
+                  <option value="All">All Categories</option>
+                  {assetCategories
+                    .filter(c => c.active && !c.parent_id)
+                    .map(parent => (
+                      <optgroup key={parent.id} label={parent.name}>
+                        <option value={parent.id}>{parent.name} (All Parent)</option>
+                        {assetCategories
+                          .filter(sub => sub.active && sub.parent_id === parent.id)
+                          .map(sub => (
+                            <option key={sub.id} value={sub.id}>
+                              {sub.name}
+                            </option>
+                          ))}
+                      </optgroup>
+                    ))}
+                </select>
+              </div>
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                Showing {assetMetrics.totalAssets} Active Assets
+              </span>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="bg-card border border-border p-4 rounded-xl text-center space-y-1">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Total Registered Assets</span>

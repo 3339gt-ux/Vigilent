@@ -42,6 +42,7 @@ import {
   DocumentStatus,
   SavedReport,
   Asset,
+  AssetCategory,
   AssetCheckType,
   AssetCheckAssignment,
   AssetCheckRecord,
@@ -1044,6 +1045,7 @@ const MOCK_ASSETS: Asset[] = [
   {
     id: 'asset-truck-261',
     organisation_id: MOCK_ORG.id,
+    category_id: 'cat-vehicle-tractor',
     asset_number: 'AST-V-01',
     name: 'Scania HGV Truck - Reg: 261-D-998',
     asset_type: 'Vehicle',
@@ -1064,6 +1066,7 @@ const MOCK_ASSETS: Asset[] = [
   {
     id: 'asset-trailer-402',
     organisation_id: MOCK_ORG.id,
+    category_id: 'cat-trailer-refrigerated',
     asset_number: 'AST-T-02',
     name: 'Krone Refrigerated Trailer - Ref: T-402',
     asset_type: 'Trailer',
@@ -1084,6 +1087,7 @@ const MOCK_ASSETS: Asset[] = [
   {
     id: 'asset-forklift-03',
     organisation_id: MOCK_ORG.id,
+    category_id: 'cat-forklift-electric',
     asset_number: 'AST-E-03',
     name: 'Toyota Electric Forklift - Ref: FLT-03',
     asset_type: 'Equipment',
@@ -1104,6 +1108,7 @@ const MOCK_ASSETS: Asset[] = [
   {
     id: 'asset-racking-hq',
     organisation_id: MOCK_ORG.id,
+    category_id: 'cat-facility-wh1',
     asset_number: 'AST-F-04',
     name: 'Pallet Racking System - HQ Warehouse',
     asset_type: 'Facility',
@@ -1117,6 +1122,244 @@ const MOCK_ASSETS: Asset[] = [
     owner: 'Jane Doe',
     status: 'active',
     notes: 'Requires annual professional structural safety inspection.',
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  }
+];
+
+const MOCK_ASSET_CATEGORIES: AssetCategory[] = [
+  // Parent Facility
+  {
+    id: 'cat-facility',
+    organisation_id: MOCK_ORG.id,
+    parent_id: null,
+    name: 'Facility',
+    description: 'Infrastructure, warehouses, garages and offices.',
+    sort_order: 1,
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'cat-facility-wh1',
+    organisation_id: MOCK_ORG.id,
+    parent_id: 'cat-facility',
+    name: 'Warehouse 1',
+    description: 'Main storage warehouse.',
+    sort_order: 1,
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'cat-facility-wh2',
+    organisation_id: MOCK_ORG.id,
+    parent_id: 'cat-facility',
+    name: 'Warehouse 2',
+    description: 'Secondary storage warehouse.',
+    sort_order: 2,
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'cat-facility-garage',
+    organisation_id: MOCK_ORG.id,
+    parent_id: 'cat-facility',
+    name: 'Garage',
+    description: 'Maintenance garage workshop.',
+    sort_order: 3,
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'cat-facility-offices',
+    organisation_id: MOCK_ORG.id,
+    parent_id: 'cat-facility',
+    name: 'Offices',
+    description: 'HQ administration offices.',
+    sort_order: 4,
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+
+  // Parent Vehicle
+  {
+    id: 'cat-vehicle',
+    organisation_id: MOCK_ORG.id,
+    parent_id: null,
+    name: 'Vehicle',
+    description: 'Transport fleet vehicles, tractors and vans.',
+    sort_order: 2,
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'cat-vehicle-rigid',
+    organisation_id: MOCK_ORG.id,
+    parent_id: 'cat-vehicle',
+    name: 'Rigid',
+    description: 'Rigid trucks.',
+    sort_order: 1,
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'cat-vehicle-tractor',
+    organisation_id: MOCK_ORG.id,
+    parent_id: 'cat-vehicle',
+    name: 'Tractor Unit',
+    description: 'Heavy duty road tractor units.',
+    sort_order: 2,
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'cat-vehicle-van',
+    organisation_id: MOCK_ORG.id,
+    parent_id: 'cat-vehicle',
+    name: 'Van',
+    description: 'Light commercial delivery vans.',
+    sort_order: 3,
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+
+  // Parent Trailer
+  {
+    id: 'cat-trailer',
+    organisation_id: MOCK_ORG.id,
+    parent_id: null,
+    name: 'Trailer',
+    description: 'Haulage trailers, skeletal and refrigerated.',
+    sort_order: 3,
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'cat-trailer-refrigerated',
+    organisation_id: MOCK_ORG.id,
+    parent_id: 'cat-trailer',
+    name: 'Refrigerated',
+    description: 'Temperature-controlled trailers.',
+    sort_order: 1,
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'cat-trailer-curtainsider',
+    organisation_id: MOCK_ORG.id,
+    parent_id: 'cat-trailer',
+    name: 'Curtainsider',
+    description: 'Curtainsider cargo trailers.',
+    sort_order: 2,
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'cat-trailer-box',
+    organisation_id: MOCK_ORG.id,
+    parent_id: 'cat-trailer',
+    name: 'Box',
+    description: 'Secure dry box trailers.',
+    sort_order: 3,
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'cat-trailer-skeletal',
+    organisation_id: MOCK_ORG.id,
+    parent_id: 'cat-trailer',
+    name: 'Skeletal',
+    description: 'Container transport skeletal trailers.',
+    sort_order: 4,
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+
+  // Parent Forklift
+  {
+    id: 'cat-forklift',
+    organisation_id: MOCK_ORG.id,
+    parent_id: null,
+    name: 'Forklift',
+    description: 'Material handling equipment and lifts.',
+    sort_order: 4,
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'cat-forklift-electric',
+    organisation_id: MOCK_ORG.id,
+    parent_id: 'cat-forklift',
+    name: 'Electric',
+    description: 'Electric counterbalanced forklifts.',
+    sort_order: 1,
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'cat-forklift-diesel',
+    organisation_id: MOCK_ORG.id,
+    parent_id: 'cat-forklift',
+    name: 'Diesel',
+    description: 'Diesel outdoor yard forklifts.',
+    sort_order: 2,
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'cat-forklift-reach',
+    organisation_id: MOCK_ORG.id,
+    parent_id: 'cat-forklift',
+    name: 'Reach Truck',
+    description: 'Narrow aisle reach warehouse trucks.',
+    sort_order: 3,
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'cat-forklift-vna',
+    organisation_id: MOCK_ORG.id,
+    parent_id: 'cat-forklift',
+    name: 'VNA',
+    description: 'Very Narrow Aisle high racks man-up lifts.',
+    sort_order: 4,
+    active: true,
     created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
     updated_at: new Date().toISOString(),
     archived_at: null
@@ -1626,6 +1869,7 @@ export const initMockDb = () => {
     localStorage.setItem('vygilence_workspace_notifications', JSON.stringify(MOCK_WORKSPACE_NOTIFICATIONS));
     
     // Seed new asset system tables
+    localStorage.setItem('vigilen_asset_categories', JSON.stringify(MOCK_ASSET_CATEGORIES));
     localStorage.setItem('vigilen_assets', JSON.stringify(MOCK_ASSETS));
     localStorage.setItem('vigilen_asset_check_types', JSON.stringify(MOCK_ASSET_CHECK_TYPES));
     localStorage.setItem('vigilen_asset_check_assignments', JSON.stringify(MOCK_ASSET_CHECK_ASSIGNMENTS));
@@ -5727,6 +5971,128 @@ export const dbService = {
     }
   },
 
+  async getAssetCategories(): Promise<AssetCategory[]> {
+    const profile = await this.getProfile();
+    const orgId = requireAssetOrganizationId(profile);
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('asset_categories')
+        .select('*')
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('asset_categories.select', error);
+      return data || [];
+    } else {
+      initMockDb();
+      const categories = getStorageItem('vigilen_asset_categories', MOCK_ASSET_CATEGORIES);
+      return categories.filter((c: AssetCategory) => c.organisation_id === orgId);
+    }
+  },
+
+  async createAssetCategory(category: Omit<AssetCategory, 'id' | 'created_at' | 'updated_at'>): Promise<AssetCategory> {
+    const profile = await this.getProfile();
+    const orgId = requireAssetOrganizationId(profile);
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('asset_categories')
+        .insert([{ ...category, organisation_id: orgId }])
+        .select()
+        .single();
+      if (error) throwSupabaseError('asset_categories.insert', error);
+      return data;
+    } else {
+      initMockDb();
+      const categories = getStorageItem('vigilen_asset_categories', MOCK_ASSET_CATEGORIES);
+      const newCategory: AssetCategory = {
+        ...category,
+        id: `cat-${Math.random().toString(36).substr(2, 9)}`,
+        organisation_id: orgId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      categories.push(newCategory);
+      setStorageItem('vigilen_asset_categories', categories);
+      return newCategory;
+    }
+  },
+
+  async updateAssetCategory(id: string, updates: Partial<AssetCategory>): Promise<AssetCategory> {
+    const profile = await this.getProfile();
+    const orgId = requireAssetOrganizationId(profile);
+    const safeUpdates = { ...updates };
+    delete safeUpdates.id;
+    delete safeUpdates.organisation_id;
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('asset_categories')
+        .update(safeUpdates)
+        .eq('id', id)
+        .eq('organisation_id', orgId)
+        .select()
+        .single();
+      if (error) throwSupabaseError('asset_categories.update', error);
+      return data;
+    } else {
+      initMockDb();
+      const categories = getStorageItem('vigilen_asset_categories', MOCK_ASSET_CATEGORIES);
+      const idx = categories.findIndex((c: AssetCategory) => c.id === id && c.organisation_id === orgId);
+      if (idx === -1) throw new Error('Asset category not found');
+      const updated = {
+        ...categories[idx],
+        ...safeUpdates,
+        updated_at: new Date().toISOString()
+      };
+      categories[idx] = updated;
+      setStorageItem('vigilen_asset_categories', categories);
+      return updated;
+    }
+  },
+
+  async deleteAssetCategory(id: string): Promise<void> {
+    await this.updateAssetCategory(id, {
+      active: false,
+      archived_at: new Date().toISOString()
+    });
+  },
+
+  async restoreAssetCategory(id: string): Promise<AssetCategory> {
+    return this.updateAssetCategory(id, {
+      active: true,
+      archived_at: null
+    });
+  },
+
+  async updateAssetHistoryEvent(eventId: string, updates: Partial<AssetHistoryEvent>): Promise<AssetHistoryEvent> {
+    const profile = await this.getProfile();
+    const orgId = requireAssetOrganizationId(profile);
+    const safeUpdates = { ...updates };
+    delete safeUpdates.id;
+    delete safeUpdates.organisation_id;
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('asset_history_events')
+        .update(safeUpdates)
+        .eq('id', eventId)
+        .eq('organisation_id', orgId)
+        .select()
+        .single();
+      if (error) throwSupabaseError('asset_history_events.update', error);
+      return data;
+    } else {
+      initMockDb();
+      const events = getStorageItem('vigilen_asset_history_events', MOCK_ASSET_HISTORY_EVENTS);
+      const idx = events.findIndex((e: AssetHistoryEvent) => e.id === eventId && e.organisation_id === orgId);
+      if (idx === -1) throw new Error('Asset history event not found');
+      const updated = {
+        ...events[idx],
+        ...safeUpdates,
+        updated_at: new Date().toISOString()
+      };
+      events[idx] = updated;
+      setStorageItem('vigilen_asset_history_events', events);
+      return updated;
+    }
+  },
+
   // Private helper to automatically map a uploaded document to a matrix cell if it fits requirements
   async autoMapCell(doc: EvidenceDocument): Promise<void> {
     requireDemoMode();
@@ -5745,10 +6111,10 @@ export const dbService = {
       else if (doc.status === 'Expiring Soon') cellStatus = 'Expiring Soon';
 
       cells[cellIdx] = {
-        ...cells[cellIdx],
-        document_id: doc.id,
-        status: cellStatus,
-        last_checked_at: new Date().toISOString()
+         ...cells[cellIdx],
+         document_id: doc.id,
+         status: cellStatus,
+         last_checked_at: new Date().toISOString()
       };
       setStorageItem('vigilen_cells', cells);
       await this.logActivity('Matrix Mapping', `Linked "${doc.title}" to target "${cells[cellIdx].target_name}"`);

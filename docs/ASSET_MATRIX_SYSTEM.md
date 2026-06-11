@@ -33,9 +33,20 @@ The database model is defined in `supabase/migrations/20260611000000_asset_matri
 
 ### Tables
 
+#### `asset_categories`
+- `id` (uuid, primary key)
+- `organisation_id` (uuid, references organizations)
+- `parent_id` (uuid, nullable, references asset_categories)
+- `name` (text, not null)
+- `description` (text, nullable)
+- `sort_order` (integer)
+- `active` (boolean)
+- Timestamps: `created_at`, `updated_at`, `archived_at`
+
 #### `assets`
 - `id` (uuid, primary key)
 - `organisation_id` (uuid, foreign key to organizations)
+- `category_id` (uuid, foreign key to asset_categories)
 - `asset_number` (text)
 - `name` (text, e.g. "HGV Truck #01")
 - `asset_type` (text, e.g. "Vehicle")
@@ -144,29 +155,38 @@ The calculation engine located at `src/lib/assetEngine.ts` supplies the canonica
 
 ## 5. UI & UX Improvements
 
+### Collapsible Category Tree Sidebar
+- **Hierarchical Sidebar**: Renders parent categories and child subcategories on the left of the Matrix table page with active counts and direct filter tags.
+- **Category Manager Modal**: Full CRUD category management (create parent categories, add child subcategories, reorder, update name, archive/restore categories).
+
+### Centered Floating Workspace Modal
+- Centered floating layout containing an asset workspace, featuring sidebar metadata detail forms, interactive tabs, contextual action rails, and Escape key down listener for fast navigation.
+- **Interactive Overview Dashboard Tab**: Shows overall asset assurance compliance score, next due checks, urgent compliance gaps, and assigned check cards.
+- **Drag-and-Drop Interactive Upload**: Allows dragging a file onto the workspace backdrop or check cards to open the context-linking modal.
+- **Context-Linking Modal**: Interactive flow to specify issue/expiry dates, notes, and targets (General Record, Specific Check, Requirement, Action / Task, or Maintenance History event).
+
 ### Grid Display Modes
 - **`Detailed`**: Displays full cells with title, date, check warning badge, and check action items.
 - **`Compact`**: Rotated headers, compact cells showing status badges only.
 - **`Status only`**: Micro-badges to compress screen space for high-volume fleets.
 - **Column Grouping**: Columns can be dynamically grouped/sorted by Category or Risk level.
 
-### Large Workspace Modal
-A workspace layout (`grid-cols-1 lg:grid-cols-[280px_1fr] lg:data-[has-active=true]:grid-cols-[280px_1fr_380px]`) featuring:
-- **Sidebar**: Complete metadata form, archive controls, status indicators.
+### Large Workspace Tabs & Side Rails
+- **Left Rail**: Detailed asset profile with category assignment select dropdown, edit details controls, and archive button.
 - **Checks Tab**: Add/remove schedules, toggle required state.
-- **Evidence Tab**: Link/unlink vault files, drag & drop uploads.
+- **Evidence Tab**: Interactive list of linked evidence vault files.
 - **Requirements Tab**: Map compliance frameworks.
 - **Actions Tab**: Register corrective actions.
-- **History Tab**: Combined timeline of scheduled checks and ad-hoc history logs (repairs, maintenance, costs).
+- **History Tab**: Combined timeline of scheduled checks and ad-hoc history logs (repairs, maintenance, costs, odometer).
 - **Notes Tab**: Full notes textarea editor.
-- **Right Side Form Pane**: Contextual forms to record checks or log repair/maintenance events immediately.
+- **Right Context Rail**: If a check cell or completion is active, renders the log check form. Otherwise, displays overview quick action advice context.
 
 ---
 
 ## 6. Integration Suite
 
-- **Dashboard**: Signals expiring/overdue assets in the Attention Centre and provides quick-action buttons.
-- **Reports**: "Locations & Assets" tab with maintenance history logs, repairs timeline, cost summary metrics, and CSV/PDF export options.
-- **Global Search**: Indexes assets, check assignments, and history events; supports deep-linking into the workspace.
+- **Dashboard**: Signals expiring/overdue assets in the Attention Centre and provides quick-action buttons; groups asset status metrics by taxonomy categories.
+- **Reports**: "Locations & Assets" tab with maintenance history logs, repairs timeline, cost summary metrics, and category filtering/grouping.
+- **Global Search**: Indexes assets, taxonomy categories, check assignments, and history events; supports deep-linking with `?asset=ASSET_ID` or `?category=CATEGORY_ID`.
 - **Audit Trail**: Logs all asset edits, check creations, completions, and edits securely.
-- **Evidence Vault**: Shows asset links in the detail sidebar for documents mapped to checks.
+- **Evidence Vault**: Displays linked assets list in the document detail sidebar with click backlinks (`/dashboard/matrix?asset=ASSET_ID`) to auto-open the asset details, and unlinking capability.
