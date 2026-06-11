@@ -106,7 +106,10 @@ export default function DashboardPage() {
     findPossibleDuplicateDocuments,
     competencyRecords,
     competencyTypes,
-    people
+    people,
+    assets,
+    assetCheckTypes,
+    assetCheckAssignments
   } = useApp();
 
   const router = useRouter();
@@ -209,10 +212,66 @@ export default function DashboardPage() {
     ? actions.find(action => action.id === selectedAction.id) || selectedAction
     : null;
 
+  // Helper: Get status of a check assignment
+  const getAssignmentStatus = (asg: any): 'Compliant' | 'Expiring Soon' | 'Expired' | 'Missing' | 'N/A' => {
+    if (!asg || !asg.active || !asg.required) return 'N/A';
+    if (!asg.next_due_date) return 'Missing';
+
+    const due = new Date(asg.next_due_date).getTime();
+    const now = Date.now();
+    const warningLimit = (asg.warning_days || 30) * 24 * 60 * 60 * 1000;
+
+    if (due <= now) return 'Expired';
+    if (due - now <= warningLimit) return 'Expiring Soon';
+    return 'Compliant';
+  };
+
+  const overdueAssetChecks = useMemo(() => {
+    return (assetCheckAssignments || [])
+      .filter(asg => asg.active && asg.required && getAssignmentStatus(asg) === 'Expired')
+      .map(asg => {
+        const asset = (assets || []).find(a => a.id === asg.asset_id);
+        const checkType = (assetCheckTypes || []).find(ct => ct.id === asg.asset_check_type_id);
+        return {
+          id: `asset-asg-${asg.id}`,
+          isOverdue: true,
+          link: `/dashboard/matrix?asset=${asset?.id}`,
+          requirement: {
+            id: asg.id,
+            title: `${checkType?.title || 'Check'} - ${asset?.name || 'Asset'}`,
+            next_due_date: asg.next_due_date || '',
+            category: asset?.asset_type || 'Asset'
+          }
+        };
+      });
+  }, [assetCheckAssignments, assets, assetCheckTypes]);
+
+  const upcomingAssetChecks = useMemo(() => {
+    return (assetCheckAssignments || [])
+      .filter(asg => asg.active && asg.required && getAssignmentStatus(asg) === 'Expiring Soon')
+      .map(asg => {
+        const asset = (assets || []).find(a => a.id === asg.asset_id);
+        const checkType = (assetCheckTypes || []).find(ct => ct.id === asg.asset_check_type_id);
+        return {
+          id: `asset-asg-${asg.id}`,
+          isOverdue: false,
+          link: `/dashboard/matrix?asset=${asset?.id}`,
+          requirement: {
+            id: asg.id,
+            title: `${checkType?.title || 'Check'} - ${asset?.name || 'Asset'}`,
+            next_due_date: asg.next_due_date || '',
+            category: asset?.asset_type || 'Asset'
+          }
+        };
+      });
+  }, [assetCheckAssignments, assets, assetCheckTypes]);
+
   // Setup list for Attention Centre
   const overdueAndUpcoming = [
-    ...readinessReport.overdue.map(item => ({ ...item, isOverdue: true })),
-    ...readinessReport.upcomingDue.map(item => ({ ...item, isOverdue: false }))
+    ...readinessReport.overdue.map(item => ({ ...item, isOverdue: true, link: `/dashboard/requirements?id=${item.requirement.id}` })),
+    ...readinessReport.upcomingDue.map(item => ({ ...item, isOverdue: false, link: `/dashboard/requirements?id=${item.requirement.id}` })),
+    ...overdueAssetChecks,
+    ...upcomingAssetChecks
   ];
 
   // Derived progress values for Readiness Breakdown (Section 3)
@@ -468,6 +527,21 @@ export default function DashboardPage() {
       });
     });
 
+    (assetCheckAssignments || []).forEach(asg => {
+      if (!asg.active || !asg.required || !asg.next_due_date) return;
+      const asset = (assets || []).find(a => a.id === asg.asset_id);
+      const checkType = (assetCheckTypes || []).find(ct => ct.id === asg.asset_check_type_id);
+      items.push({
+        id: `asset-asg-${asg.id}`,
+        title: `${checkType?.title || 'Check'} - ${asset?.name || 'Asset'}`,
+        type: 'Review',
+        dueDate: asg.next_due_date,
+        status: getAssignmentStatus(asg) === 'Expired' ? 'RED' : getAssignmentStatus(asg) === 'Expiring Soon' ? 'AMBER' : 'GREEN',
+        owner: asset?.name || 'Asset Check',
+        link: `/dashboard/matrix?asset=${asset?.id}`
+      });
+    });
+
     const sortByDate = (a: RadarItem, b: RadarItem) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
     return {
       overdue: items.filter(item => new Date(item.dueDate) < today).sort(sortByDate),
@@ -484,7 +558,7 @@ export default function DashboardPage() {
         return due > day60 && due <= day90;
       }).sort(sortByDate)
     };
-  }, [actions, competencyRecords, competencyTypes, documents, frameworkRequirements, people, today]);
+  }, [actions, competencyRecords, competencyTypes, documents, frameworkRequirements, people, today, assets, assetCheckTypes, assetCheckAssignments]);
 
   const radarRows: Array<{
     label: string;
@@ -1179,7 +1253,7 @@ export default function DashboardPage() {
                         overdueAndUpcoming.slice(0, 3).map(item => (
                           <Link
                             key={item.requirement.id}
-                            href={`/dashboard/requirements?id=${item.requirement.id}`}
+                            href={item.link || `/dashboard/requirements?id=${item.requirement.id}`}
                             className="relative group block p-3 bg-amber-500/5 dark:bg-amber-500/10 hover:bg-amber-500/10 dark:hover:bg-amber-500/15 border border-amber-500/20 rounded-xl flex gap-2 items-start text-xs transition-colors cursor-pointer"
                           >
                             <Calendar className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />

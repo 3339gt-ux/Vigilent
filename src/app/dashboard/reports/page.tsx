@@ -123,6 +123,17 @@ const PREBUILT_REPORTS = [
     tab: 'audits'
   },
   {
+    id: 'prebuilt_assets',
+    name: 'Asset Assurance & Maintenance',
+    description: 'Track asset status, compliance rates, overdue scheduled checks, and maintenance activities.',
+    category: 'Assets',
+    sourceModule: 'Assets',
+    filters: 'None',
+    exports: 'CSV, Print/PDF',
+    permission: 'All Members',
+    tab: 'locations-assets'
+  },
+  {
     id: 'prebuilt_history',
     name: 'System Audit Trail Log',
     description: 'Immutable timeline of system mutations, access events, and export operations.',
@@ -373,7 +384,11 @@ export default function ReportsPage() {
     requirementDocuments,
     auditPacks,
     readinessReport,
-    readinessScore
+    readinessScore,
+    assets,
+    assetCheckTypes,
+    assetCheckAssignments,
+    assetCheckRecords
   } = useApp();
 
   const router = useRouter();
@@ -381,6 +396,81 @@ export default function ReportsPage() {
   // Loading admin trail logs
   const [auditTrailEvents, setAuditTrailEvents] = useState<AuditTrailEvent[]>([]);
   const isOwnerOrAdmin = user?.role === 'Owner' || user?.role === 'Admin';
+
+  // Assets Report Calculations
+  const assetMetrics = useMemo(() => {
+    const totalAssets = (assets || []).length;
+    
+    // Status counts
+    let compliantCount = 0;
+    let warningCount = 0;
+    let overdueCount = 0;
+    
+    const activeAssignments = (assetCheckAssignments || []).filter(asg => asg.active && asg.required);
+    
+    activeAssignments.forEach(asg => {
+      if (!asg.next_due_date) {
+        overdueCount++; // missing due date is considered overdue/gap
+        return;
+      }
+      const due = new Date(asg.next_due_date).getTime();
+      const now = Date.now();
+      const warningLimit = (asg.warning_days || 30) * 24 * 60 * 60 * 1000;
+      
+      if (due <= now) {
+        overdueCount++;
+      } else if (due - now <= warningLimit) {
+        warningCount++;
+      } else {
+        compliantCount++;
+      }
+    });
+
+    // Asset status summary list
+    const assetsSummaryList = (assets || []).map(asset => {
+      const assetAsgs = activeAssignments.filter(asg => asg.asset_id === asset.id);
+      const totalChecks = assetAsgs.length;
+      let compliantChecks = 0;
+      let worstStatus: 'RED' | 'AMBER' | 'GREEN' | 'GREY' = 'GREY';
+      
+      assetAsgs.forEach(asg => {
+        if (!asg.next_due_date) {
+          worstStatus = 'RED'; // missing is treated as critical gap
+          return;
+        }
+        const due = new Date(asg.next_due_date).getTime();
+        const now = Date.now();
+        const warningLimit = (asg.warning_days || 30) * 24 * 60 * 60 * 1000;
+        
+        if (due <= now) {
+          worstStatus = 'RED';
+        } else if (due - now <= warningLimit) {
+          if (worstStatus !== 'RED') worstStatus = 'AMBER';
+        } else {
+          compliantChecks++;
+          if (worstStatus === 'GREY') worstStatus = 'GREEN';
+        }
+      });
+      
+      return {
+        id: asset.id,
+        name: asset.name,
+        type: asset.asset_type,
+        identifier: asset.registration_number || asset.asset_number || null,
+        status: worstStatus as 'RED' | 'AMBER' | 'GREEN' | 'GREY',
+        compliantChecks,
+        totalChecks
+      };
+    });
+
+    return {
+      totalAssets,
+      compliantCount,
+      warningCount,
+      overdueCount,
+      assetsSummaryList
+    };
+  }, [assets, assetCheckAssignments]);
 
   // State Management
   const [activeTab, setActiveTab] = useState<TabType>('executive');
@@ -747,6 +837,7 @@ export default function ReportsPage() {
     else if (activeTab === 'competencies') recordView('prebuilt_competencies', 'Competency Matrix Compliance', 'Competencies', 'Competencies', 'competencies');
     else if (activeTab === 'actions') recordView('prebuilt_actions', 'Corrective Actions Registry', 'Actions', 'Actions', 'actions');
     else if (activeTab === 'audits') recordView('prebuilt_audits', 'Audit Packs Registry', 'Audit', 'Audits', 'audits');
+    else if (activeTab === 'locations-assets') recordView('prebuilt_assets', 'Asset Assurance & Maintenance', 'Assets', 'Assets', 'locations-assets');
     else if (activeTab === 'history' && isOwnerOrAdmin) recordView('prebuilt_history', 'System Audit Trail Log', 'Administration', 'Audit Trail', 'history');
     else if (activeTab === 'administration' && isOwnerOrAdmin) recordView('prebuilt_admin', 'System Activity & Admin', 'Administration', 'Audit Trail', 'administration');
   }, [activeTab, isOwnerOrAdmin, recordView]);
@@ -2552,7 +2643,7 @@ export default function ReportsPage() {
           { id: 'competencies', name: 'Competencies & People', icon: Briefcase },
           { id: 'actions', name: 'Actions Registry', icon: FileSpreadsheet },
           { id: 'audits', name: 'Audits & packs', icon: FolderArchive },
-          { id: 'locations-assets', name: 'Locations & Assets', icon: Building2 },
+          { id: 'locations-assets', name: 'Assets & Maintenance', icon: Building2 },
           ...(isOwnerOrAdmin ? [{ id: 'administration', name: 'Activity & Admin', icon: Settings }] : []),
           ...(isOwnerOrAdmin ? [{ id: 'history', name: 'Report Audit History', icon: History }] : []),
           { id: 'builder', name: 'Report Builder', icon: SlidersHorizontal },
@@ -3045,23 +3136,94 @@ export default function ReportsPage() {
 
         {/* Tab 7: Locations & Assets */}
         {activeTab === 'locations-assets' && (
-          <div className="bg-card border border-border p-8 rounded-2xl shadow-xs space-y-4 max-w-xl mx-auto text-center">
-            <div className="w-14 h-14 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-full flex items-center justify-center mx-auto">
-              <Building2 className="w-7 h-7" />
-            </div>
-            <div className="space-y-1">
-              <h2 className="text-base font-black text-foreground">Locations & Assets Reporting Not Configured</h2>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Vygilence&apos;s active database schema does not yet support dedicated <strong className="text-foreground">Locations</strong> or <strong className="text-foreground">Assets</strong> tables.
-              </p>
-            </div>
-            <div className="bg-muted/45 border border-border/80 rounded-xl p-4 text-left text-[11px] space-y-2.5 leading-relaxed text-muted-foreground">
-              <span className="font-bold text-foreground block text-xs">Recommended Schema Updates:</span>
-              <div>
-                <strong className="text-foreground">1. Locations Table</strong>: Define fields `id`, `name`, `address`, `manager_profile_id`, and `risk_rating` to map requirements to geographical nodes.
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-card border border-border p-4 rounded-xl text-center space-y-1">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Total Registered Assets</span>
+                <span className="text-3xl font-black text-foreground">{assetMetrics.totalAssets}</span>
               </div>
-              <div>
-                <strong className="text-foreground">2. Assets Table</strong>: Define fields `id`, `name`, `type` (Vehicle/Facility/Gear), `last_inspected_at`, and `next_calibration_due` to track hardware evidence criteria.
+              <div className="bg-card border border-border p-4 rounded-xl text-center space-y-1">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Compliant Check Items</span>
+                <span className="text-3xl font-black text-emerald-500">{assetMetrics.compliantCount}</span>
+              </div>
+              <div className="bg-card border border-border p-4 rounded-xl text-center space-y-1">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Check Items Due Soon</span>
+                <span className="text-3xl font-black text-amber-500">{assetMetrics.warningCount}</span>
+              </div>
+              <div className="bg-card border border-border p-4 rounded-xl text-center space-y-1">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Overdue Checks / Gaps</span>
+                <span className="text-3xl font-black text-rose-500">{assetMetrics.overdueCount}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Asset Compliance Donut */}
+              <div className="bg-card border border-border p-5 rounded-2xl space-y-4">
+                <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Asset Assurance Distribution</h3>
+                {renderSVDonut([
+                  { value: assetMetrics.assetsSummaryList.filter(a => a.status === 'GREEN').length, color: '#10b981', label: 'GREEN (All Ok)' },
+                  { value: assetMetrics.assetsSummaryList.filter(a => a.status === 'AMBER').length, color: '#f59e0b', label: 'AMBER (Warning)' },
+                  { value: assetMetrics.assetsSummaryList.filter(a => a.status === 'RED').length, color: '#ef4444', label: 'RED (Overdue/Gap)' },
+                  { value: assetMetrics.assetsSummaryList.filter(a => a.status === 'GREY').length, color: '#71717a', label: 'GREY (No Checks)' }
+                ], 'Assets', 'assets_distribution')}
+              </div>
+
+              {/* Asset Assurance List */}
+              <div className="bg-card border border-border p-5 rounded-2xl space-y-4 lg:col-span-2">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Asset Compliance Registry</h3>
+                  <span className="text-[10px] font-bold text-muted-foreground">{assetMetrics.assetsSummaryList.length} assets</span>
+                </div>
+                <div className="border border-border/80 rounded-xl overflow-hidden divide-y divide-border/60 text-xs max-h-72 overflow-y-auto">
+                  {assetMetrics.assetsSummaryList.map(asset => (
+                    <div key={asset.id} className="p-3 flex items-center justify-between gap-4 hover:bg-muted/30 transition-all">
+                      <div>
+                        <span className="font-bold block text-foreground leading-normal">{asset.name}</span>
+                        <span className="text-[10px] text-muted-foreground block mt-0.5">Type: {asset.type} {asset.identifier ? `| Ref: ${asset.identifier}` : ''}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[11px] text-muted-foreground font-semibold">
+                          {asset.compliantChecks} / {asset.totalChecks} Checks OK
+                        </span>
+                        <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase border shrink-0 ${
+                          asset.status === 'GREEN' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' :
+                          asset.status === 'AMBER' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
+                          asset.status === 'RED' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' :
+                          'bg-zinc-500/10 border-zinc-500/20 text-zinc-650 dark:text-zinc-400'
+                        }`}>
+                          {asset.status === 'GREEN' ? 'OK' : asset.status === 'AMBER' ? 'DUE' : asset.status === 'RED' ? 'GAP' : 'EMPTY'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  {assetMetrics.assetsSummaryList.length === 0 && (
+                    <div className="p-6 text-center text-xs text-muted-foreground">No assets found.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-card border border-border p-5 rounded-2xl space-y-4">
+              <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Configured Asset Check Types</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {(assetCheckTypes || []).map(type => {
+                  const asgCount = (assetCheckAssignments || []).filter(asg => asg.asset_check_type_id === type.id && asg.active).length;
+                  return (
+                    <div key={type.id} className="bg-muted/30 border border-border/80 p-3 rounded-xl space-y-1.5">
+                      <div className="flex justify-between items-start">
+                        <h4 className="font-bold text-foreground text-xs">{type.title}</h4>
+                        <span className="px-1.5 py-0.5 text-[8px] bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 rounded-sm font-bold uppercase border border-indigo-500/10">
+                          {!type.default_frequency_value ? 'ONE-OFF' : `${type.default_frequency_value} ${type.default_frequency_unit}`}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground line-clamp-2 leading-relaxed">{type.description || 'No description provided.'}</p>
+                      <div className="text-[9px] font-semibold text-muted-foreground flex justify-between pt-1 border-t border-border/20">
+                        <span>Warning Window: {type.default_warning_days || 30} Days</span>
+                        <span className="font-bold text-indigo-650 dark:text-indigo-400">{asgCount} Assets Assigned</span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

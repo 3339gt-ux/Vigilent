@@ -40,7 +40,13 @@ import {
   ManagedCategory,
   CellStatus,
   DocumentStatus,
-  SavedReport
+  SavedReport,
+  Asset,
+  AssetCheckType,
+  AssetCheckAssignment,
+  AssetCheckRecord,
+  AssetCheckEvidenceLink,
+  AssetRequirementLink
 } from './types';
 import { calculateCompetencyStatus } from './competencyEngine';
 
@@ -1033,6 +1039,479 @@ const MOCK_REQUIREMENT_COMPETENCY_TYPES: RequirementCompetencyType[] = [
   }
 ];
 
+const MOCK_ASSETS: Asset[] = [
+  {
+    id: 'asset-truck-261',
+    organisation_id: MOCK_ORG.id,
+    asset_number: 'AST-V-01',
+    name: 'Scania HGV Truck - Reg: 261-D-998',
+    asset_type: 'Vehicle',
+    category: 'Heavy Goods Vehicle',
+    registration_number: '261-D-998',
+    serial_number: 'SCN88172639102',
+    make: 'Scania',
+    model: 'R450 Streamline',
+    location: 'Dublin Depot',
+    department: 'Transport',
+    owner: 'Marcus Vance',
+    status: 'active',
+    notes: 'Main fleet transport unit.',
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'asset-trailer-402',
+    organisation_id: MOCK_ORG.id,
+    asset_number: 'AST-T-02',
+    name: 'Krone Refrigerated Trailer - Ref: T-402',
+    asset_type: 'Trailer',
+    category: 'Refrigerated Trailer',
+    registration_number: '261-D-402',
+    serial_number: 'KRN7726381',
+    make: 'Krone',
+    model: 'Cool Liner',
+    location: 'Dublin Depot',
+    department: 'Transport',
+    owner: 'Marcus Vance',
+    status: 'active',
+    notes: 'Requires annual refrigeration calibration.',
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'asset-forklift-03',
+    organisation_id: MOCK_ORG.id,
+    asset_number: 'AST-E-03',
+    name: 'Toyota Electric Forklift - Ref: FLT-03',
+    asset_type: 'Equipment',
+    category: 'Forklift',
+    registration_number: null,
+    serial_number: 'TYT1129381',
+    make: 'Toyota',
+    model: '8FBE15',
+    location: 'Warehouse A',
+    department: 'Operations',
+    owner: 'John Smith',
+    status: 'active',
+    notes: 'Needs daily driver checklist validation.',
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'asset-racking-hq',
+    organisation_id: MOCK_ORG.id,
+    asset_number: 'AST-F-04',
+    name: 'Pallet Racking System - HQ Warehouse',
+    asset_type: 'Facility',
+    category: 'Storage Infrastructure',
+    registration_number: null,
+    serial_number: 'RCK-HQ-001',
+    make: 'Dexion',
+    model: 'Speedlock P90',
+    location: 'HQ Warehouse',
+    department: 'Operations',
+    owner: 'Jane Doe',
+    status: 'active',
+    notes: 'Requires annual professional structural safety inspection.',
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  }
+];
+
+const MOCK_ASSET_CHECK_TYPES: AssetCheckType[] = [
+  {
+    id: 'check-type-cvrt',
+    organisation_id: MOCK_ORG.id,
+    title: 'DOE / CVRT Safety Test',
+    category: 'Inspection',
+    description: 'Statutory 12-month heavy vehicle roadworthiness certification.',
+    default_frequency_value: 1,
+    default_frequency_unit: 'years',
+    default_warning_days: 30,
+    evidence_required: true,
+    risk_level: 'Critical',
+    default_status: 'Missing',
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'check-type-roadtax',
+    organisation_id: MOCK_ORG.id,
+    title: 'Annual Road Tax',
+    category: 'Tax',
+    description: 'Commercial motor tax renewal and confirmation.',
+    default_frequency_value: 1,
+    default_frequency_unit: 'years',
+    default_warning_days: 14,
+    evidence_required: true,
+    risk_level: 'Medium',
+    default_status: 'Missing',
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'check-type-calib',
+    organisation_id: MOCK_ORG.id,
+    title: 'Tachograph Calibration',
+    category: 'Calibration',
+    description: 'Statutory 2-year calibration and sealing of vehicle tachograph units.',
+    default_frequency_value: 2,
+    default_frequency_unit: 'years',
+    default_warning_days: 60,
+    evidence_required: true,
+    risk_level: 'High',
+    default_status: 'Missing',
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'check-type-fridge',
+    organisation_id: MOCK_ORG.id,
+    title: 'Refrigeration Calibration',
+    category: 'Calibration',
+    description: 'Annual temperature sensor and cooling system check for refrigerated units.',
+    default_frequency_value: 1,
+    default_frequency_unit: 'years',
+    default_warning_days: 30,
+    evidence_required: true,
+    risk_level: 'High',
+    default_status: 'Missing',
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'check-type-loler',
+    organisation_id: MOCK_ORG.id,
+    title: 'Lifting Thorough Examination',
+    category: 'Inspection',
+    description: 'Statutory lifting accessories and forklift mechanical safety inspection.',
+    default_frequency_value: 1,
+    default_frequency_unit: 'years',
+    default_warning_days: 30,
+    evidence_required: true,
+    risk_level: 'Critical',
+    default_status: 'Missing',
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'check-type-daily',
+    organisation_id: MOCK_ORG.id,
+    title: 'Operator Daily Checklist',
+    category: 'Safety',
+    description: 'Daily inspection walkaround checklist verified by operator.',
+    default_frequency_value: 1,
+    default_frequency_unit: 'days',
+    default_warning_days: 0,
+    evidence_required: false,
+    risk_level: 'Low',
+    default_status: 'Missing',
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'check-type-racking',
+    organisation_id: MOCK_ORG.id,
+    title: 'Racking Safety Audit',
+    category: 'Inspection',
+    description: 'Professional structural assessment of storage racking systems.',
+    default_frequency_value: 1,
+    default_frequency_unit: 'years',
+    default_warning_days: 30,
+    evidence_required: true,
+    risk_level: 'High',
+    default_status: 'Missing',
+    active: true,
+    created_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString()
+  }
+];
+
+const MOCK_ASSET_CHECK_ASSIGNMENTS: AssetCheckAssignment[] = [
+  {
+    id: 'asg-truck-cvrt',
+    organisation_id: MOCK_ORG.id,
+    asset_id: 'asset-truck-261',
+    asset_check_type_id: 'check-type-cvrt',
+    required: true,
+    frequency_value: 1,
+    frequency_unit: 'years',
+    warning_days: 30,
+    first_due_date: null,
+    next_due_date: daysFromNow(240),
+    last_completed_date: daysFromNow(-125),
+    last_expiry_date: daysFromNow(240),
+    status: 'valid',
+    notes: 'CVRT check successfully mapped to active document.',
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'asg-truck-tax',
+    organisation_id: MOCK_ORG.id,
+    asset_id: 'asset-truck-261',
+    asset_check_type_id: 'check-type-roadtax',
+    required: true,
+    frequency_value: 1,
+    frequency_unit: 'years',
+    warning_days: 14,
+    first_due_date: null,
+    next_due_date: daysFromNow(10),
+    last_completed_date: daysFromNow(-355),
+    last_expiry_date: daysFromNow(10),
+    status: 'due_soon',
+    notes: 'Road tax renewal due soon.',
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'asg-truck-calib',
+    organisation_id: MOCK_ORG.id,
+    asset_id: 'asset-truck-261',
+    asset_check_type_id: 'check-type-calib',
+    required: true,
+    frequency_value: 2,
+    frequency_unit: 'years',
+    warning_days: 60,
+    first_due_date: null,
+    next_due_date: daysFromNow(-30),
+    last_completed_date: daysFromNow(-760),
+    last_expiry_date: daysFromNow(-30),
+    status: 'expired',
+    notes: 'Tachograph calibration expired.',
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'asg-trailer-fridge',
+    organisation_id: MOCK_ORG.id,
+    asset_id: 'asset-trailer-402',
+    asset_check_type_id: 'check-type-fridge',
+    required: true,
+    frequency_value: 1,
+    frequency_unit: 'years',
+    warning_days: 30,
+    first_due_date: null,
+    next_due_date: daysFromNow(200),
+    last_completed_date: daysFromNow(-165),
+    last_expiry_date: daysFromNow(200),
+    status: 'valid',
+    notes: null,
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'asg-forklift-loler',
+    organisation_id: MOCK_ORG.id,
+    asset_id: 'asset-forklift-03',
+    asset_check_type_id: 'check-type-loler',
+    required: true,
+    frequency_value: 1,
+    frequency_unit: 'years',
+    warning_days: 30,
+    first_due_date: null,
+    next_due_date: daysFromNow(-15),
+    last_completed_date: daysFromNow(-380),
+    last_expiry_date: daysFromNow(-15),
+    status: 'overdue',
+    notes: 'Thorough examination past due date.',
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'asg-forklift-daily',
+    organisation_id: MOCK_ORG.id,
+    asset_id: 'asset-forklift-03',
+    asset_check_type_id: 'check-type-daily',
+    required: true,
+    frequency_value: 1,
+    frequency_unit: 'days',
+    warning_days: 0,
+    first_due_date: null,
+    next_due_date: daysFromNow(1),
+    last_completed_date: daysFromNow(0),
+    last_expiry_date: daysFromNow(1),
+    status: 'valid',
+    notes: 'No evidence upload required for daily checks.',
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'asg-racking-audit',
+    organisation_id: MOCK_ORG.id,
+    asset_id: 'asset-racking-hq',
+    asset_check_type_id: 'check-type-racking',
+    required: true,
+    frequency_value: 1,
+    frequency_unit: 'years',
+    warning_days: 30,
+    first_due_date: daysFromNow(-10),
+    next_due_date: daysFromNow(-10),
+    last_completed_date: null,
+    last_expiry_date: null,
+    status: 'missing',
+    notes: 'Required check with no completed records or linked evidence.',
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+];
+
+const MOCK_ASSET_CHECK_RECORDS: AssetCheckRecord[] = [
+  {
+    id: 'rec-truck-cvrt-2026',
+    organisation_id: MOCK_ORG.id,
+    asset_id: 'asset-truck-261',
+    asset_check_assignment_id: 'asg-truck-cvrt',
+    asset_check_type_id: 'check-type-cvrt',
+    completed_at: daysFromNow(-125),
+    valid_from: daysFromNow(-125),
+    valid_until: daysFromNow(240),
+    result_status: 'Pass',
+    performed_by: 'Dublin Test Centre',
+    reference: 'CVRT-Dublin-998',
+    notes: 'Vehicle in excellent condition, brake pads replaced.',
+    created_at: new Date(Date.now() - 125 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(Date.now() - 125 * 24 * 60 * 60 * 1000).toISOString()
+  },
+  {
+    id: 'rec-truck-tax-2025',
+    organisation_id: MOCK_ORG.id,
+    asset_id: 'asset-truck-261',
+    asset_check_assignment_id: 'asg-truck-tax',
+    asset_check_type_id: 'check-type-roadtax',
+    completed_at: daysFromNow(-355),
+    valid_from: daysFromNow(-355),
+    valid_until: daysFromNow(10),
+    result_status: 'Taxed',
+    performed_by: 'Motortax.ie Online',
+    reference: 'TAX-881766',
+    notes: 'Paid standard annual commercial rate.',
+    created_at: new Date(Date.now() - 355 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(Date.now() - 355 * 24 * 60 * 60 * 1000).toISOString()
+  },
+  {
+    id: 'rec-truck-calib-2024',
+    organisation_id: MOCK_ORG.id,
+    asset_id: 'asset-truck-261',
+    asset_check_assignment_id: 'asg-truck-calib',
+    asset_check_type_id: 'check-type-calib',
+    completed_at: daysFromNow(-760),
+    valid_from: daysFromNow(-760),
+    valid_until: daysFromNow(-30),
+    result_status: 'Calibrated',
+    performed_by: 'Tacho Calibration Services Ltd',
+    reference: 'CAL-T-8827',
+    notes: 'Calibration sealed, next due in 24 months.',
+    created_at: new Date(Date.now() - 760 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(Date.now() - 760 * 24 * 60 * 60 * 1000).toISOString()
+  },
+  {
+    id: 'rec-trailer-fridge-2025',
+    organisation_id: MOCK_ORG.id,
+    asset_id: 'asset-trailer-402',
+    asset_check_assignment_id: 'asg-trailer-fridge',
+    asset_check_type_id: 'check-type-fridge',
+    completed_at: daysFromNow(-165),
+    valid_from: daysFromNow(-165),
+    valid_until: daysFromNow(200),
+    result_status: 'Certified',
+    performed_by: 'ThermoKing Service Centre',
+    reference: 'TK-REFR-4412',
+    notes: 'Refrigeration temperature variance within limit.',
+    created_at: new Date(Date.now() - 165 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(Date.now() - 165 * 24 * 60 * 60 * 1000).toISOString()
+  },
+  {
+    id: 'rec-forklift-loler-2025',
+    organisation_id: MOCK_ORG.id,
+    asset_id: 'asset-forklift-03',
+    asset_check_assignment_id: 'asg-forklift-loler',
+    asset_check_type_id: 'check-type-loler',
+    completed_at: daysFromNow(-380),
+    valid_from: daysFromNow(-380),
+    valid_until: daysFromNow(-15),
+    result_status: 'Defects Resolved',
+    performed_by: 'Apex Materials Handling',
+    reference: 'LOLER-FLT3-2025',
+    notes: 'Lifting chains replaced and certified.',
+    created_at: new Date(Date.now() - 380 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(Date.now() - 380 * 24 * 60 * 60 * 1000).toISOString()
+  },
+  {
+    id: 'rec-forklift-daily-today',
+    organisation_id: MOCK_ORG.id,
+    asset_id: 'asset-forklift-03',
+    asset_check_assignment_id: 'asg-forklift-daily',
+    asset_check_type_id: 'check-type-daily',
+    completed_at: daysFromNow(0),
+    valid_from: daysFromNow(0),
+    valid_until: daysFromNow(1),
+    result_status: 'All Checked - Good',
+    performed_by: 'John Smith',
+    reference: 'CHK-FLT03-DAILY',
+    notes: 'Checked and verified clean.',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+];
+
+const MOCK_ASSET_CHECK_EVIDENCE_LINKS: AssetCheckEvidenceLink[] = [
+  {
+    id: 'link-truck-cvrt-doc',
+    organisation_id: MOCK_ORG.id,
+    asset_id: 'asset-truck-261',
+    asset_check_assignment_id: 'asg-truck-cvrt',
+    asset_check_record_id: 'rec-truck-cvrt-2026',
+    document_id: 'doc-mot-998',
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'link-forklift-loler-doc',
+    organisation_id: MOCK_ORG.id,
+    asset_id: 'asset-forklift-03',
+    asset_check_assignment_id: 'asg-forklift-loler',
+    asset_check_record_id: 'rec-forklift-loler-2025',
+    document_id: 'doc-loler-flt3',
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date().toISOString()
+  }
+];
+
+const MOCK_ASSET_REQUIREMENT_LINKS: AssetRequirementLink[] = [
+  {
+    id: 'link-cvrt-req-mot',
+    organisation_id: MOCK_ORG.id,
+    asset_check_type_id: 'check-type-cvrt',
+    requirement_id: 'req-hgv-mot',
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'link-loler-req-loler',
+    organisation_id: MOCK_ORG.id,
+    asset_check_type_id: 'check-type-loler',
+    requirement_id: 'req-loler',
+    created_at: new Date().toISOString()
+  }
+];
+
 // Helper to check localStorage browser availability
 export const getStorageItem = (key: string, defaultVal: any) => {
   requireDemoMode();
@@ -1078,6 +1557,15 @@ export const initMockDb = () => {
     localStorage.setItem('vigilen_requirement_competency_types', JSON.stringify(MOCK_REQUIREMENT_COMPETENCY_TYPES));
     localStorage.setItem('vigilen_audit_trail_events', JSON.stringify(MOCK_AUDIT_TRAIL_EVENTS));
     localStorage.setItem('vygilence_workspace_notifications', JSON.stringify(MOCK_WORKSPACE_NOTIFICATIONS));
+    
+    // Seed new asset system tables
+    localStorage.setItem('vigilen_assets', JSON.stringify(MOCK_ASSETS));
+    localStorage.setItem('vigilen_asset_check_types', JSON.stringify(MOCK_ASSET_CHECK_TYPES));
+    localStorage.setItem('vigilen_asset_check_assignments', JSON.stringify(MOCK_ASSET_CHECK_ASSIGNMENTS));
+    localStorage.setItem('vigilen_asset_check_records', JSON.stringify(MOCK_ASSET_CHECK_RECORDS));
+    localStorage.setItem('vigilen_asset_check_evidence_links', JSON.stringify(MOCK_ASSET_CHECK_EVIDENCE_LINKS));
+    localStorage.setItem('vigilen_asset_requirement_links', JSON.stringify(MOCK_ASSET_REQUIREMENT_LINKS));
+    
     localStorage.setItem('vigilen_initialized', 'true');
   }
 };
@@ -4711,6 +5199,352 @@ export const dbService = {
 
   async checkSavedReportsTableAvailable(): Promise<boolean> {
     return checkSavedReportsTableAvailable();
+  },
+
+  // --- ASSETS ASSURANCE SYSTEM ---
+
+  async getAssets(): Promise<Asset[]> {
+    const profile = await this.getProfile();
+    const orgId = profile.organization_id || '';
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('assets')
+        .select('*')
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('assets.select', error);
+      return data || [];
+    } else {
+      initMockDb();
+      const assets = getStorageItem('vigilen_assets', MOCK_ASSETS);
+      return assets.filter((a: Asset) => a.organisation_id === orgId);
+    }
+  },
+
+  async createAsset(asset: Omit<Asset, 'id' | 'created_at' | 'updated_at'>): Promise<Asset> {
+    const profile = await this.getProfile();
+    const orgId = profile.organization_id || '';
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('assets')
+        .insert([{ ...asset, organisation_id: orgId }])
+        .select()
+        .single();
+      if (error) throwSupabaseError('assets.insert', error);
+      await this.logActivity('Asset Management', `Created asset "${asset.name}"`);
+      return data;
+    } else {
+      initMockDb();
+      const assets = getStorageItem('vigilen_assets', MOCK_ASSETS);
+      const newAsset: Asset = {
+        ...asset,
+        id: `asset-${Math.random().toString(36).substr(2, 9)}`,
+        organisation_id: orgId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      assets.push(newAsset);
+      setStorageItem('vigilen_assets', assets);
+      await this.logActivity('Asset Management', `Created asset "${asset.name}"`);
+      return newAsset;
+    }
+  },
+
+  async updateAsset(assetId: string, updates: Partial<Asset>): Promise<Asset> {
+    const profile = await this.getProfile();
+    const orgId = profile.organization_id || '';
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('assets')
+        .update(updates)
+        .eq('id', assetId)
+        .eq('organisation_id', orgId)
+        .select()
+        .single();
+      if (error) throwSupabaseError('assets.update', error);
+      await this.logActivity('Asset Management', `Updated asset "${data.name}"`);
+      return data;
+    } else {
+      initMockDb();
+      const assets = getStorageItem('vigilen_assets', MOCK_ASSETS);
+      const idx = assets.findIndex((a: Asset) => a.id === assetId && a.organisation_id === orgId);
+      if (idx === -1) throw new Error('Asset not found');
+      const updated = {
+        ...assets[idx],
+        ...updates,
+        updated_at: new Date().toISOString()
+      };
+      assets[idx] = updated;
+      setStorageItem('vigilen_assets', assets);
+      await this.logActivity('Asset Management', `Updated asset "${updated.name}"`);
+      return updated;
+    }
+  },
+
+  async deleteAsset(assetId: string): Promise<void> {
+    const profile = await this.getProfile();
+    const orgId = profile.organization_id || '';
+    if (shouldUseSupabase()) {
+      const { error } = await supabase!
+        .from('assets')
+        .delete()
+        .eq('id', assetId)
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('assets.delete', error);
+      await this.logActivity('Asset Management', `Deleted asset ID ${assetId}`);
+    } else {
+      initMockDb();
+      let assets = getStorageItem('vigilen_assets', MOCK_ASSETS);
+      assets = assets.filter((a: Asset) => !(a.id === assetId && a.organisation_id === orgId));
+      setStorageItem('vigilen_assets', assets);
+      await this.logActivity('Asset Management', `Deleted asset ID ${assetId}`);
+    }
+  },
+
+  async getAssetCheckTypes(): Promise<AssetCheckType[]> {
+    const profile = await this.getProfile();
+    const orgId = profile.organization_id || '';
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('asset_check_types')
+        .select('*')
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('asset_check_types.select', error);
+      return data || [];
+    } else {
+      initMockDb();
+      const types = getStorageItem('vigilen_asset_check_types', MOCK_ASSET_CHECK_TYPES);
+      return types.filter((t: AssetCheckType) => t.organisation_id === orgId);
+    }
+  },
+
+  async createAssetCheckType(checkType: Omit<AssetCheckType, 'id' | 'created_at' | 'updated_at'>): Promise<AssetCheckType> {
+    const profile = await this.getProfile();
+    const orgId = profile.organization_id || '';
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('asset_check_types')
+        .insert([{ ...checkType, organisation_id: orgId }])
+        .select()
+        .single();
+      if (error) throwSupabaseError('asset_check_types.insert', error);
+      return data;
+    } else {
+      initMockDb();
+      const types = getStorageItem('vigilen_asset_check_types', MOCK_ASSET_CHECK_TYPES);
+      const newType: AssetCheckType = {
+        ...checkType,
+        id: `check-type-${Math.random().toString(36).substr(2, 9)}`,
+        organisation_id: orgId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      types.push(newType);
+      setStorageItem('vigilen_asset_check_types', types);
+      return newType;
+    }
+  },
+
+  async getAssetCheckAssignments(assetId?: string): Promise<AssetCheckAssignment[]> {
+    const profile = await this.getProfile();
+    const orgId = profile.organization_id || '';
+    if (shouldUseSupabase()) {
+      let query = supabase!.from('asset_check_assignments').select('*').eq('organisation_id', orgId);
+      if (assetId) {
+        query = query.eq('asset_id', assetId);
+      }
+      const { data, error } = await query;
+      if (error) throwSupabaseError('asset_check_assignments.select', error);
+      return data || [];
+    } else {
+      initMockDb();
+      const assignments = getStorageItem('vigilen_asset_check_assignments', MOCK_ASSET_CHECK_ASSIGNMENTS);
+      let filtered = assignments.filter((a: AssetCheckAssignment) => a.organisation_id === orgId);
+      if (assetId) {
+        filtered = filtered.filter((a: AssetCheckAssignment) => a.asset_id === assetId);
+      }
+      return filtered;
+    }
+  },
+
+  async createAssetCheckAssignment(assignment: Omit<AssetCheckAssignment, 'id' | 'created_at' | 'updated_at'>): Promise<AssetCheckAssignment> {
+    const profile = await this.getProfile();
+    const orgId = profile.organization_id || '';
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('asset_check_assignments')
+        .insert([{ ...assignment, organisation_id: orgId }])
+        .select()
+        .single();
+      if (error) throwSupabaseError('asset_check_assignments.insert', error);
+      return data;
+    } else {
+      initMockDb();
+      const assignments = getStorageItem('vigilen_asset_check_assignments', MOCK_ASSET_CHECK_ASSIGNMENTS);
+      const newAssignment: AssetCheckAssignment = {
+        ...assignment,
+        id: `asg-${Math.random().toString(36).substr(2, 9)}`,
+        organisation_id: orgId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      assignments.push(newAssignment);
+      setStorageItem('vigilen_asset_check_assignments', assignments);
+      return newAssignment;
+    }
+  },
+
+  async updateAssetCheckAssignment(assignmentId: string, updates: Partial<AssetCheckAssignment>): Promise<AssetCheckAssignment> {
+    const profile = await this.getProfile();
+    const orgId = profile.organization_id || '';
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('asset_check_assignments')
+        .update(updates)
+        .eq('id', assignmentId)
+        .eq('organisation_id', orgId)
+        .select()
+        .single();
+      if (error) throwSupabaseError('asset_check_assignments.update', error);
+      return data;
+    } else {
+      initMockDb();
+      const assignments = getStorageItem('vigilen_asset_check_assignments', MOCK_ASSET_CHECK_ASSIGNMENTS);
+      const idx = assignments.findIndex((a: AssetCheckAssignment) => a.id === assignmentId && a.organisation_id === orgId);
+      if (idx === -1) throw new Error('Assignment not found');
+      const updated = {
+        ...assignments[idx],
+        ...updates,
+        updated_at: new Date().toISOString()
+      };
+      assignments[idx] = updated;
+      setStorageItem('vigilen_asset_check_assignments', assignments);
+      return updated;
+    }
+  },
+
+  async getAssetCheckRecords(assetId?: string): Promise<AssetCheckRecord[]> {
+    const profile = await this.getProfile();
+    const orgId = profile.organization_id || '';
+    if (shouldUseSupabase()) {
+      let query = supabase!.from('asset_check_records').select('*').eq('organisation_id', orgId);
+      if (assetId) {
+        query = query.eq('asset_id', assetId);
+      }
+      const { data, error } = await query;
+      if (error) throwSupabaseError('asset_check_records.select', error);
+      return data || [];
+    } else {
+      initMockDb();
+      const records = getStorageItem('vigilen_asset_check_records', MOCK_ASSET_CHECK_RECORDS);
+      let filtered = records.filter((r: AssetCheckRecord) => r.organisation_id === orgId);
+      if (assetId) {
+        filtered = filtered.filter((r: AssetCheckRecord) => r.asset_id === assetId);
+      }
+      return filtered;
+    }
+  },
+
+  async createAssetCheckRecord(record: Omit<AssetCheckRecord, 'id' | 'created_at' | 'updated_at'>): Promise<AssetCheckRecord> {
+    const profile = await this.getProfile();
+    const orgId = profile.organization_id || '';
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('asset_check_records')
+        .insert([{ ...record, organisation_id: orgId }])
+        .select()
+        .single();
+      if (error) throwSupabaseError('asset_check_records.insert', error);
+      return data;
+    } else {
+      initMockDb();
+      const records = getStorageItem('vigilen_asset_check_records', MOCK_ASSET_CHECK_RECORDS);
+      const newRecord: AssetCheckRecord = {
+        ...record,
+        id: `rec-${Math.random().toString(36).substr(2, 9)}`,
+        organisation_id: orgId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      records.push(newRecord);
+      setStorageItem('vigilen_asset_check_records', records);
+      return newRecord;
+    }
+  },
+
+  async getAssetCheckEvidenceLinks(): Promise<AssetCheckEvidenceLink[]> {
+    const profile = await this.getProfile();
+    const orgId = profile.organization_id || '';
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('asset_check_evidence_links')
+        .select('*')
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('asset_check_evidence_links.select', error);
+      return data || [];
+    } else {
+      initMockDb();
+      const links = getStorageItem('vigilen_asset_check_evidence_links', MOCK_ASSET_CHECK_EVIDENCE_LINKS);
+      return links.filter((l: AssetCheckEvidenceLink) => l.organisation_id === orgId);
+    }
+  },
+
+  async linkAssetCheckEvidence(
+    assignmentId: string,
+    recordId: string,
+    documentId: string,
+    assetId: string
+  ): Promise<AssetCheckEvidenceLink> {
+    const profile = await this.getProfile();
+    const orgId = profile.organization_id || '';
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('asset_check_evidence_links')
+        .insert([{
+          organisation_id: orgId,
+          asset_id: assetId,
+          asset_check_assignment_id: assignmentId,
+          asset_check_record_id: recordId,
+          document_id: documentId,
+          created_by: profile.id
+        }])
+        .select()
+        .single();
+      if (error) throwSupabaseError('asset_check_evidence_links.insert', error);
+      return data;
+    } else {
+      initMockDb();
+      const links = getStorageItem('vigilen_asset_check_evidence_links', MOCK_ASSET_CHECK_EVIDENCE_LINKS);
+      const newLink: AssetCheckEvidenceLink = {
+        id: `link-${Math.random().toString(36).substr(2, 9)}`,
+        organisation_id: orgId,
+        asset_id: assetId,
+        asset_check_assignment_id: assignmentId,
+        asset_check_record_id: recordId,
+        document_id: documentId,
+        created_by: profile.id,
+        created_at: new Date().toISOString()
+      };
+      links.push(newLink);
+      setStorageItem('vigilen_asset_check_evidence_links', links);
+      return newLink;
+    }
+  },
+
+  async getAssetRequirementLinks(): Promise<AssetRequirementLink[]> {
+    const profile = await this.getProfile();
+    const orgId = profile.organization_id || '';
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('asset_requirement_links')
+        .select('*')
+        .eq('organisation_id', orgId);
+      if (error) throwSupabaseError('asset_requirement_links.select', error);
+      return data || [];
+    } else {
+      initMockDb();
+      const links = getStorageItem('vigilen_asset_requirement_links', MOCK_ASSET_REQUIREMENT_LINKS);
+      return links.filter((l: AssetRequirementLink) => l.organisation_id === orgId);
+    }
   },
 
   // Private helper to automatically map a uploaded document to a matrix cell if it fits requirements

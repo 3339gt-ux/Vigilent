@@ -30,6 +30,7 @@ const filterTabs = [
   { label: 'Competencies', value: 'competencies' },
   { label: 'Audit Packs', value: 'audit-packs' },
   { label: 'Reports', value: 'reports' },
+  { label: 'Assets', value: 'assets' },
   { label: 'Audit Trail', value: 'audit-trail', adminOnly: true }
 ];
 
@@ -50,6 +51,7 @@ const getTypeIcon = (type: GlobalSearchResult['type']) => {
     case 'audit_pack': return <FolderArchive className="w-3.5 h-3.5 text-indigo-500" />;
     case 'report': return <BarChart3 className="w-3.5 h-3.5 text-slate-500" />;
     case 'audit_trail_event': return <History className="w-3.5 h-3.5 text-rose-500" />;
+    case 'asset': return <ClipboardList className="w-3.5 h-3.5 text-indigo-500" />;
     default: return <Search className="w-3.5 h-3.5" />;
   }
 };
@@ -64,6 +66,7 @@ const getTypeLabel = (type: GlobalSearchResult['type']) => {
     case 'audit_pack': return 'Audit Pack';
     case 'report': return 'Report';
     case 'audit_trail_event': return 'Audit Event';
+    case 'asset': return 'Asset';
     default: return type;
   }
 };
@@ -78,6 +81,7 @@ const getBadgeStyle = (type: GlobalSearchResult['type']) => {
     case 'audit_pack': return 'bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400';
     case 'report': return 'bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-400';
     case 'audit_trail_event': return 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400';
+    case 'asset': return 'bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400';
     default: return 'bg-muted border-border text-muted-foreground';
   }
 };
@@ -90,7 +94,8 @@ export function GlobalSearchPanel({ dropdownAlign = 'sm:right-0 sm:top-full sm:m
     people, 
     competencyTypes, 
     documents, 
-    auditPacks 
+    auditPacks,
+    assets
   } = useApp();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -357,6 +362,29 @@ export function GlobalSearchPanel({ dropdownAlign = 'sm:right-0 sm:top-full sm:m
       } catch (e) {
         console.warn('Failed search local audit trail:', e);
       }
+    }
+
+    // Assets
+    if (tab === 'all' || tab === 'assets') {
+      const matches = (assets || []).filter(a => 
+        (a.status || 'active') === 'active' &&
+        ((a.name || '').toLowerCase().includes(term) || 
+         (a.asset_type || '').toLowerCase().includes(term) || 
+         (a.registration_number || '').toLowerCase().includes(term) || 
+         (a.make || '').toLowerCase().includes(term) || 
+         (a.model || '').toLowerCase().includes(term))
+      );
+      localResults.push(...matches.map(a => ({
+        id: a.id,
+        title: a.name,
+        description: `Reg: ${a.registration_number || 'N/A'} | Type: ${a.asset_type} | Make/Model: ${a.make || ''} ${a.model || ''}`,
+        type: 'asset' as const,
+        status: 'Active',
+        category: a.asset_type,
+        path: `/dashboard/matrix?asset=${a.id}`,
+        relevanceScore: getRelevance(a.name, a.registration_number),
+        additionalInfo: { created_at: a.created_at }
+      })));
     }
 
     // Sort

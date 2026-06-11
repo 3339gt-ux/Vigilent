@@ -1,9 +1,17 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
 import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
-import { MatrixCell, ComplianceRequirement, EvidenceDocument, CellStatus } from '@/lib/types';
+import {
+  Asset,
+  AssetCheckType,
+  AssetCheckAssignment,
+  AssetCheckRecord,
+  AssetCheckEvidenceLink,
+  EvidenceDocument,
+  Action
+} from '@/lib/types';
 import { isDemoMode } from '@/lib/env';
 import { exportCsv, exportDateStamp, ExportRow } from '@/lib/exportData';
 import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
@@ -15,13 +23,22 @@ import {
   CheckCircle2,
   AlertTriangle,
   Clock,
-  FileCheck,
   X,
   Link as LinkIcon,
   FileText,
   UserPlus,
   AlertCircle,
-  Search
+  Search,
+  Settings,
+  Calendar,
+  Trash2,
+  Edit,
+  ClipboardList,
+  Activity,
+  FileCheck,
+  Check,
+  Info,
+  ShieldAlert
 } from 'lucide-react';
 import {
   useFilterFavourites,
@@ -40,157 +57,124 @@ import {
   usePersistentViewState
 } from '@/components/FilterControls';
 
-export default function EvidenceMatrix() {
+export default function AssetMatrix() {
   const {
     user,
     organization,
-    requirements,
-    matrixCells,
+    assets,
+    assetCheckTypes,
+    assetCheckAssignments,
+    assetCheckRecords,
+    assetCheckEvidenceLinks,
     documents,
-    updateCellMapping,
-    createRequirement
+    actions,
+    auditLogs,
+    createAsset,
+    updateAsset,
+    deleteAsset,
+    createAssetCheckType,
+    createAssetCheckAssignment,
+    updateAssetCheckAssignment,
+    createAssetCheckRecord,
+    linkAssetCheckEvidence
   } = useApp();
 
-  // Filter States
+  // Search and Filters
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [selectedTargetType, setSelectedTargetType] = useState<string>('All');
+  const [selectedType, setSelectedType] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
-  const [targetNameFilter, setTargetNameFilter] = useState<string>('All');
-  const [showOnlyGaps, setShowOnlyGaps] = useState(false);
-  const [showOnlyStarredReqs, setShowOnlyStarredReqs] = useState(false);
-  const [showHiddenRows, setShowHiddenRows] = useState(false);
-  const [hiddenMatrixRowIds, setHiddenMatrixRowIds] = useState<Set<string>>(new Set());
-  const [lastHiddenRowUndo, setLastHiddenRowUndo] = useState<null | { ids: string[]; action: 'hide' | 'restore' }>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [density, setDensity] = useState<'comfortable' | 'compact'>('comfortable');
+
+  // Drawers and Modals
+  const [activeAsset, setActiveAsset] = useState<Asset | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'checks' | 'evidence' | 'actions' | 'history' | 'notes'>('overview');
+  
+  const [activeCell, setActiveCell] = useState<{ asset: Asset; checkType: AssetCheckType; assignment?: AssetCheckAssignment } | null>(null);
+  const [showAddAssetModal, setShowAddAssetModal] = useState(false);
+  const [showAddCheckTypeModal, setShowAddCheckTypeModal] = useState(false);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>(null);
   const [toast, setToast] = useState<ToastState>(null);
-  const hiddenRowsStorageKey = `vygilence_hidden_matrix_rows_${user?.id || 'guest'}_${organization?.id || 'workspace'}`;
 
-  // Layout states
-  const [density, setDensity] = useState<'comfortable' | 'compact'>('comfortable');
-  const [showFilters, setShowFilters] = useState(false);
+  // Form states - New Asset
+  const [newAssetName, setNewAssetName] = useState('');
+  const [newAssetType, setNewAssetType] = useState('Vehicle');
+  const [newAssetNumber, setNewAssetNumber] = useState('');
+  const [newAssetReg, setNewAssetReg] = useState('');
+  const [newAssetSerial, setNewAssetSerial] = useState('');
+  const [newAssetMake, setNewAssetMake] = useState('');
+  const [newAssetModel, setNewAssetModel] = useState('');
+  const [newAssetLocation, setNewAssetLocation] = useState('');
+  const [newAssetDept, setNewAssetDept] = useState('');
+  const [newAssetOwner, setNewAssetOwner] = useState('');
+  const [newAssetNotes, setNewAssetNotes] = useState('');
+
+  // Form states - New Check Type
+  const [newCheckTitle, setNewCheckTitle] = useState('');
+  const [newCheckDesc, setNewCheckDesc] = useState('');
+  const [newCheckCategory, setNewCheckCategory] = useState('Vehicle');
+  const [newCheckFreqValue, setNewCheckFreqValue] = useState<number>(12);
+  const [newCheckFreqUnit, setNewCheckFreqUnit] = useState<'days' | 'weeks' | 'months' | 'years'>('months');
+  const [newCheckWarningDays, setNewCheckWarningDays] = useState<number>(30);
+  const [newCheckEvidenceReq, setNewCheckEvidenceReq] = useState(true);
+  const [newCheckRiskLevel, setNewCheckRiskLevel] = useState<'Low' | 'Medium' | 'High' | 'Critical'>('Medium');
+
+  // Form states - New Check Record / Completion Log
+  const [completedDate, setCompletedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [validUntilDate, setValidUntilDate] = useState('');
+  const [checkResult, setCheckResult] = useState('Pass');
+  const [checkReference, setCheckReference] = useState('');
+  const [checkNotes, setCheckNotes] = useState('');
+  const [selectedDocId, setSelectedDocId] = useState('');
+  const [isLoggingCheck, setIsLoggingCheck] = useState(false);
+
   const { interfaceDetailLevel } = useInterfaceDetailLevel();
 
-  const activeFiltersCount = useMemo(() => {
-    return [
-      selectedCategory !== 'All',
-      selectedTargetType !== 'All',
-      statusFilter !== 'All',
-      targetNameFilter !== 'All',
-      showOnlyGaps,
-      showOnlyStarredReqs,
-      showHiddenRows
-    ].filter(Boolean).length;
-  }, [selectedCategory, selectedTargetType, statusFilter, targetNameFilter, showOnlyGaps, showOnlyStarredReqs, showHiddenRows]);
+  // Favourites and Saved Views config
+  const { favourites, toggleFavourite, isFavourite, clearFavourites } = useFilterFavourites(user?.id || 'guest', 'asset-matrix', organization?.id);
 
-  // Modal State for Cell Editing
-  const [activeCell, setActiveCell] = useState<MatrixCell | null>(null);
-  const [selectedDocId, setSelectedDocId] = useState<string>('');
-
-  // Target adding state
-  const [showAddTargetModal, setShowAddTargetModal] = useState(false);
-  const [newTargetName, setNewTargetName] = useState('');
-  const [newTargetType, setNewTargetType] = useState<'Vehicle' | 'Facility' | 'Personnel'>('Vehicle');
-
-  // Requirement adding state
-  const [showAddReqModal, setShowAddReqModal] = useState(false);
-  const [newReqTitle, setNewReqTitle] = useState('');
-  const [newReqDesc, setNewReqDesc] = useState('');
-  const [newReqCategory, setNewReqCategory] = useState<'Vehicle' | 'Driver' | 'Facility' | 'General'>('Vehicle');
-
-  // Starred / favourite options persistence
-  const { favourites, toggleFavourite, isFavourite, clearFavourites, FavouritesConfirmModal } = useFilterFavourites(user?.id || 'guest', 'evidence-matrix', organization?.id);
-
-  // Saved Views System
   const defaultViews: SavedView[] = [
-    {
-      id: 'missing-evidence',
-      name: 'Missing Evidence',
-      filters: { statusFilter: 'Missing' }
-    },
-    {
-      id: 'expired-evidence',
-      name: 'Expired Status',
-      filters: { statusFilter: 'Expired' }
-    },
-    {
-      id: 'expiring-soon',
-      name: 'Expiring Soon',
-      filters: { statusFilter: 'Expiring Soon' }
-    },
-    {
-      id: 'red-amber',
-      name: 'Red/Amber Alerts',
-      filters: { showOnlyGaps: true }
-    }
+    { id: 'overdue-checks', name: 'Overdue Checks', filters: { statusFilter: 'Expired' } },
+    { id: 'expiring-soon-checks', name: 'Due Soon Checks', filters: { statusFilter: 'Expiring Soon' } },
+    { id: 'missing-records', name: 'Missing Evidence', filters: { statusFilter: 'Missing' } }
   ];
 
-  const {
-    allViews,
-    activeViewId,
-    setActiveViewId,
-    saveCurrentView,
-    deleteCustomView
-  } = useSavedViews(user?.id || 'guest', 'evidence-matrix', defaultViews, organization?.id);
+  const { allViews, activeViewId, setActiveViewId, saveCurrentView, deleteCustomView } = useSavedViews(
+    user?.id || 'guest',
+    'asset-matrix',
+    defaultViews,
+    organization?.id
+  );
+
   const { globalDensity, setGlobalDensity } = useGlobalDensityPreference(user?.id || 'guest', organization?.id);
 
-  React.useEffect(() => {
+  // Synchronise Density
+  useEffect(() => {
     if (typeof window === 'undefined') return;
-    try {
-      const stored = JSON.parse(localStorage.getItem(hiddenRowsStorageKey) || '[]');
-      setHiddenMatrixRowIds(new Set(Array.isArray(stored) ? stored.filter((id): id is string => typeof id === 'string') : []));
-    } catch {
-      setHiddenMatrixRowIds(new Set());
-    }
-  }, [hiddenRowsStorageKey]);
+    setDensity(globalDensity);
+  }, [globalDensity]);
 
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(hiddenRowsStorageKey, JSON.stringify(Array.from(hiddenMatrixRowIds)));
-  }, [hiddenMatrixRowIds, hiddenRowsStorageKey]);
-
-  const handleResetFilters = () => {
-    setSearch('');
-    setSelectedCategory('All');
-    setSelectedTargetType('All');
-    setStatusFilter('All');
-    setTargetNameFilter('All');
-    setShowOnlyGaps(false);
-    setShowOnlyStarredReqs(false);
-    setShowHiddenRows(false);
-    setActiveViewId(null);
-  };
-
+  // Handle Saved View Selection
   const handleSelectView = (view: SavedView | null) => {
     if (view === null) {
-      handleResetFilters();
+      setSearch('');
+      setSelectedCategory('All');
+      setSelectedType('All');
+      setStatusFilter('All');
       setActiveViewId(null);
     } else {
       const f = view.filters;
       setSearch(f.search || '');
       setSelectedCategory(f.selectedCategory || 'All');
-      setSelectedTargetType(f.selectedTargetType || 'All');
+      setSelectedType(f.selectedType || 'All');
       setStatusFilter(f.statusFilter || 'All');
-      setTargetNameFilter(f.targetNameFilter || 'All');
-      setShowOnlyGaps(!!f.showOnlyGaps);
-      setShowOnlyStarredReqs(!!f.showOnlyStarredReqs);
-      setShowHiddenRows(!!f.showHiddenRows);
       setActiveViewId(view.id);
     }
   };
 
   const handleSaveView = (name: string) => {
-    const filters = {
-      search,
-      selectedCategory,
-      selectedTargetType,
-      statusFilter,
-      targetNameFilter,
-      showOnlyGaps,
-      showOnlyStarredReqs,
-      showHiddenRows
-    };
-    saveCurrentView(name, filters);
+    saveCurrentView(name, { search, selectedCategory, selectedType, statusFilter });
   };
 
   const isViewModified = useMemo(() => {
@@ -198,484 +182,396 @@ export default function EvidenceMatrix() {
     const activeView = allViews.find(v => v.id === activeViewId);
     if (!activeView) return false;
     const f = activeView.filters;
-
     return !(
       (f.search || '') === search &&
       (f.selectedCategory || 'All') === selectedCategory &&
-      (f.selectedTargetType || 'All') === selectedTargetType &&
-      (f.statusFilter || 'All') === statusFilter &&
-      (f.targetNameFilter || 'All') === targetNameFilter &&
-      (!!f.showOnlyGaps) === showOnlyGaps &&
-      (!!f.showOnlyStarredReqs) === showOnlyStarredReqs &&
-      (!!f.showHiddenRows) === showHiddenRows
+      (f.selectedType || 'All') === selectedType &&
+      (f.statusFilter || 'All') === statusFilter
     );
-  }, [
-    activeViewId,
-    allViews,
-    search,
-    selectedCategory,
-    selectedTargetType,
-    statusFilter,
-    targetNameFilter,
-    showOnlyGaps,
-    showOnlyStarredReqs,
-    showHiddenRows
-  ]);
+  }, [activeViewId, allViews, search, selectedCategory, selectedType, statusFilter]);
 
-  const { storageKey: matrixViewStateKey } = usePersistentViewState(
+  // Unique lists for filters
+  const categoriesList = ['Vehicle', 'Trailer', 'Equipment', 'Material', 'Object', 'Facility'];
+  const assetTypesList = useMemo(() => {
+    return Array.from(new Set(assets.map(a => a.asset_type))).filter(Boolean);
+  }, [assets]);
+
+  // Helper: Get status of a check assignment
+  const getAssignmentStatus = (asg?: AssetCheckAssignment): 'Compliant' | 'Expiring Soon' | 'Expired' | 'Missing' | 'N/A' => {
+    if (!asg || !asg.active || !asg.required) return 'N/A';
+    if (!asg.next_due_date) return 'Missing';
+
+    const due = new Date(asg.next_due_date).getTime();
+    const now = Date.now();
+    const warningLimit = (asg.warning_days || 30) * 24 * 60 * 60 * 1000;
+
+    if (due <= now) return 'Expired';
+    if (due - now <= warningLimit) return 'Expiring Soon';
+    return 'Compliant';
+  };
+
+  // Filter Assets (Rows)
+  const filteredAssets = useMemo(() => {
+    return assets.filter(asset => {
+      if (asset.status === 'archived') return false;
+
+      // Category filter
+      const matchesCategory = selectedCategory === 'All' || asset.category === selectedCategory;
+      // Type filter
+      const matchesType = selectedType === 'All' || asset.asset_type === selectedType;
+      // Search term matching
+      const query = search.toLowerCase();
+      const matchesSearch =
+        asset.name.toLowerCase().includes(query) ||
+        (asset.asset_number || '').toLowerCase().includes(query) ||
+        (asset.registration_number || '').toLowerCase().includes(query) ||
+        (asset.serial_number || '').toLowerCase().includes(query) ||
+        (asset.make || '').toLowerCase().includes(query) ||
+        (asset.model || '').toLowerCase().includes(query);
+
+      // Status Filter
+      const assetAssignments = assetCheckAssignments.filter(a => a.asset_id === asset.id && a.active);
+      let matchesStatus = statusFilter === 'All';
+      if (statusFilter !== 'All') {
+        if (statusFilter === 'N/A' && assetAssignments.length === 0) {
+          matchesStatus = true;
+        } else {
+          matchesStatus = assetAssignments.some(asg => getAssignmentStatus(asg) === statusFilter);
+        }
+      }
+
+      return matchesCategory && matchesType && matchesSearch && matchesStatus;
+    });
+  }, [assets, assetCheckAssignments, selectedCategory, selectedType, search, statusFilter]);
+
+  // Pagination Configuration
+  const pagination = usePagination(
+    filteredAssets,
     user?.id || 'guest',
     organization?.id,
-    'evidence-matrix',
-    {
-      search,
-      selectedCategory,
-      selectedTargetType,
-      statusFilter,
-      targetNameFilter,
-      showOnlyGaps,
-      showOnlyStarredReqs,
-      showHiddenRows,
-      density,
-      activeViewId
-    },
-    stored => {
-      if (typeof stored.search === 'string') setSearch(stored.search);
-      if (typeof stored.selectedCategory === 'string') setSelectedCategory(stored.selectedCategory);
-      if (typeof stored.selectedTargetType === 'string') setSelectedTargetType(stored.selectedTargetType);
-      if (typeof stored.statusFilter === 'string') setStatusFilter(stored.statusFilter);
-      if (typeof stored.targetNameFilter === 'string') setTargetNameFilter(stored.targetNameFilter);
-      if (typeof stored.showOnlyGaps === 'boolean') setShowOnlyGaps(stored.showOnlyGaps);
-      if (typeof stored.showOnlyStarredReqs === 'boolean') setShowOnlyStarredReqs(stored.showOnlyStarredReqs);
-      if (typeof stored.showHiddenRows === 'boolean') setShowHiddenRows(stored.showHiddenRows);
-      if (stored.density === 'comfortable' || stored.density === 'compact') setDensity(stored.density);
-      if (typeof stored.activeViewId === 'string' || stored.activeViewId === null) setActiveViewId(stored.activeViewId);
-    },
-    [search, selectedCategory, selectedTargetType, statusFilter, targetNameFilter, showOnlyGaps, showOnlyStarredReqs, showHiddenRows, density, activeViewId]
+    'asset-matrix-rows',
+    [search, selectedCategory, selectedType, statusFilter]
   );
 
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
+  const bulkSelection = useBulkSelection(pagination.paginatedItems);
+
+  // Auto-fill expiry date based on completed date and check frequency
+  useEffect(() => {
+    if (!activeCell || !completedDate) return;
+    const type = activeCell.checkType;
+    const value = activeCell.assignment?.frequency_value || type.default_frequency_value || 12;
+    const unit = activeCell.assignment?.frequency_unit || type.default_frequency_unit || 'months';
+
+    const date = new Date(completedDate);
+    if (unit === 'days') date.setDate(date.getDate() + value);
+    else if (unit === 'weeks') date.setDate(date.getDate() + value * 7);
+    else if (unit === 'months') date.setMonth(date.getMonth() + value);
+    else if (unit === 'years') date.setFullYear(date.getFullYear() + value);
+
+    setValidUntilDate(date.toISOString().split('T')[0]);
+  }, [completedDate, activeCell]);
+
+  // Save new asset registration
+  const handleRegisterAsset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAssetName) return;
+
     try {
-      const stored = JSON.parse(localStorage.getItem(matrixViewStateKey) || '{}');
-      if (!stored.density) setDensity(globalDensity);
-    } catch {
-      setDensity(globalDensity);
-    }
-  }, [globalDensity, matrixViewStateKey]);
-
-  React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const filterParam = params.get('filter');
-      const reqId = params.get('requirement');
-      const targetName = params.get('asset') || params.get('target');
-
-      if (reqId && targetName && matrixCells.length > 0) {
-        const cell = matrixCells.find(c => c.requirement_id === reqId && c.target_name === targetName);
-        if (cell) {
-          handleCellClick(cell);
-        }
-      } else if (reqId && requirements.length > 0) {
-        const req = requirements.find(r => r.id === reqId);
-        if (req) {
-          setSearch(req.title);
-        }
-      }
-
-      if (filterParam) {
-        if (filterParam.startsWith('req:')) {
-          const rId = filterParam.replace('req:', '');
-          const req = requirements.find(r => r.id === rId);
-          if (req) {
-            setSearch(req.title);
-          }
-        } else if (filterParam.startsWith('cat:')) {
-          const catName = filterParam.replace('cat:', '');
-          setSelectedCategory(catName);
-        } else if (filterParam.startsWith('target:')) {
-          const targetNameVal = filterParam.replace('target:', '');
-          setTargetNameFilter(targetNameVal);
-        }
-      }
-    }
-  }, [requirements, matrixCells]);
-
-  const filterChips = useMemo(() => {
-    const chips: any[] = [];
-    if (search) {
-      chips.push({
-        key: 'search',
-        label: 'Search',
-        valueLabel: search,
-        onClear: () => setSearch('')
+      const created = await createAsset({
+        organisation_id: organization?.id || '',
+        name: newAssetName,
+        asset_type: newAssetType,
+        category: newAssetType, // Simple mapping
+        asset_number: newAssetNumber || null,
+        registration_number: newAssetReg || null,
+        serial_number: newAssetSerial || null,
+        make: newAssetMake || null,
+        model: newAssetModel || null,
+        location: newAssetLocation || null,
+        department: newAssetDept || null,
+        owner: newAssetOwner || null,
+        status: 'active',
+        notes: newAssetNotes || null,
+        archived_at: null
       });
+
+      // Automatically assign check types that match this category
+      const matchingCheckTypes = assetCheckTypes.filter(ct => ct.category === newAssetType && ct.active);
+      await Promise.all(
+        matchingCheckTypes.map(ct =>
+          createAssetCheckAssignment({
+            organisation_id: organization?.id || '',
+            asset_id: created.id,
+            asset_check_type_id: ct.id,
+            required: true,
+            frequency_value: ct.default_frequency_value,
+            frequency_unit: ct.default_frequency_unit,
+            warning_days: ct.default_warning_days,
+            first_due_date: null,
+            next_due_date: null,
+            last_completed_date: null,
+            last_expiry_date: null,
+            status: 'Missing',
+            notes: null,
+            active: true
+          })
+        )
+      );
+
+      setToast({ type: 'success', message: `Registered asset "${newAssetName}" and assigned ${matchingCheckTypes.length} compliance checks.` });
+      setShowAddAssetModal(false);
+      resetAssetForm();
+    } catch (err) {
+      setToast({ type: 'error', message: 'Failed to register new asset.' });
     }
-    if (selectedCategory !== 'All') {
-      chips.push({
-        key: 'category',
-        label: 'Category',
-        valueLabel: selectedCategory,
-        onClear: () => setSelectedCategory('All')
-      });
-    }
-    if (selectedTargetType !== 'All') {
-      chips.push({
-        key: 'targetType',
-        label: 'Asset Type',
-        valueLabel: selectedTargetType,
-        onClear: () => setSelectedTargetType('All')
-      });
-    }
-    if (statusFilter !== 'All') {
-      chips.push({
-        key: 'status',
-        label: 'Status',
-        valueLabel: statusFilter,
-        onClear: () => setStatusFilter('All')
-      });
-    }
-    if (targetNameFilter !== 'All') {
-      chips.push({
-        key: 'targetName',
-        label: 'Asset Name',
-        valueLabel: targetNameFilter,
-        onClear: () => setTargetNameFilter('All')
-      });
-    }
-    if (showOnlyGaps) {
-      chips.push({
-        key: 'gaps',
-        label: 'Show Only',
-        valueLabel: 'Gaps (Alerts)',
-        onClear: () => setShowOnlyGaps(false)
-      });
-    }
-    if (showOnlyStarredReqs) {
-      chips.push({
-        key: 'starred',
-        label: 'Show Only',
-        valueLabel: 'Favourite Requirements',
-        onClear: () => setShowOnlyStarredReqs(false)
-      });
-    }
-    if (showHiddenRows) {
-      chips.push({
-        key: 'hidden',
-        label: 'Display',
-        valueLabel: 'Hidden Rows',
-        onClear: () => setShowHiddenRows(false)
-      });
-    }
-    return chips;
-  }, [
-    search,
-    selectedCategory,
-    selectedTargetType,
-    statusFilter,
-    targetNameFilter,
-    showOnlyGaps,
-    showOnlyStarredReqs,
-    showHiddenRows
-  ]);
-
-  // Find unique targets across the cells
-  const uniqueTargets = useMemo(() => {
-    return Array.from(new Set(matrixCells.map(c => c.target_name))).map(name => {
-      const matchingCell = matrixCells.find(c => c.target_name === name);
-      return {
-        name,
-        type: matchingCell ? matchingCell.target_type : 'Vehicle'
-      };
-    });
-  }, [matrixCells]);
-
-  // Dropdown list sorting
-  const categoriesList = ['Vehicle', 'Driver', 'Facility', 'General'];
-  const sortedCategories = useMemo(() => {
-    const starred = categoriesList.filter(c => isFavourite(`cat:${c}`));
-    const regular = categoriesList.filter(c => !isFavourite(`cat:${c}`));
-    return [...starred, ...regular];
-  }, [favourites]);
-
-  const targetNames = useMemo(() => {
-    return Array.from(new Set(uniqueTargets.map(t => t.name)));
-  }, [uniqueTargets]);
-
-  const sortedTargets = useMemo(() => {
-    const starred = targetNames.filter(t => isFavourite(`target:${t}`));
-    const regular = targetNames.filter(t => !isFavourite(`target:${t}`));
-    return [...starred, ...regular];
-  }, [targetNames, favourites]);
-
-  // Filter targets based on selection
-  const filteredTargets = useMemo(() => {
-    return uniqueTargets.filter(t => {
-      const matchesType = selectedTargetType === 'All' || t.type === selectedTargetType;
-      const matchesName = targetNameFilter === 'All' || t.name === targetNameFilter;
-      return matchesType && matchesName;
-    });
-  }, [uniqueTargets, selectedTargetType, targetNameFilter]);
-
-  // Filter requirements based on selection
-  const filteredRequirements = useMemo(() => {
-    return requirements.filter(r => {
-      const isHidden = hiddenMatrixRowIds.has(r.id);
-      if (!showHiddenRows && isHidden) return false;
-      const matchesCategory = selectedCategory === 'All' || r.category === selectedCategory;
-      const matchesSearch = r.title.toLowerCase().includes(search.toLowerCase()) ||
-                            (r.description || '').toLowerCase().includes(search.toLowerCase());
-      const matchesStarred = !showOnlyStarredReqs || isFavourite(`req:${r.id}`);
-
-      // Filter based on whether any cell matches status filter or gaps
-      const reqCells = matrixCells.filter(c => c.requirement_id === r.id);
-
-      const matchesStatus = statusFilter === 'All' || reqCells.some(c => c.status === statusFilter);
-      const matchesGaps = !showOnlyGaps || reqCells.some(c => c.status === 'Missing' || c.status === 'Expired' || c.status === 'Expiring Soon');
-
-      return matchesCategory && matchesSearch && matchesStarred && matchesStatus && matchesGaps;
-    });
-  }, [requirements, hiddenMatrixRowIds, showHiddenRows, selectedCategory, search, showOnlyStarredReqs, statusFilter, showOnlyGaps, matrixCells, favourites, isFavourite]);
-
-  const matrixPagination = usePagination(
-    filteredRequirements,
-    user?.id || 'guest',
-    organization?.id,
-    'evidence-matrix-rows',
-    [search, selectedCategory, selectedTargetType, statusFilter, targetNameFilter, showOnlyGaps, showOnlyStarredReqs, showHiddenRows]
-  );
-  const matrixRowSelection = useBulkSelection(matrixPagination.paginatedItems);
-
-  const matrixExportRows = (rows: ComplianceRequirement[]): ExportRow[] => {
-    const result: ExportRow[] = [];
-    rows.forEach(requirement => {
-      filteredTargets.forEach(target => {
-        const cell = matrixCells.find(item => item.requirement_id === requirement.id && item.target_name === target.name);
-        const doc = cell?.document_id ? documents.find(item => item.id === cell.document_id) : null;
-        result.push({
-          requirement_title: requirement.title,
-          requirement_category: requirement.category,
-          target_name: target.name,
-          target_type: target.type,
-          status: cell?.status || 'N/A',
-          linked_document_title: doc?.title || '',
-          linked_document_category: doc?.category || '',
-          linked_document_expiry: doc?.expiry_date || ''
-        });
-      });
-    });
-    return result;
   };
 
-  const exportMatrix = (scope: 'selected' | 'filtered') => {
-    const rows = scope === 'selected'
-      ? filteredRequirements.filter(requirement => matrixRowSelection.selectedIds.has(requirement.id))
-      : filteredRequirements;
-
-    setConfirmRequest({
-      title: 'Export Evidence Matrix?',
-      description: `You are about to export ${rows.length} requirement-target mappings as a CSV file. Do you want to download this data?`,
-      confirmLabel: 'Export CSV',
-      tone: 'primary',
-      onConfirm: () => {
-        try {
-          exportCsv(`vygilence-evidence-matrix-${scope}-export-${exportDateStamp()}.csv`, matrixExportRows(rows));
-          setToast({ type: 'success', message: 'Evidence Matrix exported successfully.' });
-        } catch (e) {
-          setToast({ type: 'error', message: 'Failed to export Evidence Matrix.' });
-        }
-      }
-    });
+  const resetAssetForm = () => {
+    setNewAssetName('');
+    setNewAssetNumber('');
+    setNewAssetReg('');
+    setNewAssetSerial('');
+    setNewAssetMake('');
+    setNewAssetModel('');
+    setNewAssetLocation('');
+    setNewAssetDept('');
+    setNewAssetOwner('');
+    setNewAssetNotes('');
   };
 
-  // Handle cell click
-  function handleCellClick(cell: MatrixCell) {
-    setActiveCell(cell);
-    setSelectedDocId(cell.document_id || '');
-  }
+  // Add Custom Check Type
+  const handleAddCheckType = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCheckTitle) return;
 
-  // Save cell link mapping
-  const handleSaveCellLink = async () => {
+    try {
+      const ct = await createAssetCheckType({
+        organisation_id: organization?.id || '',
+        title: newCheckTitle,
+        category: newCheckCategory,
+        description: newCheckDesc || null,
+        default_frequency_value: newCheckFreqValue || 12,
+        default_frequency_unit: newCheckFreqUnit,
+        default_warning_days: newCheckWarningDays || 30,
+        evidence_required: newCheckEvidenceReq,
+        risk_level: newCheckRiskLevel,
+        default_status: 'Missing',
+        active: true
+      });
+
+      // Automatically assign to existing assets of that category
+      const matchingAssets = assets.filter(a => a.category === newCheckCategory && a.status === 'active');
+      await Promise.all(
+        matchingAssets.map(a =>
+          createAssetCheckAssignment({
+            organisation_id: organization?.id || '',
+            asset_id: a.id,
+            asset_check_type_id: ct.id,
+            required: true,
+            frequency_value: ct.default_frequency_value,
+            frequency_unit: ct.default_frequency_unit,
+            warning_days: ct.default_warning_days,
+            first_due_date: null,
+            next_due_date: null,
+            last_completed_date: null,
+            last_expiry_date: null,
+            status: 'Missing',
+            notes: null,
+            active: true
+          })
+        )
+      );
+
+      setToast({ type: 'success', message: `Created check type "${newCheckTitle}" and assigned it to ${matchingAssets.length} matching assets.` });
+      setShowAddCheckTypeModal(false);
+      setNewCheckTitle('');
+      setNewCheckDesc('');
+    } catch (err) {
+      setToast({ type: 'error', message: 'Failed to create compliance check type.' });
+    }
+  };
+
+  // Log completion of check
+  const handleLogCheckCompletion = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!activeCell) return;
+    setIsLoggingCheck(true);
 
-    let nextStatus: CellStatus = 'Missing';
-    if (selectedDocId) {
-      const doc = documents.find(d => d.id === selectedDocId);
-      if (doc) {
-        if (doc.status === 'Expired') nextStatus = 'Expired';
-        else if (doc.status === 'Expiring Soon') nextStatus = 'Expiring Soon';
-        else nextStatus = 'Compliant';
-      }
-    }
+    try {
+      const { asset, checkType, assignment } = activeCell;
 
-    await updateCellMapping(activeCell.id, selectedDocId || null, nextStatus);
-    setActiveCell(null);
-  };
-
-  const handleHideSelectedRows = () => {
-    const ids = Array.from(matrixRowSelection.selectedIds).filter(id => !hiddenMatrixRowIds.has(id));
-    if (ids.length === 0) return;
-    setConfirmRequest({
-      title: 'Hide selected matrix rows?',
-      description: `Hide ${ids.length} selected active matrix row(s). This is a personal workspace display preference and does not change readiness scoring or evidence links.`,
-      confirmLabel: 'Hide rows',
-      tone: 'warning',
-      onConfirm: () => {
-        setHiddenMatrixRowIds(prev => {
-          const next = new Set(prev);
-          ids.forEach(id => next.add(id));
-          return next;
-        });
-        setLastHiddenRowUndo({ ids, action: 'hide' });
-        matrixRowSelection.clearSelection();
-        setToast({ type: 'success', message: `${ids.length} matrix row(s) hidden from your active view.` });
-      }
-    });
-  };
-
-  const handleRestoreSelectedRows = () => {
-    const ids = Array.from(matrixRowSelection.selectedIds).filter(id => hiddenMatrixRowIds.has(id));
-    if (ids.length === 0) return;
-    setConfirmRequest({
-      title: 'Restore selected matrix rows?',
-      description: `Restore ${ids.length} hidden matrix row(s) to the normal view.`,
-      confirmLabel: 'Restore rows',
-      tone: 'primary',
-      onConfirm: () => {
-        setHiddenMatrixRowIds(prev => {
-          const next = new Set(prev);
-          ids.forEach(id => next.delete(id));
-          return next;
-        });
-        setLastHiddenRowUndo({ ids, action: 'restore' });
-        matrixRowSelection.clearSelection();
-        setToast({ type: 'success', message: `${ids.length} matrix row(s) restored to the normal view.` });
-      }
-    });
-  };
-
-  const handleRestoreAllHiddenRows = () => {
-    const count = hiddenMatrixRowIds.size;
-    if (count === 0) return;
-    const oldIds = Array.from(hiddenMatrixRowIds);
-    setConfirmRequest({
-      title: 'Restore all hidden matrix rows?',
-      description: `Restore all ${count} hidden row(s) to the normal view.`,
-      confirmLabel: 'Restore all',
-      tone: 'primary',
-      onConfirm: () => {
-        setHiddenMatrixRowIds(new Set());
-        setLastHiddenRowUndo({ ids: oldIds, action: 'restore' });
-        matrixRowSelection.clearSelection();
-        setToast({ type: 'success', message: `${count} matrix row(s) restored to the normal view.` });
-      }
-    });
-  };
-
-  const undoMatrixRowVisibility = () => {
-    if (!lastHiddenRowUndo) return;
-    setHiddenMatrixRowIds(prev => {
-      const next = new Set(prev);
-      lastHiddenRowUndo.ids.forEach(id => {
-        if (lastHiddenRowUndo.action === 'hide') next.delete(id);
-        else next.add(id);
+      // 1. Create check record
+      const record = await createAssetCheckRecord({
+        organisation_id: organization?.id || '',
+        asset_id: asset.id,
+        asset_check_type_id: checkType.id,
+        asset_check_assignment_id: assignment?.id || null,
+        completed_at: new Date(completedDate).toISOString(),
+        valid_from: new Date(completedDate).toISOString(),
+        valid_until: validUntilDate ? new Date(validUntilDate).toISOString() : null,
+        result_status: checkResult,
+        performed_by: user?.full_name || 'System Operator',
+        reference: checkReference || null,
+        notes: checkNotes || null
       });
-      return next;
-    });
-    setLastHiddenRowUndo(null);
-    setToast({ type: 'success', message: 'Matrix row visibility change undone.' });
-  };
 
-  // Add a new target entity
-  const handleAddTarget = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTargetName) return;
-    if (!isDemoMode) {
-      setToast({ type: 'info', message: 'Asset registration requires a production database mutation path before it can be enabled.' });
-      return;
-    }
+      // 2. Link evidence document if selected
+      if (selectedDocId) {
+        await linkAssetCheckEvidence(
+          assignment?.id || '',
+          record.id,
+          selectedDocId,
+          asset.id
+        );
+      }
 
-    // In local context, we add blank cell linkages for this target across matching requirements
-    const matchedReqs = requirements.filter(r => {
-      if (newTargetType === 'Vehicle' && r.category === 'Vehicle') return true;
-      if (newTargetType === 'Personnel' && r.category === 'Driver') return true;
-      if (newTargetType === 'Facility' && (r.category === 'Facility' || r.category === 'General')) return true;
-      return false;
-    });
-
-    // We trigger updating cells locally via local storage
-    if (typeof window !== 'undefined') {
-      const cells = JSON.parse(localStorage.getItem('vigilen_cells') || '[]');
-      matchedReqs.forEach(req => {
-        const id = `cell-${Math.random().toString(36).substr(2, 9)}`;
-        cells.push({
-          id,
-          organization_id: req.organization_id,
-          requirement_id: req.id,
-          target_name: newTargetName,
-          target_type: newTargetType,
-          document_id: null,
-          status: 'Missing',
-          last_checked_at: new Date().toISOString()
+      // 3. Update assignment state with last date & calculate next due date
+      if (assignment) {
+        const nextDue = validUntilDate ? new Date(validUntilDate).toISOString() : null;
+        await updateAssetCheckAssignment(assignment.id, {
+          last_completed_date: new Date(completedDate).toISOString(),
+          last_expiry_date: validUntilDate ? new Date(validUntilDate).toISOString() : null,
+          next_due_date: nextDue,
+          status: checkResult === 'Pass' ? 'Compliant' : 'Failed'
         });
-      });
-      localStorage.setItem('vigilen_cells', JSON.stringify(cells));
+      }
 
-      // Seed audit log
-      const logs = JSON.parse(localStorage.getItem('vigilen_logs') || '[]');
-      logs.unshift({
-        id: `log-${Math.random().toString(36).substr(2, 9)}`,
-        organization_id: 'org-apex-101',
-        profile_id: 'usr-jane-doe',
-        action: 'Asset Registered',
-        details: `Registered new target asset "${newTargetName}" (${newTargetType}) inside matrix grid.`,
-        created_at: new Date().toISOString()
-      });
-      localStorage.setItem('vigilen_logs', JSON.stringify(logs));
-
-      // Reload page location to reflect context re-init
-      window.location.reload();
+      setToast({ type: 'success', message: `Recorded check completion for ${asset.name}.` });
+      setActiveCell(null);
+      resetLogForm();
+    } catch (err) {
+      setToast({ type: 'error', message: 'Failed to save check completion log.' });
+    } finally {
+      setIsLoggingCheck(false);
     }
   };
 
-  // Add compliance requirement
-  const handleAddRequirement = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newReqTitle) return;
-
-    await createRequirement(newReqTitle, newReqDesc, newReqCategory);
-    setNewReqTitle('');
-    setNewReqDesc('');
-    setShowAddReqModal(false);
+  const resetLogForm = () => {
+    setCompletedDate(new Date().toISOString().split('T')[0]);
+    setValidUntilDate('');
+    setCheckResult('Pass');
+    setCheckReference('');
+    setCheckNotes('');
+    setSelectedDocId('');
   };
 
-  const paddingClass = density === 'comfortable' ? 'p-4' : 'p-2';
+  // Delete Asset
+  const handleDeleteAsset = (assetId: string) => {
+    const asset = assets.find(a => a.id === assetId);
+    if (!asset) return;
+
+    setConfirmRequest({
+      title: 'Permanently delete asset?',
+      description: `You are about to delete asset "${asset.name}" and all associated checks and compliance history. This cannot be undone.`,
+      confirmLabel: 'Delete Asset',
+      tone: 'danger',
+      onConfirm: async () => {
+        try {
+          await deleteAsset(assetId);
+          setToast({ type: 'success', message: `Deleted asset "${asset.name}".` });
+          setActiveAsset(null);
+        } catch (e) {
+          setToast({ type: 'error', message: 'Failed to delete asset.' });
+        }
+      }
+    });
+  };
+
+  // CSV Export
+  const handleExportMatrix = () => {
+    const exportRows: ExportRow[] = [];
+    filteredAssets.forEach(asset => {
+      assetCheckTypes.forEach(ct => {
+        const asg = assetCheckAssignments.find(a => a.asset_id === asset.id && a.asset_check_type_id === ct.id);
+        const status = getAssignmentStatus(asg);
+        if (status !== 'N/A') {
+          exportRows.push({
+            asset_name: asset.name,
+            asset_number: asset.asset_number || '',
+            registration: asset.registration_number || '',
+            serial_number: asset.serial_number || '',
+            asset_type: asset.asset_type,
+            check_name: ct.title,
+            status: status,
+            next_due_date: asg?.next_due_date || '',
+            last_completed: asg?.last_completed_date || ''
+          });
+        }
+      });
+    });
+
+    try {
+      exportCsv(`vygilence-asset-matrix-export-${exportDateStamp()}.csv`, exportRows);
+      setToast({ type: 'success', message: 'Asset assurance report exported successfully.' });
+    } catch (e) {
+      setToast({ type: 'error', message: 'Failed to export CSV.' });
+    }
+  };
+
+  // Calculations for KPI Cards
+  const statsSummary = useMemo(() => {
+    let totalAssigned = 0;
+    let compliant = 0;
+    let dueSoon = 0;
+    let overdue = 0;
+    let missing = 0;
+
+    assetCheckAssignments.forEach(asg => {
+      if (!asg.active || !asg.required) return;
+      totalAssigned++;
+      const status = getAssignmentStatus(asg);
+      if (status === 'Compliant') compliant++;
+      else if (status === 'Expiring Soon') dueSoon++;
+      else if (status === 'Expired') overdue++;
+      else if (status === 'Missing') missing++;
+    });
+
+    const totalCalculated = compliant + dueSoon + overdue + missing;
+    const compliancePercent = totalCalculated > 0 ? Math.round((compliant / totalCalculated) * 100) : 100;
+
+    return {
+      totalAssets: assets.filter(a => a.status === 'active').length,
+      totalAssigned,
+      compliant,
+      dueSoon,
+      overdue,
+      missing,
+      compliancePercent
+    };
+  }, [assets, assetCheckAssignments]);
+
+  const paddingClass = density === 'comfortable' ? 'p-4' : 'p-2.5';
   const textClass = density === 'comfortable' ? 'text-xs' : 'text-[11px]';
 
   return (
     <div className="space-y-6">
       <InlineToast toast={toast} onDismiss={() => setToast(null)} />
+      <ConfirmDialog request={confirmRequest} onCancel={() => setConfirmRequest(null)} />
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      {/* Header Banner */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight" id="matrix-heading">Evidence Matrix</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2" id="matrix-heading">
+            <Activity className="w-8 h-8 text-indigo-500 animate-pulse" />
+            Asset Matrix
+          </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Visual evidence catalog mapping requirements to personnel, fleets, and facilities.
+            Real-time compliance ledger and asset maintenance system mapping operations checklist.
           </p>
         </div>
 
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => setShowAddReqModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-muted hover:bg-muted/80 text-foreground border border-border text-xs font-semibold rounded-lg cursor-pointer"
+            onClick={() => setShowAddCheckTypeModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-muted hover:bg-muted/80 text-foreground border border-border text-xs font-semibold rounded-lg transition-colors cursor-pointer"
             id="matrix-add-requirement-btn"
           >
-            <Plus className="w-4 h-4" /> Add Requirement
+            <Settings className="w-4 h-4" /> Customise Checks
           </button>
 
           <button
-            onClick={() => setShowAddTargetModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-650 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-md cursor-pointer"
+            onClick={() => setShowAddAssetModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-650 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-md hover:shadow-lg transition-all cursor-pointer"
             id="matrix-add-target-btn"
           >
             <UserPlus className="w-4 h-4" /> Register Asset
@@ -683,544 +579,284 @@ export default function EvidenceMatrix() {
         </div>
       </div>
 
-      {/* Filter Ribbon */}
-      <div className="bg-card border border-border p-3 rounded-xl space-y-2.5 shadow-xs">
-        {interfaceDetailLevel === 'focused' ? (
-          // FOCUSED VIEW LAYOUT
-          <>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <div className="flex flex-wrap items-center gap-2 w-full">
-                <div className="relative flex-1 min-w-[200px]">
-                  <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    value={search}
-                    onChange={event => setSearch(event.target.value)}
-                    placeholder="Search requirements by title, description..."
-                    className="w-full pl-9 pr-3 py-2 bg-muted border border-border rounded-lg text-xs outline-none text-foreground placeholder-muted-foreground"
-                  />
-                </div>
-                <FiltersAndToolsButton
-                  isOpen={showFilters}
-                  onClick={() => setShowFilters(!showFilters)}
-                  activeFiltersCount={activeFiltersCount}
-                  onClearFilters={handleResetFilters}
-                />
-                {hiddenMatrixRowIds.size > 0 && (
-                  <div className="flex items-center gap-1 text-xs font-bold px-2 py-1 bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 rounded-lg shrink-0">
-                    <span className="text-[11px] text-amber-700 dark:text-amber-400">Hidden rows · {hiddenMatrixRowIds.size}</span>
-                    <button
-                      type="button"
-                      onClick={handleRestoreAllHiddenRows}
-                      className="text-[11px] text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 font-extrabold cursor-pointer focus:underline ml-1.5"
-                    >
-                      Restore all
-                    </button>
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={() => exportMatrix('filtered')}
-                  className="px-3 py-2 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground text-xs flex items-center gap-1.5 cursor-pointer shrink-0 ml-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Export</span>
-                </button>
-              </div>
-            </div>
-
-            <AdvancedControlsPanel isOpen={showFilters} onClose={() => setShowFilters(false)}>
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={hiddenMatrixRowIds.size === 0}
-                      onClick={() => setShowHiddenRows(!showHiddenRows)}
-                      className={`px-3 py-2 border rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                        showHiddenRows
-                          ? 'bg-amber-500/10 border-amber-500/25 text-amber-700 dark:text-amber-400'
-                          : 'bg-muted hover:bg-muted/80 border-border text-foreground'
-                      }`}
-                    >
-                      <span>Show Hidden Rows ({hiddenMatrixRowIds.size})</span>
-                    </button>
-                    {hiddenMatrixRowIds.size > 0 && (
-                      <button
-                        type="button"
-                        onClick={handleRestoreAllHiddenRows}
-                        className="px-3 py-2 bg-muted hover:bg-rose-500/10 text-muted-foreground hover:text-rose-600 border border-border rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
-                      >
-                        Restore all hidden
-                      </button>
-                    )}
-                  </div>
-
-                  <DensityControls
-                    density={density}
-                    onDensityChange={setDensity}
-                    globalDensity={globalDensity}
-                    onGlobalDensityChange={nextDensity => {
-                      setGlobalDensity(nextDensity);
-                      setDensity(nextDensity);
-                    }}
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                  <StarredFilterSelect
-                    label="Category"
-                    value={selectedCategory}
-                    onChange={setSelectedCategory}
-                    options={['All', ...sortedCategories]}
-                    isStarred={(opt) => isFavourite(`cat:${opt}`)}
-                    onToggleStar={(opt) => toggleFavourite(`cat:${opt}`, opt, 'Category')}
-                    allLabel="All Categories"
-                  />
-                  <StarredFilterSelect
-                    label="Asset"
-                    value={targetNameFilter}
-                    onChange={setTargetNameFilter}
-                    options={['All', ...sortedTargets]}
-                    isStarred={(opt) => isFavourite(`target:${opt}`)}
-                    onToggleStar={(opt) => toggleFavourite(`target:${opt}`, opt, 'Target Asset')}
-                    allLabel="All Assets"
-                  />
-                  <StarredFilterSelect
-                    label="Status"
-                    value={statusFilter}
-                    onChange={setStatusFilter}
-                    options={['All', 'Compliant', 'Expiring Soon', 'Expired', 'Missing']}
-                    isStarred={(opt) => isFavourite(`status:${opt}`)}
-                    onToggleStar={(opt) => toggleFavourite(`status:${opt}`, opt, 'Status')}
-                  />
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Asset Type</label>
-                    <select
-                      value={selectedTargetType}
-                      onChange={event => setSelectedTargetType(event.target.value)}
-                      className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
-                    >
-                      <option value="All">All Types</option>
-                      <option value="Vehicle">Vehicle</option>
-                      <option value="Personnel">Personnel / Driver</option>
-                      <option value="Facility">Facility</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-border/40 text-xs">
-                  <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={showOnlyGaps}
-                      onChange={e => setShowOnlyGaps(e.target.checked)}
-                      className="accent-indigo-650 w-3.5 h-3.5"
-                    />
-                    <span>Red/Amber Status Gaps only</span>
-                  </label>
-                  <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={showOnlyStarredReqs}
-                      onChange={e => setShowOnlyStarredReqs(e.target.checked)}
-                      className="accent-indigo-650 w-3.5 h-3.5"
-                    />
-                    <span>Favourite Requirements only</span>
-                  </label>
-                  <label className={`flex items-center gap-2 font-semibold text-foreground cursor-pointer ${hiddenMatrixRowIds.size === 0 ? 'opacity-40 cursor-not-allowed' : ''}`}>
-                    <input
-                      type="checkbox"
-                      disabled={hiddenMatrixRowIds.size === 0}
-                      checked={showHiddenRows}
-                      onChange={e => setShowHiddenRows(e.target.checked)}
-                      className="accent-indigo-650 w-3.5 h-3.5 disabled:cursor-not-allowed"
-                    />
-                    <span>Show hidden rows ({hiddenMatrixRowIds.size})</span>
-                  </label>
-                </div>
-
-                <SavedViewsBar
-                  views={allViews}
-                  activeViewId={activeViewId}
-                  onSelectView={handleSelectView}
-                  onSaveCurrent={handleSaveView}
-                  onDeleteCustom={deleteCustomView}
-                  isViewModified={isViewModified}
-                />
-              </div>
-            </AdvancedControlsPanel>
-          </>
-        ) : (
-          // ADVANCED VIEW LAYOUT
-          <>
-            <div className="flex flex-col md:flex-row gap-3">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  value={search}
-                  onChange={event => setSearch(event.target.value)}
-                  placeholder="Search requirements by title, description..."
-                  className="w-full pl-9 pr-3 py-2 bg-muted border border-border rounded-lg text-xs outline-none text-foreground placeholder-muted-foreground"
-                />
-              </div>
-
-              <div className="flex flex-wrap gap-2 items-center">
-                <button
-                  type="button"
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={`px-3 py-2 border rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                    showFilters || filterChips.length > 0
-                      ? 'bg-indigo-55 border-indigo-200 text-indigo-750 dark:bg-indigo-950/30 dark:border-indigo-900/50 dark:text-indigo-400'
-                      : 'bg-muted hover:bg-muted/80 border-border text-foreground'
-                  }`}
-                >
-                  Filters {(filterChips.length > 0) && <span className="bg-indigo-650 text-white dark:bg-indigo-600 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold">{filterChips.length}</span>}
-                </button>
-
-                <button
-                  type="button"
-                  disabled={hiddenMatrixRowIds.size === 0}
-                  onClick={() => setShowHiddenRows(!showHiddenRows)}
-                  className={`px-3 py-2 border rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                    showHiddenRows
-                      ? 'bg-amber-500/10 border-amber-500/25 text-amber-700 dark:text-amber-400'
-                      : 'bg-muted hover:bg-muted/80 border-border text-foreground'
-                  }`}
-                >
-                  <span>Hidden rows ({hiddenMatrixRowIds.size})</span>
-                </button>
-
-                {hiddenMatrixRowIds.size > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleRestoreAllHiddenRows}
-                    className="px-3 py-2 bg-muted hover:bg-rose-500/10 text-muted-foreground hover:text-rose-600 border border-border rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
-                  >
-                    Restore all hidden
-                  </button>
-                )}
-
-                <DensityControls
-                  density={density}
-                  onDensityChange={setDensity}
-                  globalDensity={globalDensity}
-                  onGlobalDensityChange={nextDensity => {
-                    setGlobalDensity(nextDensity);
-                    setDensity(nextDensity);
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Collapsible advanced filters */}
-            {showFilters && (
-              <div className="border-t border-border/60 pt-3 mt-3 space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                  <StarredFilterSelect
-                    label="Category"
-                    value={selectedCategory}
-                    onChange={setSelectedCategory}
-                    options={['All', ...sortedCategories]}
-                    isStarred={(opt) => isFavourite(`cat:${opt}`)}
-                    onToggleStar={(opt) => toggleFavourite(`cat:${opt}`, opt, 'Category')}
-                    allLabel="All Categories"
-                  />
-                  <StarredFilterSelect
-                    label="Asset"
-                    value={targetNameFilter}
-                    onChange={setTargetNameFilter}
-                    options={['All', ...sortedTargets]}
-                    isStarred={(opt) => isFavourite(`target:${opt}`)}
-                    onToggleStar={(opt) => toggleFavourite(`target:${opt}`, opt, 'Target Asset')}
-                    allLabel="All Assets"
-                  />
-                  <StarredFilterSelect
-                    label="Status"
-                    value={statusFilter}
-                    onChange={setStatusFilter}
-                    options={['All', 'Compliant', 'Expiring Soon', 'Expired', 'Missing']}
-                    isStarred={(opt) => isFavourite(`status:${opt}`)}
-                    onToggleStar={(opt) => toggleFavourite(`status:${opt}`, opt, 'Status')}
-                  />
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Asset Type</label>
-                    <select
-                      value={selectedTargetType}
-                      onChange={event => setSelectedTargetType(event.target.value)}
-                      className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
-                    >
-                      <option value="All">All Types</option>
-                      <option value="Vehicle">Vehicle</option>
-                      <option value="Personnel">Personnel / Driver</option>
-                      <option value="Facility">Facility</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Quick Toggle Checkboxes */}
-                <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-border/40 text-xs">
-                  <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={showOnlyGaps}
-                      onChange={e => setShowOnlyGaps(e.target.checked)}
-                      className="accent-indigo-650 w-3.5 h-3.5"
-                    />
-                    <span>Red/Amber Status Gaps only</span>
-                  </label>
-                  <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={showOnlyStarredReqs}
-                      onChange={e => setShowOnlyStarredReqs(e.target.checked)}
-                      className="accent-indigo-650 w-3.5 h-3.5"
-                    />
-                    <span>Favourite Requirements only</span>
-                  </label>
-                  <label className={`flex items-center gap-2 font-semibold text-foreground cursor-pointer ${hiddenMatrixRowIds.size === 0 ? 'opacity-40 cursor-not-allowed' : ''}`}>
-                    <input
-                      type="checkbox"
-                      disabled={hiddenMatrixRowIds.size === 0}
-                      checked={showHiddenRows}
-                      onChange={e => setShowHiddenRows(e.target.checked)}
-                      className="accent-indigo-650 w-3.5 h-3.5 disabled:cursor-not-allowed"
-                    />
-                    <span>Show hidden rows ({hiddenMatrixRowIds.size})</span>
-                    {hiddenMatrixRowIds.size > 0 && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRestoreAllHiddenRows();
-                        }}
-                        className="ml-2 text-[10px] font-bold text-rose-600 hover:text-rose-700 hover:underline px-2 py-0.5 bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/20 rounded-md transition-colors cursor-pointer"
-                      >
-                        Restore all hidden
-                      </button>
-                    )}
-                  </label>
-                </div>
-              </div>
-            )}
-
-            {/* Saved Views Bar */}
-            <SavedViewsBar
-              views={allViews}
-              activeViewId={activeViewId}
-              onSelectView={handleSelectView}
-              onSaveCurrent={handleSaveView}
-              onDeleteCustom={deleteCustomView}
-              isViewModified={isViewModified}
-            />
-          </>
-        )}
-
-        {/* Active chips (always visible below the toolbar) */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <ActiveFilterChips chips={filterChips} onClearAll={handleResetFilters} />
-          {favourites.length > 0 && (
-            <button
-              onClick={clearFavourites}
-              className="text-[10px] font-bold text-amber-600 hover:text-amber-700 hover:underline px-2.5 py-1 bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/20 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 self-start sm:self-center shrink-0"
-            >
-              <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-              </svg>
-              Clear Favourites ({favourites.length})
-            </button>
-          )}
+      {/* Stats Summary cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="bg-card border border-border rounded-xl p-3 shadow-xs">
+          <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest block">Assurance Index</span>
+          <div className="flex items-baseline gap-2 mt-1">
+            <span className={`text-2xl font-black ${statsSummary.compliancePercent >= 90 ? 'text-emerald-500' : statsSummary.compliancePercent >= 75 ? 'text-amber-500' : 'text-rose-500'}`}>
+              {statsSummary.compliancePercent}%
+            </span>
+          </div>
         </div>
 
-        {/* Results Counter Info */}
-        <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground uppercase tracking-widest pt-1">
-          <span>Filtered Rows: {filteredRequirements.length} / {requirements.length} requirements</span>
-          <span>Filtered Columns: {filteredTargets.length} / {uniqueTargets.length} assets</span>
+        <div className="bg-card border border-border rounded-xl p-3 shadow-xs">
+          <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest block">Total Assets</span>
+          <div className="flex items-baseline gap-2 mt-1">
+            <span className="text-2xl font-black text-foreground">{statsSummary.totalAssets}</span>
+            <span className="text-xs text-muted-foreground font-semibold">active</span>
+          </div>
+        </div>
+
+        <div className="bg-card border border-border rounded-xl p-3 shadow-xs">
+          <span className="text-[10px] text-emerald-500 dark:text-emerald-400 uppercase font-bold tracking-widest block">Compliant</span>
+          <div className="flex items-baseline gap-2 mt-1">
+            <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{statsSummary.compliant}</span>
+            <span className="text-xs text-muted-foreground font-semibold">checks</span>
+          </div>
+        </div>
+
+        <div className="bg-card border border-border rounded-xl p-3 shadow-xs">
+          <span className="text-[10px] text-amber-500 dark:text-amber-400 uppercase font-bold tracking-widest block">Due Soon</span>
+          <div className="flex items-baseline gap-2 mt-1">
+            <span className="text-2xl font-black text-amber-600 dark:text-amber-400">{statsSummary.dueSoon}</span>
+            <span className="text-xs text-muted-foreground font-semibold">checks</span>
+          </div>
+        </div>
+
+        <div className="bg-card border border-border rounded-xl p-3 shadow-xs">
+          <span className="text-[10px] text-rose-500 dark:text-rose-400 uppercase font-bold tracking-widest block">Overdue</span>
+          <div className="flex items-baseline gap-2 mt-1">
+            <span className="text-2xl font-black text-rose-600 dark:text-rose-400">{statsSummary.overdue}</span>
+            <span className="text-xs text-muted-foreground font-semibold">overdue</span>
+          </div>
+        </div>
+
+        <div className="bg-card border border-border rounded-xl p-3 shadow-xs">
+          <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest block">Missing Docs</span>
+          <div className="flex items-baseline gap-2 mt-1">
+            <span className="text-2xl font-black text-zinc-500">{statsSummary.missing}</span>
+            <span className="text-xs text-muted-foreground font-semibold">no history</span>
+          </div>
         </div>
       </div>
 
-      {interfaceDetailLevel === 'advanced' && (
-        <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
-          <button type="button" onClick={() => exportMatrix('filtered')} className="px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
-            <Download className="w-3.5 h-3.5" /> Export filtered
-          </button>
-          <button type="button" disabled={matrixRowSelection.selectedCount === 0} onClick={() => exportMatrix('selected')} className="px-3 py-1.5 bg-card hover:bg-muted disabled:opacity-40 border border-border rounded-lg font-bold text-foreground flex items-center gap-1.5">
-            <Download className="w-3.5 h-3.5" /> Export selected
-          </button>
+      {/* Filters Panel */}
+      <div className="bg-card border border-border p-3.5 rounded-xl space-y-3 shadow-xs">
+        <div className="flex flex-col md:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="w-4.5 h-4.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search assets by name, identifier, make/model, reg, serial..."
+              className="w-full pl-9 pr-3 py-2.5 bg-muted border border-border rounded-lg text-xs outline-none text-foreground placeholder-muted-foreground focus:border-indigo-500"
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2 items-center">
+            <button
+              type="button"
+              onClick={() => setShowFilters(!showFilters)}
+              className={`px-3.5 py-2 border rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                showFilters || statusFilter !== 'All' || selectedCategory !== 'All' || selectedType !== 'All'
+                  ? 'bg-indigo-50 border-indigo-200 text-indigo-750 dark:bg-indigo-950/30 dark:border-indigo-900/50 dark:text-indigo-400'
+                  : 'bg-muted hover:bg-muted/80 border-border text-foreground'
+              }`}
+            >
+              Filters
+              {(statusFilter !== 'All' || selectedCategory !== 'All' || selectedType !== 'All') && (
+                <span className="bg-indigo-650 text-white dark:bg-indigo-600 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold">!</span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportMatrix}
+              className="px-3.5 py-2 bg-card hover:bg-muted border border-border rounded-lg font-bold text-foreground text-xs flex items-center gap-1.5 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" /> Export Matrix
+            </button>
+
+            <DensityControls
+              density={density}
+              onDensityChange={setDensity}
+              globalDensity={globalDensity}
+              onGlobalDensityChange={setGlobalDensity}
+            />
+          </div>
         </div>
-      )}
 
-      <BulkSelectionToolbar
-        selectedCount={matrixRowSelection.selectedCount}
-        recordLabel="matrix row(s)"
-        onSelectVisible={matrixRowSelection.selectVisible}
-        onClear={matrixRowSelection.clearSelection}
-        message="Row visibility is a user/workspace display preference."
-      >
-        {Array.from(matrixRowSelection.selectedIds).some(id => !hiddenMatrixRowIds.has(id)) && (
-          <button
-            type="button"
-            onClick={handleHideSelectedRows}
-            className="px-2.5 py-1 bg-indigo-650 hover:bg-indigo-700 text-white rounded-lg font-bold cursor-pointer text-[11px] shrink-0"
-          >
-            Hide selected
-          </button>
-        )}
-        {Array.from(matrixRowSelection.selectedIds).some(id => hiddenMatrixRowIds.has(id)) && (
-          <button
-            type="button"
-            onClick={handleRestoreSelectedRows}
-            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold cursor-pointer text-[11px] shrink-0"
-          >
-            Unhide selected
-          </button>
-        )}
-        {lastHiddenRowUndo && (
-          <button
-            type="button"
-            onClick={undoMatrixRowVisibility}
-            className="px-2.5 py-1 bg-card hover:bg-muted border border-border text-foreground rounded-lg font-bold cursor-pointer text-[11px] shrink-0"
-          >
-            Undo row visibility
-          </button>
-        )}
-      </BulkSelectionToolbar>
+        {/* Collapsible Filter settings */}
+        {showFilters && (
+          <div className="border-t border-border/60 pt-3.5 mt-2.5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Asset Category</label>
+              <select
+                value={selectedCategory}
+                onChange={e => setSelectedCategory(e.target.value)}
+                className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+              >
+                <option value="All">All Categories</option>
+                {categoriesList.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+              </select>
+            </div>
 
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Asset Specific Type</label>
+              <select
+                value={selectedType}
+                onChange={e => setSelectedType(e.target.value)}
+                className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+              >
+                <option value="All">All Types</option>
+                {assetTypesList.map(type => <option key={type} value={type}>{type}</option>)}
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Checks Standing</label>
+              <select
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+                className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+              >
+                <option value="All">All Standing Statuses</option>
+                <option value="Compliant">Compliant (GREEN)</option>
+                <option value="Expiring Soon">Due Soon (AMBER)</option>
+                <option value="Expired">Overdue / Expired (RED)</option>
+                <option value="Missing">Missing Verification (GREY)</option>
+                <option value="N/A">Not Assigned (N/A)</option>
+              </select>
+            </div>
+
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch('');
+                  setSelectedCategory('All');
+                  setSelectedType('All');
+                  setStatusFilter('All');
+                }}
+                className="w-full py-2 bg-muted hover:bg-muted/80 text-foreground border border-border rounded-lg text-xs font-bold transition-all cursor-pointer text-center"
+              >
+                Reset Filter Fields
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Counter readout */}
+        <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground uppercase tracking-widest pt-1">
+          <span>Active Asset Rows: {filteredAssets.length} / {assets.length}</span>
+          <span>Compliance Column Types: {assetCheckTypes.length}</span>
+        </div>
+      </div>
+
+      {/* Pagination Controls */}
       <PaginationControls
-        pageSize={matrixPagination.pageSize}
-        onPageSizeChange={matrixPagination.setPageSize}
-        currentPage={matrixPagination.currentPage}
-        totalPages={matrixPagination.totalPages}
-        totalItems={matrixPagination.totalItems}
-        startItem={matrixPagination.startItem}
-        endItem={matrixPagination.endItem}
-        onPageChange={matrixPagination.setCurrentPage}
-        itemLabel="requirements"
+        pageSize={pagination.pageSize}
+        onPageSizeChange={pagination.setPageSize}
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.totalItems}
+        startItem={pagination.startItem}
+        endItem={pagination.endItem}
+        onPageChange={pagination.setCurrentPage}
+        itemLabel="assets"
       />
 
-      {/* Matrix Table */}
+      {/* Grid Container */}
       <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
-        <div className="overflow-auto max-h-[62vh] relative">
+        <div className="overflow-auto max-h-[64vh] relative">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-muted border-b border-border/80 text-muted-foreground font-bold uppercase tracking-wider sticky top-0 z-20">
                 <th
-                  className="p-4 min-w-[260px] sticky left-0 top-0 z-30 border-r-2 border-b border-border/80 font-extrabold text-[10px]"
+                  className="p-4 min-w-[280px] sticky left-0 top-0 z-30 border-r-2 border-b border-border/80 font-extrabold text-[10px]"
                   style={{ backgroundColor: 'hsl(var(--muted))', left: 0, top: 0 }}
                 >
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={matrixRowSelection.allVisibleSelected}
-                      onChange={event => {
-                        if (event.target.checked) matrixRowSelection.selectVisible();
-                        else matrixRowSelection.clearSelection();
-                      }}
-                      className="rounded border-border text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 bg-muted/40 cursor-pointer"
-                      aria-label="Select visible matrix rows"
-                    />
-                    <span>Compliance Requirement</span>
-                  </div>
+                  Asset & Registration details
                 </th>
-                {filteredTargets.length === 0 ? (
-                  <th className="p-4 text-center">No assets found</th>
-                ) : (
-                  filteredTargets.map(t => (
-                    <th
-                      key={t.name}
-                      className="p-4 text-center min-w-[130px] whitespace-nowrap sticky top-0 border-b border-border"
-                      style={{ backgroundColor: 'hsl(var(--muted))', top: 0 }}
-                    >
-                      <span className="block font-extrabold text-foreground">{t.name}</span>
-                      <span className="text-[9px] text-muted-foreground font-semibold uppercase mt-0.5">{t.type}</span>
-                    </th>
-                  ))
-                )}
+                {assetCheckTypes.map(ct => (
+                  <th
+                    key={ct.id}
+                    className="p-4 text-center min-w-[150px] whitespace-nowrap sticky top-0 border-b border-border"
+                    style={{ backgroundColor: 'hsl(var(--muted))', top: 0 }}
+                    title={ct.description || ''}
+                  >
+                    <span className="block font-extrabold text-foreground">{ct.title}</span>
+                    <span className="text-[9px] text-muted-foreground font-bold uppercase mt-0.5">{ct.category}</span>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
-              {filteredRequirements.length === 0 ? (
+              {filteredAssets.length === 0 ? (
                 <tr>
-                  <td colSpan={filteredTargets.length + 1} className="p-8 text-center text-muted-foreground">
-                    No compliance requirements mapped for this view.
+                  <td colSpan={assetCheckTypes.length + 1} className="p-8 text-center text-muted-foreground">
+                    No assets matching the current search parameters were found.
                   </td>
                 </tr>
               ) : (
-                matrixPagination.paginatedItems.map(req => {
-                  const isStarred = isFavourite(`req:${req.id}`);
-                  const isBulkSelected = matrixRowSelection.isSelected(req.id);
-                  const isHiddenRow = hiddenMatrixRowIds.has(req.id);
+                pagination.paginatedItems.map(asset => {
                   return (
-                    <tr key={req.id} className={`hover:bg-muted/10 transition-colors ${isBulkSelected ? 'bg-indigo-500/5' : ''} ${isHiddenRow ? 'opacity-60 grayscale' : ''}`}>
-                      {/* Sticky Row Title */}
+                    <tr key={asset.id} className="hover:bg-muted/10 transition-colors">
+                      {/* Sticky Asset metadata */}
                       <td
-                        className={`${paddingClass} font-semibold text-foreground sticky left-0 z-10 border-r-2 border-border/80 min-w-[260px]`}
+                        className={`${paddingClass} font-semibold text-foreground sticky left-0 z-10 border-r-2 border-border/80 min-w-[280px] hover:bg-muted/20 cursor-pointer`}
                         style={{ backgroundColor: 'hsl(var(--card))', left: 0 }}
-                        onClick={(event) => {
-                          if (event.ctrlKey || event.metaKey) {
-                            matrixRowSelection.toggleSelected(req.id);
-                          }
+                        onClick={() => {
+                          setActiveAsset(asset);
+                          setActiveTab('overview');
                         }}
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-start gap-2 min-w-0">
-                            <input
-                              type="checkbox"
-                              checked={isBulkSelected}
-                              onChange={() => matrixRowSelection.toggleSelected(req.id)}
-                              className="mt-0.5 rounded border-border text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 bg-muted/40 cursor-pointer shrink-0"
-                              aria-label={`Select ${req.title}`}
-                            />
-                            <div className="min-w-0">
-                              <span className={`block font-bold text-foreground ${textClass}`}>{req.title}</span>
-                              {isHiddenRow && <span className="text-[9px] font-bold uppercase text-muted-foreground">Hidden row</span>}
-                              <span className="text-[9px] text-muted-foreground font-medium uppercase mt-0.5 block">{req.category}</span>
-                              {density === 'comfortable' && req.description && (
-                                <span className="text-[10px] text-muted-foreground font-normal leading-relaxed block mt-1 line-clamp-2" title={req.description}>
-                                  {req.description}
+                        <div className="flex items-start gap-2.5">
+                          <div className="min-w-0">
+                            <span className="block font-bold text-foreground hover:text-indigo-650 transition-colors">
+                              {asset.name}
+                            </span>
+                            <div className="flex flex-wrap gap-x-2 gap-y-0.5 items-center mt-1 text-[9px] font-bold text-muted-foreground uppercase">
+                              <span className="px-1.5 py-0.5 bg-muted rounded">{asset.asset_type}</span>
+                              {asset.registration_number && (
+                                <span className="text-foreground border border-border px-1 rounded bg-muted/40 font-mono">
+                                  {asset.registration_number}
                                 </span>
+                              )}
+                              {asset.serial_number && (
+                                <span className="font-mono">SN: {asset.serial_number}</span>
                               )}
                             </div>
                           </div>
-                          <FilterFavouriteButton
-                            isStarred={isStarred}
-                            onToggle={() => toggleFavourite(`req:${req.id}`, req.title, 'Requirement')}
-                          />
                         </div>
                       </td>
 
-                      {/* Matrix Cells */}
-                      {filteredTargets.map(target => {
-                        // Find if a matrix cell exists mapping target name to this requirement
-                        const cell = matrixCells.find(
-                          c => c.requirement_id === req.id && c.target_name === target.name
+                      {/* Matrix cells */}
+                      {assetCheckTypes.map(ct => {
+                        const asg = assetCheckAssignments.find(
+                          a => a.asset_id === asset.id && a.asset_check_type_id === ct.id
                         );
+                        const status = getAssignmentStatus(asg);
 
-                        if (!cell) {
-                          return (
-                            <td key={`${req.id}-${target.name}`} className="p-4 text-center text-muted-foreground/45 italic select-none">
-                              N/A
-                            </td>
-                          );
-                        }
-
-                        // Status styles
                         return (
-                          <td
-                            key={cell.id}
-                            className={paddingClass}
-                          >
-                            <button
-                              onClick={() => handleCellClick(cell)}
-                              id={`matrix-cell-${cell.id}`}
-                              className={`w-full py-2 px-2.5 rounded-lg border font-bold text-[10px] uppercase tracking-wide transition-all cursor-pointer hover:shadow-sm ${
-                                cell.status === 'Compliant' ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20' :
-                                cell.status === 'Expiring Soon' ? 'bg-amber-500/10 border-amber-500/25 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20' :
-                                cell.status === 'Expired' ? 'bg-rose-500/10 border-rose-500/25 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20' :
-                                'bg-zinc-500/10 border-zinc-500/25 text-zinc-500 hover:bg-zinc-500/20'
-                              }`}
-                            >
-                              {cell.status}
-                            </button>
+                          <td key={`${asset.id}-${ct.id}`} className={paddingClass}>
+                            {status === 'N/A' ? (
+                              <div className="text-center text-muted-foreground/35 select-none font-bold text-[10px]">
+                                —
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setActiveCell({ asset, checkType: ct, assignment: asg })}
+                                className={`w-full py-2 px-2.5 rounded-lg border font-bold text-[10px] uppercase tracking-wide transition-all cursor-pointer hover:shadow-sm text-center ${
+                                  status === 'Compliant'
+                                    ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20'
+                                    : status === 'Expiring Soon'
+                                    ? 'bg-amber-500/10 border-amber-500/25 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20'
+                                    : status === 'Expired'
+                                    ? 'bg-rose-500/10 border-rose-500/25 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20'
+                                    : 'bg-zinc-500/10 border-zinc-500/25 text-zinc-500 hover:bg-zinc-500/20'
+                                }`}
+                              >
+                                <span className="flex items-center justify-center gap-1">
+                                  {status === 'Compliant' && <CheckCircle2 className="w-3 h-3" />}
+                                  {status === 'Expiring Soon' && <AlertTriangle className="w-3 h-3" />}
+                                  {status === 'Expired' && <Clock className="w-3 h-3" />}
+                                  {status === 'Missing' && <AlertCircle className="w-3 h-3" />}
+                                  {status}
+                                </span>
+                              </button>
+                            )}
                           </td>
                         );
                       })}
@@ -1235,17 +871,255 @@ export default function EvidenceMatrix() {
 
       {/* Legend */}
       <div className="bg-card border border-border p-4 rounded-xl text-xs text-muted-foreground flex flex-wrap gap-6 items-center">
-        <span className="font-bold text-foreground">Matrix Legend:</span>
-        <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-500/20 border border-emerald-500 text-emerald-600"></span> Compliant (Active document uploaded)</div>
-        <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-amber-500/20 border border-amber-500 text-amber-600"></span> Expiring Soon (Doc expires within 30 days)</div>
-        <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-rose-500/20 border border-rose-500 text-rose-600"></span> Expired (Doc validity has lapsed)</div>
-        <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-zinc-500/20 border border-zinc-500 text-zinc-600"></span> Missing (No verification records attached)</div>
+        <span className="font-bold text-foreground">Assurance Indicators:</span>
+        <div className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-500" /> Compliant (Valid, up-to-date check log)</div>
+        <div className="flex items-center gap-1.5"><AlertTriangle className="w-4 h-4 text-amber-500" /> Due Soon (Warning limit triggered)</div>
+        <div className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-rose-500" /> Overdue (Check type expired)</div>
+        <div className="flex items-center gap-1.5"><AlertCircle className="w-4 h-4 text-zinc-500" /> Missing (Assigned but never verified)</div>
       </div>
 
-      {/* Modal 1: Link Evidence Document to Cell */}
+      {/* Asset Workspace Drawer (Right Slideout) */}
+      {activeAsset && (
+        <div className="fixed inset-0 z-40 bg-black/60 flex justify-end">
+          <div className="w-full max-w-2xl bg-card border-l border-border h-full flex flex-col shadow-2xl relative animate-in slide-in-from-right duration-250">
+            {/* Drawer Header */}
+            <div className="p-6 border-b border-border flex justify-between items-start">
+              <div>
+                <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest bg-indigo-500/5 px-2 py-0.5 rounded">
+                  {activeAsset.asset_type}
+                </span>
+                <h3 className="text-xl font-extrabold text-foreground mt-2">{activeAsset.name}</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  ID: {activeAsset.asset_number || 'N/A'} • Reg: {activeAsset.registration_number || 'None'}
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveAsset(null)}
+                className="p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Tabbed Nav */}
+            <div className="flex border-b border-border bg-muted/40 text-xs px-2">
+              {[
+                { id: 'overview', label: 'Overview', icon: Info },
+                { id: 'checks', label: 'Check Assignments', icon: ClipboardList },
+                { id: 'evidence', label: 'Evidence Vault', icon: FileCheck },
+                { id: 'actions', label: 'Actions/Tasks', icon: ShieldAlert },
+                { id: 'history', label: 'History Logs', icon: Activity }
+              ].map(t => {
+                const Icon = t.icon;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setActiveTab(t.id as any)}
+                    className={`flex items-center gap-1.5 px-4 py-3 border-b-2 font-bold transition-all cursor-pointer ${
+                      activeTab === t.id
+                        ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                        : 'border-transparent text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Tab Content (Scrollable) */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {activeTab === 'overview' && (
+                <div className="space-y-6">
+                  {/* Grid fields */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-muted/30 border border-border/50 rounded-xl p-3">
+                      <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest block">Manufacturer</span>
+                      <span className="text-sm font-extrabold mt-0.5 block">{activeAsset.make || 'Unspecified'}</span>
+                    </div>
+                    <div className="bg-muted/30 border border-border/50 rounded-xl p-3">
+                      <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest block">Model</span>
+                      <span className="text-sm font-extrabold mt-0.5 block">{activeAsset.model || 'Unspecified'}</span>
+                    </div>
+                    <div className="bg-muted/30 border border-border/50 rounded-xl p-3">
+                      <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest block">Location</span>
+                      <span className="text-sm font-extrabold mt-0.5 block">{activeAsset.location || 'Unspecified'}</span>
+                    </div>
+                    <div className="bg-muted/30 border border-border/50 rounded-xl p-3">
+                      <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest block">Owner / Driver</span>
+                      <span className="text-sm font-extrabold mt-0.5 block">{activeAsset.owner || 'Unassigned'}</span>
+                    </div>
+                  </div>
+
+                  {/* Notes Card */}
+                  <div className="bg-muted/30 border border-border/50 rounded-xl p-4 space-y-2">
+                    <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest block">Asset Notes</span>
+                    <p className="text-xs leading-relaxed text-foreground/80 whitespace-pre-line">
+                      {activeAsset.notes || 'No notes logged for this asset.'}
+                    </p>
+                  </div>
+
+                  {/* Danger Zone */}
+                  <div className="border border-rose-500/20 bg-rose-500/5 rounded-xl p-4 flex justify-between items-center">
+                    <div>
+                      <h4 className="text-xs font-extrabold text-rose-600 dark:text-rose-400">Decommission Asset</h4>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Delete this asset and purge its check history.</p>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteAsset(activeAsset.id)}
+                      className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Purge Asset
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'checks' && (
+                <div className="space-y-4">
+                  <h4 className="text-xs font-extrabold text-foreground uppercase tracking-wider">Compliance Checklist</h4>
+                  <div className="space-y-3">
+                    {assetCheckTypes
+                      .filter(ct => {
+                        const asg = assetCheckAssignments.find(a => a.asset_id === activeAsset.id && a.asset_check_type_id === ct.id);
+                        return asg && asg.active;
+                      })
+                      .map(ct => {
+                        const asg = assetCheckAssignments.find(a => a.asset_id === activeAsset.id && a.asset_check_type_id === ct.id);
+                        const status = getAssignmentStatus(asg);
+
+                        return (
+                          <div key={ct.id} className="border border-border p-4 rounded-xl flex justify-between items-center bg-card shadow-xs hover:border-border-hover transition-all">
+                            <div>
+                              <h5 className="font-extrabold text-xs text-foreground">{ct.title}</h5>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">
+                                Frequency: Every {asg?.frequency_value || ct.default_frequency_value} {asg?.frequency_unit || ct.default_frequency_unit}
+                              </p>
+                              {asg?.next_due_date && (
+                                <p className="text-[10px] font-bold text-foreground mt-1 flex items-center gap-1">
+                                  <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                                  Next Due: {new Date(asg.next_due_date).toLocaleDateString()}
+                                </p>
+                              )}
+                            </div>
+
+                            <button
+                              onClick={() => {
+                                setActiveCell({ asset: activeAsset, checkType: ct, assignment: asg });
+                              }}
+                              className={`px-3 py-1.5 rounded-lg border font-bold text-[10px] uppercase tracking-wide transition-all ${
+                                status === 'Compliant'
+                                  ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20'
+                                  : status === 'Expiring Soon'
+                                  ? 'bg-amber-500/10 border-amber-500/25 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20'
+                                  : status === 'Expired'
+                                  ? 'bg-rose-500/10 border-rose-500/25 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20'
+                                  : 'bg-zinc-500/10 border-zinc-500/25 text-zinc-500 hover:bg-zinc-500/20'
+                              }`}
+                            >
+                              {status}
+                            </button>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'evidence' && (
+                <div className="space-y-4">
+                  <h4 className="text-xs font-extrabold text-foreground uppercase tracking-wider">Compliance Documents</h4>
+                  <div className="space-y-3">
+                    {assetCheckEvidenceLinks
+                      .filter(link => link.asset_id === activeAsset.id)
+                      .map(link => {
+                        const doc = documents.find(d => d.id === link.document_id);
+                        if (!doc) return null;
+                        return (
+                          <div key={link.id} className="border border-border p-3 rounded-xl flex items-center justify-between bg-card">
+                            <div className="flex items-center gap-3">
+                              <FileText className="w-8 h-8 text-indigo-500 shrink-0" />
+                              <div>
+                                <span className="font-extrabold text-xs text-foreground block">{doc.title}</span>
+                                <span className="text-[10px] text-muted-foreground uppercase font-semibold mt-0.5 block">
+                                  Expiry: {doc.expiry_date ? new Date(doc.expiry_date).toLocaleDateString() : 'N/A'}
+                                </span>
+                              </div>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                              doc.status === 'Active' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-rose-500/10 text-rose-600'
+                            }`}>
+                              {doc.status}
+                            </span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'actions' && (
+                <div className="space-y-4">
+                  <h4 className="text-xs font-extrabold text-foreground uppercase tracking-wider">Corrective Actions</h4>
+                  <div className="space-y-3">
+                    {actions
+                      .filter(action => {
+                        // Find matching action links or if action title mentions asset name
+                        return action.title.toLowerCase().includes(activeAsset.name.toLowerCase());
+                      })
+                      .map(action => (
+                        <div key={action.id} className="border border-border p-4 rounded-xl bg-card space-y-2">
+                          <div className="flex justify-between items-start">
+                            <h5 className="font-extrabold text-xs text-foreground">{action.title}</h5>
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                              action.status === 'Complete' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-amber-500/10 text-amber-600'
+                            }`}>
+                              {action.status}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground leading-relaxed">
+                            {action.description || 'No description provided.'}
+                          </p>
+                          {action.due_date && (
+                            <span className="text-[9px] font-bold text-rose-500 block">
+                              Due Date: {new Date(action.due_date).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'history' && (
+                <div className="space-y-4">
+                  <h4 className="text-xs font-extrabold text-foreground uppercase tracking-wider">Activity Log</h4>
+                  <div className="space-y-4 relative pl-4 border-l border-border/80">
+                    {auditLogs
+                      .filter(log => log.details.toLowerCase().includes(activeAsset.name.toLowerCase()))
+                      .map(log => (
+                        <div key={log.id} className="space-y-1 relative">
+                          <div className="absolute -left-[20.5px] top-1 w-2.5 h-2.5 rounded-full bg-indigo-500 border border-card" />
+                          <div className="flex justify-between items-baseline text-[10px] font-bold text-muted-foreground uppercase">
+                            <span>{log.action}</span>
+                            <span>{new Date(log.created_at).toLocaleDateString()}</span>
+                          </div>
+                          <p className="text-xs text-foreground/80 leading-normal">{log.details}</p>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Log Compliance Check / Upload Evidence */}
       {activeCell && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-card solid-panel border border-border w-full max-w-md rounded-2xl p-6 relative shadow-2xl">
+          <div className="bg-card solid-panel border border-border w-full max-w-lg rounded-2xl p-6 relative shadow-2xl">
             <button
               onClick={() => setActiveCell(null)}
               className="absolute top-4 right-4 p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded"
@@ -1254,43 +1128,108 @@ export default function EvidenceMatrix() {
             </button>
 
             <div className="flex items-center gap-2.5 border-b border-border pb-3 mb-4">
-              <LinkIcon className="w-5 h-5 text-indigo-500 shrink-0" />
+              <FileCheck className="w-5 h-5 text-indigo-500 shrink-0" />
               <div>
-                <h3 className="text-base font-extrabold text-foreground">Verify Compliance Requirement</h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Link a supporting document to update evidence status.</p>
+                <h3 className="text-base font-extrabold text-foreground">Record Compliance Log</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Log completion records and bind vault evidence files.</p>
               </div>
             </div>
 
-            <div className="space-y-4 text-xs">
+            <form onSubmit={handleLogCheckCompletion} className="space-y-4 text-xs">
               <div className="p-3 bg-muted/40 rounded-xl space-y-1.5">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground font-bold">Target Entity:</span>
-                  <span className="text-foreground font-extrabold">{activeCell.target_name} ({activeCell.target_type})</span>
+                  <span className="text-muted-foreground font-bold">Asset Target:</span>
+                  <span className="text-foreground font-extrabold">{activeCell.asset.name}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground font-bold">Requirement Row:</span>
-                  <span className="text-foreground font-extrabold">{requirements.find(r => r.id === activeCell.requirement_id)?.title}</span>
+                  <span className="text-muted-foreground font-bold">Check Type:</span>
+                  <span className="text-foreground font-extrabold">{activeCell.checkType.title}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground font-bold">Current Standing:</span>
-                  <span className="text-foreground font-extrabold uppercase">{activeCell.status}</span>
+                {activeCell.assignment?.next_due_date && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground font-bold">Current Next Due:</span>
+                    <span className="text-foreground font-extrabold text-rose-500">
+                      {new Date(activeCell.assignment.next_due_date).toLocaleDateString()}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="completed-date" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Completion Date
+                  </label>
+                  <input
+                    id="completed-date"
+                    type="date"
+                    required
+                    value={completedDate}
+                    onChange={e => setCompletedDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="expiry-date" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Expiry / Validity Expiration
+                  </label>
+                  <input
+                    id="expiry-date"
+                    type="date"
+                    required
+                    value={validUntilDate}
+                    onChange={e => setValidUntilDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="check-result" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Result Status
+                  </label>
+                  <select
+                    id="check-result"
+                    value={checkResult}
+                    onChange={e => setCheckResult(e.target.value)}
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none cursor-pointer"
+                  >
+                    <option value="Pass">Pass (Compliant)</option>
+                    <option value="Fail">Fail (Failed Check)</option>
+                    <option value="Advisory">Pass with Advisory</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label htmlFor="check-reference" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Certificate / Reference ID
+                  </label>
+                  <input
+                    id="check-reference"
+                    type="text"
+                    value={checkReference}
+                    onChange={e => setCheckReference(e.target.value)}
+                    placeholder="e.g. CVRT-901-44"
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                  />
                 </div>
               </div>
 
               <div>
-                <label htmlFor="select-evidence" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Link Evidence Document
+                <label htmlFor="link-evidence" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                  Bind Supporting Vault Document
                 </label>
                 <select
-                  id="select-evidence"
+                  id="link-evidence"
                   value={selectedDocId}
                   onChange={e => setSelectedDocId(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                  className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none cursor-pointer"
                 >
                   <option value="">-- No File Linked (Mark as Missing) --</option>
                   {documents
-                    // Only show docs in the same category scope for smart grouping
-                    .filter(doc => doc.category === (requirements.find(r => r.id === activeCell.requirement_id)?.category === 'Driver' ? 'Driver' : requirements.find(r => r.id === activeCell.requirement_id)?.category))
+                    .filter(doc => doc.category === activeCell.checkType.category)
                     .map(doc => (
                       <option key={doc.id} value={doc.id}>
                         {doc.title} ({doc.status} • Exp: {doc.expiry_date || 'None'})
@@ -1299,33 +1238,46 @@ export default function EvidenceMatrix() {
                 </select>
               </div>
 
+              <div>
+                <label htmlFor="check-notes" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                  Compliance Check Notes
+                </label>
+                <textarea
+                  id="check-notes"
+                  value={checkNotes}
+                  onChange={e => setCheckNotes(e.target.value)}
+                  placeholder="Record calibration issues, inspector name or maintenance advice..."
+                  className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none h-16 resize-none"
+                />
+              </div>
+
               <div className="flex gap-3 pt-3">
                 <button
                   type="button"
                   onClick={() => setActiveCell(null)}
-                  className="w-1/2 py-2 bg-muted hover:bg-muted/80 text-foreground font-bold border border-border rounded-lg text-center cursor-pointer"
+                  className="w-1/2 py-2.5 bg-muted hover:bg-muted/80 text-foreground font-bold border border-border rounded-lg text-center cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={handleSaveCellLink}
-                  className="w-1/2 py-2 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md cursor-pointer"
-                  id="matrix-save-link-btn"
+                  type="submit"
+                  disabled={isLoggingCheck}
+                  className="w-1/2 py-2.5 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md cursor-pointer disabled:opacity-50"
                 >
-                  Save Mapping Link
+                  {isLoggingCheck ? 'Saving record...' : 'Submit Compliance Log'}
                 </button>
               </div>
-            </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* Modal 2: Register New Asset */}
-      {showAddTargetModal && (
+      {/* Modal: Register New Asset */}
+      {showAddAssetModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-card solid-panel border border-border w-full max-w-sm rounded-2xl p-6 relative shadow-2xl">
+          <div className="bg-card solid-panel border border-border w-full max-w-md rounded-2xl p-6 relative shadow-2xl">
             <button
-              onClick={() => setShowAddTargetModal(false)}
+              onClick={() => setShowAddAssetModal(false)}
               className="absolute top-4 right-4 p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded"
             >
               <X className="w-4 h-4" />
@@ -1335,59 +1287,175 @@ export default function EvidenceMatrix() {
               <UserPlus className="w-5 h-5 text-indigo-500" />
               <div>
                 <h3 className="text-base font-extrabold text-foreground">Register Target Asset</h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Add a fleet vehicle, driver, or warehouse site.</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Register a vehicle, trailer, equipment or facility.</p>
               </div>
             </div>
 
-            <form onSubmit={handleAddTarget} className="space-y-4 text-xs">
+            <form onSubmit={handleRegisterAsset} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="asset-name" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Asset Identifier / Name
+                  </label>
+                  <input
+                    id="asset-name"
+                    type="text"
+                    required
+                    value={newAssetName}
+                    onChange={e => setNewAssetName(e.target.value)}
+                    placeholder="e.g. Scania HGV Truck #204"
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="asset-class" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Asset Category Type
+                  </label>
+                  <select
+                    id="asset-class"
+                    value={newAssetType}
+                    onChange={e => setNewAssetType(e.target.value)}
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none cursor-pointer"
+                  >
+                    <option value="Vehicle">Vehicle</option>
+                    <option value="Trailer">Trailer</option>
+                    <option value="Equipment">Equipment</option>
+                    <option value="Material">Material</option>
+                    <option value="Object">Object</option>
+                    <option value="Facility">Facility</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label htmlFor="asset-number" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Asset Number
+                  </label>
+                  <input
+                    id="asset-number"
+                    type="text"
+                    value={newAssetNumber}
+                    onChange={e => setNewAssetNumber(e.target.value)}
+                    placeholder="e.g. FL-04"
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="asset-reg" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Registration
+                  </label>
+                  <input
+                    id="asset-reg"
+                    type="text"
+                    value={newAssetReg}
+                    onChange={e => setNewAssetReg(e.target.value)}
+                    placeholder="e.g. 211-D-400"
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="asset-serial" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Serial Number
+                  </label>
+                  <input
+                    id="asset-serial"
+                    type="text"
+                    value={newAssetSerial}
+                    onChange={e => setNewAssetSerial(e.target.value)}
+                    placeholder="e.g. SN-802-99"
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="asset-make" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Manufacturer / Make
+                  </label>
+                  <input
+                    id="asset-make"
+                    type="text"
+                    value={newAssetMake}
+                    onChange={e => setNewAssetMake(e.target.value)}
+                    placeholder="e.g. Scania"
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="asset-model" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Model
+                  </label>
+                  <input
+                    id="asset-model"
+                    type="text"
+                    value={newAssetModel}
+                    onChange={e => setNewAssetModel(e.target.value)}
+                    placeholder="e.g. R500 V8"
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <label htmlFor="asset-loc" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Current Location / Depot
+                  </label>
+                  <input
+                    id="asset-loc"
+                    type="text"
+                    value={newAssetLocation}
+                    onChange={e => setNewAssetLocation(e.target.value)}
+                    placeholder="e.g. Dublin Depot South"
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="asset-owner" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Owner
+                  </label>
+                  <input
+                    id="asset-owner"
+                    type="text"
+                    value={newAssetOwner}
+                    onChange={e => setNewAssetOwner(e.target.value)}
+                    placeholder="e.g. John V."
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                  />
+                </div>
+              </div>
+
               <div>
-                <label htmlFor="target-name" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Asset / Entity Identifier Name
+                <label htmlFor="asset-notes" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                  General Notes
                 </label>
-                <input
-                  id="target-name"
-                  type="text"
-                  required
-                  value={newTargetName}
-                  onChange={e => setNewTargetName(e.target.value)}
-                  placeholder="e.g. Scania HGV Truck #204 or John Vance"
-                  className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                <textarea
+                  id="asset-notes"
+                  value={newAssetNotes}
+                  onChange={e => setNewAssetNotes(e.target.value)}
+                  placeholder="Record initial description, maintenance contracts or details..."
+                  className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none h-16 resize-none"
                 />
               </div>
 
-              <div>
-                <label htmlFor="target-type" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Asset Type
-                </label>
-                <select
-                  id="target-type"
-                  value={newTargetType}
-                  onChange={e => setNewTargetType(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none cursor-pointer"
-                >
-                  <option value="Vehicle">Vehicle (Truck, Forklift, Trailer)</option>
-                  <option value="Personnel">Personnel (Driver, Operator, Manager)</option>
-                  <option value="Facility">Facility (Warehouses, Depots, HQ)</option>
-                </select>
-              </div>
-
-              <div className="p-3 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 rounded-lg text-[10px] leading-relaxed flex gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>Creating this asset will seed unverified (Missing) checklist rows inside the Evidence Matrix.</span>
-              </div>
-
-              <div className="flex gap-3 pt-3">
+              <div className="flex gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowAddTargetModal(false)}
-                  className="w-1/2 py-2 bg-muted hover:bg-muted/80 text-foreground font-bold border border-border rounded-lg text-center cursor-pointer"
+                  onClick={() => setShowAddAssetModal(false)}
+                  className="w-1/2 py-2.5 bg-muted hover:bg-muted/80 text-foreground font-bold border border-border rounded-lg text-center cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
-                  id="matrix-submit-target"
                   type="submit"
-                  className="w-1/2 py-2 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md cursor-pointer"
+                  className="w-1/2 py-2.5 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md cursor-pointer"
                 >
                   Register Asset
                 </button>
@@ -1397,96 +1465,176 @@ export default function EvidenceMatrix() {
         </div>
       )}
 
-      {/* Modal 3: Add Custom Requirement */}
-      {showAddReqModal && (
+      {/* Modal: Manage Check Types */}
+      {showAddCheckTypeModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
           <div className="bg-card solid-panel border border-border w-full max-w-md rounded-2xl p-6 relative shadow-2xl">
             <button
-              onClick={() => setShowAddReqModal(false)}
-              className="absolute top-4 right-4 p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded animate-none"
+              onClick={() => setShowAddCheckTypeModal(false)}
+              className="absolute top-4 right-4 p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded"
             >
               <X className="w-4 h-4" />
             </button>
 
             <div className="flex items-center gap-2 border-b border-border pb-3 mb-4">
-              <Grid className="w-5 h-5 text-indigo-500" />
+              <Settings className="w-5 h-5 text-indigo-500" />
               <div>
-                <h3 className="text-base font-extrabold text-foreground">Add Custom Compliance Requirement</h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Define a regulatory standard to monitor.</p>
+                <h3 className="text-base font-extrabold text-foreground">Configure Compliance Check</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Add a new standard compliance check definition.</p>
               </div>
             </div>
 
-            <form onSubmit={handleAddRequirement} className="space-y-4 text-xs">
+            <form onSubmit={handleAddCheckType} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="check-title" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Check Type Title
+                  </label>
+                  <input
+                    id="check-title"
+                    type="text"
+                    required
+                    value={newCheckTitle}
+                    onChange={e => setNewCheckTitle(e.target.value)}
+                    placeholder="e.g. Calibration, DOE/CVRT"
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="check-cat" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Applicable Asset Category
+                  </label>
+                  <select
+                    id="check-cat"
+                    value={newCheckCategory}
+                    onChange={e => setNewCheckCategory(e.target.value)}
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none cursor-pointer"
+                  >
+                    <option value="Vehicle">Vehicle</option>
+                    <option value="Trailer">Trailer</option>
+                    <option value="Equipment">Equipment</option>
+                    <option value="Material">Material</option>
+                    <option value="Object">Object</option>
+                    <option value="Facility">Facility</option>
+                  </select>
+                </div>
+              </div>
+
               <div>
-                <label htmlFor="req-title" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Requirement Title
+                <label htmlFor="check-desc" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                  Description / Purpose
                 </label>
                 <input
-                  id="req-title"
+                  id="check-desc"
                   type="text"
-                  required
-                  value={newReqTitle}
-                  onChange={e => setNewReqTitle(e.target.value)}
-                  placeholder="e.g. Forklift Thorough Examination Certificate (LOLER)"
+                  value={newCheckDesc}
+                  onChange={e => setNewCheckDesc(e.target.value)}
+                  placeholder="e.g. Annual roadworthiness test or weekly scales check"
                   className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
                 />
               </div>
 
-              <div>
-                <label htmlFor="req-desc" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Detailed Description
-                </label>
-                <textarea
-                  id="req-desc"
-                  rows={2}
-                  value={newReqDesc}
-                  onChange={e => setNewReqDesc(e.target.value)}
-                  placeholder="Describe standard validity conditions and guidelines..."
-                  className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none resize-none leading-relaxed"
-                />
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label htmlFor="check-freq-val" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Frequency Value
+                  </label>
+                  <input
+                    id="check-freq-val"
+                    type="number"
+                    required
+                    min={1}
+                    value={newCheckFreqValue}
+                    onChange={e => setNewCheckFreqValue(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="check-freq-unit" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Frequency Unit
+                  </label>
+                  <select
+                    id="check-freq-unit"
+                    value={newCheckFreqUnit}
+                    onChange={e => setNewCheckFreqUnit(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none cursor-pointer"
+                  >
+                    <option value="days">Days</option>
+                    <option value="weeks">Weeks</option>
+                    <option value="months">Months</option>
+                    <option value="years">Years</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label htmlFor="check-warn-days" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Warning Window (Days)
+                  </label>
+                  <input
+                    id="check-warn-days"
+                    type="number"
+                    required
+                    min={1}
+                    value={newCheckWarningDays}
+                    onChange={e => setNewCheckWarningDays(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label htmlFor="req-cat" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Compliance Category
-                </label>
-                <select
-                  id="req-cat"
-                  value={newReqCategory}
-                  onChange={e => setNewReqCategory(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none cursor-pointer"
-                >
-                  <option value="Vehicle">Vehicle (Applicable to trucks and machinery)</option>
-                  <option value="Driver">Driver (Applicable to drivers and operators)</option>
-                  <option value="Facility">Facility (Applicable to warehouses, depots)</option>
-                  <option value="General">General (Applicable to company-wide insurance / admin)</option>
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="check-risk" className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    Risk / Criticality Level
+                  </label>
+                  <select
+                    id="check-risk"
+                    value={newCheckRiskLevel}
+                    onChange={e => setNewCheckRiskLevel(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-muted border border-border/80 focus:border-indigo-500 rounded-lg text-xs outline-none cursor-pointer"
+                  >
+                    <option value="Low">Low Risk</option>
+                    <option value="Medium">Medium Risk</option>
+                    <option value="High">High Risk</option>
+                    <option value="Critical">Critical Risk</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2 pt-4">
+                  <input
+                    id="check-evidence-req"
+                    type="checkbox"
+                    checked={newCheckEvidenceReq}
+                    onChange={e => setNewCheckEvidenceReq(e.target.checked)}
+                    className="accent-indigo-650 w-4 h-4 cursor-pointer"
+                  />
+                  <label htmlFor="check-evidence-req" className="font-bold text-[10px] text-foreground cursor-pointer uppercase">
+                    Require Evidence File
+                  </label>
+                </div>
               </div>
 
-              <div className="flex gap-3 pt-3">
+              <div className="flex gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowAddReqModal(false)}
-                  className="w-1/2 py-2 bg-muted hover:bg-muted/80 text-foreground font-bold border border-border rounded-lg text-center cursor-pointer"
+                  onClick={() => setShowAddCheckTypeModal(false)}
+                  className="w-1/2 py-2.5 bg-muted hover:bg-muted/80 text-foreground font-bold border border-border rounded-lg text-center cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
-                  id="matrix-submit-req"
                   type="submit"
-                  className="w-1/2 py-2 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md cursor-pointer"
+                  className="w-1/2 py-2.5 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md cursor-pointer"
                 >
-                  Create Requirement
+                  Create Check Type
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-
-      <FavouritesConfirmModal />
-      <ConfirmDialog request={confirmRequest} onCancel={() => setConfirmRequest(null)} />
-
     </div>
   );
 }

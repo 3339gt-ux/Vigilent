@@ -13,7 +13,8 @@ const SEARCH_TYPES = new Set([
   'competencies',
   'audit-packs',
   'reports',
-  'audit-trail'
+  'audit-trail',
+  'assets'
 ]);
 const SEARCH_SORTS = new Set(['relevance', 'recent', 'type', 'status']);
 const MAX_RESULTS = 50;
@@ -317,6 +318,32 @@ export async function GET(request: Request) {
         })) as GlobalSearchResult[];
       };
       promises.push(getAuditTrail());
+    }
+
+    // 9. Assets
+    if (tabType === 'all' || tabType === 'assets') {
+      const getAssets = async (): Promise<GlobalSearchResult[]> => {
+        const { data, error } = await supabase
+          .from('assets')
+          .select('id, name, asset_type, registration_number, serial_number, make, model, created_at')
+          .eq('organisation_id', orgId)
+          .or(`name.ilike.%${term}%,asset_type.ilike.%${term}%,registration_number.ilike.%${term}%,make.ilike.%${term}%,model.ilike.%${term}%`)
+          .limit(20);
+
+        if (error || !data) return [];
+        return data.map(a => ({
+          id: a.id,
+          title: a.name,
+          description: `Reg: ${a.registration_number || 'N/A'} | Type: ${a.asset_type} | Make/Model: ${a.make || ''} ${a.model || ''}`,
+          type: 'asset' as const,
+          status: 'Active',
+          category: a.asset_type,
+          path: `/dashboard/matrix?asset=${a.id}`,
+          relevanceScore: getRelevance(a.name, a.registration_number || '', term),
+          additionalInfo: { created_at: a.created_at }
+        })) as GlobalSearchResult[];
+      };
+      promises.push(getAssets());
     }
 
     // Await all database queries

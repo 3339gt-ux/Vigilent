@@ -532,11 +532,127 @@ export interface GlobalSearchResult {
   id: string;
   title: string;
   description: string | null;
-  type: 'requirement' | 'action' | 'person' | 'competency_type' | 'document' | 'audit_pack' | 'report' | 'audit_trail_event';
+  type: 'requirement' | 'action' | 'person' | 'competency_type' | 'document' | 'audit_pack' | 'report' | 'audit_trail_event' | 'asset' | 'asset_check';
   status: string;
   category: string;
   path: string;
   relevanceScore: number;
   additionalInfo?: Record<string, any>;
 }
+
+export interface Asset {
+  id: string;
+  organisation_id: string;
+  asset_number: string | null;
+  name: string;
+  asset_type: string;
+  category: string | null;
+  registration_number: string | null;
+  serial_number: string | null;
+  make: string | null;
+  model: string | null;
+  location: string | null;
+  department: string | null;
+  owner: string | null;
+  status: 'active' | 'inactive' | 'archived';
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+}
+
+export interface AssetCheckType {
+  id: string;
+  organisation_id: string;
+  title: string;
+  category: string | null;
+  description: string | null;
+  default_frequency_value: number | null;
+  default_frequency_unit: 'days' | 'weeks' | 'months' | 'years' | null;
+  default_warning_days: number | null;
+  evidence_required: boolean;
+  risk_level: 'Low' | 'Medium' | 'High' | 'Critical' | null;
+  default_status: string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AssetCheckAssignment {
+  id: string;
+  organisation_id: string;
+  asset_id: string;
+  asset_check_type_id: string;
+  required: boolean;
+  frequency_value: number | null;
+  frequency_unit: 'days' | 'weeks' | 'months' | 'years' | null;
+  warning_days: number | null;
+  first_due_date: string | null;
+  next_due_date: string | null;
+  last_completed_date: string | null;
+  last_expiry_date: string | null;
+  status: string;
+  notes: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AssetCheckRecord {
+  id: string;
+  organisation_id: string;
+  asset_id: string;
+  asset_check_assignment_id: string | null;
+  asset_check_type_id: string;
+  completed_at: string;
+  valid_from: string | null;
+  valid_until: string | null;
+  result_status: string | null;
+  performed_by: string | null;
+  reference: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AssetCheckEvidenceLink {
+  id: string;
+  organisation_id: string;
+  asset_id: string;
+  asset_check_assignment_id: string | null;
+  asset_check_record_id: string | null;
+  document_id: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface AssetRequirementLink {
+  id: string;
+  organisation_id: string;
+  asset_check_type_id: string;
+  requirement_id: string;
+  created_at: string;
+}
+
+export interface AssetMatrixCell {
+  id: string;
+  organisation_id: string;
+  asset_id: string;
+  asset_check_type_id: string;
+  status: string;
+  last_checked_at: string;
+  assignment?: AssetCheckAssignment;
+  latest_record?: AssetCheckRecord;
+}
+
+export interface AssetStatusSummary {
+  total: number;
+  compliant: number;
+  dueSoon: number;
+  overdue: number;
+  expired: number;
+  missing: number;
+  compliancePercent: number;
+}
+
 

@@ -50,7 +50,13 @@ import {
   ManagedCategory,
   Person,
   RequirementCompetencyType,
-  RequirementTemplateItem
+  RequirementTemplateItem,
+  Asset,
+  AssetCheckType,
+  AssetCheckAssignment,
+  AssetCheckRecord,
+  AssetCheckEvidenceLink,
+  AssetRequirementLink
 } from '@/lib/types';
 export type ThemePreference = 'light' | 'midtone' | 'dark';
 export type VygilenceTheme = 'sentinel' | 'obsidian' | 'emerald-watch' | 'amber-beacon' | 'arc-reactor' | 'iron-ledger' | 'vanguard';
@@ -182,6 +188,22 @@ interface AppContextType {
   updateCellMapping: (cellId: string, docId: string | null, status: CellStatus) => Promise<void>;
   markNotificationRead: (notificationId: string, read?: boolean) => Promise<void>;
   markAllNotificationsRead: () => Promise<void>;
+  
+  // Asset Assurance System State & Operations
+  assets: Asset[];
+  assetCheckTypes: AssetCheckType[];
+  assetCheckAssignments: AssetCheckAssignment[];
+  assetCheckRecords: AssetCheckRecord[];
+  assetCheckEvidenceLinks: AssetCheckEvidenceLink[];
+  assetRequirementLinks: AssetRequirementLink[];
+  createAsset: (asset: Omit<Asset, 'id' | 'created_at' | 'updated_at'>) => Promise<Asset>;
+  updateAsset: (assetId: string, updates: Partial<Asset>) => Promise<Asset>;
+  deleteAsset: (assetId: string) => Promise<void>;
+  createAssetCheckType: (checkType: Omit<AssetCheckType, 'id' | 'created_at' | 'updated_at'>) => Promise<AssetCheckType>;
+  createAssetCheckAssignment: (assignment: Omit<AssetCheckAssignment, 'id' | 'created_at' | 'updated_at'>) => Promise<AssetCheckAssignment>;
+  updateAssetCheckAssignment: (assignmentId: string, updates: Partial<AssetCheckAssignment>) => Promise<AssetCheckAssignment>;
+  createAssetCheckRecord: (record: Omit<AssetCheckRecord, 'id' | 'created_at' | 'updated_at'>) => Promise<AssetCheckRecord>;
+  linkAssetCheckEvidence: (assignmentId: string, recordId: string, documentId: string, assetId: string) => Promise<AssetCheckEvidenceLink>;
 
   readinessReport: ReadinessReport;
   competencySummary: CompetencySummary;
@@ -295,6 +317,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [auditPacks, setAuditPacks] = useState<AuditPack[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [notifications, setNotifications] = useState<WorkspaceNotification[]>([]);
+  
+  // Asset state hooks
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [assetCheckTypes, setAssetCheckTypes] = useState<AssetCheckType[]>([]);
+  const [assetCheckAssignments, setAssetCheckAssignments] = useState<AssetCheckAssignment[]>([]);
+  const [assetCheckRecords, setAssetCheckRecords] = useState<AssetCheckRecord[]>([]);
+  const [assetCheckEvidenceLinks, setAssetCheckEvidenceLinks] = useState<AssetCheckEvidenceLink[]>([]);
+  const [assetRequirementLinks, setAssetRequirementLinks] = useState<AssetRequirementLink[]>([]);
+
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -357,6 +388,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setAuditPacks([]);
     setAuditLogs([]);
     setNotifications([]);
+    setAssets([]);
+    setAssetCheckTypes([]);
+    setAssetCheckAssignments([]);
+    setAssetCheckRecords([]);
+    setAssetCheckEvidenceLinks([]);
+    setAssetRequirementLinks([]);
   };
 
   // Load appearance preferences per user and organisation.
@@ -434,7 +471,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cells,
       packs,
       logs,
-      notificationRows
+      notificationRows,
+      // Assets
+      assetRows,
+      checkTypeRows,
+      assignmentRows,
+      recordRows,
+      evidenceLinkRows,
+      requirementLinkRows
     ] = await Promise.all([
       dbService.getRequirements(),
       dbService.getDocuments(),
@@ -460,7 +504,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dbService.getMatrixCells(),
       dbService.getAuditPacks(),
       dbService.getAuditLogs(),
-      dbService.getWorkspaceNotifications()
+      dbService.getWorkspaceNotifications(),
+      // Assets
+      dbService.getAssets(),
+      dbService.getAssetCheckTypes(),
+      dbService.getAssetCheckAssignments(),
+      dbService.getAssetCheckRecords(),
+      dbService.getAssetCheckEvidenceLinks(),
+      dbService.getAssetRequirementLinks()
     ]);
 
     setRequirements(reqs);
@@ -488,6 +539,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setAuditPacks(packs);
     setAuditLogs(logs);
     setNotifications(notificationRows);
+    // Assets
+    setAssets(assetRows);
+    setAssetCheckTypes(checkTypeRows);
+    setAssetCheckAssignments(assignmentRows);
+    setAssetCheckRecords(recordRows);
+    setAssetCheckEvidenceLinks(evidenceLinkRows);
+    setAssetRequirementLinks(requirementLinkRows);
   };
 
   const loadDemoData = async () => {
@@ -1282,6 +1340,73 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Asset assurance functions
+  const createAsset: AppContextType['createAsset'] = async (asset) => {
+    const res = await dbService.createAsset(asset);
+    const updated = await dbService.getAssets();
+    setAssets(updated);
+    const logs = await dbService.getAuditLogs();
+    setAuditLogs(logs);
+    return res;
+  };
+
+  const updateAsset: AppContextType['updateAsset'] = async (assetId, updates) => {
+    const res = await dbService.updateAsset(assetId, updates);
+    const updated = await dbService.getAssets();
+    setAssets(updated);
+    const logs = await dbService.getAuditLogs();
+    setAuditLogs(logs);
+    return res;
+  };
+
+  const deleteAsset: AppContextType['deleteAsset'] = async (assetId) => {
+    await dbService.deleteAsset(assetId);
+    const updated = await dbService.getAssets();
+    setAssets(updated);
+    const logs = await dbService.getAuditLogs();
+    setAuditLogs(logs);
+  };
+
+  const createAssetCheckType: AppContextType['createAssetCheckType'] = async (checkType) => {
+    const res = await dbService.createAssetCheckType(checkType);
+    const updated = await dbService.getAssetCheckTypes();
+    setAssetCheckTypes(updated);
+    return res;
+  };
+
+  const createAssetCheckAssignment: AppContextType['createAssetCheckAssignment'] = async (assignment) => {
+    const res = await dbService.createAssetCheckAssignment(assignment);
+    const updated = await dbService.getAssetCheckAssignments();
+    setAssetCheckAssignments(updated);
+    return res;
+  };
+
+  const updateAssetCheckAssignment: AppContextType['updateAssetCheckAssignment'] = async (assignmentId, updates) => {
+    const res = await dbService.updateAssetCheckAssignment(assignmentId, updates);
+    const updated = await dbService.getAssetCheckAssignments();
+    setAssetCheckAssignments(updated);
+    return res;
+  };
+
+  const createAssetCheckRecord: AppContextType['createAssetCheckRecord'] = async (record) => {
+    const res = await dbService.createAssetCheckRecord(record);
+    const updated = await dbService.getAssetCheckRecords();
+    setAssetCheckRecords(updated);
+    return res;
+  };
+
+  const linkAssetCheckEvidence: AppContextType['linkAssetCheckEvidence'] = async (
+    assignmentId,
+    recordId,
+    documentId,
+    assetId
+  ) => {
+    const res = await dbService.linkAssetCheckEvidence(assignmentId, recordId, documentId, assetId);
+    const updated = await dbService.getAssetCheckEvidenceLinks();
+    setAssetCheckEvidenceLinks(updated);
+    return res;
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -1382,6 +1507,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         updateCellMapping,
         markNotificationRead,
         markAllNotificationsRead,
+
+        // Asset Assurance System
+        assets,
+        assetCheckTypes,
+        assetCheckAssignments,
+        assetCheckRecords,
+        assetCheckEvidenceLinks,
+        assetRequirementLinks,
+        createAsset,
+        updateAsset,
+        deleteAsset,
+        createAssetCheckType,
+        createAssetCheckAssignment,
+        updateAssetCheckAssignment,
+        createAssetCheckRecord,
+        linkAssetCheckEvidence,
+
         readinessReport: readinessReport || emptyReadinessReport,
         competencySummary,
         readinessScore,
