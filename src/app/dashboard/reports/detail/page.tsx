@@ -152,24 +152,59 @@ export default function ReportDetailPage() {
 
   // Fetch initial params on mount
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    const initParams = async () => {
+      if (typeof window === 'undefined') return;
       const params = new URLSearchParams(window.location.search);
-      const requestedSource = params.get('source') || '';
-      const supportedSources = ['Requirements', 'Evidence', 'Competencies', 'Actions', 'Audits'];
-      const resolvedSource = supportedSources.includes(requestedSource) ? requestedSource : 'Unsupported';
+      const reportId = params.get('report') || params.get('reportId');
+      
+      let resolvedSource = 'Unsupported';
+      let statusVal = 'All';
+      let categoryVal = 'All';
+      let ownerVal = 'All';
+      let riskVal = 'All';
+      let overdueVal = 'All';
+
+      if (reportId) {
+        try {
+          const reportsList = await dbService.getSavedReports();
+          const report = reportsList.find(r => r.id === reportId);
+          if (report) {
+            resolvedSource = report.data_source;
+            const filters = report.configuration?.filters || {};
+            statusVal = filters.status || 'All';
+            categoryVal = filters.category || 'All';
+            ownerVal = filters.owner || 'All';
+            riskVal = filters.risk || 'All';
+            overdueVal = filters.overdue || 'All';
+          }
+        } catch (err) {
+          console.error('Failed to load saved report parameters', err);
+        }
+      } else {
+        const requestedSource = params.get('source') || '';
+        const supportedSources = ['Requirements', 'Evidence', 'Competencies', 'Actions', 'Audits'];
+        resolvedSource = supportedSources.includes(requestedSource) ? requestedSource : 'Unsupported';
+        statusVal = params.get('status') || 'All';
+        categoryVal = params.get('category') || 'All';
+        ownerVal = params.get('owner') || 'All';
+        riskVal = params.get('risk') || 'All';
+        overdueVal = params.get('overdue') || 'All';
+      }
 
       setSource(resolvedSource);
-      setStatusFilter(params.get('status') || 'All');
-      setCategoryFilter(params.get('category') || 'All');
-      setOwnerFilter(params.get('owner') || 'All');
-      setRiskFilter(params.get('risk') || 'All');
-      setOverdueFilter(params.get('overdue') || 'All');
+      setStatusFilter(statusVal);
+      setCategoryFilter(categoryVal);
+      setOwnerFilter(ownerVal);
+      setRiskFilter(riskVal);
+      setOverdueFilter(overdueVal);
       setGeneratedAt(new Date().toLocaleString());
 
       if (resolvedSource && defaultVisibleColumns[resolvedSource]) {
         setVisibleColumns(defaultVisibleColumns[resolvedSource]);
       }
-    }
+    };
+
+    initParams();
   }, [defaultVisibleColumns]);
 
   // Back tab tracking (decides which parent reports tab to open when clicking Back)

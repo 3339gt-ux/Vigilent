@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { BulkUploadConfigurationPanel } from '@/components/BulkUploadConfigurationPanel';
 import { NotificationBell } from '@/components/NotificationBell';
+import { GlobalSearchPanel } from '@/components/GlobalSearchPanel';
 
 function AppearanceControls({ compact = false }: { compact?: boolean }) {
   const { themePreference, setThemePreference } = useApp();
@@ -423,8 +424,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </aside>
 
-        {/* 3. Mobile Header & Menu */}
+        {/* 3. Mobile/Desktop Header & Menu */}
         <div className="flex-1 flex flex-col min-w-0">
+          {/* Desktop top header bar */}
+          <header className="hidden lg:flex h-14 bg-card/40 backdrop-blur-xs border-b border-border/50 px-8 items-center justify-between z-30 sticky top-0 print:hidden shrink-0">
+            <div className="flex items-center gap-3">
+              <span className="font-extrabold text-xs text-foreground/80">{organization.name}</span>
+              <span className="px-2 py-0.5 bg-muted/60 border border-border/50 text-[9px] font-extrabold rounded text-muted-foreground select-none">
+                Workspace ID: {organization.id.substring(0, 8)}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <GlobalSearchPanel dropdownAlign="right-0 top-full mt-2" />
+            </div>
+          </header>
+
           <header className="lg:hidden h-14 bg-card border-b border-border/80 px-4 flex items-center justify-between z-50 print:hidden">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 flex items-center justify-center">
@@ -440,6 +454,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
 
             <div className="flex items-center gap-1.5">
+              <GlobalSearchPanel dropdownAlign="right-0 top-full mt-2" />
               <NotificationBell dropdownAlign="right-0 top-full mt-2" />
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}

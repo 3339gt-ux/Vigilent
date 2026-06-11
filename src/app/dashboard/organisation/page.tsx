@@ -123,6 +123,19 @@ export default function OrganisationManagement() {
   const currentUserRole = user?.role || 'Viewer';
   const isAuthorized = currentUserRole === 'Admin' || currentUserRole === 'Owner';
 
+  React.useEffect(() => {
+    if (typeof window !== 'undefined' && members.length > 0) {
+      const params = new URLSearchParams(window.location.search);
+      const memberId = params.get('member');
+      if (memberId) {
+        const match = members.find(m => m.id === memberId);
+        if (match) {
+          handleEditOpen(match);
+        }
+      }
+    }
+  }, [members, isAuthorized]);
+
   const checkIsLastAdmin = (memberId: string) => {
     const activeAdmins = members.filter(m => (m.role === 'Admin' || m.role === 'Owner') && m.status === 'Active');
     const target = members.find(m => m.id === memberId);
@@ -221,7 +234,7 @@ export default function OrganisationManagement() {
     }
   };
 
-  const handleEditOpen = (member: Member) => {
+  function handleEditOpen(member: Member) {
     if (!isAuthorized) {
       showToast('Only Owners and Admins can edit members.', 'error');
       return;
@@ -231,7 +244,7 @@ export default function OrganisationManagement() {
     setEditRole(member.role);
     setEditStatus(member.status);
     setShowEditModal(true);
-  };
+  }
 
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

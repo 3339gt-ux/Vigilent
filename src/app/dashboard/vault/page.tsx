@@ -300,17 +300,17 @@ export default function EvidenceVault() {
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      const idParam = params.get('id');
+      const docId = params.get('document') || params.get('id');
       const filterParam = params.get('filter');
 
       if (filterParam && filterParam.startsWith('doc:')) {
-        const docId = filterParam.replace('doc:', '');
-        const doc = documents.find(d => d.id === docId);
+        const dId = filterParam.replace('doc:', '');
+        const doc = documents.find(d => d.id === dId);
         if (doc) {
           setSelectedDoc(doc);
         }
-      } else if (idParam) {
-        const doc = documents.find(d => d.id === idParam);
+      } else if (docId) {
+        const doc = documents.find(d => d.id === docId);
         if (doc) {
           setSelectedDoc(doc);
         }

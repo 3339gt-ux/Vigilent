@@ -457,7 +457,7 @@ export default function RequirementsPage() {
       if (actionParam === 'create') {
         setShowCreateModal(true);
       }
-      const actionIdParam = params.get('actionId');
+      const actionIdParam = params.get('actionId') || params.get('selectedAction');
       if (actionIdParam && actions.length > 0) {
         const act = actions.find(a => a.id === actionIdParam);
         if (act) {
@@ -465,8 +465,9 @@ export default function RequirementsPage() {
           setSelectedAction(act);
         }
       }
-      if (idParam && assessedRequirements.length > 0) {
-        const req = assessedRequirements.find(r => r.id === idParam);
+      const targetReqId = idParam || params.get('selected');
+      if (targetReqId && assessedRequirements.length > 0) {
+        const req = assessedRequirements.find(r => r.id === targetReqId);
         if (req) {
           setSelectedRequirement(req);
         }

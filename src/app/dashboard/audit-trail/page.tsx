@@ -182,6 +182,19 @@ export default function AuditTrailPage() {
     }
   }, [isAuthorized]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined' && events.length > 0) {
+      const params = new URLSearchParams(window.location.search);
+      const eventId = params.get('event');
+      if (eventId) {
+        const match = events.find(e => e.id === eventId);
+        if (match) {
+          setSelectedEvent(match);
+        }
+      }
+    }
+  }, [events]);
+
   // Unique lists for filtering dropdowns
   const uniqueActors = useMemo(() => {
     const actors = new Set<string>();

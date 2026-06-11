@@ -267,10 +267,25 @@ export default function EvidenceMatrix() {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const filterParam = params.get('filter');
+      const reqId = params.get('requirement');
+      const targetName = params.get('asset') || params.get('target');
+
+      if (reqId && targetName && matrixCells.length > 0) {
+        const cell = matrixCells.find(c => c.requirement_id === reqId && c.target_name === targetName);
+        if (cell) {
+          handleCellClick(cell);
+        }
+      } else if (reqId && requirements.length > 0) {
+        const req = requirements.find(r => r.id === reqId);
+        if (req) {
+          setSearch(req.title);
+        }
+      }
+
       if (filterParam) {
         if (filterParam.startsWith('req:')) {
-          const reqId = filterParam.replace('req:', '');
-          const req = requirements.find(r => r.id === reqId);
+          const rId = filterParam.replace('req:', '');
+          const req = requirements.find(r => r.id === rId);
           if (req) {
             setSearch(req.title);
           }
@@ -278,12 +293,12 @@ export default function EvidenceMatrix() {
           const catName = filterParam.replace('cat:', '');
           setSelectedCategory(catName);
         } else if (filterParam.startsWith('target:')) {
-          const targetName = filterParam.replace('target:', '');
-          setTargetNameFilter(targetName);
+          const targetNameVal = filterParam.replace('target:', '');
+          setTargetNameFilter(targetNameVal);
         }
       }
     }
-  }, [requirements]);
+  }, [requirements, matrixCells]);
 
   const filterChips = useMemo(() => {
     const chips: any[] = [];
@@ -473,10 +488,10 @@ export default function EvidenceMatrix() {
   };
 
   // Handle cell click
-  const handleCellClick = (cell: MatrixCell) => {
+  function handleCellClick(cell: MatrixCell) {
     setActiveCell(cell);
     setSelectedDocId(cell.document_id || '');
-  };
+  }
 
   // Save cell link mapping
   const handleSaveCellLink = async () => {

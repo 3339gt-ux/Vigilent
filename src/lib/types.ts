@@ -527,3 +527,16 @@ export interface SavedReport {
   owner_profile?: { full_name: string | null; role: string | null } | null;
   is_local?: boolean;
 }
+
+export interface GlobalSearchResult {
+  id: string;
+  title: string;
+  description: string | null;
+  type: 'requirement' | 'action' | 'person' | 'competency_type' | 'document' | 'audit_pack' | 'report' | 'audit_trail_event';
+  status: string;
+  category: string;
+  path: string;
+  relevanceScore: number;
+  additionalInfo?: Record<string, any>;
+}
+

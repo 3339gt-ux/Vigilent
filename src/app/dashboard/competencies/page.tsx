@@ -572,12 +572,27 @@ export default function CompetencyMatrixPage() {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const filterParam = params.get('filter');
-      const idParam = params.get('id');
+      const personId = params.get('person') || params.get('id');
+      const competencyId = params.get('competency');
       
-      if (idParam && activePeople.length > 0) {
-        const person = activePeople.find(p => p.id === idParam);
+      if (personId && activePeople.length > 0) {
+        const person = activePeople.find(p => p.id === personId);
         if (person) {
-          openPersonWorkspace(person);
+          if (competencyId && competencyTypes.length > 0) {
+            const compType = competencyTypes.find(c => c.id === competencyId);
+            if (compType) {
+              openCell(person, compType);
+            } else {
+              openPersonWorkspace(person);
+            }
+          } else {
+            openPersonWorkspace(person);
+          }
+        }
+      } else if (competencyId && competencyTypes.length > 0) {
+        const comp = competencyTypes.find(c => c.id === competencyId);
+        if (comp) {
+          setSearch(comp.title);
         }
       }
       
@@ -983,7 +998,7 @@ export default function CompetencyMatrixPage() {
 
   // Removed duplicate filteredTypes definition to allow hiddenColumns and showOnlyFavourites filters to work correctly.
 
-  const openCell = (person: Person, competencyType: CompetencyType) => {
+  function openCell(person: Person, competencyType: CompetencyType) {
     setSelectedPerson(person);
     const cell = matrix.find(item => item.person.id === person.id && item.competencyType.id === competencyType.id);
     setActiveCell({ person, competencyType, record: cell?.record || null });
@@ -998,7 +1013,7 @@ export default function CompetencyMatrixPage() {
     });
     setFormMessage('');
     setLinkDocumentId('');
-  };
+  }
 
   const linkedDocuments = activeCell?.record
     ? competencyRecordDocuments

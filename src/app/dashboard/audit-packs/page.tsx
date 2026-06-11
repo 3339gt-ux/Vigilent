@@ -104,6 +104,24 @@ export default function AuditPackBuilder() {
 
   const [step, setStep] = useState(1);
   const [packName, setPackName] = useState('');
+  const [highlightedPackId, setHighlightedPackId] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const packIdParam = params.get('pack');
+      if (packIdParam) {
+        setHighlightedPackId(packIdParam);
+        setTimeout(() => {
+          const element = document.getElementById(`audit-pack-card-${packIdParam}`);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 150);
+      }
+    }
+  }, [auditPacks]);
+
   const [packDesc, setPackDesc] = useState('');
   const [selectedRequirementIds, setSelectedRequirementIds] = useState<string[]>([]);
   const [search, setSearch] = useState('');
@@ -782,7 +800,15 @@ export default function AuditPackBuilder() {
                 const packStatus = normalizePackStatus(pack.status);
                 const rows = buildRowsForRequirements(pack.requirements || []);
                 return (
-                  <div key={pack.id} className="bg-card border border-border p-4 rounded-xl space-y-4 text-xs shadow-sm">
+                  <div
+                    key={pack.id}
+                    id={`audit-pack-card-${pack.id}`}
+                    className={`bg-card border p-4 rounded-xl space-y-4 text-xs shadow-sm transition-all duration-300 ${
+                      pack.id === highlightedPackId
+                        ? 'border-indigo-500 ring-2 ring-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-950/20'
+                        : 'border-border'
+                    }`}
+                  >
                     <div className="flex justify-between items-start gap-4">
                       <div className="overflow-hidden mr-2">
                         <span className="font-bold block truncate text-foreground leading-normal" title={pack.name}>{pack.name}</span>
