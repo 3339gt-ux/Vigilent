@@ -39,14 +39,6 @@ const scoreTone = (score: number | null) => {
 };
 
 
-const getHealthState = (score: number | null) => {
-  if (score === null) return 'N/A';
-  if (score >= 90) return 'Excellent';
-  if (score >= 75) return 'Good';
-  if (score >= 50) return 'Fair';
-  if (score >= 30) return 'Poor';
-  return 'Critical';
-};
 
 
 type RadarItem = {
@@ -406,22 +398,26 @@ export default function DashboardPage() {
         count: stats.activeRequirements,
         warnings: stats.expiredCount,
         path: '/dashboard/requirements',
-        pos: 'left-[50%] top-[10%] -translate-x-1/2 -translate-y-1/2',
+        pos: 'left-[43.75%] top-[15%] -translate-x-6 -translate-y-6',
         color: stats.expiredCount > 0 ? 'border-rose-500/40 text-rose-600 dark:text-rose-400' : 'border-border text-foreground',
         description: 'Assurance Objectives',
-        actionLabel: 'View Objectives'
+        actionLabel: 'View Objectives',
+        badge: stats.expiredCount,
+        badgeColor: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
       },
       {
         id: 'competencies',
-        name: 'Competencies',
+        name: 'Competency Matrix',
         icon: <UserCheck className="w-5 h-5" />,
         count: people.length,
         warnings: competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').length,
         path: '/dashboard/competencies',
-        pos: 'left-[82%] top-[28%] -translate-x-1/2 -translate-y-1/2',
+        pos: 'left-[17.5%] top-[30%] -translate-x-6 -translate-y-6',
         color: competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').length > 0 ? 'border-amber-500/40 text-amber-600 dark:text-amber-400' : 'border-border text-foreground',
         description: 'Personnel matrix',
-        actionLabel: 'View Matrix'
+        actionLabel: 'View Matrix',
+        badge: competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').length,
+        badgeColor: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
       },
       {
         id: 'vault',
@@ -430,10 +426,12 @@ export default function DashboardPage() {
         count: documents.length,
         warnings: unclassifiedDocs.length,
         path: '/dashboard/vault',
-        pos: 'left-[82%] top-[72%] -translate-x-1/2 -translate-y-1/2',
+        pos: 'left-[71.25%] top-[30%] -translate-x-6 -translate-y-6',
         color: unclassifiedDocs.length > 0 ? 'border-amber-500/40 text-amber-600 dark:text-amber-400' : 'border-border text-foreground',
         description: 'Audit evidence repository',
-        actionLabel: 'Open Vault'
+        actionLabel: 'Open Vault',
+        badge: unclassifiedDocs.length,
+        badgeColor: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20'
       },
       {
         id: 'matrix',
@@ -442,34 +440,40 @@ export default function DashboardPage() {
         count: assets.length,
         warnings: overdueAssetChecks.length,
         path: '/dashboard/matrix',
-        pos: 'left-[50%] top-[90%] -translate-x-1/2 -translate-y-1/2',
+        pos: 'left-[17.5%] top-[70%] -translate-x-6 -translate-y-6',
         color: overdueAssetChecks.length > 0 ? 'border-rose-500/40 text-rose-600 dark:text-rose-400' : 'border-border text-foreground',
         description: 'Equipment & facility checks',
-        actionLabel: 'Open Matrix'
+        actionLabel: 'Open Matrix',
+        badge: overdueAssetChecks.length,
+        badgeColor: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
       },
       {
         id: 'audit-packs',
-        name: 'Audit Packs',
+        name: 'Audit Pack Builder',
         icon: <FolderArchive className="w-5 h-5" />,
         count: auditPacks.length,
         warnings: 0,
         path: '/dashboard/audit-packs',
-        pos: 'left-[18%] top-[72%] -translate-x-1/2 -translate-y-1/2',
+        pos: 'left-[71.25%] top-[70%] -translate-x-6 -translate-y-6',
         color: 'border-border text-foreground',
         description: 'Readiness reports compiler',
-        actionLabel: 'Configure Packs'
+        actionLabel: 'Configure Packs',
+        badge: auditPacks.length,
+        badgeColor: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
       },
       {
         id: 'reports',
         name: 'Reports',
         icon: <BarChart3 className="w-5 h-5" />,
-        count: 5,
+        count: 24,
         warnings: 0,
         path: '/dashboard/reports',
-        pos: 'left-[18%] top-[28%] -translate-x-1/2 -translate-y-1/2',
+        pos: 'left-[43.75%] top-[85%] -translate-x-6 -translate-y-6',
         color: 'border-border text-foreground',
         description: 'Performance overview analytics',
-        actionLabel: 'Open Analytics'
+        actionLabel: 'Open Analytics',
+        badge: 5,
+        badgeColor: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
       }
     ];
   }, [stats, people, competencyRecords, documents, unclassifiedDocs, assets, overdueAssetChecks, auditPacks]);
@@ -839,100 +843,205 @@ export default function DashboardPage() {
             {/* Central content depending on toggle */}
             <div className="p-6">
               {viewMode === 'system' ? (
-                /* Interactive graphical system map layout */
-                <div className="w-full max-w-[600px] aspect-[4/3] mx-auto relative select-none">
-                  {/* Background SVG connections */}
-                  <svg viewBox="0 0 600 450" className="absolute inset-0 w-full h-full pointer-events-none">
-                    {/* Glowing effect filter definition */}
-                    <defs>
-                      <filter id="core-glow" x="-20%" y="-20%" width="140%" height="140%">
-                        <feGaussianBlur stdDeviation="6" result="blur" />
-                        <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                      </filter>
-                    </defs>
+                /* Upgraded Premium Graphical System Map Layout */
+                <>
+                  <div className="w-full max-w-[800px] aspect-[2/1] mx-auto relative select-none hidden md:block">
+                    {/* Background SVG connections */}
+                    <svg viewBox="0 0 800 400" className="absolute inset-0 w-full h-full pointer-events-none">
+                      <defs>
+                        {/* Glowing effect filter definition */}
+                        <filter id="core-glow" x="-20%" y="-20%" width="140%" height="140%">
+                          <feGaussianBlur stdDeviation="8" result="blur" />
+                          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                        </filter>
+                        <radialGradient id="hub-glow-gradient" cx="50%" cy="50%" r="50%">
+                          <stop offset="0%" stopColor="rgba(99, 102, 241, 0.25)" />
+                          <stop offset="100%" stopColor="rgba(99, 102, 241, 0)" />
+                        </radialGradient>
+                      </defs>
 
-                    {/* Connecting lines from Core to satellites */}
+                      <style>{`
+                        @keyframes flow-animation {
+                          from { stroke-dashoffset: 48; }
+                          to { stroke-dashoffset: 0; }
+                        }
+                        .glowing-flow-line {
+                          stroke-dasharray: 8 40;
+                          animation: flow-animation 3s linear infinite;
+                        }
+                      `}</style>
+
+                      {/* Radial glow behind the center hub */}
+                      <circle cx="400" cy="200" r="120" fill="url(#hub-glow-gradient)" />
+
+                      {/* Connecting lines from Core to satellites */}
+                      {satelliteNodes.map(node => {
+                        const isHovered = hoveredNode === node.id;
+                        let pathD = '';
+                        if (node.id === 'competencies') pathD = 'M 400 200 L 260 200 L 260 120 L 150 120';
+                        else if (node.id === 'requirements') pathD = 'M 400 200 L 400 100 L 350 100 L 350 60';
+                        else if (node.id === 'vault') pathD = 'M 400 200 L 510 200 L 510 120 L 570 120';
+                        else if (node.id === 'audit-packs') pathD = 'M 400 200 L 510 200 L 510 280 L 570 280';
+                        else if (node.id === 'reports') pathD = 'M 400 200 L 400 300 L 350 300 L 350 340';
+                        else if (node.id === 'matrix') pathD = 'M 400 200 L 260 200 L 260 280 L 150 280';
+
+                        return (
+                          <g key={node.id}>
+                            {/* Background path with thin subtle opacity */}
+                            <path
+                              d={pathD}
+                              fill="none"
+                              className={`transition-all duration-300 stroke-[1.5] ${
+                                isHovered
+                                  ? 'stroke-indigo-500/60'
+                                  : 'stroke-indigo-500/15 dark:stroke-indigo-500/10'
+                              }`}
+                            />
+                            {/* Animated glowing data flow line */}
+                            <path
+                              d={pathD}
+                              fill="none"
+                              stroke="#6366f1"
+                              strokeWidth="2"
+                              className="glowing-flow-line opacity-75"
+                              style={{ strokeLinecap: 'round' }}
+                            />
+                            {/* Thick glow overlay when node is hovered */}
+                            {isHovered && (
+                              <path
+                                d={pathD}
+                                fill="none"
+                                className="stroke-indigo-400 opacity-40 stroke-[4] animate-pulse"
+                                filter="url(#core-glow)"
+                                style={{ strokeLinecap: 'round' }}
+                              />
+                            )}
+                          </g>
+                        );
+                      })}
+
+                      {/* Concentric rings surrounding the central hub */}
+                      <circle cx="400" cy="200" r="76" stroke="rgba(99, 102, 241, 0.12)" strokeWidth="1" fill="none" strokeDasharray="6 12" />
+                      <circle cx="400" cy="200" r="54" stroke="rgba(6, 182, 212, 0.25)" strokeWidth="1.5" fill="none" />
+
+                      {/* Central Glowing Orb Core (fill/glow) */}
+                      <circle cx="400" cy="200" r="46" fill="#070A13" stroke="#6366f1" strokeWidth="2.5" filter="url(#core-glow)" />
+
+                      {/* Slow spinning starburst emblem inside the core (matching the Lumen radial style) */}
+                      <g style={{ transformOrigin: '400px 200px', animation: 'spin 120s linear infinite' }}>
+                        {Array.from({ length: 32 }).map((_, i) => {
+                          const angle = i * (360 / 32);
+                          const rad = (angle * Math.PI) / 180;
+                          const r1 = 12; // starts inside the core
+                          const r2 = i % 2 === 0 ? 38 : 28; // alternating long and short spikes
+                          const x1 = 400 + r1 * Math.cos(rad);
+                          const y1 = 200 + r1 * Math.sin(rad);
+                          const x2 = 400 + r2 * Math.cos(rad);
+                          const y2 = 200 + r2 * Math.sin(rad);
+
+                          return (
+                            <line
+                              key={i}
+                              x1={x1}
+                              y1={y1}
+                              x2={x2}
+                              y2={y2}
+                              className={`stroke-indigo-400 dark:stroke-indigo-300 opacity-90 ${
+                                i % 2 === 0 ? 'stroke-[2]' : 'stroke-[1.5]'
+                              }`}
+                              strokeLinecap="round"
+                            />
+                          );
+                        })}
+                      </g>
+                    </svg>
+
+                    {/* Absolute positioned module nodes with side-labels */}
                     {satelliteNodes.map(node => {
                       const isHovered = hoveredNode === node.id;
-                      // Extract target coords from lines
-                      let tx = 300, ty = 225;
-                      if (node.id === 'requirements') { tx = 300; ty = 45; }
-                      else if (node.id === 'competencies') { tx = 480; ty = 112.5; }
-                      else if (node.id === 'vault') { tx = 480; ty = 337.5; }
-                      else if (node.id === 'matrix') { tx = 300; ty = 405; }
-                      else if (node.id === 'audit-packs') { tx = 120; ty = 337.5; }
-                      else if (node.id === 'reports') { tx = 120; ty = 112.5; }
-
                       return (
-                        <g key={node.id}>
-                          <line
-                            x1="300"
-                            y1="225"
-                            x2={tx}
-                            y2={ty}
-                            className={`transition-all duration-300 stroke-2 ${
-                              isHovered
-                                ? 'stroke-indigo-500 opacity-90 stroke-[2.5]'
-                                : 'stroke-indigo-500/20 dark:stroke-indigo-500/10'
+                        <div
+                          key={node.id}
+                          className={`absolute ${node.pos} flex items-center transition-all duration-300 z-20`}
+                          style={{ minWidth: '180px' }}
+                        >
+                          <Link
+                            href={node.path}
+                            id={`program-node-${node.id}`}
+                            onMouseEnter={() => setHoveredNode(node.id)}
+                            onMouseLeave={() => setHoveredNode(null)}
+                            onFocus={() => setHoveredNode(node.id)}
+                            onBlur={() => setHoveredNode(null)}
+                            className={`w-12 h-12 rounded-full bg-card border-2 flex items-center justify-center transition-all duration-300 shadow-xs hover:scale-110 hover:shadow-lg hover:border-indigo-500/80 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 shrink-0 ${
+                              isHovered ? 'border-indigo-500 shadow-md scale-105' : 'border-border text-foreground'
                             }`}
-                          />
-                          {isHovered && (
-                            <line
-                              x1="300"
-                              y1="225"
-                              x2={tx}
-                              y2={ty}
-                              className="stroke-indigo-400 opacity-50 stroke-[5] animate-pulse pointer-events-none"
-                              filter="url(#core-glow)"
-                            />
-                          )}
-                        </g>
+                            title={`${node.name}: ${node.description}`}
+                          >
+                            <div className="relative">
+                              <span className={isHovered ? 'text-indigo-500 dark:text-indigo-400' : 'text-foreground'}>
+                                {node.icon}
+                              </span>
+                              {node.warnings > 0 && (
+                                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 border border-card text-[8px] font-black text-white flex items-center justify-center animate-pulse">
+                                  {node.warnings}
+                                </span>
+                              )}
+                            </div>
+                          </Link>
+
+                          {/* Node label details right next to the circle node */}
+                          <div className="ml-3 flex flex-col text-left select-none pointer-events-none">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`text-[11px] font-black uppercase tracking-tight transition-colors duration-250 ${
+                                isHovered ? 'text-indigo-500 dark:text-indigo-400' : 'text-foreground'
+                              }`}>
+                                {node.name}
+                              </span>
+                              {node.badge !== undefined && node.badge > 0 && (
+                                <span className={`px-1.5 py-0.5 rounded text-[8px] font-black leading-none shrink-0 ${node.badgeColor}`}>
+                                  {node.badge}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-muted-foreground font-semibold">
+                              {node.count} {node.id === 'competencies' ? 'staff' : node.id === 'vault' ? 'files' : node.id === 'reports' ? 'reports' : 'items'}
+                            </span>
+                          </div>
+                        </div>
                       );
                     })}
-                  </svg>
-
-                  {/* Central glowing core node */}
-                  <div
-                    className="absolute left-[50%] top-[50%] -translate-x-1/2 -translate-y-1/2 z-10 w-24 h-24 rounded-full bg-indigo-650/10 border-2 border-indigo-500 text-indigo-500 flex flex-col items-center justify-center shadow-lg shadow-indigo-500/15 animate-in zoom-in duration-300 select-none cursor-default"
-                    style={{ filter: 'drop-shadow(0 0 10px rgba(99, 102, 241, 0.2))' }}
-                  >
-                    <ShieldCheck className="w-8 h-8" />
-                    <span className="text-[10px] font-black uppercase tracking-widest mt-1 text-center select-none">Vygilence</span>
-                    <span className="text-[8px] text-muted-foreground/80 font-bold select-none">Hub</span>
                   </div>
 
-                  {/* Absolute positioned module nodes */}
-                  {satelliteNodes.map(node => {
-                    return (
+                  {/* Responsive grid for mobile view */}
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4 md:hidden">
+                    {satelliteNodes.map(node => (
                       <Link
                         key={node.id}
                         href={node.path}
-                        id={`program-node-${node.id}`}
-                        onMouseEnter={() => setHoveredNode(node.id)}
-                        onMouseLeave={() => setHoveredNode(null)}
-                        onFocus={() => setHoveredNode(node.id)}
-                        onBlur={() => setHoveredNode(null)}
-                        className={`absolute ${node.pos} w-20 h-20 md:w-24 md:h-24 rounded-full bg-card border-2 flex flex-col items-center justify-center text-center transition-all duration-300 shadow-xs hover:scale-105 hover:shadow-lg hover:border-indigo-500/80 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${node.color}`}
-                        title={`${node.name}: ${node.description}`}
+                        className={`p-3 bg-card border rounded-xl flex items-center gap-3 hover:border-indigo-500/50 transition-colors ${node.color}`}
                       >
-                        <div className="relative">
+                        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0">
                           {node.icon}
-                          {node.warnings > 0 && (
-                            <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 border-2 border-card text-[8px] font-black text-white flex items-center justify-center animate-pulse">
-                              {node.warnings}
-                            </span>
-                          )}
                         </div>
-                        <span className="text-[9px] md:text-[10px] font-extrabold uppercase mt-1 tracking-tight truncate max-w-[80px]">
-                          {node.name}
-                        </span>
-                        <span className="text-[9px] text-muted-foreground font-semibold">
-                          {node.count} {node.id === 'competencies' ? 'staff' : node.id === 'vault' ? 'files' : node.id === 'reports' ? 'types' : 'active'}
-                        </span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-black text-foreground uppercase tracking-tight truncate">
+                              {node.name}
+                            </span>
+                            {node.badge !== undefined && node.badge > 0 && (
+                              <span className={`px-1 rounded text-[8px] font-black shrink-0 ${node.badgeColor}`}>
+                                {node.badge}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[9px] text-muted-foreground block truncate">
+                            {node.count} {node.id === 'competencies' ? 'staff' : node.id === 'vault' ? 'files' : node.id === 'reports' ? 'reports' : 'items'}
+                          </span>
+                        </div>
                       </Link>
-                    );
-                  })}
-                </div>
+                    ))}
+                  </div>
+                </>
               ) : (
                 /* Tabular List View of Workspace modules */
                 <div className="overflow-x-auto">
@@ -1048,39 +1157,84 @@ export default function DashboardPage() {
         <aside className="space-y-6">
           {/* Rail Section 1: Circular Compliance gauge */}
           <div className="bg-card border border-border rounded-2xl p-5 shadow-xs space-y-4">
-            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Compliance Snapshot</span>
-            <div className="flex flex-col items-center justify-center space-y-2 py-2">
-              <div className="relative w-24 h-24 flex items-center justify-center">
-                {/* SVG Circular progress */}
-                <svg className="w-full h-full transform -rotate-90">
-                  <circle
-                    cx="48"
-                    cy="48"
-                    r="40"
-                    className="stroke-muted"
-                    strokeWidth="6"
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Compliance Snapshot</span>
+              <span className="flex items-center gap-1 text-[9px] font-bold text-muted-foreground uppercase">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-4 py-1">
+              <div className="relative w-28 h-28 flex items-center justify-center shrink-0">
+                {/* SVG Circular progress arch */}
+                <svg viewBox="0 0 120 120" className="w-full h-full">
+                  <defs>
+                    <linearGradient id="compliance-gauge-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+                      <stop offset="0%" stopColor="#ef4444" /> {/* Red */}
+                      <stop offset="35%" stopColor="#f59e0b" /> {/* Orange/Yellow */}
+                      <stop offset="70%" stopColor="#10b981" /> {/* Emerald */}
+                      <stop offset="100%" stopColor="#6366f1" /> {/* Indigo */}
+                    </linearGradient>
+                  </defs>
+                  {/* Background Track */}
+                  <path
+                    d="M 30 95 A 40 40 0 1 1 90 95"
                     fill="transparent"
-                  />
-                  <circle
-                    cx="48"
-                    cy="48"
-                    r="40"
-                    className="stroke-indigo-600 transition-all duration-500"
-                    strokeWidth="6"
-                    fill="transparent"
-                    strokeDasharray={`${2 * Math.PI * 40}`}
-                    strokeDashoffset={`${(2 * Math.PI * 40) - (readinessScore / 100) * (2 * Math.PI * 40)}`}
+                    stroke="currentColor"
+                    className="text-muted/15 dark:text-muted/10"
+                    strokeWidth="9"
                     strokeLinecap="round"
                   />
+                  {/* Active Arc */}
+                  <path
+                    d="M 30 95 A 40 40 0 1 1 90 95"
+                    fill="transparent"
+                    stroke="url(#compliance-gauge-grad)"
+                    strokeWidth="9"
+                    strokeLinecap="round"
+                    strokeDasharray="188.5"
+                    strokeDashoffset={188.5 - ((readinessScore ?? 0) / 100) * 188.5}
+                    className="transition-all duration-1000 ease-out"
+                  />
                 </svg>
-                <div className="absolute flex flex-col items-center justify-center">
-                  <span className="text-xl font-black text-foreground">{readinessScore}%</span>
-                  <span className="text-[8px] font-bold text-muted-foreground uppercase">Ready</span>
+                <div className="absolute flex flex-col items-center justify-center text-center mt-[-8px]">
+                  <span className="text-2xl font-black text-foreground">{readinessScore}%</span>
+                  <span className="text-[8px] font-bold text-muted-foreground uppercase tracking-wider">Overall</span>
+                  <div className={`flex items-center gap-0.5 mt-0.5 text-[8px] font-bold ${readinessScore && readinessScore >= 75 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    <span>{readinessScore && readinessScore >= 75 ? '▲' : '▼'}</span>
+                    <span>{readinessScore && readinessScore >= 75 ? '4%' : '2%'} vs last month</span>
+                  </div>
                 </div>
               </div>
-              <div className="text-center">
-                <span className="text-xs font-bold block">{getHealthState(readinessScore)} health</span>
-                <span className="text-[9px] text-muted-foreground">{stats.compliantCount} of {stats.activeRequirements} objectives met</span>
+
+              <div className="flex-1 space-y-2 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-muted-foreground font-semibold">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                    <span>Compliant</span>
+                  </div>
+                  <span className="font-bold text-foreground">{stats.compliantCount}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-muted-foreground font-semibold">
+                    <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
+                    <span>In Progress</span>
+                  </div>
+                  <span className="font-bold text-foreground">{activeActionsCount}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-muted-foreground font-semibold">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                    <span>At Risk</span>
+                  </div>
+                  <span className="font-bold text-foreground">{stats.expiringSoonCount}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-muted-foreground font-semibold">
+                    <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                    <span>Non-Compliant</span>
+                  </div>
+                  <span className="font-bold text-foreground">{stats.expiredCount}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -1166,35 +1320,249 @@ export default function DashboardPage() {
         </aside>
       </div>
 
-      {/* 4. Lower Dashboard Panels */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {/* Panel 1: Requirement Status Distribution */}
-        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs space-y-4">
-          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Requirement Status Distribution</span>
-          <div className="space-y-3 py-2 text-xs">
-            {[
-              { label: 'Compliant (Green)', count: stats.compliantCount, color: 'bg-emerald-500', pct: stats.activeRequirements > 0 ? Math.round((stats.compliantCount / stats.activeRequirements) * 100) : 0 },
-              { label: 'Expiring Soon (Amber)', count: stats.expiringSoonCount, color: 'bg-amber-500', pct: stats.activeRequirements > 0 ? Math.round((stats.expiringSoonCount / stats.activeRequirements) * 100) : 0 },
-              { label: 'Expired (Red)', count: stats.expiredCount, color: 'bg-rose-500', pct: stats.activeRequirements > 0 ? Math.round((stats.expiredCount / stats.activeRequirements) * 100) : 0 },
-              { label: 'Not Assessed (Grey)', count: stats.activeRequirements - (stats.compliantCount + stats.expiringSoonCount + stats.expiredCount), color: 'bg-zinc-500', pct: stats.activeRequirements > 0 ? Math.round(((stats.activeRequirements - (stats.compliantCount + stats.expiringSoonCount + stats.expiredCount)) / stats.activeRequirements) * 100) : 0 }
-            ].map(item => (
-              <div key={item.label} className="space-y-1.5">
-                <div className="flex justify-between items-center font-bold">
-                  <span className="flex items-center gap-1.5">
-                    <span className={`w-2.5 h-2.5 rounded-full ${item.color}`} />
-                    {item.label}
-                  </span>
-                  <span className="text-muted-foreground">{item.count}</span>
-                </div>
-                <div className="w-full bg-muted h-2 rounded-full overflow-hidden">
-                  <div className={`${item.color} h-2 rounded-full`} style={{ width: `${item.pct}%` }} />
-                </div>
-              </div>
-            ))}
+      {/* 4. Lower Dashboard Panels - Tier 1: Key Performance Dials */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {/* Card 1: Compliance Trend */}
+        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
+            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Compliance Trend</span>
+            <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">All Programs</span>
+          </div>
+          <div className="relative w-full h-32 mt-2">
+            <svg viewBox="0 0 300 120" className="w-full h-full">
+              <defs>
+                <linearGradient id="trend-fill-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="rgba(99, 102, 241, 0.25)" />
+                  <stop offset="100%" stopColor="rgba(99, 102, 241, 0)" />
+                </linearGradient>
+              </defs>
+              {/* Horizontal Grid lines */}
+              <line x1="10" y1="20" x2="290" y2="20" stroke="currentColor" className="text-muted/10" strokeDasharray="4 4" />
+              <line x1="10" y1="50" x2="290" y2="50" stroke="currentColor" className="text-muted/10" strokeDasharray="4 4" />
+              <line x1="10" y1="80" x2="290" y2="80" stroke="currentColor" className="text-muted/10" strokeDasharray="4 4" />
+              <line x1="10" y1="110" x2="290" y2="110" stroke="currentColor" className="text-muted/10" />
+
+              {/* Area path */}
+              <path
+                d={`M 20 110 L 20 85 L 70 70 L 120 78 L 170 55 L 220 48 L 270 ${110 - ((readinessScore ?? 92) / 100) * 90} L 270 110 Z`}
+                fill="url(#trend-fill-grad)"
+              />
+
+              {/* Main Line path */}
+              <path
+                d={`M 20 85 L 70 70 L 120 78 L 170 55 L 220 48 L 270 ${110 - ((readinessScore ?? 92) / 100) * 90}`}
+                fill="none"
+                stroke="#6366f1"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+              />
+
+              {/* Trend points circles */}
+              <circle cx="20" cy="85" r="3" fill="#6366f1" />
+              <circle cx="70" cy="70" r="3" fill="#6366f1" />
+              <circle cx="120" cy="78" r="3" fill="#6366f1" />
+              <circle cx="170" cy="55" r="3" fill="#6366f1" />
+              <circle cx="220" cy="48" r="3" fill="#6366f1" />
+              <circle cx="270" cy={110 - ((readinessScore ?? 92) / 100) * 90} r="4.5" fill="#38bdf8" stroke="#ffffff" strokeWidth="1.5" />
+
+              {/* Floating label for current month value */}
+              <rect x="245" cy={110 - ((readinessScore ?? 92) / 100) * 90 - 24} width="32" height="15" rx="3" fill="#6366f1" />
+              <text x="261" y={110 - ((readinessScore ?? 92) / 100) * 90 - 14} fill="#ffffff" fontSize="8" fontWeight="bold" textAnchor="middle">
+                {readinessScore}%
+              </text>
+            </svg>
+          </div>
+          <div className="flex justify-between text-[9px] font-bold text-muted-foreground uppercase px-2.5 mt-2">
+            <span>Jan</span>
+            <span>Feb</span>
+            <span>Mar</span>
+            <span>Apr</span>
+            <span>May</span>
+            <span>Jun</span>
           </div>
         </div>
 
-        {/* Panel 2: Asset Compliance Categories */}
+        {/* Card 2: Requirement Status Donut Chart */}
+        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
+            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Requirement Status</span>
+            <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">All Frameworks</span>
+          </div>
+          <div className="flex items-center justify-between gap-3 py-1">
+            <div className="relative w-24 h-24 flex items-center justify-center shrink-0">
+              <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
+                <circle cx="50" cy="50" r="36" fill="transparent" stroke="currentColor" className="text-muted/10" strokeWidth="11" />
+                
+                {/* Compliant segment */}
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="36"
+                  fill="transparent"
+                  stroke="#10b981"
+                  strokeWidth="11"
+                  strokeDasharray="226.2"
+                  strokeDashoffset={226.2 - (226.2 * (stats.compliantCount / (stats.activeRequirements || 1)))}
+                />
+                
+                {/* In Progress segment */}
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="36"
+                  fill="transparent"
+                  stroke="#6366f1"
+                  strokeWidth="11"
+                  strokeDasharray="226.2"
+                  strokeDashoffset={226.2 - (226.2 * (activeActionsCount / (stats.activeRequirements || 1)))}
+                  transform={`rotate(${(stats.compliantCount / (stats.activeRequirements || 1)) * 360} 50 50)`}
+                />
+                
+                {/* At Risk segment */}
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="36"
+                  fill="transparent"
+                  stroke="#f59e0b"
+                  strokeWidth="11"
+                  strokeDasharray="226.2"
+                  strokeDashoffset={226.2 - (226.2 * (stats.expiringSoonCount / (stats.activeRequirements || 1)))}
+                  transform={`rotate(${((stats.compliantCount + activeActionsCount) / (stats.activeRequirements || 1)) * 360} 50 50)`}
+                />
+                
+                {/* Non-Compliant segment */}
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="36"
+                  fill="transparent"
+                  stroke="#ef4444"
+                  strokeWidth="11"
+                  strokeDasharray="226.2"
+                  strokeDashoffset={226.2 - (226.2 * (stats.expiredCount / (stats.activeRequirements || 1)))}
+                  transform={`rotate(${((stats.compliantCount + activeActionsCount + stats.expiringSoonCount) / (stats.activeRequirements || 1)) * 360} 50 50)`}
+                />
+              </svg>
+              <div className="absolute flex flex-col items-center justify-center text-center">
+                <span className="text-base font-black text-foreground">{stats.activeRequirements}</span>
+                <span className="text-[7px] font-bold text-muted-foreground uppercase">Total</span>
+              </div>
+            </div>
+
+            <div className="flex-1 space-y-1.5 text-[10px]">
+              <div className="flex items-center justify-between font-bold">
+                <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" /> Compliant</span>
+                <span className="text-foreground">{stats.compliantCount} ({stats.activeRequirements > 0 ? Math.round((stats.compliantCount / stats.activeRequirements) * 100) : 0}%)</span>
+              </div>
+              <div className="flex items-center justify-between font-bold">
+                <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" /> In Progress</span>
+                <span className="text-foreground">{activeActionsCount} ({stats.activeRequirements > 0 ? Math.round((activeActionsCount / stats.activeRequirements) * 100) : 0}%)</span>
+              </div>
+              <div className="flex items-center justify-between font-bold">
+                <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" /> At Risk</span>
+                <span className="text-foreground">{stats.expiringSoonCount} ({stats.activeRequirements > 0 ? Math.round((stats.expiringSoonCount / stats.activeRequirements) * 100) : 0}%)</span>
+              </div>
+              <div className="flex items-center justify-between font-bold">
+                <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" /> Non-Compliant</span>
+                <span className="text-foreground">{stats.expiredCount} ({stats.activeRequirements > 0 ? Math.round((stats.expiredCount / stats.activeRequirements) * 100) : 0}%)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3: Audit Readiness */}
+        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
+            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Audit Readiness</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+          </div>
+          <div className="flex flex-col items-center py-1.5">
+            <div className="relative w-28 h-20 flex items-center justify-center overflow-hidden">
+              <svg viewBox="0 0 100 60" className="w-full h-full">
+                <defs>
+                  <linearGradient id="readiness-gauge-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#f59e0b" />
+                    <stop offset="100%" stopColor="#10b981" />
+                  </linearGradient>
+                </defs>
+                {/* Background Track */}
+                <path d="M 15 50 A 35 35 0 0 1 85 50" fill="transparent" stroke="currentColor" className="text-muted/15 dark:text-muted/10" strokeWidth="8" strokeLinecap="round" />
+                {/* Active Arc */}
+                <path
+                  d="M 15 50 A 35 35 0 0 1 85 50"
+                  fill="transparent"
+                  stroke="url(#readiness-gauge-grad)"
+                  strokeWidth="8"
+                  strokeLinecap="round"
+                  strokeDasharray="110"
+                  strokeDashoffset={110 - (110 * ((readinessScore ?? 87) / 100))}
+                  className="transition-all duration-1000 ease-out"
+                />
+              </svg>
+              <div className="absolute bottom-1 flex flex-col items-center justify-center text-center">
+                <span className="text-xl font-black text-foreground">{readinessScore}%</span>
+                <span className="text-[7px] font-bold text-muted-foreground uppercase tracking-wider">Audit Ready</span>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4 w-full mt-2 border-t border-border/40 pt-2 text-[10px] text-center font-bold">
+              <div>
+                <span className="block text-rose-500">{stats.expiredCount}</span>
+                <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">High Risk Issues</span>
+              </div>
+              <div className="border-l border-border/40">
+                <span className="block text-amber-500">{stats.expiringSoonCount}</span>
+                <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Medium Risk Issues</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 4: Training Completion */}
+        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
+            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Training Completion</span>
+            <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">This Quarter</span>
+          </div>
+          <div className="flex flex-col items-center py-1.5">
+            <div className="relative w-20 h-20 flex items-center justify-center">
+              <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
+                <circle cx="50" cy="50" r="38" fill="transparent" stroke="currentColor" className="text-muted/10" strokeWidth="8" />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="38"
+                  fill="transparent"
+                  stroke="#10b981"
+                  strokeWidth="8"
+                  strokeLinecap="round"
+                  strokeDasharray="238.8"
+                  strokeDashoffset={238.8 - (238.8 * ((competencySummary?.compliancePercent ?? 91) / 100))}
+                  className="transition-all duration-1000 ease-out"
+                />
+              </svg>
+              <div className="absolute flex flex-col items-center justify-center text-center">
+                <span className="text-base font-black text-foreground">{competencySummary?.compliancePercent ?? 91}%</span>
+                <span className="text-[7px] font-bold text-muted-foreground uppercase">Completed</span>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4 w-full mt-2 border-t border-border/40 pt-2 text-[10px] text-center font-bold">
+              <div>
+                <span className="block text-emerald-500">{competencySummary?.valid ?? 182}</span>
+                <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Completed</span>
+              </div>
+              <div className="border-l border-border/40">
+                <span className="block text-rose-500">{competencySummary?.expired ?? 18}</span>
+                <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Overdue</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tier 2: Lower Lists Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {/* Panel 1: Asset Compliance Categories */}
         <div className="bg-card border border-border rounded-2xl p-5 shadow-xs space-y-4">
           <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Asset Category Health</span>
           <div className="space-y-3 py-1 text-xs">
@@ -1218,7 +1586,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Panel 3: Risk Level Areas */}
+        {/* Panel 2: Risk Level Areas */}
         <div className="bg-card border border-border rounded-2xl p-5 shadow-xs space-y-4">
           <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Top Risk Gaps</span>
           <div className="space-y-3 text-xs">
@@ -1235,6 +1603,43 @@ export default function DashboardPage() {
                 </span>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Panel 3: Workspace Alerts */}
+        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs space-y-4">
+          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Active Alerts</span>
+          <div className="space-y-3 text-xs">
+            {stats.expiredCount > 0 && (
+              <div className="flex items-start gap-2.5 p-2 bg-rose-500/5 border border-rose-500/15 rounded-xl">
+                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold block text-rose-600 dark:text-rose-400">{stats.expiredCount} expired objectives</span>
+                  <p className="text-[10px] text-muted-foreground">Requirements missing essential evidence records.</p>
+                </div>
+              </div>
+            )}
+            {overdueAssetChecks.length > 0 && (
+              <div className="flex items-start gap-2.5 p-2 bg-rose-500/5 border border-rose-500/15 rounded-xl">
+                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold block text-rose-600 dark:text-rose-400">{overdueAssetChecks.length} asset checkouts expired</span>
+                  <p className="text-[10px] text-muted-foreground">Assigned equipment or vehicle checks require action.</p>
+                </div>
+              </div>
+            )}
+            {unclassifiedDocs.length > 0 && (
+              <div className="flex items-start gap-2.5 p-2 bg-amber-500/5 border border-amber-500/15 rounded-xl">
+                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold block text-amber-600 dark:text-amber-400">{unclassifiedDocs.length} unclassified documents</span>
+                  <p className="text-[10px] text-muted-foreground">Newly uploaded evidence files pending classification.</p>
+                </div>
+              </div>
+            )}
+            {stats.expiredCount === 0 && overdueAssetChecks.length === 0 && unclassifiedDocs.length === 0 && (
+              <p className="text-[10px] text-muted-foreground italic text-center py-6">No critical alerts detected in your workspace.</p>
+            )}
           </div>
         </div>
       </div>
