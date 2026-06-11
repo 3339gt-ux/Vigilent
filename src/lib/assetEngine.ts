@@ -9,15 +9,20 @@ import type {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+const parseDateOnly = (value: string): Date | null => {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
 export const daysUntil = (value: string | null | undefined, today: Date): number | null => {
   if (!value) return null;
-  const targetDate = new Date(value);
-  if (isNaN(targetDate.getTime())) return null;
-  
-  // Set times to midnight to calculate pure date differences
-  const d1 = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
-  const d2 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  return Math.ceil((d1.getTime() - d2.getTime()) / DAY_MS);
+  const targetDate = parseDateOnly(value);
+  if (!targetDate) return null;
+
+  const todayUtc = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.round((targetDate.getTime() - todayUtc) / DAY_MS);
 };
 
 export const calculateNextDueDate = (
@@ -28,22 +33,34 @@ export const calculateNextDueDate = (
   if (!frequencyValue || !frequencyUnit) {
     return completedDateStr;
   }
-  const date = new Date(completedDateStr);
-  if (isNaN(date.getTime())) return completedDateStr;
+  const date = parseDateOnly(completedDateStr);
+  if (!date) return completedDateStr;
 
   switch (frequencyUnit) {
     case 'days':
-      date.setDate(date.getDate() + frequencyValue);
+      date.setUTCDate(date.getUTCDate() + frequencyValue);
       break;
     case 'weeks':
-      date.setDate(date.getDate() + frequencyValue * 7);
+      date.setUTCDate(date.getUTCDate() + frequencyValue * 7);
       break;
-    case 'months':
-      date.setMonth(date.getMonth() + frequencyValue);
+    case 'months': {
+      const originalDay = date.getUTCDate();
+      date.setUTCDate(1);
+      date.setUTCMonth(date.getUTCMonth() + frequencyValue);
+      const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+      date.setUTCDate(Math.min(originalDay, lastDay));
       break;
-    case 'years':
-      date.setFullYear(date.getFullYear() + frequencyValue);
+    }
+    case 'years': {
+      const originalMonth = date.getUTCMonth();
+      const originalDay = date.getUTCDate();
+      date.setUTCDate(1);
+      date.setUTCFullYear(date.getUTCFullYear() + frequencyValue);
+      date.setUTCMonth(originalMonth);
+      const lastDay = new Date(Date.UTC(date.getUTCFullYear(), originalMonth + 1, 0)).getUTCDate();
+      date.setUTCDate(Math.min(originalDay, lastDay));
       break;
+    }
   }
   return date.toISOString().split('T')[0];
 };
@@ -58,8 +75,10 @@ export const calculateAssetCheckStatus = (
 ): string => {
   if (asset.status === 'archived') return 'archived';
   if (asset.status === 'inactive') return 'inactive';
+  if (!checkType.active) return 'inactive';
 
-  if (!assignment || !assignment.active) return 'inactive';
+  if (!assignment) return 'unknown';
+  if (!assignment.active) return 'inactive';
   if (!assignment.required) return 'not_required';
 
   // Extract custom warning days or check type default warning days, default to 30 days
@@ -85,6 +104,10 @@ export const calculateAssetCheckStatus = (
       }
     }
     return 'missing';
+  }
+
+  if (latestRecord.result_status?.toLowerCase() === 'fail') {
+    return 'overdue';
   }
 
   // Evaluate expiry date (valid_until)
@@ -113,7 +136,11 @@ export const buildAssetMatrix = (
   checkTypes: AssetCheckType[],
   assignments: AssetCheckAssignment[],
   records: AssetCheckRecord[],
-  evidenceLinks: { asset_check_record_id: string | null; document_id: string }[],
+  evidenceLinks: {
+    asset_check_record_id: string | null;
+    asset_check_assignment_id?: string | null;
+    document_id: string;
+  }[],
   today: Date = new Date()
 ): AssetMatrixCell[] => {
   const activeAssets = assets.filter(a => a.status === 'active');
@@ -134,10 +161,10 @@ export const buildAssetMatrix = (
       const latestRecord = typeRecords[0] || null;
 
       // Check if evidence exists
-      let hasEvidence = false;
-      if (latestRecord) {
-        hasEvidence = evidenceLinks.some(link => link.asset_check_record_id === latestRecord.id);
-      }
+      const hasEvidence = evidenceLinks.some(link =>
+        link.asset_check_record_id === latestRecord?.id ||
+        link.asset_check_assignment_id === assignment?.id
+      );
 
       const status = calculateAssetCheckStatus(
         assignment,
@@ -167,7 +194,11 @@ export const buildAssetSummary = (
   checkTypes: AssetCheckType[],
   assignments: AssetCheckAssignment[],
   records: AssetCheckRecord[],
-  evidenceLinks: { asset_check_record_id: string | null; document_id: string }[],
+  evidenceLinks: {
+    asset_check_record_id: string | null;
+    asset_check_assignment_id?: string | null;
+    document_id: string;
+  }[],
   today: Date = new Date()
 ): AssetStatusSummary => {
   const cells = buildAssetMatrix(assets, checkTypes, assignments, records, evidenceLinks, today);

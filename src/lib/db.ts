@@ -1810,6 +1810,13 @@ const safeLogAuditEvent = async (input: any) => {
   }
 };
 
+const requireAssetOrganizationId = (profile: { organization_id: string | null }): string => {
+  if (!profile.organization_id) {
+    throw new Error('Asset operations require an active organisation.');
+  }
+  return profile.organization_id;
+};
+
 // Database Service Implementation
 export const dbService = {
   // Current Org & Profile Info
@@ -5205,7 +5212,7 @@ export const dbService = {
 
   async getAssets(): Promise<Asset[]> {
     const profile = await this.getProfile();
-    const orgId = profile.organization_id || '';
+    const orgId = requireAssetOrganizationId(profile);
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('assets')
@@ -5222,7 +5229,7 @@ export const dbService = {
 
   async createAsset(asset: Omit<Asset, 'id' | 'created_at' | 'updated_at'>): Promise<Asset> {
     const profile = await this.getProfile();
-    const orgId = profile.organization_id || '';
+    const orgId = requireAssetOrganizationId(profile);
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('assets')
@@ -5251,11 +5258,14 @@ export const dbService = {
 
   async updateAsset(assetId: string, updates: Partial<Asset>): Promise<Asset> {
     const profile = await this.getProfile();
-    const orgId = profile.organization_id || '';
+    const orgId = requireAssetOrganizationId(profile);
+    const safeUpdates = { ...updates };
+    delete safeUpdates.id;
+    delete safeUpdates.organisation_id;
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('assets')
-        .update(updates)
+        .update(safeUpdates)
         .eq('id', assetId)
         .eq('organisation_id', orgId)
         .select()
@@ -5270,7 +5280,7 @@ export const dbService = {
       if (idx === -1) throw new Error('Asset not found');
       const updated = {
         ...assets[idx],
-        ...updates,
+        ...safeUpdates,
         updated_at: new Date().toISOString()
       };
       assets[idx] = updated;
@@ -5281,28 +5291,15 @@ export const dbService = {
   },
 
   async deleteAsset(assetId: string): Promise<void> {
-    const profile = await this.getProfile();
-    const orgId = profile.organization_id || '';
-    if (shouldUseSupabase()) {
-      const { error } = await supabase!
-        .from('assets')
-        .delete()
-        .eq('id', assetId)
-        .eq('organisation_id', orgId);
-      if (error) throwSupabaseError('assets.delete', error);
-      await this.logActivity('Asset Management', `Deleted asset ID ${assetId}`);
-    } else {
-      initMockDb();
-      let assets = getStorageItem('vigilen_assets', MOCK_ASSETS);
-      assets = assets.filter((a: Asset) => !(a.id === assetId && a.organisation_id === orgId));
-      setStorageItem('vigilen_assets', assets);
-      await this.logActivity('Asset Management', `Deleted asset ID ${assetId}`);
-    }
+    await this.updateAsset(assetId, {
+      status: 'archived',
+      archived_at: new Date().toISOString()
+    });
   },
 
   async getAssetCheckTypes(): Promise<AssetCheckType[]> {
     const profile = await this.getProfile();
-    const orgId = profile.organization_id || '';
+    const orgId = requireAssetOrganizationId(profile);
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('asset_check_types')
@@ -5319,7 +5316,7 @@ export const dbService = {
 
   async createAssetCheckType(checkType: Omit<AssetCheckType, 'id' | 'created_at' | 'updated_at'>): Promise<AssetCheckType> {
     const profile = await this.getProfile();
-    const orgId = profile.organization_id || '';
+    const orgId = requireAssetOrganizationId(profile);
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('asset_check_types')
@@ -5346,7 +5343,7 @@ export const dbService = {
 
   async getAssetCheckAssignments(assetId?: string): Promise<AssetCheckAssignment[]> {
     const profile = await this.getProfile();
-    const orgId = profile.organization_id || '';
+    const orgId = requireAssetOrganizationId(profile);
     if (shouldUseSupabase()) {
       let query = supabase!.from('asset_check_assignments').select('*').eq('organisation_id', orgId);
       if (assetId) {
@@ -5368,7 +5365,7 @@ export const dbService = {
 
   async createAssetCheckAssignment(assignment: Omit<AssetCheckAssignment, 'id' | 'created_at' | 'updated_at'>): Promise<AssetCheckAssignment> {
     const profile = await this.getProfile();
-    const orgId = profile.organization_id || '';
+    const orgId = requireAssetOrganizationId(profile);
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('asset_check_assignments')
@@ -5395,11 +5392,14 @@ export const dbService = {
 
   async updateAssetCheckAssignment(assignmentId: string, updates: Partial<AssetCheckAssignment>): Promise<AssetCheckAssignment> {
     const profile = await this.getProfile();
-    const orgId = profile.organization_id || '';
+    const orgId = requireAssetOrganizationId(profile);
+    const safeUpdates = { ...updates };
+    delete safeUpdates.id;
+    delete safeUpdates.organisation_id;
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('asset_check_assignments')
-        .update(updates)
+        .update(safeUpdates)
         .eq('id', assignmentId)
         .eq('organisation_id', orgId)
         .select()
@@ -5413,7 +5413,7 @@ export const dbService = {
       if (idx === -1) throw new Error('Assignment not found');
       const updated = {
         ...assignments[idx],
-        ...updates,
+        ...safeUpdates,
         updated_at: new Date().toISOString()
       };
       assignments[idx] = updated;
@@ -5424,7 +5424,7 @@ export const dbService = {
 
   async getAssetCheckRecords(assetId?: string): Promise<AssetCheckRecord[]> {
     const profile = await this.getProfile();
-    const orgId = profile.organization_id || '';
+    const orgId = requireAssetOrganizationId(profile);
     if (shouldUseSupabase()) {
       let query = supabase!.from('asset_check_records').select('*').eq('organisation_id', orgId);
       if (assetId) {
@@ -5446,7 +5446,7 @@ export const dbService = {
 
   async createAssetCheckRecord(record: Omit<AssetCheckRecord, 'id' | 'created_at' | 'updated_at'>): Promise<AssetCheckRecord> {
     const profile = await this.getProfile();
-    const orgId = profile.organization_id || '';
+    const orgId = requireAssetOrganizationId(profile);
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('asset_check_records')
@@ -5473,7 +5473,7 @@ export const dbService = {
 
   async getAssetCheckEvidenceLinks(): Promise<AssetCheckEvidenceLink[]> {
     const profile = await this.getProfile();
-    const orgId = profile.organization_id || '';
+    const orgId = requireAssetOrganizationId(profile);
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('asset_check_evidence_links')
@@ -5495,7 +5495,7 @@ export const dbService = {
     assetId: string
   ): Promise<AssetCheckEvidenceLink> {
     const profile = await this.getProfile();
-    const orgId = profile.organization_id || '';
+    const orgId = requireAssetOrganizationId(profile);
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('asset_check_evidence_links')
@@ -5532,7 +5532,7 @@ export const dbService = {
 
   async getAssetRequirementLinks(): Promise<AssetRequirementLink[]> {
     const profile = await this.getProfile();
-    const orgId = profile.organization_id || '';
+    const orgId = requireAssetOrganizationId(profile);
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
         .from('asset_requirement_links')

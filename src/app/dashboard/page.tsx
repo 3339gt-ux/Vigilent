@@ -9,6 +9,7 @@ import { EvidenceDropzone } from '@/components/EvidenceDropzone';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import { isDemoMode } from '@/lib/env';
 import type { Action, CompetencyCategory, RequirementRiskLevel, ReviewFrequency } from '@/lib/types';
+import { buildAssetMatrix } from '@/lib/assetEngine';
 import {
   ArrowRight,
   CheckCircle2,
@@ -109,7 +110,9 @@ export default function DashboardPage() {
     people,
     assets,
     assetCheckTypes,
-    assetCheckAssignments
+    assetCheckAssignments,
+    assetCheckRecords,
+    assetCheckEvidenceLinks
   } = useApp();
 
   const router = useRouter();
@@ -212,23 +215,29 @@ export default function DashboardPage() {
     ? actions.find(action => action.id === selectedAction.id) || selectedAction
     : null;
 
-  // Helper: Get status of a check assignment
-  const getAssignmentStatus = (asg: any): 'Compliant' | 'Expiring Soon' | 'Expired' | 'Missing' | 'N/A' => {
-    if (!asg || !asg.active || !asg.required) return 'N/A';
-    if (!asg.next_due_date) return 'Missing';
+  const assetMatrixCells = useMemo(
+    () => buildAssetMatrix(
+      assets,
+      assetCheckTypes,
+      assetCheckAssignments,
+      assetCheckRecords,
+      assetCheckEvidenceLinks
+    ),
+    [assets, assetCheckTypes, assetCheckAssignments, assetCheckRecords, assetCheckEvidenceLinks]
+  );
 
-    const due = new Date(asg.next_due_date).getTime();
-    const now = Date.now();
-    const warningLimit = (asg.warning_days || 30) * 24 * 60 * 60 * 1000;
-
-    if (due <= now) return 'Expired';
-    if (due - now <= warningLimit) return 'Expiring Soon';
-    return 'Compliant';
+  const getAssignmentStatus = (assignmentId: string): 'Compliant' | 'Expiring Soon' | 'Expired' | 'Missing' | 'N/A' => {
+    const status = assetMatrixCells.find(cell => cell.assignment?.id === assignmentId)?.status;
+    if (status === 'valid') return 'Compliant';
+    if (status === 'due_soon') return 'Expiring Soon';
+    if (status === 'expired' || status === 'overdue') return 'Expired';
+    if (status === 'missing') return 'Missing';
+    return 'N/A';
   };
 
   const overdueAssetChecks = useMemo(() => {
     return (assetCheckAssignments || [])
-      .filter(asg => asg.active && asg.required && getAssignmentStatus(asg) === 'Expired')
+      .filter(asg => asg.active && asg.required && getAssignmentStatus(asg.id) === 'Expired')
       .map(asg => {
         const asset = (assets || []).find(a => a.id === asg.asset_id);
         const checkType = (assetCheckTypes || []).find(ct => ct.id === asg.asset_check_type_id);
@@ -244,11 +253,11 @@ export default function DashboardPage() {
           }
         };
       });
-  }, [assetCheckAssignments, assets, assetCheckTypes]);
+  }, [assetCheckAssignments, assets, assetCheckTypes, assetMatrixCells]);
 
   const upcomingAssetChecks = useMemo(() => {
     return (assetCheckAssignments || [])
-      .filter(asg => asg.active && asg.required && getAssignmentStatus(asg) === 'Expiring Soon')
+      .filter(asg => asg.active && asg.required && getAssignmentStatus(asg.id) === 'Expiring Soon')
       .map(asg => {
         const asset = (assets || []).find(a => a.id === asg.asset_id);
         const checkType = (assetCheckTypes || []).find(ct => ct.id === asg.asset_check_type_id);
@@ -264,7 +273,7 @@ export default function DashboardPage() {
           }
         };
       });
-  }, [assetCheckAssignments, assets, assetCheckTypes]);
+  }, [assetCheckAssignments, assets, assetCheckTypes, assetMatrixCells]);
 
   // Setup list for Attention Centre
   const overdueAndUpcoming = [
@@ -536,7 +545,7 @@ export default function DashboardPage() {
         title: `${checkType?.title || 'Check'} - ${asset?.name || 'Asset'}`,
         type: 'Review',
         dueDate: asg.next_due_date,
-        status: getAssignmentStatus(asg) === 'Expired' ? 'RED' : getAssignmentStatus(asg) === 'Expiring Soon' ? 'AMBER' : 'GREEN',
+        status: getAssignmentStatus(asg.id) === 'Expired' ? 'RED' : getAssignmentStatus(asg.id) === 'Expiring Soon' ? 'AMBER' : 'GREEN',
         owner: asset?.name || 'Asset Check',
         link: `/dashboard/matrix?asset=${asset?.id}`
       });
@@ -558,7 +567,7 @@ export default function DashboardPage() {
         return due > day60 && due <= day90;
       }).sort(sortByDate)
     };
-  }, [actions, competencyRecords, competencyTypes, documents, frameworkRequirements, people, today, assets, assetCheckTypes, assetCheckAssignments]);
+  }, [actions, competencyRecords, competencyTypes, documents, frameworkRequirements, people, today, assets, assetCheckTypes, assetCheckAssignments, assetMatrixCells]);
 
   const radarRows: Array<{
     label: string;

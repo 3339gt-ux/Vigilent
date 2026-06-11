@@ -6,7 +6,7 @@ This document describes the design, architecture, data model, calculation engine
 
 ## 1. System Architecture
 
-The Asset Matrix system provides structured assurance and compliance management for physical items such as vehicles, trailers, equipment, calibrators, and facility checklist checkpoints. 
+The Asset Matrix system provides structured assurance tracking for physical items such as vehicles, trailers, equipment, calibrators, and facility checklist checkpoints.
 
 ```mermaid
 graph TD
@@ -20,7 +20,7 @@ graph TD
 - **Assets**: The physical items being tracked (e.g., forklift, delivery truck).
 - **Asset Check Types**: Templates defining compliance checks (e.g., annual safety test, weekly inspection, calibration).
 - **Asset Check Assignments**: Active compliance schedules tracking when the next check is due.
-- **Asset Check Records**: Immutable logs of completed checks.
+- **Asset Check Records**: Dated logs of completed checks. Database immutability is not currently enforced.
 - **Asset Check Evidence Links**: Secure mappings tying completions to vault documents.
 
 ---
@@ -34,7 +34,7 @@ The database model is defined in `supabase/migrations/20260611000000_asset_matri
 #### `assets`
 - `id` (uuid, primary key)
 - `organisation_id` (uuid, foreign key to organizations)
-- `asset_number` (text, unique per tenant)
+- `asset_number` (text; uniqueness is not currently enforced)
 - `name` (text, e.g. "HGV Truck #01")
 - `asset_type` (text, e.g. "Vehicle")
 - `category` (text, e.g. "HGV")
@@ -72,10 +72,10 @@ The database model is defined in `supabase/migrations/20260611000000_asset_matri
 - `frequency_value` (integer)
 - `frequency_unit` (`'days' | 'weeks' | 'months' | 'years'`)
 - `warning_days` (integer)
-- `first_due_date` (timestamptz)
-- `next_due_date` (timestamptz)
-- `last_completed_date` (timestamptz)
-- `last_expiry_date` (timestamptz)
+- `first_due_date` (date)
+- `next_due_date` (date)
+- `last_completed_date` (date)
+- `last_expiry_date` (date)
 - `status` (text)
 - `notes` (text)
 - `active` (boolean)
@@ -86,9 +86,9 @@ The database model is defined in `supabase/migrations/20260611000000_asset_matri
 - `asset_id` (uuid, references assets)
 - `asset_check_type_id` (uuid, references asset_check_types)
 - `asset_check_assignment_id` (uuid, references asset_check_assignments)
-- `completed_at` (timestamptz)
-- `valid_from` (timestamptz)
-- `valid_until` (timestamptz)
+- `completed_at` (date)
+- `valid_from` (date)
+- `valid_until` (date)
 - `result_status` (text)
 - `performed_by` (text)
 - `reference` (text)
@@ -106,23 +106,26 @@ The database model is defined in `supabase/migrations/20260611000000_asset_matri
 
 ## 3. Row-Level Security (RLS)
 
-All tables strictly enforce organization isolation:
+All asset tables enable RLS and use organisation membership checks:
 - **`SELECT`**: Allowed for authenticated users if `public.is_organization_member(organisation_id)` is true.
 - **`INSERT/UPDATE/DELETE`**: Allowed for authenticated users if `public.can_write_organization(organisation_id)` is true.
+- Relationship policies also require referenced assets, check types, records, evidence documents, and requirements to belong to the same organisation.
 - Performance indexes are added to `organisation_id` and references (`asset_id`, `asset_check_type_id`) to optimize reads.
+
+The migration is local repository SQL only. It has not been applied remotely by this implementation review.
 
 ---
 
 ## 4. Compliance Calculation Engine
 
-The calculation engine located at `src/lib/assetEngine.ts` enforces the canonical check status hierarchy:
+The calculation engine located at `src/lib/assetEngine.ts` supplies the canonical check status hierarchy used by the matrix, dashboard, and asset report:
 
-1. **`N/A`**: Mapped if the asset is archived/inactive or the check assignment is inactive/not required.
-2. **`Expired`**: Mapped if the projected due date (`next_due_date`) has passed.
-3. **`Overdue`**: Mapped if a due date exists and has passed, or if a check is required but has never been completed.
-4. **`Expiring Soon`**: Mapped if the due date is in the future but falls within the warning window (`next_due_date - now <= warning_days`).
-5. **`Compliant`**: Mapped if the check is completed and the due date is in the future beyond the warning window.
-6. **`Missing`**: Mapped if no completion record or due date is configured for a required check type.
+1. **`Archived` / `Inactive` / `Not Required` / `Unknown`**: Excluded from active assurance totals.
+2. **`Expired`**: The latest validity date has passed.
+3. **`Overdue`**: The due date has passed or the latest check result failed.
+4. **`Due Soon`**: The validity/due date falls within the configured warning window.
+5. **`Valid`**: A completed check remains valid beyond the warning window.
+6. **`Missing`**: A required completion or required evidence link is absent.
 
 ---
 
@@ -130,4 +133,8 @@ The calculation engine located at `src/lib/assetEngine.ts` enforces the canonica
 
 - **Global Search**: Search records scan matching asset numbers, registration numbers, makes, models, and titles. Results support deep-linking directly into details.
 - **Reporting Hub**: Aggregates metrics to build status distributions and registers all assets for compliance tracking.
-- **Audit Logging**: Appends logs to the audit trail on asset registration, edits, check assignments, and completion recordings.
+- **Evidence**: Check completion can link an existing private Evidence Vault document. Direct upload and unlink controls are not implemented in the Asset Matrix.
+- **Archiving**: The current decommission control archives the asset and retains history. A restore UI is not yet implemented.
+- **Audit Logging**: Asset create/update/archive operations use existing activity logging. Check-type, assignment, completion, and evidence-link audit coverage remains incomplete.
+- **Requirements**: Optional requirement-link storage exists, but asset checks do not alter requirement readiness scores.
+- **Actions**: The current asset action display is a title-based convenience view, not a persisted asset/action relationship.

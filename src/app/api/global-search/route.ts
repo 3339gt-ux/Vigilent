@@ -325,8 +325,9 @@ export async function GET(request: Request) {
       const getAssets = async (): Promise<GlobalSearchResult[]> => {
         const { data, error } = await supabase
           .from('assets')
-          .select('id, name, asset_type, registration_number, serial_number, make, model, created_at')
+          .select('id, name, asset_type, registration_number, serial_number, make, model, status, created_at')
           .eq('organisation_id', orgId)
+          .eq('status', 'active')
           .or(`name.ilike.%${term}%,asset_type.ilike.%${term}%,registration_number.ilike.%${term}%,make.ilike.%${term}%,model.ilike.%${term}%`)
           .limit(20);
 
@@ -336,7 +337,7 @@ export async function GET(request: Request) {
           title: a.name,
           description: `Reg: ${a.registration_number || 'N/A'} | Type: ${a.asset_type} | Make/Model: ${a.make || ''} ${a.model || ''}`,
           type: 'asset' as const,
-          status: 'Active',
+          status: a.status,
           category: a.asset_type,
           path: `/dashboard/matrix?asset=${a.id}`,
           relevanceScore: getRelevance(a.name, a.registration_number || '', term),

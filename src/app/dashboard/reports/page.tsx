@@ -40,6 +40,7 @@ import {
 import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
 import { REPORT_CAPABILITIES, BuilderSource } from '@/lib/reportCapabilities';
 import { calculateCompetencyStatus } from '@/lib/competencyEngine';
+import { buildAssetMatrix } from '@/lib/assetEngine';
 import { isDemoMode } from '@/lib/env';
 
 // Local storage key for saved custom reports
@@ -388,7 +389,8 @@ export default function ReportsPage() {
     assets,
     assetCheckTypes,
     assetCheckAssignments,
-    assetCheckRecords
+    assetCheckRecords,
+    assetCheckEvidenceLinks
   } = useApp();
 
   const router = useRouter();
@@ -399,59 +401,30 @@ export default function ReportsPage() {
 
   // Assets Report Calculations
   const assetMetrics = useMemo(() => {
-    const totalAssets = (assets || []).length;
-    
-    // Status counts
-    let compliantCount = 0;
-    let warningCount = 0;
-    let overdueCount = 0;
-    
-    const activeAssignments = (assetCheckAssignments || []).filter(asg => asg.active && asg.required);
-    
-    activeAssignments.forEach(asg => {
-      if (!asg.next_due_date) {
-        overdueCount++; // missing due date is considered overdue/gap
-        return;
-      }
-      const due = new Date(asg.next_due_date).getTime();
-      const now = Date.now();
-      const warningLimit = (asg.warning_days || 30) * 24 * 60 * 60 * 1000;
-      
-      if (due <= now) {
-        overdueCount++;
-      } else if (due - now <= warningLimit) {
-        warningCount++;
-      } else {
-        compliantCount++;
-      }
-    });
+    const activeAssets = (assets || []).filter(asset => asset.status === 'active');
+    const cells = buildAssetMatrix(
+      assets || [],
+      assetCheckTypes || [],
+      assetCheckAssignments || [],
+      assetCheckRecords || [],
+      assetCheckEvidenceLinks || []
+    );
+    const assessedCells = cells.filter(cell => !['inactive', 'archived', 'not_required', 'unknown'].includes(cell.status));
+    const compliantCount = assessedCells.filter(cell => cell.status === 'valid').length;
+    const warningCount = assessedCells.filter(cell => cell.status === 'due_soon').length;
+    const overdueCount = assessedCells.filter(cell => ['overdue', 'expired', 'missing'].includes(cell.status)).length;
 
     // Asset status summary list
-    const assetsSummaryList = (assets || []).map(asset => {
-      const assetAsgs = activeAssignments.filter(asg => asg.asset_id === asset.id);
-      const totalChecks = assetAsgs.length;
-      let compliantChecks = 0;
+    const assetsSummaryList = activeAssets.map(asset => {
+      const assetCells = assessedCells.filter(cell => cell.asset_id === asset.id);
+      const totalChecks = assetCells.length;
+      const compliantChecks = assetCells.filter(cell => cell.status === 'valid').length;
       let worstStatus: 'RED' | 'AMBER' | 'GREEN' | 'GREY' = 'GREY';
-      
-      assetAsgs.forEach(asg => {
-        if (!asg.next_due_date) {
-          worstStatus = 'RED'; // missing is treated as critical gap
-          return;
-        }
-        const due = new Date(asg.next_due_date).getTime();
-        const now = Date.now();
-        const warningLimit = (asg.warning_days || 30) * 24 * 60 * 60 * 1000;
-        
-        if (due <= now) {
-          worstStatus = 'RED';
-        } else if (due - now <= warningLimit) {
-          if (worstStatus !== 'RED') worstStatus = 'AMBER';
-        } else {
-          compliantChecks++;
-          if (worstStatus === 'GREY') worstStatus = 'GREEN';
-        }
-      });
-      
+
+      if (assetCells.some(cell => ['overdue', 'expired', 'missing'].includes(cell.status))) worstStatus = 'RED';
+      else if (assetCells.some(cell => cell.status === 'due_soon')) worstStatus = 'AMBER';
+      else if (assetCells.some(cell => cell.status === 'valid')) worstStatus = 'GREEN';
+
       return {
         id: asset.id,
         name: asset.name,
@@ -464,13 +437,13 @@ export default function ReportsPage() {
     });
 
     return {
-      totalAssets,
+      totalAssets: activeAssets.length,
       compliantCount,
       warningCount,
       overdueCount,
       assetsSummaryList
     };
-  }, [assets, assetCheckAssignments]);
+  }, [assets, assetCheckTypes, assetCheckAssignments, assetCheckRecords, assetCheckEvidenceLinks]);
 
   // State Management
   const [activeTab, setActiveTab] = useState<TabType>('executive');

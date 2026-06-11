@@ -14,6 +14,7 @@ import {
 } from '@/lib/types';
 import { isDemoMode } from '@/lib/env';
 import { exportCsv, exportDateStamp, ExportRow } from '@/lib/exportData';
+import { calculateAssetCheckStatus, calculateNextDueDate } from '@/lib/assetEngine';
 import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
 import {
   Grid,
@@ -70,7 +71,6 @@ export default function AssetMatrix() {
     actions,
     auditLogs,
     createAsset,
-    updateAsset,
     deleteAsset,
     createAssetCheckType,
     createAssetCheckAssignment,
@@ -198,17 +198,37 @@ export default function AssetMatrix() {
 
   // Helper: Get status of a check assignment
   const getAssignmentStatus = (asg?: AssetCheckAssignment): 'Compliant' | 'Expiring Soon' | 'Expired' | 'Missing' | 'N/A' => {
-    if (!asg || !asg.active || !asg.required) return 'N/A';
-    if (!asg.next_due_date) return 'Missing';
+    if (!asg) return 'N/A';
+    const asset = assets.find(item => item.id === asg.asset_id);
+    const checkType = assetCheckTypes.find(item => item.id === asg.asset_check_type_id);
+    if (!asset || !checkType) return 'N/A';
 
-    const due = new Date(asg.next_due_date).getTime();
-    const now = Date.now();
-    const warningLimit = (asg.warning_days || 30) * 24 * 60 * 60 * 1000;
+    const latestRecord = assetCheckRecords
+      .filter(record => record.asset_id === asset.id && record.asset_check_type_id === checkType.id)
+      .sort((a, b) => b.completed_at.localeCompare(a.completed_at))[0];
+    const hasEvidence = assetCheckEvidenceLinks.some(link =>
+      link.asset_check_assignment_id === asg.id ||
+      link.asset_check_record_id === latestRecord?.id
+    );
+    const status = calculateAssetCheckStatus(asg, latestRecord, asset, checkType, hasEvidence);
 
-    if (due <= now) return 'Expired';
-    if (due - now <= warningLimit) return 'Expiring Soon';
-    return 'Compliant';
+    if (status === 'valid') return 'Compliant';
+    if (status === 'due_soon') return 'Expiring Soon';
+    if (status === 'expired' || status === 'overdue') return 'Expired';
+    if (status === 'missing') return 'Missing';
+    return 'N/A';
   };
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || assets.length === 0) return;
+    const assetId = new URLSearchParams(window.location.search).get('asset');
+    if (!assetId) return;
+    const matchedAsset = assets.find(asset => asset.id === assetId);
+    if (matchedAsset) {
+      setActiveAsset(matchedAsset);
+      setActiveTab('overview');
+    }
+  }, [assets]);
 
   // Filter Assets (Rows)
   const filteredAssets = useMemo(() => {
@@ -262,13 +282,7 @@ export default function AssetMatrix() {
     const value = activeCell.assignment?.frequency_value || type.default_frequency_value || 12;
     const unit = activeCell.assignment?.frequency_unit || type.default_frequency_unit || 'months';
 
-    const date = new Date(completedDate);
-    if (unit === 'days') date.setDate(date.getDate() + value);
-    else if (unit === 'weeks') date.setDate(date.getDate() + value * 7);
-    else if (unit === 'months') date.setMonth(date.getMonth() + value);
-    else if (unit === 'years') date.setFullYear(date.getFullYear() + value);
-
-    setValidUntilDate(date.toISOString().split('T')[0]);
+    setValidUntilDate(calculateNextDueDate(completedDate, value, unit));
   }, [completedDate, activeCell]);
 
   // Save new asset registration
@@ -296,7 +310,9 @@ export default function AssetMatrix() {
       });
 
       // Automatically assign check types that match this category
-      const matchingCheckTypes = assetCheckTypes.filter(ct => ct.category === newAssetType && ct.active);
+      const matchingCheckTypes = assetCheckTypes.filter(
+        ct => ct.active && ct.category === newAssetType
+      );
       await Promise.all(
         matchingCheckTypes.map(ct =>
           createAssetCheckAssignment({
@@ -360,7 +376,11 @@ export default function AssetMatrix() {
       });
 
       // Automatically assign to existing assets of that category
-      const matchingAssets = assets.filter(a => a.category === newCheckCategory && a.status === 'active');
+      const matchingAssets = assets.filter(
+        asset =>
+          asset.status === 'active' &&
+          (asset.asset_type === newCheckCategory || asset.category === newCheckCategory)
+      );
       await Promise.all(
         matchingAssets.map(a =>
           createAssetCheckAssignment({
@@ -406,9 +426,9 @@ export default function AssetMatrix() {
         asset_id: asset.id,
         asset_check_type_id: checkType.id,
         asset_check_assignment_id: assignment?.id || null,
-        completed_at: new Date(completedDate).toISOString(),
-        valid_from: new Date(completedDate).toISOString(),
-        valid_until: validUntilDate ? new Date(validUntilDate).toISOString() : null,
+        completed_at: completedDate,
+        valid_from: completedDate,
+        valid_until: validUntilDate || null,
         result_status: checkResult,
         performed_by: user?.full_name || 'System Operator',
         reference: checkReference || null,
@@ -427,10 +447,10 @@ export default function AssetMatrix() {
 
       // 3. Update assignment state with last date & calculate next due date
       if (assignment) {
-        const nextDue = validUntilDate ? new Date(validUntilDate).toISOString() : null;
+        const nextDue = validUntilDate || null;
         await updateAssetCheckAssignment(assignment.id, {
-          last_completed_date: new Date(completedDate).toISOString(),
-          last_expiry_date: validUntilDate ? new Date(validUntilDate).toISOString() : null,
+          last_completed_date: completedDate,
+          last_expiry_date: validUntilDate || null,
           next_due_date: nextDue,
           status: checkResult === 'Pass' ? 'Compliant' : 'Failed'
         });
@@ -455,23 +475,23 @@ export default function AssetMatrix() {
     setSelectedDocId('');
   };
 
-  // Delete Asset
+  // Archive Asset
   const handleDeleteAsset = (assetId: string) => {
     const asset = assets.find(a => a.id === assetId);
     if (!asset) return;
 
     setConfirmRequest({
-      title: 'Permanently delete asset?',
-      description: `You are about to delete asset "${asset.name}" and all associated checks and compliance history. This cannot be undone.`,
-      confirmLabel: 'Delete Asset',
-      tone: 'danger',
+      title: 'Archive asset?',
+      description: `Archive "${asset.name}"? The asset will leave the active matrix while its check and evidence history remains available in the database.`,
+      confirmLabel: 'Archive Asset',
+      tone: 'warning',
       onConfirm: async () => {
         try {
           await deleteAsset(assetId);
-          setToast({ type: 'success', message: `Deleted asset "${asset.name}".` });
+          setToast({ type: 'success', message: `Archived asset "${asset.name}".` });
           setActiveAsset(null);
         } catch (e) {
-          setToast({ type: 'error', message: 'Failed to delete asset.' });
+          setToast({ type: 'error', message: 'Failed to archive asset.' });
         }
       }
     });
@@ -542,6 +562,70 @@ export default function AssetMatrix() {
 
   const paddingClass = density === 'comfortable' ? 'p-4' : 'p-2.5';
   const textClass = density === 'comfortable' ? 'text-xs' : 'text-[11px]';
+  const activeFiltersCount = [
+    selectedCategory !== 'All',
+    selectedType !== 'All',
+    statusFilter !== 'All'
+  ].filter(Boolean).length;
+  const resetFilters = () => {
+    setSearch('');
+    setSelectedCategory('All');
+    setSelectedType('All');
+    setStatusFilter('All');
+  };
+  const filterFields = (
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Asset Category</label>
+        <select
+          value={selectedCategory}
+          onChange={e => setSelectedCategory(e.target.value)}
+          className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+        >
+          <option value="All">All Categories</option>
+          {categoriesList.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Asset Specific Type</label>
+        <select
+          value={selectedType}
+          onChange={e => setSelectedType(e.target.value)}
+          className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+        >
+          <option value="All">All Types</option>
+          {assetTypesList.map(type => <option key={type} value={type}>{type}</option>)}
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Checks Standing</label>
+        <select
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value)}
+          className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+        >
+          <option value="All">All Standing Statuses</option>
+          <option value="Compliant">Compliant (GREEN)</option>
+          <option value="Expiring Soon">Due Soon (AMBER)</option>
+          <option value="Expired">Overdue / Expired (RED)</option>
+          <option value="Missing">Missing Verification (GREY)</option>
+          <option value="N/A">Not Assigned (N/A)</option>
+        </select>
+      </div>
+
+      <div className="flex items-end">
+        <button
+          type="button"
+          onClick={resetFilters}
+          className="w-full py-2 bg-muted hover:bg-muted/80 text-foreground border border-border rounded-lg text-xs font-bold transition-all cursor-pointer text-center"
+        >
+          Reset Filter Fields
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -645,20 +729,29 @@ export default function AssetMatrix() {
           </div>
 
           <div className="flex flex-wrap gap-2 items-center">
-            <button
-              type="button"
-              onClick={() => setShowFilters(!showFilters)}
-              className={`px-3.5 py-2 border rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                showFilters || statusFilter !== 'All' || selectedCategory !== 'All' || selectedType !== 'All'
-                  ? 'bg-indigo-50 border-indigo-200 text-indigo-750 dark:bg-indigo-950/30 dark:border-indigo-900/50 dark:text-indigo-400'
-                  : 'bg-muted hover:bg-muted/80 border-border text-foreground'
-              }`}
-            >
-              Filters
-              {(statusFilter !== 'All' || selectedCategory !== 'All' || selectedType !== 'All') && (
-                <span className="bg-indigo-650 text-white dark:bg-indigo-600 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold">!</span>
-              )}
-            </button>
+            {interfaceDetailLevel === 'focused' ? (
+              <FiltersAndToolsButton
+                isOpen={showFilters}
+                onClick={() => setShowFilters(!showFilters)}
+                activeFiltersCount={activeFiltersCount}
+                onClearFilters={resetFilters}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowFilters(!showFilters)}
+                className={`px-3.5 py-2 border rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  showFilters || activeFiltersCount > 0
+                    ? 'bg-indigo-50 border-indigo-200 text-indigo-750 dark:bg-indigo-950/30 dark:border-indigo-900/50 dark:text-indigo-400'
+                    : 'bg-muted hover:bg-muted/80 border-border text-foreground'
+                }`}
+              >
+                Filters
+                {activeFiltersCount > 0 && (
+                  <span className="bg-indigo-650 text-white dark:bg-indigo-600 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold">!</span>
+                )}
+              </button>
+            )}
 
             <button
               type="button"
@@ -678,63 +771,16 @@ export default function AssetMatrix() {
         </div>
 
         {/* Collapsible Filter settings */}
-        {showFilters && (
-          <div className="border-t border-border/60 pt-3.5 mt-2.5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Asset Category</label>
-              <select
-                value={selectedCategory}
-                onChange={e => setSelectedCategory(e.target.value)}
-                className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
-              >
-                <option value="All">All Categories</option>
-                {categoriesList.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-              </select>
+        {interfaceDetailLevel === 'focused' ? (
+          <AdvancedControlsPanel isOpen={showFilters} onClose={() => setShowFilters(false)}>
+            {filterFields}
+          </AdvancedControlsPanel>
+        ) : (
+          showFilters && (
+            <div className="border-t border-border/60 pt-3.5 mt-2.5">
+              {filterFields}
             </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Asset Specific Type</label>
-              <select
-                value={selectedType}
-                onChange={e => setSelectedType(e.target.value)}
-                className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
-              >
-                <option value="All">All Types</option>
-                {assetTypesList.map(type => <option key={type} value={type}>{type}</option>)}
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Checks Standing</label>
-              <select
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value)}
-                className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
-              >
-                <option value="All">All Standing Statuses</option>
-                <option value="Compliant">Compliant (GREEN)</option>
-                <option value="Expiring Soon">Due Soon (AMBER)</option>
-                <option value="Expired">Overdue / Expired (RED)</option>
-                <option value="Missing">Missing Verification (GREY)</option>
-                <option value="N/A">Not Assigned (N/A)</option>
-              </select>
-            </div>
-
-            <div className="flex items-end">
-              <button
-                type="button"
-                onClick={() => {
-                  setSearch('');
-                  setSelectedCategory('All');
-                  setSelectedType('All');
-                  setStatusFilter('All');
-                }}
-                className="w-full py-2 bg-muted hover:bg-muted/80 text-foreground border border-border rounded-lg text-xs font-bold transition-all cursor-pointer text-center"
-              >
-                Reset Filter Fields
-              </button>
-            </div>
-          </div>
+          )
         )}
 
         {/* Counter readout */}
@@ -963,14 +1009,14 @@ export default function AssetMatrix() {
                   {/* Danger Zone */}
                   <div className="border border-rose-500/20 bg-rose-500/5 rounded-xl p-4 flex justify-between items-center">
                     <div>
-                      <h4 className="text-xs font-extrabold text-rose-600 dark:text-rose-400">Decommission Asset</h4>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Delete this asset and purge its check history.</p>
+                      <h4 className="text-xs font-extrabold text-rose-600 dark:text-rose-400">Archive Asset</h4>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Remove this asset from the active matrix while retaining its history.</p>
                     </div>
                     <button
                       onClick={() => handleDeleteAsset(activeAsset.id)}
                       className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
-                      <Trash2 className="w-3.5 h-3.5" /> Purge Asset
+                      <Trash2 className="w-3.5 h-3.5" /> Archive Asset
                     </button>
                   </div>
                 </div>

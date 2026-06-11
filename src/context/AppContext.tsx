@@ -471,14 +471,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cells,
       packs,
       logs,
-      notificationRows,
-      // Assets
-      assetRows,
-      checkTypeRows,
-      assignmentRows,
-      recordRows,
-      evidenceLinkRows,
-      requirementLinkRows
+      notificationRows
     ] = await Promise.all([
       dbService.getRequirements(),
       dbService.getDocuments(),
@@ -504,15 +497,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dbService.getMatrixCells(),
       dbService.getAuditPacks(),
       dbService.getAuditLogs(),
-      dbService.getWorkspaceNotifications(),
-      // Assets
-      dbService.getAssets(),
-      dbService.getAssetCheckTypes(),
-      dbService.getAssetCheckAssignments(),
-      dbService.getAssetCheckRecords(),
-      dbService.getAssetCheckEvidenceLinks(),
-      dbService.getAssetRequirementLinks()
+      dbService.getWorkspaceNotifications()
     ]);
+
+    let assetRows: Asset[] = [];
+    let checkTypeRows: AssetCheckType[] = [];
+    let assignmentRows: AssetCheckAssignment[] = [];
+    let recordRows: AssetCheckRecord[] = [];
+    let evidenceLinkRows: AssetCheckEvidenceLink[] = [];
+    let requirementLinkRows: AssetRequirementLink[] = [];
+    try {
+      [
+        assetRows,
+        checkTypeRows,
+        assignmentRows,
+        recordRows,
+        evidenceLinkRows,
+        requirementLinkRows
+      ] = await Promise.all([
+        dbService.getAssets(),
+        dbService.getAssetCheckTypes(),
+        dbService.getAssetCheckAssignments(),
+        dbService.getAssetCheckRecords(),
+        dbService.getAssetCheckEvidenceLinks(),
+        dbService.getAssetRequirementLinks()
+      ]);
+    } catch (error) {
+      console.error('Asset Matrix data is unavailable. Core workspace data will continue loading.', error);
+    }
 
     setRequirements(reqs);
     setDocuments(docs);
@@ -622,6 +634,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setAuditPacks(emptyCollections.auditPacks);
       setAuditLogs(emptyCollections.auditLogs);
       setNotifications(emptyCollections.notifications);
+      setAssets([]);
+      setAssetCheckTypes([]);
+      setAssetCheckAssignments([]);
+      setAssetCheckRecords([]);
+      setAssetCheckEvidenceLinks([]);
+      setAssetRequirementLinks([]);
       return;
     }
 

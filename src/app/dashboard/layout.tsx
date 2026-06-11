@@ -285,7 +285,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'Requirements', href: '/dashboard/requirements', icon: ClipboardList },
     { name: 'Competency Matrix', href: '/dashboard/competencies', icon: UserCheck },
     { name: 'Evidence Vault', href: '/dashboard/vault', icon: FolderLock },
-    { name: 'Evidence Matrix', href: '/dashboard/matrix', icon: Grid },
+    { name: 'Asset Matrix', href: '/dashboard/matrix', icon: Grid },
     { name: 'Audit Pack Builder', href: '/dashboard/audit-packs', icon: FolderArchive },
     { name: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
     ...(isOwnerOrAdmin ? [{ name: 'Audit Trail', href: '/dashboard/audit-trail', icon: History }] : []),

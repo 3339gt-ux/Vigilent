@@ -1,4 +1,5 @@
--- Migration: Asset Matrix assurance and maintenance system tables
+-- Migration: Asset Matrix assurance and maintenance system tables.
+-- This migration is idempotent and can be safely re-run in Supabase SQL Editor.
 -- Target Tables: public.assets, public.asset_check_types, public.asset_check_assignments, public.asset_check_records, public.asset_check_evidence_links, public.asset_requirement_links
 
 -- 1. Core company asset register
@@ -126,6 +127,19 @@ grant select, insert, update, delete on table public.asset_check_records to auth
 grant select, insert, update, delete on table public.asset_check_evidence_links to authenticated;
 grant select, insert, update, delete on table public.asset_requirement_links to authenticated;
 
+drop policy if exists "Users can read assets in own organisation" on public.assets;
+drop policy if exists "Members can write assets in own organisation" on public.assets;
+drop policy if exists "Users can read asset check types in own organisation" on public.asset_check_types;
+drop policy if exists "Members can write asset check types in own organisation" on public.asset_check_types;
+drop policy if exists "Users can read assignments in own organisation" on public.asset_check_assignments;
+drop policy if exists "Members can write assignments in own organisation" on public.asset_check_assignments;
+drop policy if exists "Users can read check records in own organisation" on public.asset_check_records;
+drop policy if exists "Members can write check records in own organisation" on public.asset_check_records;
+drop policy if exists "Users can read evidence links in own organisation" on public.asset_check_evidence_links;
+drop policy if exists "Members can write evidence links in own organisation" on public.asset_check_evidence_links;
+drop policy if exists "Users can read requirement links in own organisation" on public.asset_requirement_links;
+drop policy if exists "Members can write requirement links in own organisation" on public.asset_requirement_links;
+
 -- RLS Policies: Assets
 create policy "Users can read assets in own organisation" on public.assets
     for select using (public.is_organization_member(organisation_id));
@@ -142,31 +156,207 @@ create policy "Members can write asset check types in own organisation" on publi
 
 -- RLS Policies: Asset Check Assignments
 create policy "Users can read assignments in own organisation" on public.asset_check_assignments
-    for select using (public.is_organization_member(organisation_id));
+    for select using (
+        public.is_organization_member(organisation_id)
+        and exists (
+            select 1 from public.assets
+            where assets.id = asset_id
+              and assets.organisation_id = asset_check_assignments.organisation_id
+        )
+        and exists (
+            select 1 from public.asset_check_types
+            where asset_check_types.id = asset_check_type_id
+              and asset_check_types.organisation_id = asset_check_assignments.organisation_id
+        )
+    );
 create policy "Members can write assignments in own organisation" on public.asset_check_assignments
-    for all using (public.can_write_organization(organisation_id))
-    with check (public.can_write_organization(organisation_id));
+    for all using (
+        public.can_write_organization(organisation_id)
+        and exists (
+            select 1 from public.assets
+            where assets.id = asset_id
+              and assets.organisation_id = asset_check_assignments.organisation_id
+        )
+        and exists (
+            select 1 from public.asset_check_types
+            where asset_check_types.id = asset_check_type_id
+              and asset_check_types.organisation_id = asset_check_assignments.organisation_id
+        )
+    )
+    with check (
+        public.can_write_organization(organisation_id)
+        and exists (
+            select 1 from public.assets
+            where assets.id = asset_id
+              and assets.organisation_id = asset_check_assignments.organisation_id
+        )
+        and exists (
+            select 1 from public.asset_check_types
+            where asset_check_types.id = asset_check_type_id
+              and asset_check_types.organisation_id = asset_check_assignments.organisation_id
+        )
+    );
 
 -- RLS Policies: Asset Check Records
 create policy "Users can read check records in own organisation" on public.asset_check_records
-    for select using (public.is_organization_member(organisation_id));
+    for select using (
+        public.is_organization_member(organisation_id)
+        and exists (
+            select 1 from public.assets
+            where assets.id = asset_id
+              and assets.organisation_id = asset_check_records.organisation_id
+        )
+        and exists (
+            select 1 from public.asset_check_types
+            where asset_check_types.id = asset_check_type_id
+              and asset_check_types.organisation_id = asset_check_records.organisation_id
+        )
+    );
 create policy "Members can write check records in own organisation" on public.asset_check_records
-    for all using (public.can_write_organization(organisation_id))
-    with check (public.can_write_organization(organisation_id));
+    for all using (
+        public.can_write_organization(organisation_id)
+        and exists (
+            select 1 from public.assets
+            where assets.id = asset_id
+              and assets.organisation_id = asset_check_records.organisation_id
+        )
+        and exists (
+            select 1 from public.asset_check_types
+            where asset_check_types.id = asset_check_type_id
+              and asset_check_types.organisation_id = asset_check_records.organisation_id
+        )
+        and (
+            asset_check_assignment_id is null
+            or exists (
+                select 1 from public.asset_check_assignments
+                where asset_check_assignments.id = asset_check_assignment_id
+                  and asset_check_assignments.organisation_id = asset_check_records.organisation_id
+            )
+        )
+    )
+    with check (
+        public.can_write_organization(organisation_id)
+        and exists (
+            select 1 from public.assets
+            where assets.id = asset_id
+              and assets.organisation_id = asset_check_records.organisation_id
+        )
+        and exists (
+            select 1 from public.asset_check_types
+            where asset_check_types.id = asset_check_type_id
+              and asset_check_types.organisation_id = asset_check_records.organisation_id
+        )
+        and (
+            asset_check_assignment_id is null
+            or exists (
+                select 1 from public.asset_check_assignments
+                where asset_check_assignments.id = asset_check_assignment_id
+                  and asset_check_assignments.organisation_id = asset_check_records.organisation_id
+            )
+        )
+    );
 
 -- RLS Policies: Asset Check Evidence Links
 create policy "Users can read evidence links in own organisation" on public.asset_check_evidence_links
-    for select using (public.is_organization_member(organisation_id));
+    for select using (
+        public.is_organization_member(organisation_id)
+        and exists (
+            select 1 from public.assets
+            where assets.id = asset_id
+              and assets.organisation_id = asset_check_evidence_links.organisation_id
+        )
+        and exists (
+            select 1 from public.evidence_documents
+            where evidence_documents.id = document_id
+              and evidence_documents.organization_id = asset_check_evidence_links.organisation_id
+        )
+    );
 create policy "Members can write evidence links in own organisation" on public.asset_check_evidence_links
-    for all using (public.can_write_organization(organisation_id))
-    with check (public.can_write_organization(organisation_id));
+    for all using (
+        public.can_write_organization(organisation_id)
+        and exists (
+            select 1 from public.assets
+            where assets.id = asset_id
+              and assets.organisation_id = asset_check_evidence_links.organisation_id
+        )
+        and exists (
+            select 1 from public.evidence_documents
+            where evidence_documents.id = document_id
+              and evidence_documents.organization_id = asset_check_evidence_links.organisation_id
+        )
+    )
+    with check (
+        public.can_write_organization(organisation_id)
+        and exists (
+            select 1 from public.assets
+            where assets.id = asset_id
+              and assets.organisation_id = asset_check_evidence_links.organisation_id
+        )
+        and exists (
+            select 1 from public.evidence_documents
+            where evidence_documents.id = document_id
+              and evidence_documents.organization_id = asset_check_evidence_links.organisation_id
+        )
+        and (
+            asset_check_assignment_id is null
+            or exists (
+                select 1 from public.asset_check_assignments
+                where asset_check_assignments.id = asset_check_assignment_id
+                  and asset_check_assignments.organisation_id = asset_check_evidence_links.organisation_id
+            )
+        )
+        and (
+            asset_check_record_id is null
+            or exists (
+                select 1 from public.asset_check_records
+                where asset_check_records.id = asset_check_record_id
+                  and asset_check_records.organisation_id = asset_check_evidence_links.organisation_id
+            )
+        )
+    );
 
 -- RLS Policies: Asset Requirement Links
 create policy "Users can read requirement links in own organisation" on public.asset_requirement_links
-    for select using (public.is_organization_member(organisation_id));
+    for select using (
+        public.is_organization_member(organisation_id)
+        and exists (
+            select 1 from public.asset_check_types
+            where asset_check_types.id = asset_check_type_id
+              and asset_check_types.organisation_id = asset_requirement_links.organisation_id
+        )
+        and exists (
+            select 1 from public.requirements
+            where requirements.id = requirement_id
+              and requirements.organisation_id = asset_requirement_links.organisation_id
+        )
+    );
 create policy "Members can write requirement links in own organisation" on public.asset_requirement_links
-    for all using (public.can_write_organization(organisation_id))
-    with check (public.can_write_organization(organisation_id));
+    for all using (
+        public.can_write_organization(organisation_id)
+        and exists (
+            select 1 from public.asset_check_types
+            where asset_check_types.id = asset_check_type_id
+              and asset_check_types.organisation_id = asset_requirement_links.organisation_id
+        )
+        and exists (
+            select 1 from public.requirements
+            where requirements.id = requirement_id
+              and requirements.organisation_id = asset_requirement_links.organisation_id
+        )
+    )
+    with check (
+        public.can_write_organization(organisation_id)
+        and exists (
+            select 1 from public.asset_check_types
+            where asset_check_types.id = asset_check_type_id
+              and asset_check_types.organisation_id = asset_requirement_links.organisation_id
+        )
+        and exists (
+            select 1 from public.requirements
+            where requirements.id = requirement_id
+              and requirements.organisation_id = asset_requirement_links.organisation_id
+        )
+    );
 
 -- Triggers for updated_at timestamps
 create or replace function public.set_asset_updated_at()
@@ -181,18 +371,22 @@ end;
 $$;
 
 -- Triggers
+drop trigger if exists set_assets_updated_at on public.assets;
 create trigger set_assets_updated_at
 before update on public.assets
 for each row execute function public.set_asset_updated_at();
 
+drop trigger if exists set_asset_check_types_updated_at on public.asset_check_types;
 create trigger set_asset_check_types_updated_at
 before update on public.asset_check_types
 for each row execute function public.set_asset_updated_at();
 
+drop trigger if exists set_asset_check_assignments_updated_at on public.asset_check_assignments;
 create trigger set_asset_check_assignments_updated_at
 before update on public.asset_check_assignments
 for each row execute function public.set_asset_updated_at();
 
+drop trigger if exists set_asset_check_records_updated_at on public.asset_check_records;
 create trigger set_asset_check_records_updated_at
 before update on public.asset_check_records
 for each row execute function public.set_asset_updated_at();

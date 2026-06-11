@@ -408,7 +408,7 @@ export function GlobalSearchPanel({ dropdownAlign = 'sm:right-0 sm:top-full sm:m
     }
 
     return localResults.slice(0, 50);
-  }, [frameworkRequirements, actions, people, competencyTypes, documents, auditPacks, isOwnerOrAdmin]);
+  }, [frameworkRequirements, actions, people, competencyTypes, documents, auditPacks, assets, isOwnerOrAdmin]);
 
   // Main Search Fetch Effect
   useEffect(() => {
