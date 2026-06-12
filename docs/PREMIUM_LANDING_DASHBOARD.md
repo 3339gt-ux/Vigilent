@@ -26,8 +26,8 @@ The dashboard is structured as a modern, responsive, two-column workspace on des
 - **Profile / Avatar Dropdown**: User profile menu.
 
 ### Top KPI Strip
-Displays six core compliance indicators, fully data-backed:
-1. **Overall Compliance / Assurance**: Shows the computed readiness score (e.g., `92%`).
+Displays six core operational indicators, fully data-backed:
+1. **Readiness Health**: Shows the canonical requirement readiness score. It displays `N/A` when no active requirements have been assessed.
 2. **Requirements**: Shows compliant/total active requirements count.
 3. **Evidence Coverage**: Displays the percentage of documents classified.
 4. **Training Completion**: Based on active competency records and qualifications.
@@ -35,16 +35,16 @@ Displays six core compliance indicators, fully data-backed:
 6. **Asset Assurance**: Compliance progress across all active asset checks.
 
 ### Central Compliance Program Overview
-An interactive visual map representing the core compliance posture of the active organization.
+An interactive visual map representing the current readiness posture of the active organisation.
 - **Compliance Core centerpiece**: The abstract rotating spinner is replaced with a data-rich circular layout:
   - **Center displays**: The overall readiness score percentage.
   - **Readiness label**: Dynamic semantic status label (Excellent, Good, Fair, Needs Attention, Critical) matches the score tone.
-  - **Status badge**: Small overlay showing `LIVE` or `SNAPSHOT` alongside a pulsing status indicator dot.
+  - **Status badge**: Small `LIVE` overlay identifying the current readiness calculation.
   - **Watermark**: The rotating starburst spikes are integrated as a faint watermark (opacity `0.12`) to preserve the brand signature without obscuring the reading score.
-- **Segmented Compliance Ring**: An outer concentric SVG ring at radius `r=52.5` represents the breakdown of requirements: Compliant (Green), At Risk (Amber), Needs Attention (Red), and Not Assessed (Grey). Individual segments are cleanly separated by a visual 3px gap.
+- **Segmented Readiness Ring**: An outer concentric SVG ring represents the calculated requirement breakdown: Compliant (Green), At Risk (Amber), Needs Attention (Red), and Not Assessed (Grey).
 - **Animated Risk Pulses**: Exits from the centerpiece targeting any sub-module with active warning or expired items display warning dots with pulsing animations (`animate-ping`). Under reduced-motion settings, the ping animations are automatically disabled.
 - **State-Responsive Pathways**: Orthogonal data flow lines connect the core to satellite nodes. The pathway strokes dynamically indicate the destination node's health (emerald-500/20 for green, amber-500/20 for warning, rose-500/20 for critical, neutral for others). Data packets flow animation is suspended under reduced motion mode.
-- **Satellite Nodes**: Hover-scaling circular nodes displaying sub-module icons. Label text adjacent to the right displays the module title, badge warning counts, and total items (e.g. "Requirements [badge 21]" and "236 Requirements").
+- **Satellite Nodes**: Hover-scaling circular nodes display sub-module icons, live record counts, and warning badges where current data indicates attention is needed.
 - **List View**: Toggles to a clean list/tabular overview of the modules with summary statistics.
 - **Interactions**:
   - Hovering a satellite node highlights its SVG path, scales the node, and populates the details panel.
@@ -58,7 +58,7 @@ Provides continuous context-aware insights and shortcuts:
    - **Left**: A thick semi-circular speedometer gauge arc mapped to a colorful multi-stop gradient (red -> orange -> emerald -> indigo) indicating the current readiness score.
    - **Right**: Status legends representing valid, due soon, and needs-attention records with live counts.
 2. **Due & Overdue**: Combined feed of overdue framework requirements, upcoming actions, and expired asset checks.
-3. **Recent Activity**: Displays non-restricted workspace audit logs for transparency. Owner/Admin restrictions are strictly respected.
+3. **Recent Activity**: Displays workspace activity made available by the existing audit-log permissions.
 4. **Expiring Soon**: Aggregated list of evidence or competencies expiring within the next 30 days.
 5. **Smart Insights**: Suggests focus areas based on data (e.g. classification of raw files or linking empty matrices).
 
@@ -109,8 +109,8 @@ All metrics leverage the existing canonical calculators inside `AppContext` to a
 The dashboard incorporates a live interactive intelligence layer enabling deep inspection and workspace personalization:
 
 ### Hover Popovers & Tooltips
-- **Insight Popovers**: Triggered when hovering or focusing the six top KPI cards and the central Compliance Core orb. Popovers show driver scores, next action suggestions, and attention-required items.
-- **Readiness Point Tooltip**: Hovering over the compliance trend point displays the month's readiness score.
+- **Insight Popovers**: Triggered when hovering or focusing the six top KPI cards and the central Compliance Core orb. Popovers show the current calculation context and attention-required records.
+- **Readiness Point Tooltip**: Hovering over the readiness snapshot point displays the current calculated score.
 - **Donut Chart Segment Hover**: Displays calculated GREEN, AMBER, RED, and GREY requirement counts and supports filtered click-through.
 
 ### Reusable Insight Detail Drawer
@@ -127,11 +127,11 @@ The dashboard incorporates a live interactive intelligence layer enabling deep i
   - **Hero Style**: Choose between **System Map** (full diagram), **Compliance Core Only** (hides satellite nodes & paths), and **List Overview** (tabular module overview).
   - **Hero Detail Level**: Toggle between **Minimal**, **Balanced**, and **Full** representation styles.
   - **Motion Preference**: Toggle between **Standard animations** and **Reduced motion** (which suppresses pings and flow line packet animations).
-  - **Default Data Window**: Configure default timeline range (**Snapshot**, **7 Days**, **30 Days**, **90 Days**).
+  - **Upcoming Items Window**: Controls how far ahead the right-rail due-item list looks (**Due Today**, **7 Days**, **30 Days**, **90 Days**). It does not alter the readiness score or create historical data.
   - **Right Rail Sections**: Multi-select visible sections (Snapshot, Tasks, Activity, Suggestions, Expiring).
   - **KPI Sorting & Visibility**: Hide or reorder the Top KPI cards.
-- **Undo Capability**: Stashes the previous customization configuration. Clicking the **"Undo"** button in the dashboard header reverts the layout change immediately.
-- **Reset Defaults**: Instantly restores the default configuration settings.
+- **Undo Capability**: Stashes the previous saved customization configuration. Clicking **"Undo last save"** restores it once.
+- **Reset Defaults**: Loads the default configuration into the customization form; **Save Changes** applies it.
 - Scoped to `vygilence_dashboard_customization_${userId}_${orgId}` in `localStorage`.
 
 ### Historical Trend Honesty Assertions
@@ -143,6 +143,7 @@ The dashboard incorporates a live interactive intelligence layer enabling deep i
 
 - All interactive controls are fully keyboard focusable with visible focus outlines and support native `<button>` or `<Link>` semantics.
 - SVG hubs and interactive elements map `onFocus` and `onBlur` listeners to support popover display via keyboard navigation.
-- SVG animations, pings, and dashboard visual flows strictly respect the customization's `motionPreference` settings (and fall back to system `prefers-reduced-motion` settings).
+- Compliance Core flow lines, warning pings, watermark rotation, and live indicators respect the dashboard's explicit reduced-motion preference.
+- Escape closes the insight drawer, customization dialog, and dashboard quick-action dialogs.
 - Aria-labels are applied to icon-only controls.
 - Color alone is never used to convey status; warning badges are backed by descriptive texts.

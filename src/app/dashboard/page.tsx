@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
 import Link from 'next/link';
@@ -58,13 +58,25 @@ type RadarItem = {
 
 type DashboardModal = 'requirement' | 'competency' | 'action' | 'audit-pack' | null;
 type ViewMode = 'system' | 'list';
+type DashboardCustomization = {
+  visibleKpis: string[];
+  kpiOrder: string[];
+  visiblePanels: string[];
+  defaultViewMode: 'system' | 'list';
+  defaultRailTab: 'tasks' | 'activity' | 'suggestions' | 'expiring';
+  density: 'comfortable' | 'compact' | 'executive';
+  heroStyle: 'map' | 'core' | 'list';
+  heroDetailLevel: 'minimal' | 'balanced' | 'full';
+  visibleRightRailSections: string[];
+  dataWindow: 'snapshot' | '7days' | '30days' | '90days';
+  motionPreference: 'standard' | 'reduced';
+};
 
 export default function DashboardPage() {
   const {
     organization,
     user,
     readinessReport,
-    readinessScore,
     stats,
     competencySummary,
     documents,
@@ -98,21 +110,11 @@ export default function DashboardPage() {
     assetCheckEvidenceLinks,
     assetCategories
   } = useApp();
+  const readinessScore = readinessReport.overallScore;
+  const readinessDisplay = readinessScore === null ? 'N/A' : `${readinessScore}%`;
 
   // Customization state
-  const [customization, setCustomization] = useState<{
-    visibleKpis: string[];
-    kpiOrder: string[];
-    visiblePanels: string[];
-    defaultViewMode: 'system' | 'list';
-    defaultRailTab: 'tasks' | 'activity' | 'suggestions' | 'expiring';
-    density: 'comfortable' | 'compact' | 'executive';
-    heroStyle: 'map' | 'core' | 'list';
-    heroDetailLevel: 'minimal' | 'balanced' | 'full';
-    visibleRightRailSections: string[];
-    dataWindow: 'snapshot' | '7days' | '30days' | '90days';
-    motionPreference: 'standard' | 'reduced';
-  }>(() => {
+  const [customization, setCustomization] = useState<DashboardCustomization>(() => {
     const defaultSettings = {
       visibleKpis: ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
       kpiOrder: ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
@@ -157,7 +159,7 @@ export default function DashboardPage() {
   const [activeRailTab, setActiveRailTab] = useState<'tasks' | 'activity' | 'suggestions' | 'expiring'>(
     customization.defaultRailTab
   );
-  const [prevCustomization, setPrevCustomization] = useState<typeof customization | null>(null);
+  const [prevCustomization, setPrevCustomization] = useState<DashboardCustomization | null>(null);
   const [clickedItemId, setClickedItemId] = useState<string | null>(null);
 
   const handleItemClick = (id: string, action?: () => void) => {
@@ -594,21 +596,21 @@ export default function DashboardPage() {
   const segmentedRingPaths = useMemo(() => {
     const numSegments = segmentsData.length;
     if (numSegments === 0) return [];
-    
+
     const gapDegrees = numSegments === 1 ? 0 : 4;
     const totalGapDegrees = numSegments * gapDegrees;
     const availableDegrees = 360 - totalGapDegrees;
-    
+
     let currentAngle = 0;
-    
+
     return segmentsData.map((seg) => {
       const segmentDegrees = seg.pct * availableDegrees;
       const startAngle = currentAngle;
       const endAngle = currentAngle + segmentDegrees;
-      
+
       // Update currentAngle for next iteration, including the gap
       currentAngle = endAngle + gapDegrees;
-      
+
       const d = describeArc(400, 200, 52.5, startAngle, endAngle);
       return {
         ...seg,
@@ -987,15 +989,31 @@ export default function DashboardPage() {
 
   const [modalCustomization, setModalCustomization] = useState(customization);
 
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setHoveredInsight(null);
+      setActiveInsightDrawer(null);
+      setIsCustomizationOpen(false);
+      setIsUploadModalOpen(false);
+      setActiveQuickActionModal(null);
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, []);
+
   const getInsightData = useCallback((id: string) => {
     switch (id) {
       case 'health':
         return {
           id: 'health',
-          title: "Compliance Health Rating",
-          explanation: "The workspace readiness rating calculated from active requirements, evidence records, competencies, actions, and asset checks.",
-          count: `${readinessScore ?? 0}%`,
-          countLabel: "Compliance Score",
+          title: "Readiness Health",
+          explanation: readinessScore === null
+            ? "No assessed active requirements are currently included in the readiness calculation."
+            : "The readiness score is calculated from assessed active requirements and their linked evidence, reviews, actions, and mapped competency records. Asset gaps are shown as supplementary workspace context.",
+          count: readinessDisplay,
+          countLabel: "Readiness Score",
           statusBreakdown: [
             { label: "Compliant", count: stats.compliantCount, color: "bg-emerald-500" },
             { label: "At Risk", count: stats.expiringSoonCount, color: "bg-amber-500" },
@@ -1252,25 +1270,27 @@ export default function DashboardPage() {
       case 'hub':
         const compGapsCount = competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').length;
         const topReasons = [
-          ...(stats.expiredCount > 0 ? [{ name: `${stats.expiredCount} Overdue goals`, info: "Critical framework requirements pending reviews", status: "RED", link: "/dashboard/requirements?status=RED" }] : []),
+          ...(stats.expiredCount > 0 ? [{ name: `${stats.expiredCount} requirements need attention`, info: "Missing evidence, overdue reviews, or other readiness gaps", status: "RED", link: "/dashboard/requirements?status=RED" }] : []),
           ...(overdueAssetChecks.length > 0 ? [{ name: `${overdueAssetChecks.length} Expired asset checks`, info: "Equipment or vehicle check gaps", status: "RED", link: "/dashboard/matrix?status=Expired" }] : []),
-          ...(compGapsCount > 0 ? [{ name: `${compGapsCount} Training expiries`, info: "Personnel missing active certifications", status: "AMBER", link: "/dashboard/competencies?status=Expired" }] : []),
-          ...(unclassifiedDocs.length > 0 ? [{ name: `${unclassifiedDocs.length} Unlinked documents`, info: "Unclassified evidence in vault", status: "AMBER", link: "/dashboard/vault?status=Unclassified" }] : [])
+          ...(compGapsCount > 0 ? [{ name: `${compGapsCount} Training gaps`, info: "Expired or missing competency records", status: "AMBER", link: "/dashboard/competencies?status=Expired" }] : []),
+          ...(unclassifiedDocs.length > 0 ? [{ name: `${unclassifiedDocs.length} Unclassified documents`, info: "Evidence records awaiting classification", status: "AMBER", link: "/dashboard/vault?status=Unclassified" }] : [])
         ].slice(0, 3);
 
         if (topReasons.length === 0) {
-          topReasons.push({ name: "All items current", info: "Workspace is in optimal compliance health.", status: "GREEN", link: "/dashboard/reports" });
+          topReasons.push({ name: "No current priority gaps", info: "No priority gaps were identified from the available workspace records.", status: "GREEN", link: "/dashboard/reports" });
         }
 
         return {
           id: 'hub',
           title: "Compliance Core Status",
-          explanation: `Workspace readiness rating is ${readinessScore ?? 0}%. Computed dynamically from Framework Requirements, Evidence Vault coverage, Personnel Training, and Asset assurance logs.`,
-          count: `${readinessScore ?? 0}%`,
+          explanation: readinessScore === null
+            ? "No assessed active requirements are currently included in the readiness calculation."
+            : `Workspace readiness rating is ${readinessScore}%. It is calculated from assessed active requirements and their linked evidence, reviews, actions, and mapped competency records.`,
+          count: readinessDisplay,
           countLabel: "Readiness Rating",
           statusBreakdown: [
-            { label: "Overdue Goals", count: stats.expiredCount, color: "bg-rose-500" },
-            { label: "Missing Evidence", count: unclassifiedDocs.length, color: "bg-amber-500" },
+            { label: "Requirements Needing Attention", count: stats.expiredCount, color: "bg-rose-500" },
+            { label: "Missing Evidence", count: stats.missingCount, color: "bg-amber-500" },
             { label: "Training Gaps", count: compGapsCount, color: "bg-amber-500" },
             { label: "Asset Gaps", count: overdueAssetChecks.length, color: "bg-rose-500" }
           ],
@@ -1282,12 +1302,12 @@ export default function DashboardPage() {
           suggestedAction: stats.expiredCount > 0 ? "Review overdue framework goals" :
                            overdueAssetChecks.length > 0 ? "Log checklist updates in Asset Matrix" :
                            unclassifiedDocs.length > 0 ? "Classify vault documents" :
-                           "Perform self-audit export"
+                           "Review current workspace records"
         };
       default:
         return null;
     }
-  }, [readinessScore, stats, activeActionsCount, activeRequirements, frameworkRequirements, overdueAssetChecks, classifiedDocsCount, documents, unclassifiedDocs, competencySummary, competencyRecords, people, competencyTypes, overdueActionsCount, actions, compliantAssetChecks, totalAssetChecks, auditPacks, assets, today, greyRequirementCount, reportViewCount, assetMatrixCells]);
+  }, [readinessScore, readinessDisplay, stats, activeActionsCount, activeRequirements, frameworkRequirements, overdueAssetChecks, classifiedDocsCount, documents, unclassifiedDocs, competencySummary, competencyRecords, people, competencyTypes, overdueActionsCount, actions, compliantAssetChecks, totalAssetChecks, auditPacks, assets, today, greyRequirementCount, reportViewCount, assetMatrixCells]);
 
   const handleMouseEnter = (id: string) => (e: React.SyntheticEvent<HTMLElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -1387,14 +1407,21 @@ export default function DashboardPage() {
     return newOrder;
   };
 
-  const handleSaveCustomization = (newCustomization: typeof customization) => {
+  const handleSaveCustomization = (newCustomization: DashboardCustomization) => {
     const key = `vygilence_dashboard_customization_${user?.id || 'anon'}_${organization?.id || 'default'}`;
     try {
+      const visibleTabs = newCustomization.visibleRightRailSections.filter(
+        section => section !== 'snapshot'
+      ) as DashboardCustomization['defaultRailTab'][];
+      const defaultRailTab = visibleTabs.includes(newCustomization.defaultRailTab)
+        ? newCustomization.defaultRailTab
+        : visibleTabs[0] || 'tasks';
+      const normalizedCustomization = { ...newCustomization, defaultRailTab };
       setPrevCustomization(customization);
-      localStorage.setItem(key, JSON.stringify(newCustomization));
-      setCustomization(newCustomization);
-      setViewMode(newCustomization.heroStyle === 'list' ? 'list' : newCustomization.defaultViewMode);
-      setActiveRailTab(newCustomization.defaultRailTab);
+      localStorage.setItem(key, JSON.stringify(normalizedCustomization));
+      setCustomization(normalizedCustomization);
+      setViewMode(normalizedCustomization.heroStyle === 'list' ? 'list' : normalizedCustomization.defaultViewMode);
+      setActiveRailTab(defaultRailTab);
       setToast({ type: 'success', message: 'Dashboard layout preferences saved.' });
       setIsCustomizationOpen(false);
     } catch {
@@ -1403,7 +1430,15 @@ export default function DashboardPage() {
   };
 
   const getTrendData = useCallback(() => {
-    const scoreVal = readinessScore ?? 0;
+    if (readinessScore === null) {
+      return {
+        points: [],
+        labels: [],
+        pathD: '',
+        areaD: ''
+      };
+    }
+    const scoreVal = readinessScore;
     const y = 110 - (scoreVal / 100) * 90;
     return {
       points: [
@@ -1483,7 +1518,7 @@ export default function DashboardPage() {
                   >
                     <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Compliance Health</span>
                     <div className="flex items-baseline gap-1.5">
-                      <span className={`text-2xl font-black ${scoreTone(readinessScore)}`}>{readinessScore}%</span>
+                      <span className={`text-2xl font-black ${scoreTone(readinessScore)}`}>{readinessDisplay}</span>
                       <span className="text-[10px] text-muted-foreground font-bold leading-none">Score</span>
                     </div>
                     <span className="text-[10px] text-muted-foreground block font-bold">Current Snapshot</span>
@@ -1663,10 +1698,17 @@ export default function DashboardPage() {
                 {prevCustomization && (
                   <button
                     onClick={() => {
-                      const temp = customization;
-                      handleSaveCustomization(prevCustomization);
-                      setPrevCustomization(temp);
-                      setToast({ type: 'success', message: 'Reverted to previous customization.' });
+                      const key = `vygilence_dashboard_customization_${user?.id || 'anon'}_${organization?.id || 'default'}`;
+                      try {
+                        localStorage.setItem(key, JSON.stringify(prevCustomization));
+                        setCustomization(prevCustomization);
+                        setViewMode(prevCustomization.heroStyle === 'list' ? 'list' : prevCustomization.defaultViewMode);
+                        setActiveRailTab(prevCustomization.defaultRailTab);
+                        setPrevCustomization(null);
+                        setToast({ type: 'success', message: 'Reverted to previous customization.' });
+                      } catch {
+                        setToast({ type: 'error', message: 'Failed to restore dashboard preferences.' });
+                      }
                     }}
                     className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/25 border border-amber-500/30 text-amber-600 dark:text-amber-400 rounded-md text-[10px] font-bold transition-all cursor-pointer"
                   >
@@ -1744,14 +1786,14 @@ export default function DashboardPage() {
                         else if (node.id === 'audit-packs') pathD = 'M 400 200 L 520 200 L 520 280 L 600 280';
 
                         const tone = getNodeStatusTone(node.id);
-                        const bgStrokeColor = 
+                        const bgStrokeColor =
                           tone === 'rose' ? 'stroke-rose-500/20' :
                           tone === 'amber' ? 'stroke-amber-500/20' :
                           tone === 'emerald' ? 'stroke-emerald-500/20' :
                           tone === 'indigo' ? 'stroke-indigo-500/20' :
                           'stroke-zinc-500/10';
 
-                        const flowStrokeColor = 
+                        const flowStrokeColor =
                           tone === 'rose' ? 'text-rose-500' :
                           tone === 'amber' ? 'text-amber-500' :
                           tone === 'emerald' ? 'text-emerald-500' :
@@ -1926,7 +1968,7 @@ export default function DashboardPage() {
                         textAnchor="middle"
                         className="fill-foreground font-black text-lg select-none pointer-events-none"
                       >
-                        {readinessScore ?? 0}%
+                        {readinessDisplay}
                       </text>
 
                       {/* Status Label Text Overlay inside Core */}
@@ -1941,14 +1983,14 @@ export default function DashboardPage() {
 
                       {/* Live Snapshot Indicator inside Core */}
                       <g className="select-none opacity-80 pointer-events-none">
-                        <circle cx={customization.dataWindow === 'snapshot' ? 384 : 368} cy="221" r="2.5" className="fill-emerald-500 animate-pulse" />
+                        <circle cx="384" cy="221" r="2.5" className={`fill-emerald-500 ${isMotionReduced ? '' : 'animate-pulse'}`} />
                         <text
-                          x={customization.dataWindow === 'snapshot' ? 390 : 374}
+                          x="390"
                           y="224"
                           textAnchor="start"
                           className="fill-muted-foreground font-extrabold text-[8px] tracking-widest"
                         >
-                          {customization.dataWindow === 'snapshot' ? 'LIVE' : 'SNAPSHOT'}
+                          LIVE
                         </text>
                       </g>
 
@@ -2279,7 +2321,7 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between">
                 <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Compliance Snapshot</span>
                 <span className="flex items-center gap-1 text-[9px] font-bold text-muted-foreground uppercase">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> {customization.dataWindow === 'snapshot' ? 'Live' : 'Snapshot'}
+                  <span className={`w-1.5 h-1.5 rounded-full bg-emerald-500 ${isMotionReduced ? '' : 'animate-pulse'}`} /> Live
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4">
@@ -2322,12 +2364,11 @@ export default function DashboardPage() {
                     />
                   </svg>
                   <div className="absolute flex flex-col items-center justify-center text-center mt-[-8px]">
-                    <span className="text-xl font-black text-foreground">{readinessScore}%</span>
+                    <span className="text-xl font-black text-foreground">{readinessDisplay}</span>
                     <span className="text-[7px] font-bold text-muted-foreground uppercase tracking-wider">Overall</span>
-                    <div className={`flex items-center gap-0.5 mt-0.5 text-[8px] font-bold ${readinessScore && readinessScore >= 75 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                      <span>{readinessScore && readinessScore >= 75 ? 'Current' : 'Review'}</span>
-                      <span>live calculation</span>
-                    </div>
+                    <span className="mt-0.5 text-[7px] font-bold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+                      {readinessScore === null ? 'Not assessed' : 'Live readiness'}
+                    </span>
                   </div>
                 </div>
 
@@ -2396,7 +2437,7 @@ export default function DashboardPage() {
                   .map(tab => (
                     <button
                       key={tab.id}
-                      onClick={() => setActiveRailTab(tab.id as any)}
+                      onClick={() => setActiveRailTab(tab.id as DashboardCustomization['defaultRailTab'])}
                       className={`flex-1 text-center pb-1 text-[9px] font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer relative ${
                         activeRailTab === tab.id
                           ? 'border-indigo-500 text-foreground'
@@ -2589,11 +2630,19 @@ export default function DashboardPage() {
                   />
                 ))}
 
-                {/* Floating label for current month value */}
-                <rect x="134" cy={110 - ((readinessScore ?? 0) / 100) * 90 - 24} width="32" height="15" rx="3" fill="#6366f1" />
-                <text x="150" y={110 - ((readinessScore ?? 0) / 100) * 90 - 14} fill="#ffffff" fontSize="8" fontWeight="bold" textAnchor="middle">
-                  {readinessScore}%
-                </text>
+                {/* Floating label for the current readiness value */}
+                {readinessScore !== null ? (
+                  <>
+                    <rect x="134" cy={110 - (readinessScore / 100) * 90 - 24} width="32" height="15" rx="3" fill="#6366f1" />
+                    <text x="150" y={110 - (readinessScore / 100) * 90 - 14} fill="#ffffff" fontSize="8" fontWeight="bold" textAnchor="middle">
+                      {readinessDisplay}
+                    </text>
+                  </>
+                ) : (
+                  <text x="150" y="66" fill="currentColor" className="text-muted-foreground" fontSize="9" fontWeight="bold" textAnchor="middle">
+                    No assessed requirements
+                  </text>
+                )}
               </svg>
             </div>
             <div className="flex justify-between text-[9px] font-bold text-muted-foreground uppercase px-2.5 mt-2">
@@ -2758,7 +2807,7 @@ export default function DashboardPage() {
                   />
                 </svg>
                 <div className="absolute bottom-1 flex flex-col items-center justify-center text-center">
-                  <span className="text-xl font-black text-foreground">{readinessScore}%</span>
+                  <span className="text-xl font-black text-foreground">{readinessDisplay}</span>
                   <span className="text-[7px] font-bold text-muted-foreground uppercase tracking-wider">Readiness</span>
                 </div>
               </div>
@@ -3374,7 +3423,7 @@ export default function DashboardPage() {
 
                   {/* Module Contribution Cards */}
                   <div className="space-y-3">
-                    <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Module Health Contributions</span>
+                    <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Module Health Context</span>
                     <div className="grid grid-cols-2 gap-2.5">
                       {satelliteNodes.map(node => {
                         let healthVal = '';
@@ -3687,7 +3736,7 @@ export default function DashboardPage() {
                     <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Layout Density</label>
                     <select
                       value={modalCustomization.density}
-                      onChange={(e) => setModalCustomization({ ...modalCustomization, density: e.target.value as any })}
+                      onChange={(e) => setModalCustomization({ ...modalCustomization, density: e.target.value as DashboardCustomization['density'] })}
                       className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
                     >
                       <option value="comfortable">Comfortable</option>
@@ -3699,7 +3748,7 @@ export default function DashboardPage() {
                     <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Hero Style</label>
                     <select
                       value={modalCustomization.heroStyle}
-                      onChange={(e) => setModalCustomization({ ...modalCustomization, heroStyle: e.target.value as any })}
+                      onChange={(e) => setModalCustomization({ ...modalCustomization, heroStyle: e.target.value as DashboardCustomization['heroStyle'] })}
                       className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
                     >
                       <option value="map">System Map</option>
@@ -3711,7 +3760,7 @@ export default function DashboardPage() {
                     <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Hero Detail Level</label>
                     <select
                       value={modalCustomization.heroDetailLevel}
-                      onChange={(e) => setModalCustomization({ ...modalCustomization, heroDetailLevel: e.target.value as any })}
+                      onChange={(e) => setModalCustomization({ ...modalCustomization, heroDetailLevel: e.target.value as DashboardCustomization['heroDetailLevel'] })}
                       className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
                     >
                       <option value="minimal">Minimal</option>
@@ -3723,7 +3772,7 @@ export default function DashboardPage() {
                     <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Motion Settings</label>
                     <select
                       value={modalCustomization.motionPreference}
-                      onChange={(e) => setModalCustomization({ ...modalCustomization, motionPreference: e.target.value as any })}
+                      onChange={(e) => setModalCustomization({ ...modalCustomization, motionPreference: e.target.value as DashboardCustomization['motionPreference'] })}
                       className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
                     >
                       <option value="standard">Standard animations</option>
@@ -3750,7 +3799,7 @@ export default function DashboardPage() {
                   <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Default Right Rail Tab</label>
                   <select
                     value={modalCustomization.defaultRailTab}
-                    onChange={(e) => setModalCustomization({ ...modalCustomization, defaultRailTab: e.target.value as any })}
+                    onChange={(e) => setModalCustomization({ ...modalCustomization, defaultRailTab: e.target.value as DashboardCustomization['defaultRailTab'] })}
                     className="w-full px-2.5 py-1.5 bg-muted border border-border focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
                   >
                     <option value="tasks">Tasks list</option>
@@ -3760,13 +3809,13 @@ export default function DashboardPage() {
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Default Data Window</label>
+                  <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Upcoming Items Window</label>
                   <select
                     value={modalCustomization.dataWindow}
-                    onChange={(e) => setModalCustomization({ ...modalCustomization, dataWindow: e.target.value as any })}
+                    onChange={(e) => setModalCustomization({ ...modalCustomization, dataWindow: e.target.value as DashboardCustomization['dataWindow'] })}
                     className="w-full px-2.5 py-1.5 bg-muted border border-border focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
                   >
-                    <option value="snapshot">Current snapshot</option>
+                    <option value="snapshot">Due today</option>
                     <option value="7days">Next 7 days</option>
                     <option value="30days">Next 30 days</option>
                     <option value="90days">Next 90 days</option>
