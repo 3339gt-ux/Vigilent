@@ -100,6 +100,7 @@ export default function DashboardPage() {
     auditLogs,
     resetDemoData,
     uploadDocument,
+    linkDocumentToRequirement,
     createFrameworkRequirement,
     createActionForRequirement,
     upsertCompetencyType,
@@ -119,7 +120,9 @@ export default function DashboardPage() {
     assetCheckAssignments,
     assetCheckRecords,
     assetCheckEvidenceLinks,
-    assetCategories
+    assetCategories,
+    linkDocumentToCompetencyRecord,
+    linkAssetCheckEvidence
   } = useApp();
   const readinessScore = readinessReport.overallScore;
   const readinessDisplay = readinessScore === null ? 'N/A' : `${readinessScore}%`;
@@ -409,8 +412,29 @@ export default function DashboardPage() {
 
   // Safe Workspace Activity
   const safeActivity = useMemo(() => {
-    return (auditLogs || []).slice(0, 5);
-  }, [auditLogs]);
+    const isPrivileged = user?.role === 'Owner' || user?.role === 'Admin';
+    if (isPrivileged) {
+      return (auditLogs || []).slice(0, 5);
+    }
+    return (auditLogs || [])
+      .filter(log => {
+        const act = (log.action || '').toLowerCase();
+        const det = (log.details || '').toLowerCase();
+        return !act.includes('delete') &&
+               !act.includes('organization') &&
+               !act.includes('billing') &&
+               !act.includes('invite') &&
+               !act.includes('role') &&
+               !act.includes('key') &&
+               !det.includes('delete') &&
+               !det.includes('organization') &&
+               !det.includes('billing') &&
+               !det.includes('invite') &&
+               !det.includes('role') &&
+               !det.includes('key');
+      })
+      .slice(0, 5);
+  }, [auditLogs, user?.role]);
 
   // Timeline / Radar Buckets
   const radarBuckets = useMemo(() => {
@@ -987,7 +1011,12 @@ export default function DashboardPage() {
     explanation: string;
     count: string | number;
     countLabel?: string;
-    statusBreakdown?: Array<{ label: string; count: number; color: string }>;
+    statusBreakdown?: Array<{
+      label: string;
+      count: number;
+      color: string;
+      records: Array<{ name: string; info: string; status?: string; link: string }>;
+    }>;
     records?: Array<{ name: string; info: string; status?: string; link: string }>;
     link?: string;
     linkLabel?: string;
@@ -1004,7 +1033,12 @@ export default function DashboardPage() {
     explanation: string;
     count: string | number;
     countLabel?: string;
-    statusBreakdown?: Array<{ label: string; count: number; color: string }>;
+    statusBreakdown?: Array<{
+      label: string;
+      count: number;
+      color: string;
+      records: Array<{ name: string; info: string; status?: string; link: string }>;
+    }>;
     records: Array<{ name: string; info: string; status?: string; link: string }>;
     link?: string;
     linkLabel?: string;
@@ -1024,6 +1058,75 @@ export default function DashboardPage() {
   const [modalCustomization, setModalCustomization] = useState(customization);
   const hoverTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [expandedStatusLabel, setExpandedStatusLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!hoveredInsight) {
+      setExpandedStatusLabel(null);
+    }
+  }, [hoveredInsight]);
+
+  // Drag over states for smart evidence dropzone
+  const [isDragOverActive, setIsDragOverActive] = useState(false);
+  const [droppedFiles, setDroppedFiles] = useState<File[] | null>(null);
+  const [isDropContextModalOpen, setIsDropContextModalOpen] = useState(false);
+  const [selectedContextType, setSelectedContextType] = useState<'general' | 'requirement' | 'action' | 'asset' | 'competency'>('general');
+  const [selectedContextId, setSelectedContextId] = useState('');
+  const [isUploadingDropped, setIsUploadingDropped] = useState(false);
+  const [uploadProgressMessage, setUploadProgressMessage] = useState('');
+
+  const dragCounter = React.useRef(0);
+
+  useEffect(() => {
+    const handleDragEnter = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter.current += 1;
+      if (dragCounter.current === 1) {
+        setIsDragOverActive(true);
+      }
+    };
+
+    const handleDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter.current -= 1;
+      if (dragCounter.current === 0) {
+        setIsDragOverActive(false);
+      }
+    };
+
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const handleDrop = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter.current = 0;
+      setIsDragOverActive(false);
+      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+        setDroppedFiles(Array.from(e.dataTransfer.files));
+        setIsDropContextModalOpen(true);
+        setSelectedContextType('general');
+        setSelectedContextId('');
+      }
+    };
+
+    window.addEventListener('dragenter', handleDragEnter);
+    window.addEventListener('dragleave', handleDragLeave);
+    window.addEventListener('dragover', handleDragOver);
+    window.addEventListener('drop', handleDrop);
+
+    return () => {
+      window.removeEventListener('dragenter', handleDragEnter);
+      window.removeEventListener('dragleave', handleDragLeave);
+      window.removeEventListener('dragover', handleDragOver);
+      window.removeEventListener('drop', handleDrop);
+    };
+  }, []);
+
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
@@ -1032,6 +1135,8 @@ export default function DashboardPage() {
       setIsCustomizationOpen(false);
       setIsUploadModalOpen(false);
       setActiveQuickActionModal(null);
+      setIsDropContextModalOpen(false);
+      setDroppedFiles(null);
     };
 
     window.addEventListener('keydown', handleEscape);
@@ -1039,6 +1144,59 @@ export default function DashboardPage() {
   }, []);
 
   const getInsightData = useCallback((id: string) => {
+    const mapRequirement = (r: typeof frameworkRequirements[0]) => ({
+      name: r.title,
+      info: `${r.category} | Risk: ${r.risk_level}`,
+      status: r.status,
+      link: `/dashboard/requirements?requirementId=${r.id}`
+    });
+
+    const mapDocument = (d: typeof documents[0]) => ({
+      name: d.title,
+      info: d.expiry_date ? `Expires: ${d.expiry_date}` : `Classified | ${d.category}`,
+      status: d.expiry_date && new Date(d.expiry_date) < today ? "RED" : "GREEN",
+      link: `/dashboard/vault?id=${d.id}`
+    });
+
+    const mapCompRecord = (r: typeof competencyRecords[0]) => {
+      const p = people.find(item => item.id === r.person_id);
+      const ct = competencyTypes.find(item => item.id === r.competency_type_id);
+      return {
+        name: p?.display_name || 'Teammate',
+        info: `${ct?.title || 'Training'} | ${r.status}`,
+        status: r.status === 'Expired' ? 'RED' : r.status === 'Valid' ? 'GREEN' : 'AMBER',
+        link: `/dashboard/competencies?person=${p?.id}&competency=${ct?.id}`
+      };
+    };
+
+    const isActionOverdue = (a: typeof actions[0]) => {
+      const dueDate = a.target_due_date || a.due_date;
+      if (!dueDate) return false;
+      return new Date(dueDate) < today;
+    };
+
+    const mapAction = (a: typeof actions[0]) => {
+      const isOver = isActionOverdue(a);
+      return {
+        name: a.title,
+        info: `Owner: ${a.owner || 'Unassigned'} | Due: ${a.target_due_date || a.due_date || 'No Date'}`,
+        status: isOver ? 'RED' : 'AMBER',
+        link: `/dashboard/requirements?filter=actions`
+      };
+    };
+
+    const mapAssetAssignment = (asg: typeof assetCheckAssignments[0]) => {
+      const asset = (assets || []).find(a => a.id === asg.asset_id);
+      const checkType = (assetCheckTypes || []).find(ct => ct.id === asg.asset_check_type_id);
+      const status = getAssignmentStatus(asg.id);
+      return {
+        name: `${checkType?.title || 'Check'} - ${asset?.name || 'Asset'}`,
+        info: `Asset Check | ${status}`,
+        status: status === 'Compliant' ? 'GREEN' : status === 'Expired' ? 'RED' : 'AMBER',
+        link: `/dashboard/matrix?asset=${asset?.id}`
+      };
+    };
+
     switch (id) {
       case 'health':
         return {
@@ -1046,22 +1204,17 @@ export default function DashboardPage() {
           title: "Readiness Health",
           explanation: readinessScore === null
             ? "No assessed active requirements are currently included in the readiness calculation."
-            : "The readiness score is calculated from assessed active requirements and their linked evidence, reviews, actions, and mapped competency records. Asset gaps are shown as supplementary workspace context.",
+            : "The readiness score is calculated from assessed active requirements and their linked evidence, reviews, actions, and mapped competency records. Asset gaps are shown as workspace context.",
           count: readinessDisplay,
           countLabel: "Readiness Score",
           statusBreakdown: [
-            { label: "Compliant", count: stats.compliantCount, color: "bg-emerald-500" },
-            { label: "At Risk", count: stats.expiringSoonCount, color: "bg-amber-500" },
-            { label: "Needs Attention", count: stats.expiredCount, color: "bg-rose-500" },
-            { label: "Not Assessed", count: greyRequirementCount, color: "bg-zinc-500" }
+            { label: "Compliant", count: stats.compliantCount, color: "bg-emerald-500", records: activeRequirements.filter(r => r.status === 'GREEN').slice(0, 5).map(mapRequirement) },
+            { label: "At Risk", count: stats.expiringSoonCount, color: "bg-amber-500", records: activeRequirements.filter(r => r.status === 'AMBER').slice(0, 5).map(mapRequirement) },
+            { label: "Needs Attention", count: stats.expiredCount, color: "bg-rose-500", records: activeRequirements.filter(r => r.status === 'RED').slice(0, 5).map(mapRequirement) },
+            { label: "Not Assessed", count: greyRequirementCount, color: "bg-zinc-500", records: activeRequirements.filter(r => !r.status || r.status === 'GREY').slice(0, 5).map(mapRequirement) }
           ],
           records: [
-            ...frameworkRequirements.filter(r => r.status === 'RED' || r.status === 'AMBER').slice(0, 3).map(r => ({
-              name: r.title,
-              info: `Requirement | Risk: ${r.risk_level}`,
-              status: r.status,
-              link: `/dashboard/requirements?id=${r.id}`
-            })),
+            ...frameworkRequirements.filter(r => r.status === 'RED' || r.status === 'AMBER').slice(0, 3).map(mapRequirement),
             ...overdueAssetChecks.slice(0, 2).map(c => ({
               name: c.requirement.title,
               info: `Asset Check | Overdue`,
@@ -1073,12 +1226,7 @@ export default function DashboardPage() {
           linkLabel: "Open Reports Overview"
         };
       case 'requirements':
-        const reqRecords = activeRequirements.filter(r => r.status === 'RED' || r.status === 'AMBER').slice(0, 3).map(r => ({
-          name: r.title,
-          info: `${r.category} | Owner: ${r.owner || 'Unassigned'}`,
-          status: r.status,
-          link: `/dashboard/requirements?id=${r.id}`
-        }));
+        const reqRecords = activeRequirements.filter(r => r.status === 'RED' || r.status === 'AMBER').slice(0, 3).map(mapRequirement);
         if (reqRecords.length === 0) {
           reqRecords.push({
             name: "All requirements current",
@@ -1094,10 +1242,10 @@ export default function DashboardPage() {
           count: `${stats.compliantCount} / ${stats.activeRequirements}`,
           countLabel: "Compliant Objectives",
           statusBreakdown: [
-            { label: "Compliant", count: stats.compliantCount, color: "bg-emerald-500" },
-            { label: "At Risk (Amber)", count: stats.expiringSoonCount, color: "bg-amber-500" },
-            { label: "Needs Attention (Red)", count: stats.expiredCount, color: "bg-rose-500" },
-            { label: "Not Assessed (Grey)", count: greyRequirementCount, color: "bg-zinc-500" }
+            { label: "Compliant", count: stats.compliantCount, color: "bg-emerald-500", records: activeRequirements.filter(r => r.status === 'GREEN').slice(0, 5).map(mapRequirement) },
+            { label: "At Risk (Amber)", count: stats.expiringSoonCount, color: "bg-amber-500", records: activeRequirements.filter(r => r.status === 'AMBER').slice(0, 5).map(mapRequirement) },
+            { label: "Needs Attention (Red)", count: stats.expiredCount, color: "bg-rose-500", records: activeRequirements.filter(r => r.status === 'RED').slice(0, 5).map(mapRequirement) },
+            { label: "Not Assessed (Grey)", count: greyRequirementCount, color: "bg-zinc-500", records: activeRequirements.filter(r => !r.status || r.status === 'GREY').slice(0, 5).map(mapRequirement) }
           ],
           records: reqRecords,
           link: "/dashboard/requirements?status=Attention",
@@ -1114,18 +1262,8 @@ export default function DashboardPage() {
           return exp >= today && exp <= limit;
         }).length;
         const vaultRecords = [
-          ...unclassifiedDocs.slice(0, 2).map(d => ({
-            name: d.title,
-            info: `Unclassified | Category: ${d.category}`,
-            status: "AMBER",
-            link: `/dashboard/vault?id=${d.id}`
-          })),
-          ...documents.filter(d => d.expiry_date && new Date(d.expiry_date as string) < today).slice(0, 2).map(d => ({
-            name: d.title,
-            info: `Expired: ${d.expiry_date}`,
-            status: "RED",
-            link: `/dashboard/vault?id=${d.id}`
-          }))
+          ...unclassifiedDocs.slice(0, 2).map(mapDocument),
+          ...documents.filter(d => d.expiry_date && new Date(d.expiry_date as string) < today).slice(0, 2).map(mapDocument)
         ];
         if (vaultRecords.length === 0) {
           vaultRecords.push({
@@ -1142,10 +1280,10 @@ export default function DashboardPage() {
           count: `${classifiedDocsCount} / ${documents.length}`,
           countLabel: "Classified Documents",
           statusBreakdown: [
-            { label: "Classified & Linked", count: classifiedDocsCount, color: "bg-indigo-500" },
-            { label: "Unclassified Raw Uploads", count: unclassifiedDocs.length, color: "bg-amber-500" },
-            { label: "Expired Evidence Documents", count: expiredDocsCount, color: "bg-rose-500" },
-            { label: "Expiring Within 30 Days", count: expiringDocsCount, color: "bg-amber-400" }
+            { label: "Classified & Linked", count: classifiedDocsCount, color: "bg-indigo-500", records: documents.filter(d => d.status !== 'Unclassified').slice(0, 5).map(mapDocument) },
+            { label: "Unclassified Raw Uploads", count: unclassifiedDocs.length, color: "bg-amber-500", records: unclassifiedDocs.slice(0, 5).map(mapDocument) },
+            { label: "Expired Evidence Documents", count: expiredDocsCount, color: "bg-rose-500", records: documents.filter(d => d.expiry_date && new Date(d.expiry_date) < today).slice(0, 5).map(mapDocument) },
+            { label: "Expiring Within 30 Days", count: expiringDocsCount, color: "bg-amber-400", records: documents.filter(d => { if (!d.expiry_date) return false; const exp = new Date(d.expiry_date); const limit = new Date(today); limit.setDate(limit.getDate() + 30); return exp >= today && exp <= limit; }).slice(0, 5).map(mapDocument) }
           ],
           records: vaultRecords,
           link: "/dashboard/vault?status=Unclassified",
@@ -1155,16 +1293,7 @@ export default function DashboardPage() {
       case 'competencies':
         const compExpired = competencyRecords.filter(r => r.status === 'Expired').length;
         const compMissing = competencyRecords.filter(r => r.status === 'Missing').length;
-        const compRecords = competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').slice(0, 3).map(r => {
-          const p = people.find(item => item.id === r.person_id);
-          const ct = competencyTypes.find(item => item.id === r.competency_type_id);
-          return {
-            name: p?.display_name || 'Teammate',
-            info: `${ct?.title || 'Training'} | ${r.status}`,
-            status: r.status === 'Expired' ? 'RED' : 'AMBER',
-            link: `/dashboard/competencies?person=${p?.id}&competency=${ct?.id}`
-          };
-        });
+        const compRecords = competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').slice(0, 3).map(mapCompRecord);
         if (compRecords.length === 0) {
           compRecords.push({
             name: "Personnel training up-to-date",
@@ -1180,9 +1309,9 @@ export default function DashboardPage() {
           count: `${competencySummary.compliancePercent}%`,
           countLabel: "Training Compliance",
           statusBreakdown: [
-            { label: "Valid Qualifications", count: competencySummary.valid, color: "bg-emerald-500" },
-            { label: "Expired Certifications", count: compExpired, color: "bg-rose-500" },
-            { label: "Missing Records", count: compMissing, color: "bg-amber-500" }
+            { label: "Valid Qualifications", count: competencySummary.valid, color: "bg-emerald-500", records: competencyRecords.filter(r => r.status === 'Valid').slice(0, 5).map(mapCompRecord) },
+            { label: "Expired Certifications", count: compExpired, color: "bg-rose-500", records: competencyRecords.filter(r => r.status === 'Expired').slice(0, 5).map(mapCompRecord) },
+            { label: "Missing Records", count: compMissing, color: "bg-amber-500", records: competencyRecords.filter(r => r.status === 'Missing').slice(0, 5).map(mapCompRecord) }
           ],
           records: compRecords,
           link: "/dashboard/competencies?status=Expired",
@@ -1197,18 +1326,10 @@ export default function DashboardPage() {
           count: activeActionsCount,
           countLabel: "Open Action Tasks",
           statusBreakdown: [
-            { label: "Overdue Actions", count: overdueActionsCount, color: "bg-rose-500" },
-            { label: "Active Actions", count: activeActionsCount - overdueActionsCount, color: "bg-indigo-500" }
+            { label: "Overdue Actions", count: overdueActionsCount, color: "bg-rose-500", records: actions.filter(a => (a.status === 'Open' || a.status === 'In Progress') && isActionOverdue(a)).slice(0, 5).map(mapAction) },
+            { label: "Active Actions", count: activeActionsCount - overdueActionsCount, color: "bg-indigo-500", records: actions.filter(a => (a.status === 'Open' || a.status === 'In Progress') && !isActionOverdue(a)).slice(0, 5).map(mapAction) }
           ],
-          records: actions.filter(a => a.status === 'Open' || a.status === 'In Progress').slice(0, 3).map(a => {
-            const isOver = (a.target_due_date || a.due_date) && new Date(a.target_due_date || a.due_date as string) < today;
-            return {
-              name: a.title,
-              info: `Owner: ${a.owner || 'Unassigned'} | Due: ${a.target_due_date || a.due_date || 'No Date'}`,
-              status: isOver ? 'RED' : 'AMBER',
-              link: `/dashboard/requirements?selectedAction=${a.id}`
-            };
-          }),
+          records: actions.filter(a => a.status === 'Open' || a.status === 'In Progress').slice(0, 3).map(mapAction),
           link: "/dashboard/requirements?filter=actions",
           linkLabel: "View Actions Registry"
         };
@@ -1238,10 +1359,10 @@ export default function DashboardPage() {
           count: `${compliantAssetChecks} / ${totalAssetChecks}`,
           countLabel: "Compliant Asset Checks",
           statusBreakdown: [
-            { label: "Compliant checks", count: compliantAssetChecks, color: "bg-emerald-500" },
-            { label: "Overdue checks", count: expiredAssetChecks, color: "bg-rose-500" },
-            { label: "Missing check logs", count: missingAssetChecks, color: "bg-rose-500/60" },
-            { label: "Due soon checks", count: dueSoonAssetChecks, color: "bg-amber-500" }
+            { label: "Compliant checks", count: compliantAssetChecks, color: "bg-emerald-500", records: (assetCheckAssignments || []).filter(a => a.active && a.required && getAssignmentStatus(a.id) === 'Compliant').slice(0, 5).map(mapAssetAssignment) },
+            { label: "Overdue checks", count: expiredAssetChecks, color: "bg-rose-500", records: (assetCheckAssignments || []).filter(a => a.active && a.required && getAssignmentStatus(a.id) === 'Expired').slice(0, 5).map(mapAssetAssignment) },
+            { label: "Missing check logs", count: missingAssetChecks, color: "bg-rose-500/60", records: (assetCheckAssignments || []).filter(a => a.active && a.required && getAssignmentStatus(a.id) === 'Missing').slice(0, 5).map(mapAssetAssignment) },
+            { label: "Due soon checks", count: dueSoonAssetChecks, color: "bg-amber-500", records: (assetCheckAssignments || []).filter(a => a.active && a.required && getAssignmentStatus(a.id) === 'Expiring Soon').slice(0, 5).map(mapAssetAssignment) }
           ],
           records: matrixRecords,
           link: "/dashboard/matrix?status=Expired",
@@ -1272,9 +1393,9 @@ export default function DashboardPage() {
           count: auditPacks.length,
           countLabel: "Active Packs",
           statusBreakdown: [
-            { label: "Draft Packs", count: draftPacks, color: "bg-amber-500" },
-            { label: "Ready to Present", count: readyPacks, color: "bg-emerald-500" },
-            { label: "Shared / Sent Packs", count: sentPacks, color: "bg-indigo-500" }
+            { label: "Draft Packs", count: draftPacks, color: "bg-amber-500", records: [] },
+            { label: "Ready to Present", count: readyPacks, color: "bg-emerald-500", records: [] },
+            { label: "Shared / Sent Packs", count: sentPacks, color: "bg-indigo-500", records: [] }
           ],
           records: packRecords,
           link: "/dashboard/audit-packs",
@@ -1288,10 +1409,10 @@ export default function DashboardPage() {
           count: reportViewCount,
           countLabel: "Available Views",
           statusBreakdown: [
-            { label: "Executive summary", count: 1, color: "bg-emerald-500" },
-            { label: "Framework audit check", count: 1, color: "bg-emerald-500" },
-            { label: "Training matrix check", count: 1, color: "bg-emerald-500" },
-            { label: "Asset maintenance history", count: 1, color: "bg-emerald-500" }
+            { label: "Executive summary", count: 1, color: "bg-emerald-500", records: [] },
+            { label: "Framework audit check", count: 1, color: "bg-emerald-500", records: [] },
+            { label: "Training matrix check", count: 1, color: "bg-emerald-500", records: [] },
+            { label: "Asset maintenance history", count: 1, color: "bg-emerald-500", records: [] }
           ],
           records: [
             { name: "Executive Readiness Overview", info: "Aggregated health index across framework groups", status: "GREEN", link: "/dashboard/reports?tab=executive" },
@@ -1305,7 +1426,7 @@ export default function DashboardPage() {
       case 'hub':
         const compGapsCount = competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').length;
         const topReasons = [
-          ...(stats.expiredCount > 0 ? [{ name: `${stats.expiredCount} requirements need attention`, info: "Missing evidence, overdue reviews, or other readiness gaps", status: "RED", link: "/dashboard/requirements?status=RED" }] : []),
+          ...(stats.expiredCount > 0 ? [{ name: `${stats.expiredCount} requirements need attention`, info: "Missing evidence, overdue reviews, or other readiness gaps", status: "RED", link: `/dashboard/requirements?status=RED` }] : []),
           ...(overdueAssetChecks.length > 0 ? [{ name: `${overdueAssetChecks.length} Expired asset checks`, info: "Equipment or vehicle check gaps", status: "RED", link: "/dashboard/matrix?status=Expired" }] : []),
           ...(compGapsCount > 0 ? [{ name: `${compGapsCount} Training gaps`, info: "Expired or missing competency records", status: "AMBER", link: "/dashboard/competencies?status=Expired" }] : []),
           ...(unclassifiedDocs.length > 0 ? [{ name: `${unclassifiedDocs.length} Unclassified documents`, info: "Evidence records awaiting classification", status: "AMBER", link: "/dashboard/vault?status=Unclassified" }] : [])
@@ -1324,10 +1445,10 @@ export default function DashboardPage() {
           count: readinessDisplay,
           countLabel: "Readiness Rating",
           statusBreakdown: [
-            { label: "Requirements Needing Attention", count: stats.expiredCount, color: "bg-rose-500" },
-            { label: "Missing Evidence", count: stats.missingCount, color: "bg-amber-500" },
-            { label: "Training Gaps", count: compGapsCount, color: "bg-amber-500" },
-            { label: "Asset Gaps", count: overdueAssetChecks.length, color: "bg-rose-500" }
+            { label: "Requirements Needing Attention", count: stats.expiredCount, color: "bg-rose-500", records: activeRequirements.filter(r => r.status === 'RED').slice(0, 5).map(mapRequirement) },
+            { label: "Missing Evidence", count: stats.missingCount, color: "bg-amber-500", records: activeRequirements.filter(r => r.status === 'AMBER').slice(0, 5).map(mapRequirement) },
+            { label: "Training Gaps", count: compGapsCount, color: "bg-amber-500", records: competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').slice(0, 5).map(mapCompRecord) },
+            { label: "Asset Gaps", count: overdueAssetChecks.length, color: "bg-rose-500", records: overdueAssetChecks.map(c => ({ name: c.requirement.title, info: `Asset Check | Overdue`, status: "RED", link: c.link })) }
           ],
           records: topReasons,
           link: "/dashboard/reports?tab=executive",
@@ -1339,10 +1460,54 @@ export default function DashboardPage() {
                            unclassifiedDocs.length > 0 ? "Classify vault documents" :
                            "Review current workspace records"
         };
+      case 'snapshot-compliant':
+        return {
+          id: 'snapshot-compliant',
+          title: "Compliant Requirements",
+          explanation: "All framework requirements that have active evidence and are marked as compliant (GREEN).",
+          count: stats.compliantCount,
+          countLabel: "Compliant count",
+          records: activeRequirements.filter(r => r.status === 'GREEN').slice(0, 5).map(mapRequirement),
+          link: "/dashboard/requirements?status=GREEN",
+          linkLabel: "Filter Compliant Requirements"
+        };
+      case 'snapshot-inprogress':
+        return {
+          id: 'snapshot-inprogress',
+          title: "In Progress Actions",
+          explanation: "Remediation action items currently active or open to address framework gaps.",
+          count: activeActionsCount,
+          countLabel: "Active Actions count",
+          records: actions.filter(a => a.status === 'Open' || a.status === 'In Progress').slice(0, 5).map(mapAction),
+          link: "/dashboard/requirements?filter=actions",
+          linkLabel: "Filter Actions"
+        };
+      case 'snapshot-atrisk':
+        return {
+          id: 'snapshot-atrisk',
+          title: "At Risk Requirements",
+          explanation: "Framework requirements that are expiring soon or have warning flags (AMBER).",
+          count: stats.expiringSoonCount,
+          countLabel: "At Risk count",
+          records: activeRequirements.filter(r => r.status === 'AMBER').slice(0, 5).map(mapRequirement),
+          link: "/dashboard/requirements?status=AMBER",
+          linkLabel: "Filter At Risk Requirements"
+        };
+      case 'snapshot-needsattention':
+        return {
+          id: 'snapshot-needsattention',
+          title: "Needs Attention Requirements",
+          explanation: "Requirements that are overdue, have missing evidence, or have expired items (RED).",
+          count: stats.expiredCount,
+          countLabel: "Needs Attention count",
+          records: activeRequirements.filter(r => r.status === 'RED').slice(0, 5).map(mapRequirement),
+          link: "/dashboard/requirements?status=RED",
+          linkLabel: "Filter Attention Requirements"
+        };
       default:
         return null;
     }
-  }, [readinessScore, readinessDisplay, stats, activeActionsCount, activeRequirements, frameworkRequirements, overdueAssetChecks, classifiedDocsCount, documents, unclassifiedDocs, competencySummary, competencyRecords, people, competencyTypes, overdueActionsCount, actions, compliantAssetChecks, totalAssetChecks, auditPacks, assets, today, greyRequirementCount, reportViewCount, assetMatrixCells]);
+  }, [readinessScore, readinessDisplay, stats, activeActionsCount, activeRequirements, frameworkRequirements, overdueAssetChecks, classifiedDocsCount, documents, unclassifiedDocs, competencySummary, competencyRecords, people, competencyTypes, overdueActionsCount, actions, compliantAssetChecks, totalAssetChecks, auditPacks, assets, today, greyRequirementCount, reportViewCount, assetMatrixCells, getAssignmentStatus, assetCheckAssignments]);
 
   const handleMouseEnter = (id: string) => (e: React.SyntheticEvent<HTMLElement>) => {
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
@@ -2411,6 +2576,9 @@ export default function DashboardPage() {
                 <div className="flex-1 space-y-1.5 text-[10.5px]">
                   <Link
                     href="/dashboard/requirements?status=GREEN"
+                    onMouseEnter={handleMouseEnter('snapshot-compliant')}
+                    onMouseLeave={handleMouseLeave}
+                    onFocus={handleMouseEnter('snapshot-compliant')}
                     className="flex items-center justify-between gap-2 p-1 hover:bg-muted/30 border border-transparent hover:border-border/40 rounded-lg transition-all cursor-pointer block text-xs text-foreground font-bold"
                     title="Click to view compliant requirements"
                   >
@@ -2422,6 +2590,9 @@ export default function DashboardPage() {
                   </Link>
                   <Link
                     href="/dashboard/requirements?filter=actions"
+                    onMouseEnter={handleMouseEnter('snapshot-inprogress')}
+                    onMouseLeave={handleMouseLeave}
+                    onFocus={handleMouseEnter('snapshot-inprogress')}
                     className="flex items-center justify-between gap-2 p-1 hover:bg-muted/30 border border-transparent hover:border-border/40 rounded-lg transition-all cursor-pointer block text-xs text-foreground font-bold"
                     title="Click to view action tasks"
                   >
@@ -2433,6 +2604,9 @@ export default function DashboardPage() {
                   </Link>
                   <Link
                     href="/dashboard/requirements?status=AMBER"
+                    onMouseEnter={handleMouseEnter('snapshot-atrisk')}
+                    onMouseLeave={handleMouseLeave}
+                    onFocus={handleMouseEnter('snapshot-atrisk')}
                     className="flex items-center justify-between gap-2 p-1 hover:bg-muted/30 border border-transparent hover:border-border/40 rounded-lg transition-all cursor-pointer block text-xs text-foreground font-bold"
                     title="Click to view at-risk requirements"
                   >
@@ -2444,6 +2618,9 @@ export default function DashboardPage() {
                   </Link>
                   <Link
                     href="/dashboard/requirements?status=RED"
+                    onMouseEnter={handleMouseEnter('snapshot-needsattention')}
+                    onMouseLeave={handleMouseLeave}
+                    onFocus={handleMouseEnter('snapshot-needsattention')}
                     className="flex items-center justify-between gap-2 p-1 hover:bg-muted/30 border border-transparent hover:border-border/40 rounded-lg transition-all cursor-pointer block text-xs text-foreground font-bold"
                     title="Click to view requirements needing attention"
                   >
@@ -3380,16 +3557,57 @@ export default function DashboardPage() {
           </div>
           <p className="text-[10.5px] text-muted-foreground leading-relaxed">{hoveredInsight.explanation}</p>
           {hoveredInsight.statusBreakdown && (
-            <div className="space-y-1 text-[9.5px] font-bold border-t border-border/40 pt-2">
-              {hoveredInsight.statusBreakdown.map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-muted-foreground">
-                    <span className={`w-1.5 h-1.5 rounded-full ${item.color}`} />
-                    {item.label}
-                  </span>
-                  <span className="text-foreground">{item.count}</span>
-                </div>
-              ))}
+            <div className="space-y-1.5 text-[9.5px] font-bold border-t border-border/40 pt-2">
+              {hoveredInsight.statusBreakdown.map((item, idx) => {
+                const hasRecords = item.records && item.records.length > 0;
+                const isExpanded = expandedStatusLabel === `${hoveredInsight.id}-${item.label}`;
+                return (
+                  <div key={idx} className="space-y-1">
+                    <button
+                      onClick={() => {
+                        if (hasRecords) {
+                          setExpandedStatusLabel(isExpanded ? null : `${hoveredInsight.id}-${item.label}`);
+                        }
+                      }}
+                      className={`w-full flex items-center justify-between p-1 rounded hover:bg-muted/30 transition-colors text-left ${hasRecords ? 'cursor-pointer' : 'cursor-default'}`}
+                    >
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <span className={`w-1.5 h-1.5 rounded-full ${item.color}`} />
+                        {item.label}
+                        {hasRecords && (
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className={`w-2.5 h-2.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                          >
+                            <path d="m6 9 6 6 6-6"/>
+                          </svg>
+                        )}
+                      </span>
+                      <span className="text-foreground">{item.count}</span>
+                    </button>
+                    {hasRecords && isExpanded && (
+                      <div className="pl-3 space-y-1 max-h-32 overflow-y-auto no-scrollbar pt-0.5 pb-1">
+                        {item.records.map((rec, recIdx) => (
+                          <Link
+                            key={recIdx}
+                            href={rec.link || '#'}
+                            className="flex justify-between items-center text-[9px] p-1.5 bg-muted/40 hover:bg-muted/80 border border-border/40 hover:border-indigo-500/30 rounded-lg transition-colors cursor-pointer pointer-events-auto"
+                          >
+                            <span className="font-extrabold text-foreground truncate max-w-[150px]" title={rec.name}>{rec.name}</span>
+                            <span className="text-muted-foreground text-[8px] truncate">{rec.info}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
           {hoveredInsight.records && hoveredInsight.records.length > 0 && (
@@ -3926,6 +4144,194 @@ export default function DashboardPage() {
         onOpenDocument={getDocumentSignedUrl}
         onFindDuplicates={findPossibleDuplicateDocuments}
       />
+
+      {/* Smart Evidence Dropzone Side Panel */}
+      {isDragOverActive && (
+        <div className="fixed inset-y-0 right-0 z-50 w-80 bg-background/95 backdrop-blur-md border-l border-border p-6 shadow-2xl flex flex-col items-center justify-center text-center animate-in slide-in-from-right duration-300">
+          <div className="absolute inset-0 border-2 border-dashed border-indigo-500/50 m-4 rounded-xl flex flex-col items-center justify-center pointer-events-none">
+            <Upload className="w-12 h-12 text-indigo-500 animate-bounce mb-4" />
+            <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider">Evidence Dropzone</h3>
+            <p className="text-[10px] text-muted-foreground mt-2 max-w-[200px] leading-relaxed">
+              Drop files anywhere to start linking evidence to your requirements, actions, assets, or competencies.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Drop Context Classification Modal */}
+      {isDropContextModalOpen && droppedFiles && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-card border border-border w-full max-w-lg rounded-2xl p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-border/60 pb-3">
+              <div className="flex items-center gap-2">
+                <Upload className="w-5 h-5 text-indigo-500" />
+                <h3 className="text-base font-extrabold text-foreground">Classify & Link Evidence</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setIsDropContextModalOpen(false);
+                  setDroppedFiles(null);
+                }}
+                className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Dropped Files List */}
+            <div className="space-y-1.5 max-h-32 overflow-y-auto no-scrollbar">
+              <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Dropped Files ({droppedFiles.length})</span>
+              {droppedFiles.map((file, idx) => (
+                <div key={idx} className="flex justify-between items-center text-[10px] p-2 bg-muted/40 border border-border/40 rounded-lg">
+                  <span className="font-bold text-foreground truncate max-w-[250px]">{file.name}</span>
+                  <span className="text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Context Type Selector */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Link To Context</label>
+              <select
+                value={selectedContextType}
+                onChange={(e) => {
+                  setSelectedContextType(e.target.value as any);
+                  setSelectedContextId('');
+                }}
+                className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none text-xs text-foreground font-bold cursor-pointer"
+              >
+                <option value="general">General (Unclassified Vault)</option>
+                <option value="requirement">Framework Requirement</option>
+                <option value="action">Remediation Action Task</option>
+                <option value="asset">Asset Check Assignment</option>
+                <option value="competency">Personnel Competency Record</option>
+              </select>
+            </div>
+
+            {/* Specific Record Selector (conditional) */}
+            {selectedContextType !== 'general' && (
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">
+                  Select {selectedContextType.charAt(0).toUpperCase() + selectedContextType.slice(1)} Target
+                </label>
+                <select
+                  value={selectedContextId}
+                  onChange={(e) => setSelectedContextId(e.target.value)}
+                  className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none text-xs text-foreground font-bold cursor-pointer"
+                >
+                  <option value="">-- Choose one --</option>
+                  {selectedContextType === 'requirement' &&
+                    activeRequirements.map(r => (
+                      <option key={r.id} value={r.id}>
+                        [{r.category}] {r.title} ({r.status})
+                      </option>
+                    ))
+                  }
+                  {selectedContextType === 'action' &&
+                    actions.filter(a => a.status === 'Open' || a.status === 'In Progress').map(a => (
+                      <option key={a.id} value={a.id}>
+                        {a.title} (Owner: {a.owner || 'Unassigned'})
+                      </option>
+                    ))
+                  }
+                  {selectedContextType === 'asset' &&
+                    (assetCheckAssignments || []).filter(a => a.active && a.required).map(asg => {
+                      const asset = (assets || []).find(a => a.id === asg.asset_id);
+                      const checkType = (assetCheckTypes || []).find(ct => ct.id === asg.asset_check_type_id);
+                      return (
+                        <option key={asg.id} value={asg.id}>
+                          {checkType?.title || 'Check'} - {asset?.name || 'Asset'} (Next due: {asg.next_due_date || 'None'})
+                        </option>
+                      );
+                    })
+                  }
+                  {selectedContextType === 'competency' &&
+                    competencyRecords.map(r => {
+                      const p = people.find(item => item.id === r.person_id);
+                      const ct = competencyTypes.find(item => item.id === r.competency_type_id);
+                      return (
+                        <option key={r.id} value={r.id}>
+                          {p?.display_name || 'Teammate'} - {ct?.title || 'Certification'} ({r.status})
+                        </option>
+                      );
+                    })
+                  }
+                </select>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex justify-end gap-2 border-t border-border/60 pt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDropContextModalOpen(false);
+                  setDroppedFiles(null);
+                }}
+                className="px-4 py-2 bg-muted hover:bg-muted/80 text-foreground border border-border rounded-lg font-bold text-xs transition-colors cursor-pointer"
+                disabled={isUploadingDropped}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (selectedContextType !== 'general' && !selectedContextId) {
+                    alert('Please select a target.');
+                    return;
+                  }
+                  setIsUploadingDropped(true);
+                  setUploadProgressMessage('Uploading files...');
+                  try {
+                    for (const file of droppedFiles) {
+                      setUploadProgressMessage(`Uploading ${file.name}...`);
+                      const doc = await uploadDocument({
+                        file,
+                        title: file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim() || file.name,
+                        category: selectedContextType === 'competency' ? 'Competency' :
+                                  selectedContextType === 'asset' ? 'Asset' :
+                                  selectedContextType === 'requirement' ? 'Requirement' :
+                                  selectedContextType === 'action' ? 'Action' : 'General',
+                        expiry_date: null,
+                        issue_date: new Date().toISOString().split('T')[0],
+                        metadata: { source: 'dashboard_dropzone' }
+                      });
+
+                      if (selectedContextType === 'requirement') {
+                        await linkDocumentToRequirement(selectedContextId, doc.id);
+                      } else if (selectedContextType === 'action') {
+                        await linkDocumentToAction(selectedContextId, doc.id);
+                      } else if (selectedContextType === 'asset') {
+                        const asg = assetCheckAssignments.find(a => a.id === selectedContextId);
+                        if (asg) {
+                          await linkAssetCheckEvidence(asg.id, null, doc.id, asg.asset_id);
+                        }
+                      } else if (selectedContextType === 'competency') {
+                        await linkDocumentToCompetencyRecord(selectedContextId, doc.id);
+                      }
+                    }
+                    setToast({ type: 'success', message: `Successfully uploaded and linked ${droppedFiles.length} file(s).` });
+                    setIsDropContextModalOpen(false);
+                    setDroppedFiles(null);
+                  } catch (err) {
+                    alert(err instanceof Error ? err.message : 'An error occurred during upload.');
+                  } finally {
+                    setIsUploadingDropped(false);
+                    setUploadProgressMessage('');
+                  }
+                }}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs transition-all shadow-md cursor-pointer disabled:bg-indigo-650/40"
+                disabled={isUploadingDropped || (selectedContextType !== 'general' && !selectedContextId)}
+              >
+                {isUploadingDropped ? 'Uploading...' : 'Upload & Link'}
+              </button>
+            </div>
+            {uploadProgressMessage && (
+              <p className="text-[10px] text-indigo-500 font-bold text-center mt-2 animate-pulse">{uploadProgressMessage}</p>
+            )}
+          </div>
+        </div>
+      )}
 
       <InlineToast toast={toast} onDismiss={() => setToast(null)} />
     </div>

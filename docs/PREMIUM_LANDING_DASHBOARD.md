@@ -107,7 +107,8 @@ All metrics leverage the existing canonical calculators inside `AppContext` to a
 The dashboard incorporates a live interactive intelligence layer enabling deep inspection and workspace personalization:
 
 ### Hover Popovers & Tooltips
-- **Insight Popovers**: Triggered when hovering or focusing the six top KPI cards and the central Compliance Core orb. Popovers persist smoothly, allowing users to hover inside and click on listed records for direct navigation.
+- **Insight Popovers**: Triggered when hovering or focusing the six top KPI cards, the central Compliance Core orb, and the Compliance Snapshot status items (Compliant, In Progress, At Risk, Needs Attention) in the Right Rail. Popovers persist smoothly to allow hovering inside.
+- **Expandable Drilldowns**: Status rows inside popovers can be expanded by clicking, displaying a list of exact underlying records (up to 5). Clicking any record deep links directly to its workspace detail view (e.g. opening the central Requirement Workspace modal via `requirementId`).
 - **Readiness Point Tooltip**: Hovering over the readiness snapshot point displays the current calculated score.
 - **Donut Chart Segment Hover**: Displays calculated GREEN, AMBER, RED, and GREY requirement counts and supports filtered click-through.
 
@@ -116,7 +117,11 @@ The dashboard incorporates a live interactive intelligence layer enabling deep i
 - Slides in from the right to present a comprehensive inspection view of the selected system module.
 - Displays a status breakdown, the metrics context value, and a list of associated records needing attention.
 - Clicking any record inside the drawer navigates directly to that specific item's details.
-- **Dual CTAs**: Provides primary action buttons at the bottom: "Open Reports" and "View Attention Items" for the hub, or module-specific actions (e.g. "Create Requirement" and "Open Module").
+- **Dual CTAs**: Provides primary action buttons at the bottom: "Open Reports" and "View Attention Items" for the hub, or module-specific actions.
+
+### Smart Evidence Dropzone Side Panel
+- **Window Drag Handler**: Dragging files anywhere over the dashboard page automatically slides out a premium dropzone panel from the right.
+- **Context Classification Dialog**: Dropping files opens an interactive classification dialog where users select a target context (General, Requirement, Action, Asset, Competency) and select the specific target record to automatically link files privately upon upload.
 
 ### Advanced Layout Customization Panel
 - Triggered by clicking the **"Customize"** button in the dashboard controls.
