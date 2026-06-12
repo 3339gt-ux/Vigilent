@@ -5,7 +5,7 @@ import { useApp } from '@/context/AppContext';
 import Link from 'next/link';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
-import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
+import { evidenceAcceptAttribute } from '@/lib/evidenceStorage';
 import { isDemoMode } from '@/lib/env';
 import type { Action, CompetencyCategory, RequirementRiskLevel, ReviewFrequency } from '@/lib/types';
 import { buildAssetMatrix } from '@/lib/assetEngine';
@@ -97,6 +97,7 @@ export default function DashboardPage() {
 
   const [viewMode, setViewMode] = useState<ViewMode>('system');
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  const [activeRailTab, setActiveRailTab] = useState<'tasks' | 'activity' | 'suggestions'>('tasks');
 
   // Form states - Quick Evidence Upload
   const [uploadTitle, setUploadTitle] = useState('');
@@ -387,6 +388,47 @@ export default function DashboardPage() {
     }
     return list;
   }, [overdueAssetChecks, stats, unclassifiedDocs, overdueActionsCount]);
+
+  // Unified list of all tasks and expiries (requirements, asset checks, expiring training/documents)
+  const allTasksAndExpiries = useMemo(() => {
+    const combined = overdueAndUpcoming.map(item => ({
+      id: item.id,
+      isOverdue: item.isOverdue,
+      link: item.link || '#',
+      requirement: {
+        id: item.requirement.id,
+        title: item.requirement.title,
+        next_due_date: item.requirement.next_due_date,
+        category: item.requirement.category
+      }
+    }));
+
+    radarBuckets.forEach(radarItem => {
+      const exists = combined.some(item =>
+        item.id === radarItem.id ||
+        item.requirement.id === radarItem.id.replace(/^(requirement|evidence|competency|action)-/, '')
+      );
+      if (!exists) {
+        combined.push({
+          id: radarItem.id,
+          isOverdue: false,
+          link: radarItem.link || '#',
+          requirement: {
+            id: radarItem.id,
+            title: radarItem.title,
+            next_due_date: radarItem.dueDate,
+            category: radarItem.type
+          }
+        });
+      }
+    });
+
+    return combined.sort((a, b) => {
+      const dateA = a.requirement.next_due_date ? new Date(a.requirement.next_due_date).getTime() : Infinity;
+      const dateB = b.requirement.next_due_date ? new Date(b.requirement.next_due_date).getTime() : Infinity;
+      return dateA - dateB;
+    });
+  }, [overdueAndUpcoming, radarBuckets]);
 
   // Central Map Satellite Nodes configuration
   const satelliteNodes = useMemo(() => {
@@ -808,20 +850,20 @@ export default function DashboardPage() {
       </div>
 
       {/* 3. Core content grid with Sidebar Live Rail */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Main Central compliance program map */}
-        <div className="lg:col-span-3 space-y-6">
-          <div className="bg-card border border-border rounded-2xl shadow-xs overflow-hidden">
+        <div className="lg:col-span-3 space-y-5">
+          <div className="bg-card border border-border rounded-xl shadow-xs overflow-hidden">
             {/* Header controls for central overview */}
-            <div className="p-5 border-b border-border/60 bg-muted/20 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div className="p-4 border-b border-border/60 bg-muted/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <div>
-                <h3 className="text-sm font-extrabold text-foreground">Compliance Program Overview</h3>
-                <p className="text-xs text-muted-foreground">Interactive program maps and status monitoring of system modules.</p>
+                <h3 className="text-xs font-black text-foreground uppercase tracking-wider">Compliance Program Overview</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Interactive program maps and status monitoring of system modules.</p>
               </div>
               <div className="flex items-center bg-muted border border-border p-0.5 rounded-lg shrink-0">
                 <button
                   onClick={() => setViewMode('system')}
-                  className={`px-3 py-1.5 rounded-md text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
                     viewMode === 'system' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                   }`}
                   aria-label="View graphical system map"
@@ -830,7 +872,7 @@ export default function DashboardPage() {
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`px-3 py-1.5 rounded-md text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
                     viewMode === 'list' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                   }`}
                   aria-label="View list format"
@@ -841,7 +883,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Central content depending on toggle */}
-            <div className="p-6">
+            <div className="p-5">
               {viewMode === 'system' ? (
                 /* Upgraded Premium Graphical System Map Layout */
                 <>
@@ -878,12 +920,12 @@ export default function DashboardPage() {
                       {satelliteNodes.map(node => {
                         const isHovered = hoveredNode === node.id;
                         let pathD = '';
-                        if (node.id === 'competencies') pathD = 'M 400 200 L 260 200 L 260 120 L 150 120';
-                        else if (node.id === 'requirements') pathD = 'M 400 200 L 400 100 L 350 100 L 350 60';
-                        else if (node.id === 'vault') pathD = 'M 400 200 L 510 200 L 510 120 L 570 120';
-                        else if (node.id === 'audit-packs') pathD = 'M 400 200 L 510 200 L 510 280 L 570 280';
-                        else if (node.id === 'reports') pathD = 'M 400 200 L 400 300 L 350 300 L 350 340';
-                        else if (node.id === 'matrix') pathD = 'M 400 200 L 260 200 L 260 280 L 150 280';
+                        if (node.id === 'requirements') pathD = 'M 400 200 L 400 55';
+                        else if (node.id === 'reports') pathD = 'M 400 200 L 400 345';
+                        else if (node.id === 'competencies') pathD = 'M 400 200 L 280 200 L 280 120 L 200 120';
+                        else if (node.id === 'matrix') pathD = 'M 400 200 L 280 200 L 280 280 L 200 280';
+                        else if (node.id === 'vault') pathD = 'M 400 200 L 520 200 L 520 120 L 600 120';
+                        else if (node.id === 'audit-packs') pathD = 'M 400 200 L 520 200 L 520 280 L 600 280';
 
                         return (
                           <g key={node.id}>
@@ -901,9 +943,9 @@ export default function DashboardPage() {
                             <path
                               d={pathD}
                               fill="none"
-                              stroke="#6366f1"
+                              stroke="currentColor"
                               strokeWidth="2"
-                              className="glowing-flow-line opacity-75"
+                              className="glowing-flow-line opacity-75 text-indigo-500"
                               style={{ strokeLinecap: 'round' }}
                             />
                             {/* Thick glow overlay when node is hovered */}
@@ -924,8 +966,16 @@ export default function DashboardPage() {
                       <circle cx="400" cy="200" r="76" stroke="rgba(99, 102, 241, 0.12)" strokeWidth="1" fill="none" strokeDasharray="6 12" />
                       <circle cx="400" cy="200" r="54" stroke="rgba(6, 182, 212, 0.25)" strokeWidth="1.5" fill="none" />
 
+                      {/* Glowing circuit bends dots */}
+                      <circle cx="280" cy="200" r="2.5" className="fill-indigo-500/70" />
+                      <circle cx="280" cy="120" r="2.5" className="fill-indigo-500/70" />
+                      <circle cx="280" cy="280" r="2.5" className="fill-indigo-500/70" />
+                      <circle cx="520" cy="200" r="2.5" className="fill-indigo-500/70" />
+                      <circle cx="520" cy="120" r="2.5" className="fill-indigo-500/70" />
+                      <circle cx="520" cy="280" r="2.5" className="fill-indigo-500/70" />
+
                       {/* Central Glowing Orb Core (fill/glow) */}
-                      <circle cx="400" cy="200" r="46" fill="#070A13" stroke="#6366f1" strokeWidth="2.5" filter="url(#core-glow)" />
+                      <circle cx="400" cy="200" r="46" fill="#070A13" stroke="currentColor" className="text-indigo-500" strokeWidth="2.5" filter="url(#core-glow)" />
 
                       {/* Slow spinning starburst emblem inside the core (matching the Lumen radial style) */}
                       <g style={{ transformOrigin: '400px 200px', animation: 'spin 120s linear infinite' }}>
@@ -956,14 +1006,23 @@ export default function DashboardPage() {
                       </g>
                     </svg>
 
-                    {/* Absolute positioned module nodes with side-labels */}
+                    {/* Absolute positioned module nodes with symmetric side-labels */}
                     {satelliteNodes.map(node => {
                       const isHovered = hoveredNode === node.id;
+                      let posClass = '';
+                      let isLeftNode = false;
+
+                      if (node.id === 'requirements') posClass = 'left-[50%] top-[13.75%]';
+                      else if (node.id === 'reports') posClass = 'left-[50%] top-[86.25%]';
+                      else if (node.id === 'competencies') { posClass = 'left-[25%] top-[30%]'; isLeftNode = true; }
+                      else if (node.id === 'matrix') { posClass = 'left-[25%] top-[70%]'; isLeftNode = true; }
+                      else if (node.id === 'vault') posClass = 'left-[75%] top-[30%]';
+                      else if (node.id === 'audit-packs') posClass = 'left-[75%] top-[70%]';
+
                       return (
                         <div
                           key={node.id}
-                          className={`absolute ${node.pos} flex items-center transition-all duration-300 z-20`}
-                          style={{ minWidth: '180px' }}
+                          className={`absolute ${posClass} -translate-x-6 -translate-y-6 flex items-center justify-center z-20`}
                         >
                           <Link
                             href={node.path}
@@ -972,7 +1031,7 @@ export default function DashboardPage() {
                             onMouseLeave={() => setHoveredNode(null)}
                             onFocus={() => setHoveredNode(node.id)}
                             onBlur={() => setHoveredNode(null)}
-                            className={`w-12 h-12 rounded-full bg-card border-2 flex items-center justify-center transition-all duration-300 shadow-xs hover:scale-110 hover:shadow-lg hover:border-indigo-500/80 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 shrink-0 ${
+                            className={`w-12 h-12 rounded-full bg-card border-2 flex items-center justify-center transition-all duration-300 shadow-xs hover:scale-110 hover:shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 shrink-0 ${
                               isHovered ? 'border-indigo-500 shadow-md scale-105' : 'border-border text-foreground'
                             }`}
                             title={`${node.name}: ${node.description}`}
@@ -989,24 +1048,52 @@ export default function DashboardPage() {
                             </div>
                           </Link>
 
-                          {/* Node label details right next to the circle node */}
-                          <div className="ml-3 flex flex-col text-left select-none pointer-events-none">
-                            <div className="flex items-center gap-1.5">
-                              <span className={`text-[11px] font-black uppercase tracking-tight transition-colors duration-250 ${
-                                isHovered ? 'text-indigo-500 dark:text-indigo-400' : 'text-foreground'
-                              }`}>
-                                {node.name}
-                              </span>
-                              {node.badge !== undefined && node.badge > 0 && (
-                                <span className={`px-1.5 py-0.5 rounded text-[8px] font-black leading-none shrink-0 ${node.badgeColor}`}>
-                                  {node.badge}
+                          {/* Symmetric label positioning */}
+                          {isLeftNode ? (
+                            <div className="absolute right-full mr-3.5 flex flex-col text-right select-none pointer-events-none min-w-[170px] items-end">
+                              <div className="flex items-center gap-1.5 justify-end">
+                                {node.badge !== undefined && node.badge > 0 && (
+                                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-black leading-none shrink-0 ${node.badgeColor}`}>
+                                    {node.badge}
+                                  </span>
+                                )}
+                                <span className={`text-[11px] font-black uppercase tracking-tight transition-colors duration-250 ${
+                                  isHovered ? 'text-indigo-500 dark:text-indigo-400' : 'text-foreground'
+                                }`}>
+                                  {node.name}
                                 </span>
-                              )}
+                              </div>
+                              <span className="text-[10px] text-muted-foreground font-semibold leading-tight mt-0.5">
+                                {isHovered ? (
+                                  <span className="text-indigo-500 dark:text-indigo-400 font-bold transition-all">{node.description}</span>
+                                ) : (
+                                  `${node.count} ${node.id === 'competencies' ? 'staff' : 'items'}`
+                                )}
+                              </span>
                             </div>
-                            <span className="text-[10px] text-muted-foreground font-semibold">
-                              {node.count} {node.id === 'competencies' ? 'staff' : node.id === 'vault' ? 'files' : node.id === 'reports' ? 'reports' : 'items'}
-                            </span>
-                          </div>
+                          ) : (
+                            <div className="absolute left-full ml-3.5 flex flex-col text-left select-none pointer-events-none min-w-[170px] items-start">
+                              <div className="flex items-center gap-1.5 justify-start">
+                                <span className={`text-[11px] font-black uppercase tracking-tight transition-colors duration-250 ${
+                                  isHovered ? 'text-indigo-500 dark:text-indigo-400' : 'text-foreground'
+                                }`}>
+                                  {node.name}
+                                </span>
+                                {node.badge !== undefined && node.badge > 0 && (
+                                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-black leading-none shrink-0 ${node.badgeColor}`}>
+                                    {node.badge}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-muted-foreground font-semibold leading-tight mt-0.5">
+                                {isHovered ? (
+                                  <span className="text-indigo-500 dark:text-indigo-400 font-bold transition-all">{node.description}</span>
+                                ) : (
+                                  `${node.count} ${node.id === 'vault' ? 'files' : node.id === 'reports' ? 'reports' : 'items'}`
+                                )}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -1092,87 +1179,92 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Quick actions panel */}
-          <section className="bg-card border border-border rounded-2xl p-5 space-y-3.5 shadow-xs">
-            <div>
-              <h3 className="text-sm font-extrabold text-foreground">Program Quick Actions</h3>
-              <p className="text-xs text-muted-foreground">High-frequency compliance operations and records registration.</p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
-              {[
-                { label: 'Upload Evidence', desc: 'Add file to vault', icon: <Upload className="w-4 h-4" />, onClick: () => setIsUploadModalOpen(true) },
-                { label: 'Create Requirement', desc: 'Add new compliance goal', icon: <ShieldCheck className="w-4 h-4" />, onClick: () => setActiveQuickActionModal('requirement') },
-                { label: 'Create Competency', desc: 'Add skills / training', icon: <Briefcase className="w-4 h-4" />, onClick: () => setActiveQuickActionModal('competency') },
-                { label: 'Create Action', desc: 'Register gap items', icon: <FileSpreadsheet className="w-4 h-4" />, onClick: () => setActiveQuickActionModal('action') },
-                { label: 'Build Audit Pack', desc: 'Export compliance pack', icon: <FileText className="w-4 h-4" />, onClick: () => setActiveQuickActionModal('audit-pack') }
-              ].map(action => (
-                <button
-                  key={action.label}
-                  onClick={action.onClick}
-                  className="p-3 bg-muted/40 hover:bg-card hover:border-indigo-500/40 hover:shadow-xs border border-border rounded-xl text-left transition-all duration-200 group flex flex-col justify-between min-h-[96px] cursor-pointer"
-                >
-                  <div className="p-2 bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-all shrink-0">
-                    {action.icon}
-                  </div>
-                  <div className="space-y-0.5">
-                    <span className="font-extrabold text-foreground text-[11px] block group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{action.label}</span>
-                    <p className="text-[9px] text-muted-foreground line-clamp-1">{action.desc}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </section>
+          {/* Side-by-side Quick Actions & Upload area */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {/* Quick Actions (spans 2 columns) */}
+            <section className="md:col-span-2 bg-card border border-border rounded-xl p-4 flex flex-col justify-between shadow-xs">
+              <div className="mb-2">
+                <h3 className="text-xs font-black text-foreground uppercase tracking-wider">Program Quick Actions</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">High-frequency compliance operations and records registration.</p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2.5 mt-2">
+                {[
+                  { label: 'Upload Evidence', desc: 'Add file to vault', icon: <Upload className="w-3.5 h-3.5" />, onClick: () => setIsUploadModalOpen(true) },
+                  { label: 'Create Goal', desc: 'Add requirement', icon: <ShieldCheck className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('requirement') },
+                  { label: 'Add Competency', desc: 'Skills / training', icon: <Briefcase className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('competency') },
+                  { label: 'Create Action', desc: 'Register gap item', icon: <FileSpreadsheet className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('action') },
+                  { label: 'Build Pack', desc: 'Export audit pack', icon: <FileText className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('audit-pack') }
+                ].map(action => (
+                  <button
+                    key={action.label}
+                    onClick={action.onClick}
+                    className="p-2.5 bg-muted/40 hover:bg-card hover:border-indigo-500/40 hover:shadow-xs border border-border rounded-xl text-left transition-all duration-200 group flex flex-col justify-between min-h-[82px] cursor-pointer"
+                  >
+                    <div className="p-1.5 w-7 h-7 bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-all shrink-0 flex items-center justify-center">
+                      {action.icon}
+                    </div>
+                    <div className="space-y-0.5 mt-2">
+                      <span className="font-extrabold text-foreground text-[10px] block leading-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{action.label}</span>
+                      <p className="text-[8px] text-muted-foreground line-clamp-1 leading-none">{action.desc}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </section>
 
-          {/* Quick upload drop zone section */}
-          <div className="bg-card border border-border rounded-2xl p-5 shadow-xs">
-            <h3 className="text-sm font-extrabold text-foreground">Discreet Evidence Drops</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">Quickly upload private audit evidence directly from the landing desk.</p>
-            <div className="mt-4 border-2 border-dashed border-border/80 hover:border-indigo-500/40 rounded-xl p-6 text-center bg-muted/10">
-              <EvidenceDropzone
-                label="Drag & drop evidence files here to upload"
-                helperText={`Files remain secure and require context confirmation. Max ${formatMaxEvidenceUploadSize()}.`}
-                buttonLabel="Browse Documents"
-                compact
-                multiple
-                onUpload={async (file, updateStatus) => {
-                  updateStatus('saving record');
-                  const doc = await uploadDocument({
-                    file,
-                    title: file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim() || file.name,
-                    category: 'General',
-                    expiry_date: null,
-                    issue_date: new Date().toISOString().split('T')[0],
-                    metadata: { source: 'dashboard_quick_dropper' }
-                  });
-                  return doc;
-                }}
-                onComplete={docs => setUploadSuccess(`Uploaded ${docs.length} document${docs.length === 1 ? '' : 's'} successfully.`)}
-                findDuplicates={findPossibleDuplicateDocuments}
-              />
+            {/* Quick Upload dropzone (spans 1 column) */}
+            <div className="md:col-span-1 bg-card border border-border rounded-xl p-4 flex flex-col justify-between shadow-xs">
+              <div className="mb-2">
+                <h3 className="text-xs font-black text-foreground uppercase tracking-wider">Discreet Dropzone</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Quickly upload evidence directly to the vault.</p>
+              </div>
+              <div className="flex-1 flex items-center justify-center mt-2 min-h-[82px]">
+                <EvidenceDropzone
+                  label="Drag file here or click"
+                  helperText=""
+                  buttonLabel="Browse"
+                  compact
+                  multiple
+                  onUpload={async (file, updateStatus) => {
+                    updateStatus('saving record');
+                    const doc = await uploadDocument({
+                      file,
+                      title: file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim() || file.name,
+                      category: 'General',
+                      expiry_date: null,
+                      issue_date: new Date().toISOString().split('T')[0],
+                      metadata: { source: 'dashboard_quick_dropper' }
+                    });
+                    return doc;
+                  }}
+                  onComplete={docs => setUploadSuccess(`Uploaded ${docs.length} document${docs.length === 1 ? '' : 's'} successfully.`)}
+                  findDuplicates={findPossibleDuplicateDocuments}
+                />
+              </div>
             </div>
           </div>
         </div>
 
         {/* Right-side live intelligence rail */}
-        <aside className="space-y-6">
+        <aside className="space-y-5">
           {/* Rail Section 1: Circular Compliance gauge */}
-          <div className="bg-card border border-border rounded-2xl p-5 shadow-xs space-y-4">
+          <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Compliance Snapshot</span>
+              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Compliance Snapshot</span>
               <span className="flex items-center gap-1 text-[9px] font-bold text-muted-foreground uppercase">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
               </span>
             </div>
-            <div className="flex items-center justify-between gap-4 py-1">
-              <div className="relative w-28 h-28 flex items-center justify-center shrink-0">
+            <div className="flex items-center justify-between gap-4">
+              <div className="relative w-24 h-24 flex items-center justify-center shrink-0">
                 {/* SVG Circular progress arch */}
                 <svg viewBox="0 0 120 120" className="w-full h-full">
                   <defs>
                     <linearGradient id="compliance-gauge-grad" x1="0%" y1="100%" x2="100%" y2="0%">
-                      <stop offset="0%" stopColor="#ef4444" /> {/* Red */}
-                      <stop offset="35%" stopColor="#f59e0b" /> {/* Orange/Yellow */}
-                      <stop offset="70%" stopColor="#10b981" /> {/* Emerald */}
-                      <stop offset="100%" stopColor="#6366f1" /> {/* Indigo */}
+                      <stop offset="0%" stopColor="#ef4444" />
+                      <stop offset="35%" stopColor="#f59e0b" />
+                      <stop offset="70%" stopColor="#10b981" />
+                      <stop offset="100%" stopColor="#6366f1" />
                     </linearGradient>
                   </defs>
                   {/* Background Track */}
@@ -1197,40 +1289,40 @@ export default function DashboardPage() {
                   />
                 </svg>
                 <div className="absolute flex flex-col items-center justify-center text-center mt-[-8px]">
-                  <span className="text-2xl font-black text-foreground">{readinessScore}%</span>
-                  <span className="text-[8px] font-bold text-muted-foreground uppercase tracking-wider">Overall</span>
+                  <span className="text-xl font-black text-foreground">{readinessScore}%</span>
+                  <span className="text-[7px] font-bold text-muted-foreground uppercase tracking-wider">Overall</span>
                   <div className={`flex items-center gap-0.5 mt-0.5 text-[8px] font-bold ${readinessScore && readinessScore >= 75 ? 'text-emerald-500' : 'text-rose-500'}`}>
                     <span>{readinessScore && readinessScore >= 75 ? '▲' : '▼'}</span>
-                    <span>{readinessScore && readinessScore >= 75 ? '4%' : '2%'} vs last month</span>
+                    <span>4% vs last month</span>
                   </div>
                 </div>
               </div>
 
-              <div className="flex-1 space-y-2 text-xs">
+              <div className="flex-1 space-y-1.5 text-[10.5px]">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-muted-foreground font-semibold">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                  <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                     <span>Compliant</span>
                   </div>
                   <span className="font-bold text-foreground">{stats.compliantCount}</span>
                 </div>
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-muted-foreground font-semibold">
-                    <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
+                  <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
                     <span>In Progress</span>
                   </div>
                   <span className="font-bold text-foreground">{activeActionsCount}</span>
                 </div>
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-muted-foreground font-semibold">
-                    <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                  <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
                     <span>At Risk</span>
                   </div>
                   <span className="font-bold text-foreground">{stats.expiringSoonCount}</span>
                 </div>
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-muted-foreground font-semibold">
-                    <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                  <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
                     <span>Non-Compliant</span>
                   </div>
                   <span className="font-bold text-foreground">{stats.expiredCount}</span>
@@ -1239,93 +1331,100 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Rail Section 2: Due & Overdue items */}
-          <div className="bg-card border border-border rounded-2xl p-5 shadow-xs space-y-4">
-            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Due & Overdue</span>
-            <div className="space-y-3">
-              {overdueAndUpcoming.slice(0, 5).map(item => (
-                <Link
-                  key={item.id}
-                  href={item.link}
-                  className="flex items-start gap-2.5 p-2 bg-muted/30 hover:bg-muted/65 border border-border/60 rounded-xl transition-colors text-xs outline-none focus-visible:ring-1 focus-visible:ring-indigo-500"
+          {/* Rail Section 2: Tabbed Workspace Intelligence card */}
+          <div className="bg-card border border-border rounded-xl p-4 shadow-xs flex flex-col h-[382px]">
+            {/* Tab bar headers */}
+            <div className="flex border-b border-border/60 pb-1.5 mb-2.5">
+              {[
+                { id: 'tasks', label: 'Tasks', count: allTasksAndExpiries.length },
+                { id: 'activity', label: 'Activity', count: 0 },
+                { id: 'suggestions', label: 'Focus', count: smartSuggestions.filter(s => s !== "All modules aligned. Your compliance posture is currently optimal.").length }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveRailTab(tab.id as 'tasks' | 'activity' | 'suggestions')}
+                  className={`flex-1 text-center pb-1 text-[9px] font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer relative ${
+                    activeRailTab === tab.id
+                      ? 'border-indigo-500 text-foreground'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
                 >
-                  {item.isOverdue ? (
-                    <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                  ) : (
-                    <Clock className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                  <span className="flex items-center justify-center gap-1.5">
+                    {tab.label}
+                    {tab.count > 0 && (
+                      <span className={`w-1.5 h-1.5 rounded-full ${tab.id === 'tasks' ? 'bg-rose-500' : 'bg-indigo-500'}`} />
+                    )}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* Tab contents */}
+            <div className="flex-1 overflow-y-auto pr-0.5 no-scrollbar">
+              {activeRailTab === 'tasks' && (
+                <div className="space-y-2 animate-in fade-in duration-200">
+                  {allTasksAndExpiries.slice(0, 5).map(item => (
+                    <Link
+                      key={item.id}
+                      href={item.link}
+                      className="flex items-start gap-2.5 p-2 bg-muted/20 hover:bg-muted/40 border border-border/50 rounded-xl transition-all text-xs outline-none focus-visible:ring-1 focus-visible:ring-indigo-500"
+                    >
+                      {item.isOverdue ? (
+                        <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
+                      ) : (
+                        <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <span className="font-extrabold block text-foreground truncate text-[11px] leading-tight">{item.requirement.title}</span>
+                        <span className="text-[9px] text-muted-foreground block truncate leading-none mt-0.5">{item.requirement.category}</span>
+                        <span className={`text-[9px] font-black block mt-1 ${item.isOverdue ? 'text-rose-500' : 'text-amber-500'}`}>
+                          Due: {item.requirement.next_due_date || 'N/A'}
+                        </span>
+                      </div>
+                    </Link>
+                  ))}
+                  {allTasksAndExpiries.length === 0 && (
+                    <p className="text-[10px] text-muted-foreground italic text-center py-20">No pending items due.</p>
                   )}
-                  <div className="min-w-0 flex-1">
-                    <span className="font-bold block text-foreground truncate">{item.requirement.title}</span>
-                    <span className="text-[10px] text-muted-foreground block truncate">{item.requirement.category}</span>
-                    <span className={`text-[9px] font-extrabold ${item.isOverdue ? 'text-rose-500' : 'text-amber-500'}`}>
-                      Due: {item.requirement.next_due_date || 'N/A'}
-                    </span>
-                  </div>
-                </Link>
-              ))}
-              {overdueAndUpcoming.length === 0 && (
-                <p className="text-[10px] text-muted-foreground italic text-center py-4">No pending items due.</p>
-              )}
-            </div>
-          </div>
-
-          {/* Rail Section 3: Recent Safe Activity */}
-          <div className="bg-card border border-border rounded-2xl p-5 shadow-xs space-y-4">
-            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Recent Workspace Activity</span>
-            <div className="space-y-3 relative border-l border-border pl-3.5 ml-1.5 py-1">
-              {safeActivity.map(log => (
-                <div key={log.id} className="text-[11px] relative space-y-0.5">
-                  <div className="absolute -left-[18.5px] top-1.5 w-2 h-2 rounded-full border border-card bg-indigo-500" />
-                  <span className="font-bold block text-foreground truncate" title={log.action}>{log.action}</span>
-                  <p className="text-muted-foreground text-[10px] leading-relaxed line-clamp-2">{log.details}</p>
                 </div>
-              ))}
-              {safeActivity.length === 0 && (
-                <p className="text-[10px] text-muted-foreground italic text-center py-4">No recent activities.</p>
               )}
-            </div>
-          </div>
 
-          {/* Rail Section 4: Expiring Soon */}
-          <div className="bg-card border border-border rounded-2xl p-5 shadow-xs space-y-4">
-            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Expiring within 30 Days</span>
-            <div className="space-y-2.5">
-              {radarBuckets.slice(0, 5).map(item => (
-                <div key={item.id} className="flex justify-between items-center text-xs p-2 bg-muted/20 rounded-lg">
-                  <div className="min-w-0">
-                    <span className="font-bold text-foreground block truncate max-w-[120px]">{item.title}</span>
-                    <span className="text-[9px] text-muted-foreground block">{item.type}</span>
-                  </div>
-                  <span className="text-[9px] font-bold text-amber-500">{item.dueDate}</span>
+              {activeRailTab === 'activity' && (
+                <div className="space-y-3 relative border-l border-border pl-3.5 ml-1.5 py-1 animate-in fade-in duration-200">
+                  {safeActivity.map(log => (
+                    <div key={log.id} className="text-[11px] relative space-y-0.5">
+                      <div className="absolute -left-[18.5px] top-1 w-2.5 h-2.5 rounded-full border-2 border-card bg-indigo-500 shadow-xs" />
+                      <span className="font-extrabold block text-foreground truncate text-[10px]" title={log.action}>{log.action}</span>
+                      <p className="text-muted-foreground text-[9.5px] leading-relaxed line-clamp-2">{log.details}</p>
+                    </div>
+                  ))}
+                  {safeActivity.length === 0 && (
+                    <p className="text-[10px] text-muted-foreground italic text-center py-20">No recent activities.</p>
+                  )}
                 </div>
-              ))}
-              {radarBuckets.length === 0 && (
-                <p className="text-[10px] text-muted-foreground italic text-center py-4">No exipries in 30 days.</p>
               )}
-            </div>
-          </div>
 
-          {/* Rail Section 5: Smart Suggestions */}
-          <div className="bg-card border border-border rounded-2xl p-5 shadow-xs space-y-4">
-            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Smart Focus Suggestions</span>
-            <div className="space-y-2">
-              {smartSuggestions.map((suggestion, idx) => (
-                <div key={idx} className="flex gap-2 p-2 bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/15 rounded-xl text-xs text-indigo-650 dark:text-indigo-300 font-semibold leading-relaxed">
-                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0" />
-                  <span>{suggestion}</span>
+              {activeRailTab === 'suggestions' && (
+                <div className="space-y-2 animate-in fade-in duration-200">
+                  {smartSuggestions.map((suggestion, idx) => (
+                    <div key={idx} className="flex gap-2.5 p-2.5 bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/15 rounded-xl text-[10px] text-indigo-650 dark:text-indigo-300 font-semibold leading-relaxed">
+                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0 animate-pulse" />
+                      <span>{suggestion}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </aside>
       </div>
 
       {/* 4. Lower Dashboard Panels - Tier 1: Key Performance Dials */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Card 1: Compliance Trend */}
-        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+        <div className="bg-card border border-border rounded-xl p-4 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
-            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Compliance Trend</span>
+            <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Compliance Trend</span>
             <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">All Programs</span>
           </div>
           <div className="relative w-full h-32 mt-2">
@@ -1383,9 +1482,9 @@ export default function DashboardPage() {
         </div>
 
         {/* Card 2: Requirement Status Donut Chart */}
-        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+        <div className="bg-card border border-border rounded-xl p-4 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
-            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Requirement Status</span>
+            <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Requirement Status</span>
             <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">All Frameworks</span>
           </div>
           <div className="flex items-center justify-between gap-3 py-1">
@@ -1472,9 +1571,9 @@ export default function DashboardPage() {
         </div>
 
         {/* Card 3: Audit Readiness */}
-        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+        <div className="bg-card border border-border rounded-xl p-4 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
-            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Audit Readiness</span>
+            <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Audit Readiness</span>
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
           </div>
           <div className="flex flex-col items-center py-1.5">
@@ -1519,9 +1618,9 @@ export default function DashboardPage() {
         </div>
 
         {/* Card 4: Training Completion */}
-        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+        <div className="bg-card border border-border rounded-xl p-4 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
-            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Training Completion</span>
+            <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Training Completion</span>
             <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">This Quarter</span>
           </div>
           <div className="flex flex-col items-center py-1.5">
@@ -1561,9 +1660,9 @@ export default function DashboardPage() {
       </div>
 
       {/* Tier 2: Lower Lists Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Panel 1: Asset Compliance Categories */}
-        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs space-y-4">
+        <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-4">
           <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Asset Category Health</span>
           <div className="space-y-3 py-1 text-xs">
             {assetCategoryCompliance.map(category => (
@@ -1587,7 +1686,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Panel 2: Risk Level Areas */}
-        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs space-y-4">
+        <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-4">
           <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Top Risk Gaps</span>
           <div className="space-y-3 text-xs">
             {[
@@ -1607,7 +1706,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Panel 3: Workspace Alerts */}
-        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs space-y-4">
+        <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-4">
           <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Active Alerts</span>
           <div className="space-y-3 text-xs">
             {stats.expiredCount > 0 && (
