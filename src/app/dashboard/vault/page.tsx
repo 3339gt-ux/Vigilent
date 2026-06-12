@@ -305,6 +305,27 @@ export default function EvidenceVault() {
       const params = new URLSearchParams(window.location.search);
       const docId = params.get('document') || params.get('id');
       const filterParam = params.get('filter');
+      const statusParam = params.get('status');
+      const linkParam = params.get('link') || params.get('linkFilter');
+      const categoryParam = params.get('category');
+
+      if (statusParam) {
+        const normalizedStatus = statusParam.toLowerCase();
+        if (normalizedStatus === 'expired') setSelectedStatus('Expired');
+        else if (normalizedStatus === 'expiring' || normalizedStatus === 'expiring soon') setSelectedStatus('Expiring Soon');
+        else if (normalizedStatus === 'unclassified') setSelectedStatus('Unclassified');
+        else if (normalizedStatus === 'active') setSelectedStatus('Active');
+      }
+
+      if (linkParam) {
+        const normalizedLink = linkParam.toLowerCase();
+        if (normalizedLink === 'unlinked' || normalizedLink === 'unlinked only') setLinkFilter('Unlinked Only');
+        else if (normalizedLink === 'linked' || normalizedLink === 'linked only') setLinkFilter('Linked Only');
+      }
+
+      if (categoryParam) {
+        setSelectedCategory(categoryParam);
+      }
 
       if (filterParam && filterParam.startsWith('doc:')) {
         const dId = filterParam.replace('doc:', '');

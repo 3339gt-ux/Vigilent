@@ -349,6 +349,14 @@ export default function AssetMatrix() {
     if (categoryId) {
       setSelectedCategory(categoryId);
     }
+    const statusParam = params.get('status');
+    if (statusParam) {
+      const normalizedStatus = statusParam.toLowerCase();
+      if (normalizedStatus === 'expired') setStatusFilter('Expired');
+      else if (normalizedStatus === 'missing') setStatusFilter('Missing');
+      else if (normalizedStatus === 'expiring' || normalizedStatus === 'expiring soon') setStatusFilter('Expiring Soon');
+      else if (normalizedStatus === 'compliant') setStatusFilter('Compliant');
+    }
   }, [assets]);
 
   // Escape key down listener to close modals

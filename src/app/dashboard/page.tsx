@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
 import Link from 'next/link';
+import { InlineToast, ToastState } from '@/components/AppFeedback';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
 import { evidenceAcceptAttribute } from '@/lib/evidenceStorage';
@@ -27,7 +29,9 @@ import {
   FolderLock,
   Grid,
   FolderArchive,
-  BarChart3
+  BarChart3,
+  Settings,
+  ArrowRight
 } from 'lucide-react';
 
 const scoreTone = (score: number | null) => {
@@ -95,9 +99,47 @@ export default function DashboardPage() {
     assetCategories
   } = useApp();
 
-  const [viewMode, setViewMode] = useState<ViewMode>('system');
+  // Customization state
+  const [customization, setCustomization] = useState<{
+    visibleKpis: string[];
+    kpiOrder: string[];
+    visiblePanels: string[];
+    defaultViewMode: 'system' | 'list';
+    defaultRailTab: 'tasks' | 'activity' | 'suggestions';
+  }>(() => {
+    if (typeof window === 'undefined') return {
+      visibleKpis: ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
+      kpiOrder: ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
+      visiblePanels: ['trend', 'statusDonut', 'readinessGauge', 'trainingRing', 'assetCategory', 'riskGaps', 'alerts'],
+      defaultViewMode: 'system',
+      defaultRailTab: 'tasks'
+    };
+    try {
+      const key = `vygilence_dashboard_customization_${user?.id || 'anon'}_${organization?.id || 'default'}`;
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return {
+          visibleKpis: parsed.visibleKpis || ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
+          kpiOrder: parsed.kpiOrder || ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
+          visiblePanels: parsed.visiblePanels || ['trend', 'statusDonut', 'readinessGauge', 'trainingRing', 'assetCategory', 'riskGaps', 'alerts'],
+          defaultViewMode: parsed.defaultViewMode || 'system',
+          defaultRailTab: parsed.defaultRailTab || 'tasks'
+        };
+      }
+    } catch {}
+    return {
+      visibleKpis: ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
+      kpiOrder: ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
+      visiblePanels: ['trend', 'statusDonut', 'readinessGauge', 'trainingRing', 'assetCategory', 'riskGaps', 'alerts'],
+      defaultViewMode: 'system',
+      defaultRailTab: 'tasks'
+    };
+  });
+
+  const [viewMode, setViewMode] = useState<ViewMode>(customization.defaultViewMode);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
-  const [activeRailTab, setActiveRailTab] = useState<'tasks' | 'activity' | 'suggestions'>('tasks');
+  const [activeRailTab, setActiveRailTab] = useState<'tasks' | 'activity' | 'suggestions'>(customization.defaultRailTab);
 
   // Form states - Quick Evidence Upload
   const [uploadTitle, setUploadTitle] = useState('');
@@ -178,6 +220,8 @@ export default function DashboardPage() {
     () => frameworkRequirements.filter(requirement => (requirement.lifecycle_status || 'ACTIVE') === 'ACTIVE'),
     [frameworkRequirements]
   );
+  const greyRequirementCount = activeRequirements.filter(requirement => requirement.status === 'GREY').length;
+  const reportViewCount = user?.role === 'Owner' || user?.role === 'Admin' ? 11 : 9;
   const reqProgress = stats.activeRequirements > 0
     ? Math.round((stats.compliantCount / stats.activeRequirements) * 100)
     : 0;
@@ -326,7 +370,7 @@ export default function DashboardPage() {
         dueDate: document.expiry_date,
         status: document.status,
         owner: document.uploaded_by,
-        link: '/dashboard/vault'
+        link: `/dashboard/vault?id=${document.id}`
       });
     });
 
@@ -341,7 +385,7 @@ export default function DashboardPage() {
         dueDate: record.expiry_date,
         status: record.status,
         owner: person?.display_name,
-        link: `/dashboard/competencies?search=${encodeURIComponent(person?.display_name || '')}`
+        link: `/dashboard/competencies?person=${record.person_id}&competency=${record.competency_type_id}`
       });
     });
 
@@ -356,6 +400,7 @@ export default function DashboardPage() {
         dueDate,
         status: action.status,
         owner: action.owner,
+        link: `/dashboard/requirements?selectedAction=${action.id}`,
         action
       });
     });
@@ -384,7 +429,7 @@ export default function DashboardPage() {
       list.push(`Update progress or close out ${overdueActionsCount} overdue gap action tasks.`);
     }
     if (list.length === 0) {
-      list.push("All modules aligned. Your compliance posture is currently optimal.");
+      list.push("No current priority suggestions were identified from the available workspace records.");
     }
     return list;
   }, [overdueAssetChecks, stats, unclassifiedDocs, overdueActionsCount]);
@@ -507,18 +552,18 @@ export default function DashboardPage() {
         id: 'reports',
         name: 'Reports',
         icon: <BarChart3 className="w-5 h-5" />,
-        count: 24,
+        count: reportViewCount,
         warnings: 0,
         path: '/dashboard/reports',
         pos: 'left-[43.75%] top-[85%] -translate-x-6 -translate-y-6',
         color: 'border-border text-foreground',
         description: 'Performance overview analytics',
         actionLabel: 'Open Analytics',
-        badge: 5,
+        badge: 0,
         badgeColor: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
       }
     ];
-  }, [stats, people, competencyRecords, documents, unclassifiedDocs, assets, overdueAssetChecks, auditPacks]);
+  }, [stats, people, competencyRecords, documents, unclassifiedDocs, assets, overdueAssetChecks, auditPacks, reportViewCount]);
 
   // Asset Categories list compliance progress
   const assetCategoryCompliance = useMemo(() => {
@@ -730,6 +775,387 @@ export default function DashboardPage() {
     ? actions.find(action => action.id === selectedAction.id) || selectedAction
     : null;
 
+  const router = useRouter();
+
+  // Toast state
+  const [toast, setToast] = useState<ToastState>(null);
+
+  // Customization state
+  const [isCustomizationOpen, setIsCustomizationOpen] = useState(false);
+
+  // Insight Popover & Drawer states
+  const [hoveredInsight, setHoveredInsight] = useState<{
+    id: string;
+    title: string;
+    explanation: string;
+    count: string | number;
+    countLabel?: string;
+    statusBreakdown?: Array<{ label: string; count: number; color: string }>;
+    records?: Array<{ name: string; info: string; status?: string; link: string }>;
+    link?: string;
+    linkLabel?: string;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  const [activeInsightDrawer, setActiveInsightDrawer] = useState<{
+    id: string;
+    title: string;
+    explanation: string;
+    count: string | number;
+    countLabel?: string;
+    statusBreakdown?: Array<{ label: string; count: number; color: string }>;
+    records: Array<{ name: string; info: string; status?: string; link: string }>;
+    link?: string;
+    linkLabel?: string;
+  } | null>(null);
+
+  const [hoveredTrendPoint, setHoveredTrendPoint] = useState<{
+    label: string;
+    score: number;
+    source: string;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  const [modalCustomization, setModalCustomization] = useState(customization);
+
+  const getInsightData = useCallback((id: string) => {
+    switch (id) {
+      case 'health':
+        return {
+          id: 'health',
+          title: "Compliance Health",
+          explanation: "The workspace readiness rating calculated from active requirements, evidence records, competencies, actions, and asset checks.",
+          count: `${readinessScore ?? 0}%`,
+          countLabel: "Compliance Score",
+          statusBreakdown: [
+            { label: "Compliant", count: stats.compliantCount, color: "bg-emerald-500" },
+            { label: "At Risk", count: stats.expiringSoonCount, color: "bg-amber-500" },
+            { label: "Needs Attention", count: stats.expiredCount, color: "bg-rose-500" },
+            { label: "Not Assessed", count: greyRequirementCount, color: "bg-zinc-500" }
+          ],
+          records: [
+            ...frameworkRequirements.filter(r => r.status === 'RED' || r.status === 'AMBER').slice(0, 3).map(r => ({
+              name: r.title,
+              info: `Requirement | Risk: ${r.risk_level}`,
+              status: r.status,
+              link: `/dashboard/requirements?id=${r.id}`
+            })),
+            ...overdueAssetChecks.slice(0, 2).map(c => ({
+              name: c.requirement.title,
+              info: `Asset Check | Overdue`,
+              status: "RED",
+              link: c.link
+            }))
+          ],
+          link: "/dashboard/reports?tab=executive",
+          linkLabel: "Open Reports Overview"
+        };
+      case 'requirements':
+        return {
+          id: 'requirements',
+          title: "Framework Requirements",
+          explanation: "Active requirements assigned to your workspace. Gaps indicate requirements with missing, expiring, or overdue supporting records.",
+          count: `${stats.compliantCount} / ${stats.activeRequirements}`,
+          countLabel: "Compliant Objectives",
+          statusBreakdown: [
+            { label: "Compliant", count: stats.compliantCount, color: "bg-emerald-500" },
+            { label: "At Risk", count: stats.expiringSoonCount, color: "bg-amber-500" },
+            { label: "Needs Attention", count: stats.expiredCount, color: "bg-rose-500" },
+            { label: "Not Assessed", count: greyRequirementCount, color: "bg-zinc-500" }
+          ],
+          records: frameworkRequirements.filter(r => r.status === 'RED' || r.status === 'AMBER').slice(0, 5).map(r => ({
+            name: r.title,
+            info: `${r.category} | Owner: ${r.owner || 'Unassigned'}`,
+            status: r.status,
+            link: `/dashboard/requirements?id=${r.id}`
+          })),
+          link: "/dashboard/requirements?status=Attention",
+          linkLabel: "View Attention Requirements"
+        };
+      case 'evidence':
+      case 'vault':
+        return {
+          id: 'vault',
+          title: "Evidence Vault Coverage",
+          explanation: "Percentage of uploaded evidence records successfully classified and linked to active requirements.",
+          count: `${classifiedDocsCount} / ${documents.length}`,
+          countLabel: "Classified Documents",
+          statusBreakdown: [
+            { label: "Classified", count: classifiedDocsCount, color: "bg-indigo-500" },
+            { label: "Unclassified", count: unclassifiedDocs.length, color: "bg-amber-500" }
+          ],
+          records: [
+            ...unclassifiedDocs.slice(0, 3).map(d => ({
+              name: d.title,
+              info: `Unclassified | Category: ${d.category}`,
+              status: "AMBER",
+              link: `/dashboard/vault?id=${d.id}`
+            })),
+            ...documents.filter(d => d.expiry_date && new Date(d.expiry_date as string) < today).slice(0, 2).map(d => ({
+              name: d.title,
+              info: `Expired: ${d.expiry_date}`,
+              status: "RED",
+              link: `/dashboard/vault?id=${d.id}`
+            }))
+          ],
+          link: "/dashboard/vault?status=Unclassified",
+          linkLabel: "Open Unclassified Vault Records"
+        };
+      case 'training':
+      case 'competencies':
+        return {
+          id: 'competencies',
+          title: "Personnel Competency Training",
+          explanation: "Summarises current competency records against the skills and training assigned to personnel.",
+          count: `${competencySummary.compliancePercent}%`,
+          countLabel: "Training Compliance",
+          statusBreakdown: [
+            { label: "Valid", count: competencySummary.valid, color: "bg-emerald-500" },
+            { label: "Expired/Missing", count: competencySummary.expired, color: "bg-rose-500" }
+          ],
+          records: competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').slice(0, 5).map(r => {
+            const p = people.find(item => item.id === r.person_id);
+            const ct = competencyTypes.find(item => item.id === r.competency_type_id);
+            return {
+              name: p?.display_name || 'Staff member',
+              info: ct?.title || 'Training Requirement',
+              status: r.status === 'Expired' ? 'RED' : 'AMBER',
+              link: `/dashboard/competencies?person=${p?.id}&competency=${ct?.id}`
+            };
+          }),
+          link: "/dashboard/competencies?status=Expired",
+          linkLabel: "View Expired Competencies"
+        };
+      case 'tasks':
+      case 'actions':
+        return {
+          id: 'actions',
+          title: "Action Tasks / Gaps",
+          explanation: "Active gap remediation tasks. Overdue actions indicate unresolved risks beyond their target completion dates.",
+          count: activeActionsCount,
+          countLabel: "Open Actions",
+          statusBreakdown: [
+            { label: "Overdue", count: overdueActionsCount, color: "bg-rose-500" },
+            { label: "Active", count: activeActionsCount - overdueActionsCount, color: "bg-indigo-500" }
+          ],
+          records: actions.filter(a => a.status === 'Open' || a.status === 'In Progress').slice(0, 5).map(a => {
+            const isOver = (a.target_due_date || a.due_date) && new Date(a.target_due_date || a.due_date as string) < today;
+            return {
+              name: a.title,
+              info: `Owner: ${a.owner || 'Unassigned'} | Due: ${a.target_due_date || a.due_date || 'No Date'}`,
+              status: isOver ? 'RED' : 'AMBER',
+              link: `/dashboard/requirements?selectedAction=${a.id}`
+            };
+          }),
+          link: "/dashboard/requirements?filter=actions",
+          linkLabel: "View Actions Registry"
+        };
+      case 'asset':
+      case 'matrix':
+        return {
+          id: 'matrix',
+          title: "Asset Assurance Health",
+          explanation: "Vehicles, facility checkups, and safety logs. Gaps indicate checks that have expired or are missing evidence.",
+          count: `${compliantAssetChecks} / ${totalAssetChecks}`,
+          countLabel: "Compliant Asset Checks",
+          statusBreakdown: [
+            { label: "Compliant", count: compliantAssetChecks, color: "bg-emerald-500" },
+            { label: "Overdue/Expired", count: overdueAssetChecks.length, color: "bg-rose-500" },
+            { label: "Due Soon", count: upcomingAssetChecks.length, color: "bg-amber-500" }
+          ],
+          records: overdueAssetChecks.slice(0, 5).map(c => ({
+            name: c.requirement.title,
+            info: `Asset Check | Due: ${c.requirement.next_due_date || 'N/A'}`,
+            status: "RED",
+            link: c.link
+          })),
+          link: "/dashboard/matrix?status=Expired",
+          linkLabel: "Open Asset Matrix Gaps"
+        };
+      case 'audit-packs':
+        return {
+          id: 'audit-packs',
+          title: "Audit Pack Builder",
+          explanation: "Evidence packages assembled from selected requirements and linked records for review.",
+          count: auditPacks.length,
+          countLabel: "Active Packs",
+          records: auditPacks.slice(0, 5).map(p => ({
+            name: p.name,
+            info: `Status: ${p.status || 'Draft'} | Requirements: ${p.requirements?.length || 0}`,
+            status: p.status === 'Ready' ? 'GREEN' : 'AMBER',
+            link: `/dashboard/audit-packs?pack=${p.id}`
+          })),
+          link: "/dashboard/audit-packs",
+          linkLabel: "Open Pack Builder"
+        };
+      case 'reports':
+        return {
+          id: 'reports',
+          title: "Analytics & Reports",
+          explanation: "Available reporting views generated from current workspace records.",
+          count: reportViewCount,
+          countLabel: "Available Views",
+          records: [
+            { name: "Executive Readiness Overview", info: "Aggregated health index across framework groups", status: "GREEN", link: "/dashboard/reports?tab=executive" },
+            { name: "Framework Requirements breakdown", info: "Detailed checklist completion charts", status: "GREEN", link: "/dashboard/reports?tab=requirements" },
+            { name: "Personnel Training status", info: "Certification expiry timelines", status: "GREEN", link: "/dashboard/reports?tab=competencies" },
+            { name: "Asset Maintenance history", info: "Equipment checklists & service records", status: "GREEN", link: "/dashboard/reports?tab=locations-assets" }
+          ],
+          link: "/dashboard/reports",
+          linkLabel: "Open Analytics Hub"
+        };
+      case 'hub':
+        return {
+          id: 'hub',
+          title: "Compliance Program Command Centre",
+          explanation: "SaaS Command Centre Hub synchronizing Framework Objectives, Vault Evidence, Teammate Training, and Fleet Assets.",
+          count: `${readinessScore ?? 0}%`,
+          countLabel: "Current readiness",
+          statusBreakdown: [
+            { label: "Compliant Objectives", count: stats.compliantCount, color: "bg-emerald-500" },
+            { label: "Active Teammates", count: people.length, color: "bg-indigo-500" },
+            { label: "Assured Fleet Assets", count: assets.length, color: "bg-blue-500" }
+          ],
+          records: [
+            ...(stats.expiredCount > 0 ? [{ name: `${stats.expiredCount} Expired framework goals`, info: "Critical action required", status: "RED", link: "/dashboard/requirements?status=RED" }] : []),
+            ...(overdueAssetChecks.length > 0 ? [{ name: `${overdueAssetChecks.length} Asset checks overdue`, info: "Action required on assets", status: "RED", link: "/dashboard/matrix?status=Expired" }] : []),
+            ...(unclassifiedDocs.length > 0 ? [{ name: `${unclassifiedDocs.length} Unclassified files in vault`, info: "Needs metadata mapping", status: "AMBER", link: "/dashboard/vault?status=Unclassified" }] : [])
+          ],
+          link: "/dashboard/reports?tab=executive",
+          linkLabel: "Open Workspace Analytics"
+        };
+      default:
+        return null;
+    }
+  }, [readinessScore, stats, activeActionsCount, frameworkRequirements, overdueAssetChecks, classifiedDocsCount, documents, unclassifiedDocs, competencySummary, competencyRecords, people, competencyTypes, overdueActionsCount, actions, compliantAssetChecks, totalAssetChecks, upcomingAssetChecks, auditPacks, assets, today, greyRequirementCount, reportViewCount]);
+
+  const handleMouseEnter = (id: string) => (e: React.SyntheticEvent<HTMLElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const data = getInsightData(id);
+    if (data) {
+      setHoveredInsight({
+        ...data,
+        x: rect.left + rect.width / 2,
+        y: rect.bottom + 8
+      });
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setHoveredInsight(null);
+  };
+
+  const handleClick = (id: string) => () => {
+    const data = getInsightData(id);
+    if (data) {
+      setActiveInsightDrawer(data);
+    }
+  };
+
+  const handleInsightKeyDown = (id: string) => (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      handleClick(id)();
+    }
+  };
+
+  const handleTrendMouseEnter = (point: { label: string; score: number; source: string }) => (e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setHoveredTrendPoint({
+      label: point.label,
+      score: point.score,
+      source: point.source,
+      x: rect.left + rect.width / 2,
+      y: rect.top - 10
+    });
+  };
+
+  const handleTrendMouseLeave = () => {
+    setHoveredTrendPoint(null);
+  };
+
+  const getBadgeLink = (nodeId: string, path: string) => {
+    if (nodeId === 'requirements') return `${path}?status=Attention`;
+    if (nodeId === 'competencies') return `/dashboard/competencies?status=Expired`;
+    if (nodeId === 'matrix') return `/dashboard/matrix?status=Expired`;
+    if (nodeId === 'vault') return `/dashboard/vault?status=Unclassified`;
+    return path;
+  };
+
+  const getPopoverStyle = (insight: typeof hoveredInsight) => {
+    if (!insight) return {};
+    let left = insight.x;
+    let transform = 'translateX(-50%)';
+    if (insight.x < 160) {
+      left = 16;
+      transform = 'none';
+    } else if (typeof window !== 'undefined' && insight.x > window.innerWidth - 180) {
+      return {
+        position: 'fixed' as const,
+        right: '16px',
+        top: `${insight.y}px`,
+        width: '280px'
+      };
+    }
+    return {
+      position: 'fixed' as const,
+      left: `${left}px`,
+      top: `${insight.y}px`,
+      transform,
+      width: '280px'
+    };
+  };
+
+  const getTrendTooltipStyle = (pt: typeof hoveredTrendPoint) => {
+    if (!pt) return {};
+    return {
+      position: 'fixed' as const,
+      left: `${pt.x}px`,
+      top: `${pt.y}px`,
+      transform: 'translate(-50%, -100%)',
+      pointerEvents: 'none' as const
+    };
+  };
+
+  const moveKpi = (index: number, direction: -1 | 1, currentOrder: string[]) => {
+    const newOrder = [...currentOrder];
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= newOrder.length) return newOrder;
+    const temp = newOrder[index];
+    newOrder[index] = newOrder[targetIndex];
+    newOrder[targetIndex] = temp;
+    return newOrder;
+  };
+
+  const handleSaveCustomization = (newCustomization: typeof customization) => {
+    const key = `vygilence_dashboard_customization_${user?.id || 'anon'}_${organization?.id || 'default'}`;
+    try {
+      localStorage.setItem(key, JSON.stringify(newCustomization));
+      setCustomization(newCustomization);
+      setViewMode(newCustomization.defaultViewMode);
+      setActiveRailTab(newCustomization.defaultRailTab);
+      setToast({ type: 'success', message: 'Dashboard layout preferences saved.' });
+      setIsCustomizationOpen(false);
+    } catch {
+      setToast({ type: 'error', message: 'Failed to save dashboard preferences.' });
+    }
+  };
+
+  const getTrendData = useCallback(() => {
+    const scoreVal = readinessScore ?? 0;
+    const y = 110 - (scoreVal / 100) * 90;
+    return {
+      points: [
+        { label: 'Current', cx: 150, cy: y, score: scoreVal, source: 'Live readiness calculation' }
+      ],
+      labels: ['Current'],
+      pathD: '',
+      areaD: ''
+    };
+  }, [readinessScore]);
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       {/* 1. Header greeting strip */}
@@ -770,83 +1196,170 @@ export default function DashboardPage() {
 
       {/* 2. Top KPI strip */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-        {/* KPI 1: Overall Compliance */}
-        <div className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md transition-all space-y-2.5">
-          <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Compliance Health</span>
-          <div className="flex items-baseline gap-1.5">
-            <span className={`text-2xl font-black ${scoreTone(readinessScore)}`}>{readinessScore}%</span>
-            <span className="text-[10px] text-muted-foreground font-bold leading-none">Score</span>
-          </div>
-          <span className="text-[10px] text-muted-foreground block font-bold">Current Snapshot</span>
-        </div>
-
-        {/* KPI 2: Requirements */}
-        <div className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md transition-all space-y-2.5">
-          <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Requirements</span>
-          <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-black text-foreground">{stats.compliantCount}</span>
-            <span className="text-muted-foreground text-xs font-bold">/ {stats.activeRequirements}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-full bg-muted h-1 rounded-full overflow-hidden">
-              <div className="bg-emerald-500 h-1 rounded-full" style={{ width: `${reqProgress}%` }} />
-            </div>
-            <span className="text-[9px] font-bold text-muted-foreground">{reqProgress}%</span>
-          </div>
-        </div>
-
-        {/* KPI 3: Evidence Coverage */}
-        <div className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md transition-all space-y-2.5">
-          <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Evidence Coverage</span>
-          <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-black text-foreground">{classifiedDocsCount}</span>
-            <span className="text-muted-foreground text-xs font-bold">/ {documents.length}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-full bg-muted h-1 rounded-full overflow-hidden">
-              <div className="bg-indigo-500 h-1 rounded-full" style={{ width: `${docProgress}%` }} />
-            </div>
-            <span className="text-[9px] font-bold text-muted-foreground">{docProgress}%</span>
-          </div>
-        </div>
-
-        {/* KPI 4: Personnel Training */}
-        <div className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md transition-all space-y-2.5">
-          <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Personnel Training</span>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-foreground">{competencySummary.compliancePercent}%</span>
-          </div>
-          <span className="text-[10px] text-muted-foreground block font-bold truncate">Active certifications</span>
-        </div>
-
-        {/* KPI 5: Action Tasks */}
-        <div className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md transition-all space-y-2.5">
-          <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Open Tasks / Gaps</span>
-          <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-black text-foreground">{activeActionsCount}</span>
-            {overdueActionsCount > 0 && (
-              <span className="text-rose-500 text-[10px] font-black uppercase bg-rose-500/10 border border-rose-500/20 px-1 rounded">
-                {overdueActionsCount} Exp
-              </span>
-            )}
-          </div>
-          <span className="text-[10px] text-muted-foreground block font-bold">Actions pending</span>
-        </div>
-
-        {/* KPI 6: Asset Assurance */}
-        <div className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md transition-all space-y-2.5">
-          <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Asset Assurance</span>
-          <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-black text-foreground">{compliantAssetChecks}</span>
-            <span className="text-muted-foreground text-xs font-bold">/ {totalAssetChecks}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-full bg-muted h-1 rounded-full overflow-hidden">
-              <div className="bg-indigo-500 h-1 rounded-full" style={{ width: `${assetProgress}%` }} />
-            </div>
-            <span className="text-[9px] font-bold text-muted-foreground">{assetProgress}%</span>
-          </div>
-        </div>
+        {customization.kpiOrder
+          .filter(kpiId => customization.visibleKpis.includes(kpiId))
+          .map(kpiId => {
+            switch (kpiId) {
+              case 'health':
+                return (
+                  <div
+                    key="health"
+                    onMouseEnter={handleMouseEnter('health')}
+                    onMouseLeave={handleMouseLeave}
+                    onFocus={handleMouseEnter('health')}
+                    onBlur={handleMouseLeave}
+                    onClick={handleClick('health')}
+                    onKeyDown={handleInsightKeyDown('health')}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Inspect Compliance Health"
+                    className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none"
+                  >
+                    <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Compliance Health</span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className={`text-2xl font-black ${scoreTone(readinessScore)}`}>{readinessScore}%</span>
+                      <span className="text-[10px] text-muted-foreground font-bold leading-none">Score</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground block font-bold">Current Snapshot</span>
+                  </div>
+                );
+              case 'requirements':
+                return (
+                  <div
+                    key="requirements"
+                    onMouseEnter={handleMouseEnter('requirements')}
+                    onMouseLeave={handleMouseLeave}
+                    onFocus={handleMouseEnter('requirements')}
+                    onBlur={handleMouseLeave}
+                    onClick={handleClick('requirements')}
+                    onKeyDown={handleInsightKeyDown('requirements')}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Inspect Requirements"
+                    className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none"
+                  >
+                    <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Requirements</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-2xl font-black text-foreground">{stats.compliantCount}</span>
+                      <span className="text-muted-foreground text-xs font-bold">/ {stats.activeRequirements}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-full bg-muted h-1 rounded-full overflow-hidden">
+                        <div className="bg-emerald-500 h-1 rounded-full" style={{ width: `${reqProgress}%` }} />
+                      </div>
+                      <span className="text-[9px] font-bold text-muted-foreground">{reqProgress}%</span>
+                    </div>
+                  </div>
+                );
+              case 'evidence':
+                return (
+                  <div
+                    key="evidence"
+                    onMouseEnter={handleMouseEnter('evidence')}
+                    onMouseLeave={handleMouseLeave}
+                    onFocus={handleMouseEnter('evidence')}
+                    onBlur={handleMouseLeave}
+                    onClick={handleClick('evidence')}
+                    onKeyDown={handleInsightKeyDown('evidence')}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Inspect Evidence Coverage"
+                    className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none"
+                  >
+                    <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Evidence Coverage</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-2xl font-black text-foreground">{classifiedDocsCount}</span>
+                      <span className="text-muted-foreground text-xs font-bold">/ {documents.length}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-full bg-muted h-1 rounded-full overflow-hidden">
+                        <div className="bg-indigo-500 h-1 rounded-full" style={{ width: `${docProgress}%` }} />
+                      </div>
+                      <span className="text-[9px] font-bold text-muted-foreground">{docProgress}%</span>
+                    </div>
+                  </div>
+                );
+              case 'training':
+                return (
+                  <div
+                    key="training"
+                    onMouseEnter={handleMouseEnter('training')}
+                    onMouseLeave={handleMouseLeave}
+                    onFocus={handleMouseEnter('training')}
+                    onBlur={handleMouseLeave}
+                    onClick={handleClick('training')}
+                    onKeyDown={handleInsightKeyDown('training')}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Inspect Personnel Training"
+                    className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none"
+                  >
+                    <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Personnel Training</span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-2xl font-black text-foreground">{competencySummary.compliancePercent}%</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground block font-bold truncate">Active certifications</span>
+                  </div>
+                );
+              case 'tasks':
+                return (
+                  <div
+                    key="tasks"
+                    onMouseEnter={handleMouseEnter('tasks')}
+                    onMouseLeave={handleMouseLeave}
+                    onFocus={handleMouseEnter('tasks')}
+                    onBlur={handleMouseLeave}
+                    onClick={handleClick('tasks')}
+                    onKeyDown={handleInsightKeyDown('tasks')}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Inspect Open Tasks and Gaps"
+                    className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none"
+                  >
+                    <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Open Tasks / Gaps</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-2xl font-black text-foreground">{activeActionsCount}</span>
+                      {overdueActionsCount > 0 && (
+                        <span className="text-rose-500 text-[10px] font-black uppercase bg-rose-500/10 border border-rose-500/20 px-1 rounded">
+                          {overdueActionsCount} Exp
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-muted-foreground block font-bold">Actions pending</span>
+                  </div>
+                );
+              case 'asset':
+                return (
+                  <div
+                    key="asset"
+                    onMouseEnter={handleMouseEnter('asset')}
+                    onMouseLeave={handleMouseLeave}
+                    onFocus={handleMouseEnter('asset')}
+                    onBlur={handleMouseLeave}
+                    onClick={handleClick('asset')}
+                    onKeyDown={handleInsightKeyDown('asset')}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Inspect Asset Assurance"
+                    className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none"
+                  >
+                    <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Asset Assurance</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-2xl font-black text-foreground">{compliantAssetChecks}</span>
+                      <span className="text-muted-foreground text-xs font-bold">/ {totalAssetChecks}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-full bg-muted h-1 rounded-full overflow-hidden">
+                        <div className="bg-indigo-500 h-1 rounded-full" style={{ width: `${assetProgress}%` }} />
+                      </div>
+                      <span className="text-[9px] font-bold text-muted-foreground">{assetProgress}%</span>
+                    </div>
+                  </div>
+                );
+              default:
+                return null;
+            }
+          })}
       </div>
 
       {/* 3. Core content grid with Sidebar Live Rail */}
@@ -860,7 +1373,18 @@ export default function DashboardPage() {
                 <h3 className="text-xs font-black text-foreground uppercase tracking-wider">Compliance Program Overview</h3>
                 <p className="text-[11px] text-muted-foreground mt-0.5">Interactive program maps and status monitoring of system modules.</p>
               </div>
-              <div className="flex items-center bg-muted border border-border p-0.5 rounded-lg shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => {
+                    setModalCustomization(customization);
+                    setIsCustomizationOpen(true);
+                  }}
+                  className="px-2.5 py-1 bg-muted hover:bg-muted/80 border border-border rounded-md text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer text-muted-foreground hover:text-foreground"
+                  title="Customize Dashboard"
+                >
+                  <Settings className="w-3.5 h-3.5" /> Customize
+                </button>
+                <div className="flex items-center bg-muted border border-border p-0.5 rounded-lg shrink-0">
                 <button
                   onClick={() => setViewMode('system')}
                   className={`px-2.5 py-1 rounded-md text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
@@ -881,6 +1405,7 @@ export default function DashboardPage() {
                 </button>
               </div>
             </div>
+          </div>
 
             {/* Central content depending on toggle */}
             <div className="p-5">
@@ -975,7 +1500,50 @@ export default function DashboardPage() {
                       <circle cx="520" cy="280" r="2.5" className="fill-indigo-500/70" />
 
                       {/* Central Glowing Orb Core (fill/glow) */}
-                      <circle cx="400" cy="200" r="46" fill="#070A13" stroke="currentColor" className="text-indigo-500" strokeWidth="2.5" filter="url(#core-glow)" />
+                      <circle
+                        cx="400"
+                        cy="200"
+                        r="46"
+                        fill="#070A13"
+                        stroke="currentColor"
+                        className="text-indigo-500 cursor-pointer hover:text-indigo-400 transition-colors"
+                        strokeWidth="2.5"
+                        filter="url(#core-glow)"
+                        onMouseEnter={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const data = getInsightData('hub');
+                          if (data) {
+                            setHoveredInsight({
+                              ...data,
+                              x: rect.left + rect.width / 2,
+                              y: rect.bottom + 8
+                            });
+                          }
+                        }}
+                        onMouseLeave={handleMouseLeave}
+                        onClick={handleClick('hub')}
+                        onFocus={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const data = getInsightData('hub');
+                          if (data) {
+                            setHoveredInsight({
+                              ...data,
+                              x: rect.left + rect.width / 2,
+                              y: rect.bottom + 8
+                            });
+                          }
+                        }}
+                        onBlur={handleMouseLeave}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleClick('hub')();
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        aria-label="Inspect workspace readiness"
+                      />
 
                       {/* Slow spinning starburst emblem inside the core (matching the Lumen radial style) */}
                       <g style={{ transformOrigin: '400px 200px', animation: 'spin 120s linear infinite' }}>
@@ -1024,29 +1592,63 @@ export default function DashboardPage() {
                           key={node.id}
                           className={`absolute ${posClass} -translate-x-6 -translate-y-6 flex items-center justify-center z-20`}
                         >
-                          <Link
-                            href={node.path}
+                          <div
                             id={`program-node-${node.id}`}
-                            onMouseEnter={() => setHoveredNode(node.id)}
-                            onMouseLeave={() => setHoveredNode(null)}
-                            onFocus={() => setHoveredNode(node.id)}
-                            onBlur={() => setHoveredNode(null)}
-                            className={`w-12 h-12 rounded-full bg-card border-2 flex items-center justify-center transition-all duration-300 shadow-xs hover:scale-110 hover:shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 shrink-0 ${
+                            onMouseEnter={(e) => {
+                              setHoveredNode(node.id);
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const data = getInsightData(node.id);
+                              if (data) {
+                                setHoveredInsight({
+                                  ...data,
+                                  x: rect.left + rect.width / 2,
+                                  y: rect.bottom + 8
+                                });
+                              }
+                            }}
+                            onMouseLeave={() => {
+                              setHoveredNode(null);
+                              setHoveredInsight(null);
+                            }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              const data = getInsightData(node.id);
+                              if (data) {
+                                setActiveInsightDrawer(data);
+                              }
+                            }}
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                const data = getInsightData(node.id);
+                                if (data) {
+                                  setActiveInsightDrawer(data);
+                                }
+                              }
+                            }}
+                            className={`w-12 h-12 rounded-full bg-card border-2 flex items-center justify-center transition-all duration-300 shadow-xs hover:scale-110 hover:shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 shrink-0 cursor-pointer ${
                               isHovered ? 'border-indigo-500 shadow-md scale-105' : 'border-border text-foreground'
                             }`}
-                            title={`${node.name}: ${node.description}`}
                           >
                             <div className="relative">
                               <span className={isHovered ? 'text-indigo-500 dark:text-indigo-400' : 'text-foreground'}>
                                 {node.icon}
                               </span>
                               {node.warnings > 0 && (
-                                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 border border-card text-[8px] font-black text-white flex items-center justify-center animate-pulse">
+                                <span
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    router.push(getBadgeLink(node.id, node.path));
+                                  }}
+                                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 border border-card text-[8px] font-black text-white flex items-center justify-center animate-pulse cursor-pointer z-30 font-sans"
+                                >
                                   {node.warnings}
                                 </span>
                               )}
                             </div>
-                          </Link>
+                          </div>
 
                           {/* Symmetric label positioning */}
                           {isLeftNode ? (
@@ -1067,7 +1669,7 @@ export default function DashboardPage() {
                                 {isHovered ? (
                                   <span className="text-indigo-500 dark:text-indigo-400 font-bold transition-all">{node.description}</span>
                                 ) : (
-                                  `${node.count} ${node.id === 'competencies' ? 'staff' : 'items'}`
+                                  `${node.count} ${node.id === 'competencies' ? 'staff' : node.id === 'reports' ? 'views' : 'items'}`
                                 )}
                               </span>
                             </div>
@@ -1089,7 +1691,7 @@ export default function DashboardPage() {
                                 {isHovered ? (
                                   <span className="text-indigo-500 dark:text-indigo-400 font-bold transition-all">{node.description}</span>
                                 ) : (
-                                  `${node.count} ${node.id === 'vault' ? 'files' : node.id === 'reports' ? 'reports' : 'items'}`
+                                  `${node.count} ${node.id === 'vault' ? 'files' : node.id === 'reports' ? 'views' : 'items'}`
                                 )}
                               </span>
                             </div>
@@ -1122,7 +1724,7 @@ export default function DashboardPage() {
                             )}
                           </div>
                           <span className="text-[9px] text-muted-foreground block truncate">
-                            {node.count} {node.id === 'competencies' ? 'staff' : node.id === 'vault' ? 'files' : node.id === 'reports' ? 'reports' : 'items'}
+                            {node.count} {node.id === 'competencies' ? 'staff' : node.id === 'vault' ? 'files' : node.id === 'reports' ? 'views' : 'items'}
                           </span>
                         </div>
                       </Link>
@@ -1256,7 +1858,13 @@ export default function DashboardPage() {
               </span>
             </div>
             <div className="flex items-center justify-between gap-4">
-              <div className="relative w-24 h-24 flex items-center justify-center shrink-0">
+              <div
+                className="relative w-24 h-24 flex items-center justify-center shrink-0 cursor-pointer"
+                onMouseEnter={handleMouseEnter('health')}
+                onMouseLeave={handleMouseLeave}
+                onClick={handleClick('health')}
+                title="Click to view posture summary"
+              >
                 {/* SVG Circular progress arch */}
                 <svg viewBox="0 0 120 120" className="w-full h-full">
                   <defs>
@@ -1292,41 +1900,57 @@ export default function DashboardPage() {
                   <span className="text-xl font-black text-foreground">{readinessScore}%</span>
                   <span className="text-[7px] font-bold text-muted-foreground uppercase tracking-wider">Overall</span>
                   <div className={`flex items-center gap-0.5 mt-0.5 text-[8px] font-bold ${readinessScore && readinessScore >= 75 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    <span>{readinessScore && readinessScore >= 75 ? '▲' : '▼'}</span>
-                    <span>4% vs last month</span>
+                    <span>{readinessScore && readinessScore >= 75 ? 'Current' : 'Review'}</span>
+                    <span>live calculation</span>
                   </div>
                 </div>
               </div>
 
               <div className="flex-1 space-y-1.5 text-[10.5px]">
-                <div className="flex items-center justify-between gap-2">
+                <Link
+                  href="/dashboard/requirements?status=GREEN"
+                  className="flex items-center justify-between gap-2 p-1 hover:bg-muted/30 border border-transparent hover:border-border/40 rounded-lg transition-all cursor-pointer block text-xs text-foreground font-bold"
+                  title="Click to view compliant requirements"
+                >
                   <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                     <span>Compliant</span>
                   </div>
                   <span className="font-bold text-foreground">{stats.compliantCount}</span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
+                </Link>
+                <Link
+                  href="/dashboard/requirements?filter=actions"
+                  className="flex items-center justify-between gap-2 p-1 hover:bg-muted/30 border border-transparent hover:border-border/40 rounded-lg transition-all cursor-pointer block text-xs text-foreground font-bold"
+                  title="Click to view action tasks"
+                >
                   <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
                     <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
                     <span>In Progress</span>
                   </div>
                   <span className="font-bold text-foreground">{activeActionsCount}</span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
+                </Link>
+                <Link
+                  href="/dashboard/requirements?status=AMBER"
+                  className="flex items-center justify-between gap-2 p-1 hover:bg-muted/30 border border-transparent hover:border-border/40 rounded-lg transition-all cursor-pointer block text-xs text-foreground font-bold"
+                  title="Click to view at-risk requirements"
+                >
                   <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
                     <span>At Risk</span>
                   </div>
                   <span className="font-bold text-foreground">{stats.expiringSoonCount}</span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
+                </Link>
+                <Link
+                  href="/dashboard/requirements?status=RED"
+                  className="flex items-center justify-between gap-2 p-1 hover:bg-muted/30 border border-transparent hover:border-border/40 rounded-lg transition-all cursor-pointer block text-xs text-foreground font-bold"
+                  title="Click to view requirements needing attention"
+                >
                   <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
                     <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
-                    <span>Non-Compliant</span>
+                    <span>Needs Attention</span>
                   </div>
                   <span className="font-bold text-foreground">{stats.expiredCount}</span>
-                </div>
+                </Link>
               </div>
             </div>
           </div>
@@ -1338,7 +1962,7 @@ export default function DashboardPage() {
               {[
                 { id: 'tasks', label: 'Tasks', count: allTasksAndExpiries.length },
                 { id: 'activity', label: 'Activity', count: 0 },
-                { id: 'suggestions', label: 'Focus', count: smartSuggestions.filter(s => s !== "All modules aligned. Your compliance posture is currently optimal.").length }
+                { id: 'suggestions', label: 'Focus', count: smartSuggestions.filter(s => s !== "No current priority suggestions were identified from the available workspace records.").length }
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -1390,14 +2014,31 @@ export default function DashboardPage() {
               )}
 
               {activeRailTab === 'activity' && (
-                <div className="space-y-3 relative border-l border-border pl-3.5 ml-1.5 py-1 animate-in fade-in duration-200">
-                  {safeActivity.map(log => (
-                    <div key={log.id} className="text-[11px] relative space-y-0.5">
-                      <div className="absolute -left-[18.5px] top-1 w-2.5 h-2.5 rounded-full border-2 border-card bg-indigo-500 shadow-xs" />
-                      <span className="font-extrabold block text-foreground truncate text-[10px]" title={log.action}>{log.action}</span>
-                      <p className="text-muted-foreground text-[9.5px] leading-relaxed line-clamp-2">{log.details}</p>
-                    </div>
-                  ))}
+                <div className="space-y-3 relative border-l border-border pl-3.5 ml-1.5 py-1 animate-in fade-in duration-200 text-xs">
+                  {safeActivity.map(log => {
+                    const isAdminOrOwner = user?.role === 'Owner' || user?.role === 'Admin';
+                    return (
+                      <div
+                        key={log.id}
+                        onClick={() => {
+                          if (isAdminOrOwner) {
+                            router.push('/dashboard/reports?tab=history');
+                          } else {
+                            setToast({
+                              type: 'error',
+                              message: 'Access Denied: Standard users cannot view the full audit logs.'
+                            });
+                          }
+                        }}
+                        className="text-[11px] relative space-y-0.5 cursor-pointer hover:bg-muted/30 p-1.5 rounded-lg transition-all"
+                        title={isAdminOrOwner ? "Click to view full Audit Trail logs in Reports." : "Audit event details"}
+                      >
+                        <div className="absolute -left-[18.5px] top-2.5 w-2.5 h-2.5 rounded-full border-2 border-card bg-indigo-500 shadow-xs" />
+                        <span className="font-extrabold block text-foreground truncate text-[10px] leading-tight" title={log.action}>{log.action}</span>
+                        <p className="text-muted-foreground text-[9.5px] leading-relaxed line-clamp-2 mt-0.5">{log.details}</p>
+                      </div>
+                    );
+                  })}
                   {safeActivity.length === 0 && (
                     <p className="text-[10px] text-muted-foreground italic text-center py-20">No recent activities.</p>
                   )}
@@ -1406,12 +2047,41 @@ export default function DashboardPage() {
 
               {activeRailTab === 'suggestions' && (
                 <div className="space-y-2 animate-in fade-in duration-200">
-                  {smartSuggestions.map((suggestion, idx) => (
-                    <div key={idx} className="flex gap-2.5 p-2.5 bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/15 rounded-xl text-[10px] text-indigo-650 dark:text-indigo-300 font-semibold leading-relaxed">
-                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0 animate-pulse" />
-                      <span>{suggestion}</span>
-                    </div>
-                  ))}
+                  {smartSuggestions.map((suggestion, idx) => {
+                    let targetLink = '';
+                    if (suggestion.includes('Asset Matrix')) {
+                      targetLink = '/dashboard/matrix?status=Expired';
+                    } else if (suggestion.includes('expired framework requirements')) {
+                      targetLink = '/dashboard/requirements?status=RED';
+                    } else if (suggestion.includes('vault documents')) {
+                      targetLink = '/dashboard/vault?status=Unclassified';
+                    } else if (suggestion.includes('gap action tasks')) {
+                      targetLink = '/dashboard/requirements?filter=actions';
+                    }
+
+                    if (targetLink) {
+                      return (
+                        <Link
+                          key={idx}
+                          href={targetLink}
+                          className="flex gap-2.5 p-2.5 bg-indigo-500/5 dark:bg-indigo-500/10 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/20 border border-indigo-500/15 hover:border-indigo-500/30 rounded-xl text-[10px] text-indigo-650 dark:text-indigo-300 font-semibold leading-relaxed transition-all cursor-pointer block text-left"
+                          title="Click to navigate to filter"
+                        >
+                          <div className="flex items-start gap-2.5">
+                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0 animate-pulse" />
+                            <span>{suggestion}</span>
+                          </div>
+                        </Link>
+                      );
+                    }
+
+                    return (
+                      <div key={idx} className="flex gap-2.5 p-2.5 bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/15 rounded-xl text-[10px] text-indigo-650 dark:text-indigo-300 font-semibold leading-relaxed">
+                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0 animate-pulse" />
+                        <span>{suggestion}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1422,325 +2092,399 @@ export default function DashboardPage() {
       {/* 4. Lower Dashboard Panels - Tier 1: Key Performance Dials */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Card 1: Compliance Trend */}
-        <div className="bg-card border border-border rounded-xl p-4 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
-            <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Compliance Trend</span>
-            <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">All Programs</span>
-          </div>
-          <div className="relative w-full h-32 mt-2">
-            <svg viewBox="0 0 300 120" className="w-full h-full">
-              <defs>
-                <linearGradient id="trend-fill-grad" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="rgba(99, 102, 241, 0.25)" />
-                  <stop offset="100%" stopColor="rgba(99, 102, 241, 0)" />
-                </linearGradient>
-              </defs>
-              {/* Horizontal Grid lines */}
-              <line x1="10" y1="20" x2="290" y2="20" stroke="currentColor" className="text-muted/10" strokeDasharray="4 4" />
-              <line x1="10" y1="50" x2="290" y2="50" stroke="currentColor" className="text-muted/10" strokeDasharray="4 4" />
-              <line x1="10" y1="80" x2="290" y2="80" stroke="currentColor" className="text-muted/10" strokeDasharray="4 4" />
-              <line x1="10" y1="110" x2="290" y2="110" stroke="currentColor" className="text-muted/10" />
-
-              {/* Area path */}
-              <path
-                d={`M 20 110 L 20 85 L 70 70 L 120 78 L 170 55 L 220 48 L 270 ${110 - ((readinessScore ?? 92) / 100) * 90} L 270 110 Z`}
-                fill="url(#trend-fill-grad)"
-              />
-
-              {/* Main Line path */}
-              <path
-                d={`M 20 85 L 70 70 L 120 78 L 170 55 L 220 48 L 270 ${110 - ((readinessScore ?? 92) / 100) * 90}`}
-                fill="none"
-                stroke="#6366f1"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-              />
-
-              {/* Trend points circles */}
-              <circle cx="20" cy="85" r="3" fill="#6366f1" />
-              <circle cx="70" cy="70" r="3" fill="#6366f1" />
-              <circle cx="120" cy="78" r="3" fill="#6366f1" />
-              <circle cx="170" cy="55" r="3" fill="#6366f1" />
-              <circle cx="220" cy="48" r="3" fill="#6366f1" />
-              <circle cx="270" cy={110 - ((readinessScore ?? 92) / 100) * 90} r="4.5" fill="#38bdf8" stroke="#ffffff" strokeWidth="1.5" />
-
-              {/* Floating label for current month value */}
-              <rect x="245" cy={110 - ((readinessScore ?? 92) / 100) * 90 - 24} width="32" height="15" rx="3" fill="#6366f1" />
-              <text x="261" y={110 - ((readinessScore ?? 92) / 100) * 90 - 14} fill="#ffffff" fontSize="8" fontWeight="bold" textAnchor="middle">
-                {readinessScore}%
-              </text>
-            </svg>
-          </div>
-          <div className="flex justify-between text-[9px] font-bold text-muted-foreground uppercase px-2.5 mt-2">
-            <span>Jan</span>
-            <span>Feb</span>
-            <span>Mar</span>
-            <span>Apr</span>
-            <span>May</span>
-            <span>Jun</span>
-          </div>
-        </div>
-
-        {/* Card 2: Requirement Status Donut Chart */}
-        <div className="bg-card border border-border rounded-xl p-4 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
-            <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Requirement Status</span>
-            <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">All Frameworks</span>
-          </div>
-          <div className="flex items-center justify-between gap-3 py-1">
-            <div className="relative w-24 h-24 flex items-center justify-center shrink-0">
-              <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
-                <circle cx="50" cy="50" r="36" fill="transparent" stroke="currentColor" className="text-muted/10" strokeWidth="11" />
-                
-                {/* Compliant segment */}
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="36"
-                  fill="transparent"
-                  stroke="#10b981"
-                  strokeWidth="11"
-                  strokeDasharray="226.2"
-                  strokeDashoffset={226.2 - (226.2 * (stats.compliantCount / (stats.activeRequirements || 1)))}
-                />
-                
-                {/* In Progress segment */}
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="36"
-                  fill="transparent"
-                  stroke="#6366f1"
-                  strokeWidth="11"
-                  strokeDasharray="226.2"
-                  strokeDashoffset={226.2 - (226.2 * (activeActionsCount / (stats.activeRequirements || 1)))}
-                  transform={`rotate(${(stats.compliantCount / (stats.activeRequirements || 1)) * 360} 50 50)`}
-                />
-                
-                {/* At Risk segment */}
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="36"
-                  fill="transparent"
-                  stroke="#f59e0b"
-                  strokeWidth="11"
-                  strokeDasharray="226.2"
-                  strokeDashoffset={226.2 - (226.2 * (stats.expiringSoonCount / (stats.activeRequirements || 1)))}
-                  transform={`rotate(${((stats.compliantCount + activeActionsCount) / (stats.activeRequirements || 1)) * 360} 50 50)`}
-                />
-                
-                {/* Non-Compliant segment */}
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="36"
-                  fill="transparent"
-                  stroke="#ef4444"
-                  strokeWidth="11"
-                  strokeDasharray="226.2"
-                  strokeDashoffset={226.2 - (226.2 * (stats.expiredCount / (stats.activeRequirements || 1)))}
-                  transform={`rotate(${((stats.compliantCount + activeActionsCount + stats.expiringSoonCount) / (stats.activeRequirements || 1)) * 360} 50 50)`}
-                />
-              </svg>
-              <div className="absolute flex flex-col items-center justify-center text-center">
-                <span className="text-base font-black text-foreground">{stats.activeRequirements}</span>
-                <span className="text-[7px] font-bold text-muted-foreground uppercase">Total</span>
-              </div>
+        {customization.visiblePanels.includes('trend') && (
+          <div className="bg-card border border-border rounded-xl p-4 shadow-xs flex flex-col justify-between">
+            <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
+              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Readiness Snapshot</span>
+              <span className="text-[8px] font-bold text-muted-foreground">Historical trend unavailable</span>
             </div>
-
-            <div className="flex-1 space-y-1.5 text-[10px]">
-              <div className="flex items-center justify-between font-bold">
-                <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" /> Compliant</span>
-                <span className="text-foreground">{stats.compliantCount} ({stats.activeRequirements > 0 ? Math.round((stats.compliantCount / stats.activeRequirements) * 100) : 0}%)</span>
-              </div>
-              <div className="flex items-center justify-between font-bold">
-                <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" /> In Progress</span>
-                <span className="text-foreground">{activeActionsCount} ({stats.activeRequirements > 0 ? Math.round((activeActionsCount / stats.activeRequirements) * 100) : 0}%)</span>
-              </div>
-              <div className="flex items-center justify-between font-bold">
-                <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" /> At Risk</span>
-                <span className="text-foreground">{stats.expiringSoonCount} ({stats.activeRequirements > 0 ? Math.round((stats.expiringSoonCount / stats.activeRequirements) * 100) : 0}%)</span>
-              </div>
-              <div className="flex items-center justify-between font-bold">
-                <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" /> Non-Compliant</span>
-                <span className="text-foreground">{stats.expiredCount} ({stats.activeRequirements > 0 ? Math.round((stats.expiredCount / stats.activeRequirements) * 100) : 0}%)</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 3: Audit Readiness */}
-        <div className="bg-card border border-border rounded-xl p-4 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
-            <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Audit Readiness</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-          </div>
-          <div className="flex flex-col items-center py-1.5">
-            <div className="relative w-28 h-20 flex items-center justify-center overflow-hidden">
-              <svg viewBox="0 0 100 60" className="w-full h-full">
+            <div className="relative w-full h-32 mt-2">
+              <svg viewBox="0 0 300 120" className="w-full h-full">
                 <defs>
-                  <linearGradient id="readiness-gauge-grad" x1="0%" y1="100%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#f59e0b" />
-                    <stop offset="100%" stopColor="#10b981" />
+                  <linearGradient id="trend-fill-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="rgba(99, 102, 241, 0.25)" />
+                    <stop offset="100%" stopColor="rgba(99, 102, 241, 0)" />
                   </linearGradient>
                 </defs>
-                {/* Background Track */}
-                <path d="M 15 50 A 35 35 0 0 1 85 50" fill="transparent" stroke="currentColor" className="text-muted/15 dark:text-muted/10" strokeWidth="8" strokeLinecap="round" />
-                {/* Active Arc */}
-                <path
-                  d="M 15 50 A 35 35 0 0 1 85 50"
-                  fill="transparent"
-                  stroke="url(#readiness-gauge-grad)"
-                  strokeWidth="8"
-                  strokeLinecap="round"
-                  strokeDasharray="110"
-                  strokeDashoffset={110 - (110 * ((readinessScore ?? 87) / 100))}
-                  className="transition-all duration-1000 ease-out"
-                />
+                {/* Horizontal Grid lines */}
+                <line x1="10" y1="20" x2="290" y2="20" stroke="currentColor" className="text-muted/10" strokeDasharray="4 4" />
+                <line x1="10" y1="50" x2="290" y2="50" stroke="currentColor" className="text-muted/10" strokeDasharray="4 4" />
+                <line x1="10" y1="80" x2="290" y2="80" stroke="currentColor" className="text-muted/10" strokeDasharray="4 4" />
+                <line x1="10" y1="110" x2="290" y2="110" stroke="currentColor" className="text-muted/10" />
+
+                {/* Area path */}
+                {getTrendData().areaD && <path d={getTrendData().areaD} fill="url(#trend-fill-grad)" />}
+
+                {/* Main Line path */}
+                {getTrendData().pathD && <path d={getTrendData().pathD} fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" />}
+
+                {/* Trend points circles */}
+                {getTrendData().points.map((pt, idx) => (
+                  <circle
+                    key={idx}
+                    cx={pt.cx}
+                    cy={pt.cy}
+                    r={idx === getTrendData().points.length - 1 ? 4.5 : 3.5}
+                    fill={idx === getTrendData().points.length - 1 ? "#38bdf8" : "#6366f1"}
+                    stroke={idx === getTrendData().points.length - 1 ? "#ffffff" : "none"}
+                    strokeWidth={idx === getTrendData().points.length - 1 ? 1.5 : 0}
+                    className="cursor-pointer transition-all hover:scale-150"
+                    onMouseEnter={handleTrendMouseEnter(pt)}
+                    onMouseLeave={handleTrendMouseLeave}
+                  />
+                ))}
+
+                {/* Floating label for current month value */}
+                <rect x="134" cy={110 - ((readinessScore ?? 0) / 100) * 90 - 24} width="32" height="15" rx="3" fill="#6366f1" />
+                <text x="150" y={110 - ((readinessScore ?? 0) / 100) * 90 - 14} fill="#ffffff" fontSize="8" fontWeight="bold" textAnchor="middle">
+                  {readinessScore}%
+                </text>
               </svg>
-              <div className="absolute bottom-1 flex flex-col items-center justify-center text-center">
-                <span className="text-xl font-black text-foreground">{readinessScore}%</span>
-                <span className="text-[7px] font-bold text-muted-foreground uppercase tracking-wider">Audit Ready</span>
-              </div>
             </div>
-            <div className="grid grid-cols-2 gap-4 w-full mt-2 border-t border-border/40 pt-2 text-[10px] text-center font-bold">
-              <div>
-                <span className="block text-rose-500">{stats.expiredCount}</span>
-                <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">High Risk Issues</span>
+            <div className="flex justify-between text-[9px] font-bold text-muted-foreground uppercase px-2.5 mt-2">
+              {getTrendData().labels.map((lbl, idx) => (
+                <span key={idx}>{lbl}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Card 2: Requirement Status Donut Chart */}
+        {customization.visiblePanels.includes('statusDonut') && (
+          <div className="bg-card border border-border rounded-xl p-4 shadow-xs flex flex-col justify-between">
+            <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
+              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Requirement Status</span>
+              <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">Active Requirements</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 py-1">
+              <div className="relative w-24 h-24 flex items-center justify-center shrink-0">
+                <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
+                  <circle cx="50" cy="50" r="36" fill="transparent" stroke="currentColor" className="text-muted/10" strokeWidth="11" />
+                  {/* Compliant segment */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="36"
+                    fill="transparent"
+                    stroke="#10b981"
+                    strokeWidth="11"
+                    strokeDasharray="226.2"
+                    strokeDashoffset={226.2 - (226.2 * (stats.compliantCount / (stats.activeRequirements || 1)))}
+                    className="cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={() => router.push('/dashboard/requirements?status=GREEN')}
+                  >
+                    <title>{`Compliant: ${stats.compliantCount} objectives. Click to filter.`}</title>
+                  </circle>
+                  {/* At Risk segment */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="36"
+                    fill="transparent"
+                    stroke="#f59e0b"
+                    strokeWidth="11"
+                    strokeDasharray="226.2"
+                    strokeDashoffset={226.2 - (226.2 * (stats.expiringSoonCount / (stats.activeRequirements || 1)))}
+                    transform={`rotate(${(stats.compliantCount / (stats.activeRequirements || 1)) * 360} 50 50)`}
+                    className="cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={() => router.push('/dashboard/requirements?status=AMBER')}
+                  >
+                    <title>{`At Risk: ${stats.expiringSoonCount} requirements. Click to filter.`}</title>
+                  </circle>
+
+                  {/* Needs Attention segment */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="36"
+                    fill="transparent"
+                    stroke="#ef4444"
+                    strokeWidth="11"
+                    strokeDasharray="226.2"
+                    strokeDashoffset={226.2 - (226.2 * (stats.expiredCount / (stats.activeRequirements || 1)))}
+                    transform={`rotate(${((stats.compliantCount + stats.expiringSoonCount) / (stats.activeRequirements || 1)) * 360} 50 50)`}
+                    className="cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={() => router.push('/dashboard/requirements?status=RED')}
+                  >
+                    <title>{`Needs Attention: ${stats.expiredCount} requirements. Click to filter.`}</title>
+                  </circle>
+
+                  {/* Not Assessed segment */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="36"
+                    fill="transparent"
+                    stroke="#71717a"
+                    strokeWidth="11"
+                    strokeDasharray="226.2"
+                    strokeDashoffset={226.2 - (226.2 * (greyRequirementCount / (stats.activeRequirements || 1)))}
+                    transform={`rotate(${((stats.compliantCount + stats.expiringSoonCount + stats.expiredCount) / (stats.activeRequirements || 1)) * 360} 50 50)`}
+                    className="cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={() => router.push('/dashboard/requirements?status=GREY')}
+                  >
+                    <title>{`Not Assessed: ${greyRequirementCount} requirements. Click to filter.`}</title>
+                  </circle>
+                </svg>
+                <div className="absolute flex flex-col items-center justify-center text-center">
+                  <span className="text-base font-black text-foreground">{stats.activeRequirements}</span>
+                  <span className="text-[7px] font-bold text-muted-foreground uppercase">Total</span>
+                </div>
               </div>
-              <div className="border-l border-border/40">
-                <span className="block text-amber-500">{stats.expiringSoonCount}</span>
-                <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Medium Risk Issues</span>
+
+              <div className="flex-1 space-y-1.5 text-[10px]">
+                <button
+                  onClick={() => router.push('/dashboard/requirements?status=GREEN')}
+                  className="w-full flex items-center justify-between font-bold hover:bg-muted/30 p-1 rounded-md transition-all text-left"
+                >
+                  <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" /> Compliant</span>
+                  <span className="text-foreground">{stats.compliantCount} ({stats.activeRequirements > 0 ? Math.round((stats.compliantCount / stats.activeRequirements) * 100) : 0}%)</span>
+                </button>
+                <button
+                  onClick={() => router.push('/dashboard/requirements?status=AMBER')}
+                  className="w-full flex items-center justify-between font-bold hover:bg-muted/30 p-1 rounded-md transition-all text-left"
+                >
+                  <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" /> At Risk</span>
+                  <span className="text-foreground">{stats.expiringSoonCount} ({stats.activeRequirements > 0 ? Math.round((stats.expiringSoonCount / stats.activeRequirements) * 100) : 0}%)</span>
+                </button>
+                <button
+                  onClick={() => router.push('/dashboard/requirements?status=RED')}
+                  className="w-full flex items-center justify-between font-bold hover:bg-muted/30 p-1 rounded-md transition-all text-left"
+                >
+                  <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" /> Needs Attention</span>
+                  <span className="text-foreground">{stats.expiredCount} ({stats.activeRequirements > 0 ? Math.round((stats.expiredCount / stats.activeRequirements) * 100) : 0}%)</span>
+                </button>
+                <button
+                  onClick={() => router.push('/dashboard/requirements?status=GREY')}
+                  className="w-full flex items-center justify-between font-bold hover:bg-muted/30 p-1 rounded-md transition-all text-left"
+                >
+                  <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-zinc-500 shrink-0" /> Not Assessed</span>
+                  <span className="text-foreground">{greyRequirementCount} ({stats.activeRequirements > 0 ? Math.round((greyRequirementCount / stats.activeRequirements) * 100) : 0}%)</span>
+                </button>
               </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {/* Card 3: Audit Readiness */}
+        {customization.visiblePanels.includes('readinessGauge') && (
+          <div
+            className="bg-card border border-border rounded-xl p-4 shadow-xs flex flex-col justify-between cursor-pointer hover:border-indigo-500/50 transition-all select-none"
+            onMouseEnter={handleMouseEnter('health')}
+            onMouseLeave={handleMouseLeave}
+            onClick={handleClick('health')}
+            title="Click to view full posture analysis"
+          >
+            <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
+              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Audit Readiness</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+            </div>
+            <div className="flex flex-col items-center py-1.5">
+              <div className="relative w-28 h-20 flex items-center justify-center overflow-hidden">
+                <svg viewBox="0 0 100 60" className="w-full h-full">
+                  <defs>
+                    <linearGradient id="readiness-gauge-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+                      <stop offset="0%" stopColor="#f59e0b" />
+                      <stop offset="100%" stopColor="#10b981" />
+                    </linearGradient>
+                  </defs>
+                  {/* Background Track */}
+                  <path d="M 15 50 A 35 35 0 0 1 85 50" fill="transparent" stroke="currentColor" className="text-muted/15 dark:text-muted/10" strokeWidth="8" strokeLinecap="round" />
+                  {/* Active Arc */}
+                  <path
+                    d="M 15 50 A 35 35 0 0 1 85 50"
+                    fill="transparent"
+                    stroke="url(#readiness-gauge-grad)"
+                    strokeWidth="8"
+                    strokeLinecap="round"
+                    strokeDasharray="110"
+                    strokeDashoffset={110 - (110 * ((readinessScore ?? 0) / 100))}
+                    className="transition-all duration-1000 ease-out"
+                  />
+                </svg>
+                <div className="absolute bottom-1 flex flex-col items-center justify-center text-center">
+                  <span className="text-xl font-black text-foreground">{readinessScore}%</span>
+                  <span className="text-[7px] font-bold text-muted-foreground uppercase tracking-wider">Readiness</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 w-full mt-2 border-t border-border/40 pt-2 text-[10px] text-center font-bold">
+                <div>
+                  <span className="block text-rose-500">{stats.expiredCount}</span>
+                  <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Needs Attention</span>
+                </div>
+                <div className="border-l border-border/40">
+                  <span className="block text-amber-500">{stats.expiringSoonCount}</span>
+                  <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Due Soon</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Card 4: Training Completion */}
-        <div className="bg-card border border-border rounded-xl p-4 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
-            <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Training Completion</span>
-            <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">This Quarter</span>
-          </div>
-          <div className="flex flex-col items-center py-1.5">
-            <div className="relative w-20 h-20 flex items-center justify-center">
-              <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
-                <circle cx="50" cy="50" r="38" fill="transparent" stroke="currentColor" className="text-muted/10" strokeWidth="8" />
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="38"
-                  fill="transparent"
-                  stroke="#10b981"
-                  strokeWidth="8"
-                  strokeLinecap="round"
-                  strokeDasharray="238.8"
-                  strokeDashoffset={238.8 - (238.8 * ((competencySummary?.compliancePercent ?? 91) / 100))}
-                  className="transition-all duration-1000 ease-out"
-                />
-              </svg>
-              <div className="absolute flex flex-col items-center justify-center text-center">
-                <span className="text-base font-black text-foreground">{competencySummary?.compliancePercent ?? 91}%</span>
-                <span className="text-[7px] font-bold text-muted-foreground uppercase">Completed</span>
+        {customization.visiblePanels.includes('trainingRing') && (
+          <div
+            className="bg-card border border-border rounded-xl p-4 shadow-xs flex flex-col justify-between cursor-pointer hover:border-indigo-500/50 transition-all select-none"
+            onMouseEnter={handleMouseEnter('training')}
+            onMouseLeave={handleMouseLeave}
+            onClick={handleClick('training')}
+            title="Click to view teammate certifications status"
+          >
+            <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
+              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Training Completion</span>
+              <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">Current Records</span>
+            </div>
+            <div className="flex flex-col items-center py-1.5">
+              <div className="relative w-20 h-20 flex items-center justify-center">
+                <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
+                  <circle cx="50" cy="50" r="38" fill="transparent" stroke="currentColor" className="text-muted/10" strokeWidth="8" />
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="38"
+                    fill="transparent"
+                    stroke="#10b981"
+                    strokeWidth="8"
+                    strokeLinecap="round"
+                    strokeDasharray="238.8"
+                    strokeDashoffset={238.8 - (238.8 * ((competencySummary?.compliancePercent ?? 0) / 100))}
+                    className="transition-all duration-1000 ease-out"
+                  />
+                </svg>
+                <div className="absolute flex flex-col items-center justify-center text-center">
+                  <span className="text-base font-black text-foreground">{competencySummary?.compliancePercent ?? 0}%</span>
+                  <span className="text-[7px] font-bold text-muted-foreground uppercase">Completed</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 w-full mt-2 border-t border-border/40 pt-2 text-[10px] text-center font-bold">
+                <div>
+                  <span className="block text-emerald-500">{competencySummary?.valid ?? 0}</span>
+                  <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Completed</span>
+                </div>
+                <div className="border-l border-border/40">
+                  <span className="block text-rose-500">{competencySummary?.expired ?? 0}</span>
+                  <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Overdue</span>
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4 w-full mt-2 border-t border-border/40 pt-2 text-[10px] text-center font-bold">
-              <div>
-                <span className="block text-emerald-500">{competencySummary?.valid ?? 182}</span>
-                <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Completed</span>
-              </div>
-              <div className="border-l border-border/40">
-                <span className="block text-rose-500">{competencySummary?.expired ?? 18}</span>
-                <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Overdue</span>
-              </div>
-            </div>
           </div>
-        </div>
-      </div>
-
-      {/* Tier 2: Lower Lists Row */}
+        )}
+      </div>      {/* Tier 2: Lower Lists Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Panel 1: Asset Compliance Categories */}
-        <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-4">
-          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Asset Category Health</span>
-          <div className="space-y-3 py-1 text-xs">
-            {assetCategoryCompliance.map(category => (
-              <div key={category.id} className="space-y-1.5">
-                <div className="flex justify-between items-center font-bold">
-                  <span>{category.name}</span>
-                  <span className="text-muted-foreground">{category.compliant} / {category.total} checks</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-full bg-muted h-2 rounded-full overflow-hidden">
-                    <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${category.percent}%` }} />
+        {customization.visiblePanels.includes('assetCategory') && (
+          <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-4">
+            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Asset Category Health</span>
+            <div className="space-y-3 py-1 text-xs">
+              {assetCategoryCompliance.map(category => (
+                <Link
+                  key={category.id}
+                  href={`/dashboard/matrix?category=${category.id}`}
+                  className="space-y-1.5 block hover:bg-muted/30 p-2 rounded-xl transition-all cursor-pointer"
+                  title={`Health score: ${category.percent}% | ${category.compliant} of ${category.total} checks compliant. Click to view category in Asset Matrix.`}
+                >
+                  <div className="flex justify-between items-center font-bold">
+                    <span>{category.name}</span>
+                    <span className="text-muted-foreground">{category.compliant} / {category.total} checks</span>
                   </div>
-                  <span className="font-extrabold text-[10px] text-muted-foreground w-8 text-right">{category.percent}%</span>
-                </div>
-              </div>
-            ))}
-            {assetCategoryCompliance.length === 0 && (
-              <p className="text-[10px] text-muted-foreground italic text-center py-6">No parent asset categories defined.</p>
-            )}
+                  <div className="flex items-center gap-2">
+                    <div className="w-full bg-muted h-2 rounded-full overflow-hidden">
+                      <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${category.percent}%` }} />
+                    </div>
+                    <span className="font-extrabold text-[10px] text-muted-foreground w-8 text-right">{category.percent}%</span>
+                  </div>
+                </Link>
+              ))}
+              {assetCategoryCompliance.length === 0 && (
+                <p className="text-[10px] text-muted-foreground italic text-center py-6">No parent asset categories defined.</p>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Panel 2: Risk Level Areas */}
-        <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-4">
-          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Top Risk Gaps</span>
-          <div className="space-y-3 text-xs">
-            {[
-              { label: 'Critical Risk Items', count: frameworkRequirements.filter(r => r.risk_level === 'Critical' && r.status !== 'GREEN').length, color: 'text-rose-600 bg-rose-500/10 border-rose-500/20' },
-              { label: 'High Risk Items', count: frameworkRequirements.filter(r => r.risk_level === 'High' && r.status !== 'GREEN').length, color: 'text-rose-500 bg-rose-500/5 border-rose-500/15' },
-              { label: 'Medium Risk Items', count: frameworkRequirements.filter(r => r.risk_level === 'Medium' && r.status !== 'GREEN').length, color: 'text-amber-600 bg-amber-500/10 border-amber-500/20' },
-              { label: 'Low Risk Items', count: frameworkRequirements.filter(r => r.risk_level === 'Low' && r.status !== 'GREEN').length, color: 'text-zinc-600 bg-zinc-500/10 border-zinc-500/20' }
-            ].map(item => (
-              <div key={item.label} className="flex justify-between items-center p-2.5 bg-muted/20 border border-border rounded-xl">
-                <span className="font-bold text-foreground">{item.label}</span>
-                <span className={`px-2 py-0.5 text-[10px] font-black rounded-md border ${item.color}`}>
-                  {item.count} pending
-                </span>
-              </div>
-            ))}
+        {customization.visiblePanels.includes('riskGaps') && (
+          <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-4">
+            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Top Risk Gaps</span>
+            <div className="space-y-3 text-xs">
+              {[
+                { label: 'Critical Risk Items', riskKey: 'Critical', count: frameworkRequirements.filter(r => r.risk_level === 'Critical' && r.status !== 'GREEN').length, color: 'text-rose-600 bg-rose-500/10 border-rose-500/20' },
+                { label: 'High Risk Items', riskKey: 'High', count: frameworkRequirements.filter(r => r.risk_level === 'High' && r.status !== 'GREEN').length, color: 'text-rose-500 bg-rose-500/5 border-rose-500/15' },
+                { label: 'Medium Risk Items', riskKey: 'Medium', count: frameworkRequirements.filter(r => r.risk_level === 'Medium' && r.status !== 'GREEN').length, color: 'text-amber-600 bg-amber-500/10 border-amber-500/20' },
+                { label: 'Low Risk Items', riskKey: 'Low', count: frameworkRequirements.filter(r => r.risk_level === 'Low' && r.status !== 'GREEN').length, color: 'text-zinc-600 bg-zinc-500/10 border-zinc-500/20' }
+              ].map(item => (
+                <Link
+                  key={item.label}
+                  href={`/dashboard/requirements?risk=${item.riskKey}&status=Attention`}
+                  className="flex justify-between items-center p-2.5 bg-muted/20 hover:bg-muted/40 border border-border rounded-xl transition-all cursor-pointer block text-xs font-bold text-foreground"
+                  title={`Click to view pending ${item.riskKey} risk requirements.`}
+                >
+                  <span>{item.label}</span>
+                  <span className={`px-2 py-0.5 text-[10px] font-black rounded-md border ${item.color}`}>
+                    {item.count} pending
+                  </span>
+                </Link>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Panel 3: Workspace Alerts */}
-        <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-4">
-          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Active Alerts</span>
-          <div className="space-y-3 text-xs">
-            {stats.expiredCount > 0 && (
-              <div className="flex items-start gap-2.5 p-2 bg-rose-500/5 border border-rose-500/15 rounded-xl">
-                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold block text-rose-600 dark:text-rose-400">{stats.expiredCount} expired objectives</span>
-                  <p className="text-[10px] text-muted-foreground">Requirements missing essential evidence records.</p>
-                </div>
-              </div>
-            )}
-            {overdueAssetChecks.length > 0 && (
-              <div className="flex items-start gap-2.5 p-2 bg-rose-500/5 border border-rose-500/15 rounded-xl">
-                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold block text-rose-600 dark:text-rose-400">{overdueAssetChecks.length} asset checkouts expired</span>
-                  <p className="text-[10px] text-muted-foreground">Assigned equipment or vehicle checks require action.</p>
-                </div>
-              </div>
-            )}
-            {unclassifiedDocs.length > 0 && (
-              <div className="flex items-start gap-2.5 p-2 bg-amber-500/5 border border-amber-500/15 rounded-xl">
-                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold block text-amber-600 dark:text-amber-400">{unclassifiedDocs.length} unclassified documents</span>
-                  <p className="text-[10px] text-muted-foreground">Newly uploaded evidence files pending classification.</p>
-                </div>
-              </div>
-            )}
-            {stats.expiredCount === 0 && overdueAssetChecks.length === 0 && unclassifiedDocs.length === 0 && (
-              <p className="text-[10px] text-muted-foreground italic text-center py-6">No critical alerts detected in your workspace.</p>
-            )}
+        {customization.visiblePanels.includes('alerts') && (
+          <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-4">
+            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Active Alerts</span>
+            <div className="space-y-3 text-xs">
+              {stats.expiredCount > 0 && (
+                <Link
+                  href="/dashboard/requirements?status=RED"
+                  className="flex items-start gap-2.5 p-2 bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/15 hover:border-rose-500/30 rounded-xl transition-all cursor-pointer block"
+                  title="Click to view requirements needing attention."
+                >
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block text-rose-600 dark:text-rose-400">{stats.expiredCount} requirements need attention</span>
+                      <p className="text-[10px] text-muted-foreground">Missing evidence, overdue reviews, or other readiness gaps.</p>
+                    </div>
+                  </div>
+                </Link>
+              )}
+              {overdueAssetChecks.length > 0 && (
+                <Link
+                  href="/dashboard/matrix?status=Expired"
+                  className="flex items-start gap-2.5 p-2 bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/15 hover:border-rose-500/30 rounded-xl transition-all cursor-pointer block"
+                  title="Click to view expired asset checks."
+                >
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block text-rose-600 dark:text-rose-400">{overdueAssetChecks.length} asset checks overdue</span>
+                      <p className="text-[10px] text-muted-foreground">Assigned equipment or vehicle checks require action.</p>
+                    </div>
+                  </div>
+                </Link>
+              )}
+              {unclassifiedDocs.length > 0 && (
+                <Link
+                  href="/dashboard/vault?status=Unclassified"
+                  className="flex items-start gap-2.5 p-2 bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/15 hover:border-amber-500/30 rounded-xl transition-all cursor-pointer block"
+                  title="Click to view unclassified vault files."
+                >
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block text-amber-600 dark:text-amber-400">{unclassifiedDocs.length} unclassified documents</span>
+                      <p className="text-[10px] text-muted-foreground">Newly uploaded evidence files pending classification.</p>
+                    </div>
+                  </div>
+                </Link>
+              )}
+              {stats.expiredCount === 0 && overdueAssetChecks.length === 0 && unclassifiedDocs.length === 0 && (
+                <p className="text-[10px] text-muted-foreground italic text-center py-6">No critical alerts detected in your workspace.</p>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* 5. Modals and Quick-Upload dialogs */}
@@ -2074,6 +2818,330 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Insight Popover Tooltip */}
+      {hoveredInsight && (
+        <div
+          style={getPopoverStyle(hoveredInsight)}
+          className="z-50 bg-card/95 backdrop-blur-md border border-indigo-500/30 rounded-xl p-4 shadow-2xl space-y-3 pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95 text-left"
+        >
+          <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
+            <span className="text-[10px] font-black text-foreground uppercase tracking-widest">{hoveredInsight.title}</span>
+            {hoveredInsight.countLabel && (
+              <span className="text-[9px] font-bold text-muted-foreground uppercase">{hoveredInsight.countLabel}</span>
+            )}
+          </div>
+          <p className="text-[10.5px] text-muted-foreground leading-relaxed">{hoveredInsight.explanation}</p>
+          {hoveredInsight.statusBreakdown && (
+            <div className="space-y-1 text-[9.5px] font-bold border-t border-border/40 pt-2">
+              {hoveredInsight.statusBreakdown.map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                    <span className={`w-1.5 h-1.5 rounded-full ${item.color}`} />
+                    {item.label}
+                  </span>
+                  <span className="text-foreground">{item.count}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {hoveredInsight.records && hoveredInsight.records.length > 0 && (
+            <div className="space-y-1.5 border-t border-border/40 pt-2">
+              <span className="text-[8px] font-black text-muted-foreground uppercase tracking-widest block">Needs Attention</span>
+              <div className="space-y-1 max-h-24 overflow-y-auto no-scrollbar">
+                {hoveredInsight.records.slice(0, 3).map((rec, idx) => (
+                  <div key={idx} className="flex justify-between items-center text-[9px] p-1 bg-muted/30 border border-border/40 rounded-lg">
+                    <span className="font-extrabold text-foreground truncate max-w-[150px]" title={rec.name}>{rec.name}</span>
+                    <span className="text-muted-foreground text-[8px] truncate">{rec.info}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {hoveredTrendPoint && (
+        <div
+          style={getTrendTooltipStyle(hoveredTrendPoint)}
+          className="z-50 bg-card/95 backdrop-blur-md border border-indigo-500/30 rounded-xl p-3 shadow-xl pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95 text-left"
+        >
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-[10px] font-black text-foreground uppercase tracking-widest">{hoveredTrendPoint.label}</span>
+            <span className="text-[9px] font-bold text-indigo-500">{hoveredTrendPoint.source}</span>
+          </div>
+          <div className="flex items-baseline gap-1 mt-1">
+            <span className="text-xl font-black text-foreground">{hoveredTrendPoint.score}%</span>
+            <span className="text-[9px] text-muted-foreground font-semibold">readiness</span>
+          </div>
+        </div>
+      )}
+
+      {/* Insight Drawer */}
+      {activeInsightDrawer && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex justify-end animate-in fade-in duration-200">
+          <div className="absolute inset-0 cursor-pointer" onClick={() => setActiveInsightDrawer(null)} />
+          <div className="relative w-full max-w-md bg-card/95 backdrop-blur-md border-l border-border/80 h-full p-6 shadow-2xl flex flex-col justify-between animate-in slide-in-from-right duration-300 text-left">
+            <div className="space-y-6 overflow-y-auto no-scrollbar flex-1 pb-6">
+              <div className="flex items-start justify-between border-b border-border/60 pb-4">
+                <div>
+                  <h3 className="text-base font-black text-foreground uppercase tracking-wider">{activeInsightDrawer.title}</h3>
+                  <p className="text-xs text-muted-foreground mt-1">{activeInsightDrawer.explanation}</p>
+                </div>
+                <button
+                  onClick={() => setActiveInsightDrawer(null)}
+                  className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="bg-muted/30 border border-border/50 rounded-2xl p-4 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">{activeInsightDrawer.countLabel || 'Current Posture'}</span>
+                  <span className="text-3xl font-black block text-foreground mt-1">{activeInsightDrawer.count}</span>
+                </div>
+                {activeInsightDrawer.statusBreakdown && (
+                  <div className="space-y-1.5 text-[10px] font-bold">
+                    {activeInsightDrawer.statusBreakdown.map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${item.color}`} />
+                        <span className="text-muted-foreground">{item.label}:</span>
+                        <span className="text-foreground">{item.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Items Requiring Attention</span>
+                <div className="space-y-2.5 max-h-[40vh] overflow-y-auto pr-1">
+                  {activeInsightDrawer.records && activeInsightDrawer.records.length > 0 ? (
+                    activeInsightDrawer.records.map((rec, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-3 bg-muted/20 border border-border/60 hover:border-indigo-500/30 rounded-xl transition-all"
+                      >
+                        <div className="min-w-0 flex-1 pr-3">
+                          <span className="font-extrabold text-xs block text-foreground truncate">{rec.name}</span>
+                          <span className="text-[10px] text-muted-foreground block truncate mt-0.5">{rec.info}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {rec.status && (
+                            <span className={`px-1.5 py-0.5 text-[8px] font-black rounded-md border ${
+                              rec.status === 'RED' ? 'bg-rose-500/10 border-rose-500/20 text-rose-500' :
+                              rec.status === 'AMBER' ? 'bg-amber-500/10 border-amber-500/20 text-amber-500' :
+                              'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
+                            }`}>
+                              {rec.status}
+                            </span>
+                          )}
+                          <Link
+                            href={rec.link}
+                            className="p-1 bg-muted hover:bg-indigo-500/10 text-muted-foreground hover:text-indigo-500 rounded-lg transition-colors"
+                            onClick={() => setActiveInsightDrawer(null)}
+                          >
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </Link>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 bg-muted/10 border border-dashed border-border rounded-xl">
+                      <p className="text-xs text-muted-foreground italic">No pending action items found.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {activeInsightDrawer.link && (
+              <div className="border-t border-border/60 pt-4 mt-auto">
+                <Link
+                  href={activeInsightDrawer.link}
+                  onClick={() => setActiveInsightDrawer(null)}
+                  className="w-full py-3 bg-indigo-650 hover:bg-indigo-750 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/10 transition-all"
+                >
+                  {activeInsightDrawer.linkLabel || 'Open Module'}
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Layout Customization Modal */}
+      {isCustomizationOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-card w-full max-w-lg border border-border rounded-2xl p-6 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto flex flex-col justify-between text-left">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                <div className="flex items-center gap-2">
+                  <Settings className="w-4 h-4 text-indigo-500" />
+                  <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider">Customize Dashboard Layout</h3>
+                </div>
+                <button
+                  onClick={() => setIsCustomizationOpen(false)}
+                  className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* KPI Cards Configuration */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Top KPI Cards (Show & Reorder)</span>
+                <div className="space-y-1.5 border border-border/60 rounded-xl p-3 bg-muted/10 max-h-56 overflow-y-auto">
+                  {modalCustomization.kpiOrder.map((kpiId, index) => {
+                    const isVisible = modalCustomization.visibleKpis.includes(kpiId);
+                    const label = kpiId === 'health' ? 'Compliance Health' :
+                                  kpiId === 'requirements' ? 'Framework Requirements' :
+                                  kpiId === 'evidence' ? 'Evidence Vault Coverage' :
+                                  kpiId === 'training' ? 'Personnel Competency Training' :
+                                  kpiId === 'tasks' ? 'Open Tasks / Gaps' :
+                                  kpiId === 'asset' ? 'Asset Assurance' : kpiId;
+                    return (
+                      <div key={kpiId} className="flex items-center justify-between p-2 bg-card border border-border/60 rounded-lg text-xs font-semibold">
+                        <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={isVisible}
+                            onChange={(e) => {
+                              const newVisible = e.target.checked
+                                ? [...modalCustomization.visibleKpis, kpiId]
+                                : modalCustomization.visibleKpis.filter(id => id !== kpiId);
+                              setModalCustomization({ ...modalCustomization, visibleKpis: newVisible });
+                            }}
+                            className="rounded border-border focus:ring-indigo-500"
+                          />
+                          <span className={isVisible ? 'text-foreground font-bold' : 'text-muted-foreground line-through'}>{label}</span>
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <button
+                            disabled={index === 0}
+                            onClick={() => {
+                              const newOrder = moveKpi(index, -1, modalCustomization.kpiOrder);
+                              setModalCustomization({ ...modalCustomization, kpiOrder: newOrder });
+                            }}
+                            className="p-1 bg-muted hover:bg-muted-foreground/10 disabled:opacity-40 rounded text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+                          >
+                            ▲
+                          </button>
+                          <button
+                            disabled={index === modalCustomization.kpiOrder.length - 1}
+                            onClick={() => {
+                              const newOrder = moveKpi(index, 1, modalCustomization.kpiOrder);
+                              setModalCustomization({ ...modalCustomization, kpiOrder: newOrder });
+                            }}
+                            className="p-1 bg-muted hover:bg-muted-foreground/10 disabled:opacity-40 rounded text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+                          >
+                            ▼
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Lower Panels Configuration */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Visible Lower Panels</span>
+                <div className="grid grid-cols-2 gap-2 border border-border/60 rounded-xl p-3 bg-muted/10">
+                  {[
+                    { id: 'trend', label: 'Readiness Snapshot' },
+                    { id: 'statusDonut', label: 'Requirement Donut' },
+                    { id: 'readinessGauge', label: 'Readiness Dial' },
+                    { id: 'trainingRing', label: 'Training Ring' },
+                    { id: 'assetCategory', label: 'Asset Categories' },
+                    { id: 'riskGaps', label: 'Risk Level Areas' },
+                    { id: 'alerts', label: 'Workspace Alerts' }
+                  ].map(panel => {
+                    const isVisible = modalCustomization.visiblePanels.includes(panel.id);
+                    return (
+                      <label key={panel.id} className="flex items-center gap-2 p-2 bg-card border border-border/60 rounded-lg text-xs font-semibold cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={isVisible}
+                          onChange={(e) => {
+                            const newVisible = e.target.checked
+                              ? [...modalCustomization.visiblePanels, panel.id]
+                              : modalCustomization.visiblePanels.filter(id => id !== panel.id);
+                            setModalCustomization({ ...modalCustomization, visiblePanels: newVisible });
+                          }}
+                          className="rounded border-border focus:ring-indigo-500"
+                        />
+                        <span className={isVisible ? 'text-foreground' : 'text-muted-foreground'}>{panel.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Defaults Configuration */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Default View Mode</label>
+                  <select
+                    value={modalCustomization.defaultViewMode}
+                    onChange={(e) => setModalCustomization({ ...modalCustomization, defaultViewMode: e.target.value as 'system' | 'list' })}
+                    className="w-full px-3 py-2 bg-muted border border-border focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
+                  >
+                    <option value="system">System graphical map</option>
+                    <option value="list">Module tables list</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Default Right Rail Tab</label>
+                  <select
+                    value={modalCustomization.defaultRailTab}
+                    onChange={(e) => setModalCustomization({ ...modalCustomization, defaultRailTab: e.target.value as 'tasks' | 'activity' | 'suggestions' })}
+                    className="w-full px-3 py-2 bg-muted border border-border focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
+                  >
+                    <option value="tasks">Tasks pending list</option>
+                    <option value="activity">Recent workspace activity</option>
+                    <option value="suggestions">Smart suggestions</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-border/60 pt-4 mt-6 flex justify-between items-center gap-3">
+              <button
+                onClick={() => {
+                  const defaultVal = {
+                    visibleKpis: ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
+                    kpiOrder: ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
+                    visiblePanels: ['trend', 'statusDonut', 'readinessGauge', 'trainingRing', 'assetCategory', 'riskGaps', 'alerts'],
+                    defaultViewMode: 'system' as const,
+                    defaultRailTab: 'tasks' as const
+                  };
+                  setModalCustomization(defaultVal);
+                }}
+                className="px-4 py-2 border border-border rounded-xl text-xs font-bold text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+              >
+                Reset to Defaults
+              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setIsCustomizationOpen(false)}
+                  className="px-4 py-2 border border-border rounded-xl text-xs font-bold text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleSaveCustomization(modalCustomization)}
+                  className="px-4 py-2 bg-indigo-650 hover:bg-indigo-750 text-white font-bold text-xs rounded-xl cursor-pointer transition-all shadow-md shadow-indigo-600/10"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Action Detail Drawer */}
       <ActionDetailDrawer
         action={currentSelectedAction}
@@ -2090,6 +3158,8 @@ export default function DashboardPage() {
         onOpenDocument={getDocumentSignedUrl}
         onFindDuplicates={findPossibleDuplicateDocuments}
       />
+
+      <InlineToast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }

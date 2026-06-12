@@ -441,6 +441,11 @@ export default function RequirementsPage() {
       const idParam = params.get('id');
       const actionParam = params.get('action');
       const filterParam = params.get('filter');
+      const riskParam = params.get('risk');
+
+      if (riskParam && ['Critical', 'High', 'Medium', 'Low'].includes(riskParam)) {
+        setRiskFilter(riskParam);
+      }
       if (filterParam === 'actions' || filterParam === 'due-week') {
         setRequirementView('actions');
         setRadarFilter(filterParam === 'due-week' ? 'due-week' : 'All');
@@ -448,8 +453,8 @@ export default function RequirementsPage() {
         setRequirementView('active');
         setRadarFilter(filterParam);
       }
-      if (statusParam) {
-        setSelectedStatus(statusParam as any);
+      if (statusParam && ['Attention', 'GREEN', 'AMBER', 'RED', 'GREY'].includes(statusParam)) {
+        setSelectedStatus(statusParam as 'Attention' | RequirementStatus);
       }
       if (categoryParam) {
         setSelectedCategory(categoryParam);

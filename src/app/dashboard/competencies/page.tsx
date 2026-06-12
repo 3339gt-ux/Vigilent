@@ -574,6 +574,15 @@ export default function CompetencyMatrixPage() {
       const filterParam = params.get('filter');
       const personId = params.get('person') || params.get('id');
       const competencyId = params.get('competency');
+      const statusParam = params.get('status');
+
+      if (statusParam) {
+        const normalizedStatus = statusParam.toLowerCase();
+        if (normalizedStatus === 'expired') setStatusFilter('Expired');
+        else if (normalizedStatus === 'missing') setStatusFilter('Missing');
+        else if (normalizedStatus === 'expiring' || normalizedStatus === 'expiring soon') setStatusFilter('Expiring Soon');
+        else if (normalizedStatus === 'valid') setStatusFilter('Valid');
+      }
       
       if (personId && activePeople.length > 0) {
         const person = activePeople.find(p => p.id === personId);

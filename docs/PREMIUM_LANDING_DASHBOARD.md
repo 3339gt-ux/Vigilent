@@ -49,17 +49,17 @@ An interactive interactive map visualizing the Vygilence Core compliance status.
 ### Right-Side Live Intelligence Rail
 Provides continuous context-aware insights and shortcuts:
 1. **Compliance Snapshot**: A premium horizontal split panel featuring:
-   - **Left**: A thick semi-circular speedometer gauge arc mapped to a colorful multi-stop gradient (red -> orange -> emerald -> indigo) indicating the overall compliance score with centered text value and trend.
-   - **Right**: Aligning legends representing Compliant, In Progress, At Risk, and Non-Compliant with live counts.
+   - **Left**: A thick semi-circular speedometer gauge arc mapped to a colorful multi-stop gradient (red -> orange -> emerald -> indigo) indicating the current readiness score.
+   - **Right**: Status legends representing valid, due soon, and needs-attention records with live counts.
 2. **Due & Overdue**: Combined feed of overdue framework requirements, upcoming actions, and expired asset checks.
 3. **Recent Activity**: Displays non-restricted workspace audit logs for transparency. Owner/Admin restrictions are strictly respected.
 4. **Expiring Soon**: Aggregated list of evidence or competencies expiring within the next 30 days.
 5. **Smart Insights**: Suggests focus areas based on data (e.g. classification of raw files or linking empty matrices).
 
 ### Lower Dashboard Panels
-1. **Compliance Trend**: A smooth line chart with grid lines and a glowing indigo fill gradient underneath representing compliance trajectory. Shows month-by-month points (Jan - Jun) with a floating bubble for the current month.
-2. **Requirement Status**: A segmented SVG donut chart mapping the breakdown of compliant vs in progress vs at risk vs non-compliant requirements with counts and percentages.
-3. **Audit Readiness**: A speedometer gauge displaying the readiness percentage with details on high-risk and medium-risk issues below.
+1. **Readiness Snapshot**: Displays the current calculated readiness score. Historical trend lines are intentionally not shown until a persisted historical dataset exists.
+2. **Requirement Status**: A segmented SVG donut chart mapping the calculated GREEN, AMBER, RED, and GREY requirement states with counts and percentages.
+3. **Readiness**: A speedometer gauge displaying the readiness percentage with needs-attention and due-soon counts below.
 4. **Training Completion**: Concentric progress ring mapping competency completion with details on completed vs overdue staff competency items.
 
 ### Tier 2 Lower Lists Row
@@ -98,7 +98,41 @@ All metrics leverage the existing canonical calculators inside `AppContext` to a
 
 ---
 
-## 4. Accessibility (a11y)
+## 4. Interactive Intelligence Layer & Customization
+
+The dashboard incorporates a live interactive intelligence layer enabling deep inspection and workspace personalization:
+
+### Hover Popovers & Tooltips
+- **Insight Popovers**: Triggered when hovering or focusing the six top KPI cards and the central command orb. Asset category bars provide direct filtered links and native hover labels.
+- **Readiness Point Tooltip**: Hovering over the current readiness point displays the live calculated score and its source.
+- **Donut Chart Segment Hover**: Displays calculated GREEN, AMBER, RED, and GREY requirement counts and supports filtered click-through.
+
+### Reusable Insight Detail Drawer
+- Triggered when clicking a satellite node or any of the Top KPI cards.
+- Slides in from the right to present a comprehensive inspection view of the selected system module.
+- Displays a status breakdown, the metrics context value, and a list of associated records needing attention.
+- Clicking any record inside the drawer navigates directly to that specific item's details.
+- Includes a primary action button at the bottom to navigate directly to the filtered module view.
+
+### Dashboard Customization Panel
+- Triggered by clicking the **"Customize"** button in the dashboard controls.
+- Opens an overlay dialog permitting users to:
+  - Toggle visibility of individual Top KPI cards.
+  - Reorder the Top KPI cards using visual up/down sorting controls.
+  - Toggle visibility of lower widgets and panels (Trend, Donut Chart, Readiness, Training, Asset Health, Risk Gaps, Alerts).
+  - Configure the default layout view mode (`system` graphical vs `list` module overview) and the default active Live Rail tab (`tasks`, `activity`, `suggestions`).
+- Customization preferences contain display settings only and are persisted to `localStorage` under a key scoped by the active user and organisation (`vygilence_dashboard_customization_${userId}_${orgId}`). This is a convenience preference, not a security boundary.
+
+### Filter & Drill-down Parameterized Routing
+All navigation links from popovers, donut segments, risk gap rows, alert items, and drawer CTA buttons pass detailed query parameters to direct the user to pre-filtered lists:
+- **Evidence Vault**: Evaluates query parameters for `status` (`Expired`, `Expiring Soon`, `Unclassified`), `link` / `linkFilter` (`Unlinked Only`, `Linked Only`), and `category`.
+- **Competency Matrix**: Evaluates supported `status` query parameters to pre-filter staff records (`Expired`, `Missing`, `Expiring Soon`, `Valid`) and ignores unsupported values.
+- **Asset Matrix**: Evaluates supported `status` (`Expired`, `Missing`, `Expiring Soon`, `Compliant`) and valid `category` parameters.
+- **Requirements**: Evaluates supported `status` (`Attention`, `RED`, `AMBER`, `GREEN`, `GREY`), `filter` (`actions`, `due-week`), and `risk` (`Critical`, `High`, `Medium`, `Low`) values.
+
+---
+
+## 5. Accessibility (a11y)
 
 - All clickable elements are fully keyboard focusable and support native `<button>` or `<Link>` semantics.
 - Visual focus outlines are provided for keyboard-navigating users.
