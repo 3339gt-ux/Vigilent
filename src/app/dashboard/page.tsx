@@ -105,41 +105,101 @@ export default function DashboardPage() {
     kpiOrder: string[];
     visiblePanels: string[];
     defaultViewMode: 'system' | 'list';
-    defaultRailTab: 'tasks' | 'activity' | 'suggestions';
+    defaultRailTab: 'tasks' | 'activity' | 'suggestions' | 'expiring';
+    density: 'comfortable' | 'compact' | 'executive';
+    heroStyle: 'map' | 'core' | 'list';
+    heroDetailLevel: 'minimal' | 'balanced' | 'full';
+    visibleRightRailSections: string[];
+    dataWindow: 'snapshot' | '7days' | '30days' | '90days';
+    motionPreference: 'standard' | 'reduced';
   }>(() => {
-    if (typeof window === 'undefined') return {
+    const defaultSettings = {
       visibleKpis: ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
       kpiOrder: ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
       visiblePanels: ['trend', 'statusDonut', 'readinessGauge', 'trainingRing', 'assetCategory', 'riskGaps', 'alerts'],
-      defaultViewMode: 'system',
-      defaultRailTab: 'tasks'
+      defaultViewMode: 'system' as const,
+      defaultRailTab: 'tasks' as const,
+      density: 'comfortable' as const,
+      heroStyle: 'map' as const,
+      heroDetailLevel: 'balanced' as const,
+      visibleRightRailSections: ['snapshot', 'tasks', 'activity', 'suggestions', 'expiring'],
+      dataWindow: 'snapshot' as const,
+      motionPreference: 'standard' as const
     };
+    if (typeof window === 'undefined') return defaultSettings;
     try {
       const key = `vygilence_dashboard_customization_${user?.id || 'anon'}_${organization?.id || 'default'}`;
       const stored = localStorage.getItem(key);
       if (stored) {
         const parsed = JSON.parse(stored);
         return {
-          visibleKpis: parsed.visibleKpis || ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
-          kpiOrder: parsed.kpiOrder || ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
-          visiblePanels: parsed.visiblePanels || ['trend', 'statusDonut', 'readinessGauge', 'trainingRing', 'assetCategory', 'riskGaps', 'alerts'],
-          defaultViewMode: parsed.defaultViewMode || 'system',
-          defaultRailTab: parsed.defaultRailTab || 'tasks'
+          visibleKpis: parsed.visibleKpis || defaultSettings.visibleKpis,
+          kpiOrder: parsed.kpiOrder || defaultSettings.kpiOrder,
+          visiblePanels: parsed.visiblePanels || defaultSettings.visiblePanels,
+          defaultViewMode: parsed.defaultViewMode || defaultSettings.defaultViewMode,
+          defaultRailTab: parsed.defaultRailTab || defaultSettings.defaultRailTab,
+          density: parsed.density || defaultSettings.density,
+          heroStyle: parsed.heroStyle || defaultSettings.heroStyle,
+          heroDetailLevel: parsed.heroDetailLevel || defaultSettings.heroDetailLevel,
+          visibleRightRailSections: parsed.visibleRightRailSections || defaultSettings.visibleRightRailSections,
+          dataWindow: parsed.dataWindow || defaultSettings.dataWindow,
+          motionPreference: parsed.motionPreference || defaultSettings.motionPreference
         };
       }
     } catch {}
-    return {
-      visibleKpis: ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
-      kpiOrder: ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
-      visiblePanels: ['trend', 'statusDonut', 'readinessGauge', 'trainingRing', 'assetCategory', 'riskGaps', 'alerts'],
-      defaultViewMode: 'system',
-      defaultRailTab: 'tasks'
-    };
+    return defaultSettings;
   });
 
-  const [viewMode, setViewMode] = useState<ViewMode>(customization.defaultViewMode);
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    customization.heroStyle === 'list' ? 'list' : customization.defaultViewMode
+  );
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
-  const [activeRailTab, setActiveRailTab] = useState<'tasks' | 'activity' | 'suggestions'>(customization.defaultRailTab);
+  const [activeRailTab, setActiveRailTab] = useState<'tasks' | 'activity' | 'suggestions' | 'expiring'>(
+    customization.defaultRailTab
+  );
+  const [prevCustomization, setPrevCustomization] = useState<typeof customization | null>(null);
+  const [clickedItemId, setClickedItemId] = useState<string | null>(null);
+
+  const handleItemClick = (id: string, action?: () => void) => {
+    setClickedItemId(id);
+    setTimeout(() => setClickedItemId(null), 150);
+    if (action) action();
+  };
+
+  const densityStyles = useMemo(() => {
+    return {
+      comfortable: {
+        spacing: 'space-y-8',
+        cardPadding: 'p-6',
+        gridGap: 'gap-6',
+        kpiPadding: 'p-4.5',
+        headingSize: 'text-2xl',
+        subheadingSize: 'text-xs',
+        panelSpacing: 'space-y-5',
+        outerGridGap: 'gap-6'
+      },
+      compact: {
+        spacing: 'space-y-4',
+        cardPadding: 'p-4',
+        gridGap: 'gap-4',
+        kpiPadding: 'p-3',
+        headingSize: 'text-xl',
+        subheadingSize: 'text-[11px]',
+        panelSpacing: 'space-y-3',
+        outerGridGap: 'gap-4'
+      },
+      executive: {
+        spacing: 'space-y-3',
+        cardPadding: 'p-3',
+        gridGap: 'gap-3',
+        kpiPadding: 'p-2.5',
+        headingSize: 'text-lg',
+        subheadingSize: 'text-[10px]',
+        panelSpacing: 'space-y-2',
+        outerGridGap: 'gap-3'
+      }
+    }[customization.density || 'comfortable'];
+  }, [customization.density]);
 
   // Form states - Quick Evidence Upload
   const [uploadTitle, setUploadTitle] = useState('');
@@ -344,7 +404,11 @@ export default function DashboardPage() {
       r.setDate(r.getDate() + days);
       return r;
     };
-    const day30 = addDays(today, 30);
+    const daysLimit =
+      customization.dataWindow === '7days' ? 7 :
+      customization.dataWindow === '90days' ? 90 :
+      customization.dataWindow === 'snapshot' ? 0 : 30;
+    const limitDate = addDays(today, daysLimit);
     const items: RadarItem[] = [];
 
     frameworkRequirements.forEach(req => {
@@ -408,10 +472,10 @@ export default function DashboardPage() {
     return items
       .filter(item => {
         const d = new Date(item.dueDate);
-        return d >= today && d <= day30;
+        return d >= today && d <= limitDate;
       })
       .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-  }, [frameworkRequirements, documents, competencyRecords, competencyTypes, people, actions, today]);
+  }, [frameworkRequirements, documents, competencyRecords, competencyTypes, people, actions, today, customization.dataWindow]);
 
   // Smart suggestions
   const smartSuggestions = useMemo(() => {
@@ -474,6 +538,104 @@ export default function DashboardPage() {
       return dateA - dateB;
     });
   }, [overdueAndUpcoming, radarBuckets]);
+
+  // Helper for drawing SVG arc paths
+  const describeArc = useCallback((x: number, y: number, radius: number, startAngle: number, endAngle: number) => {
+    const polarToCartesian = (centerX: number, centerY: number, radiusVal: number, angleInDegrees: number) => {
+      const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180.0;
+      return {
+        x: centerX + radiusVal * Math.cos(angleInRadians),
+        y: centerY + radiusVal * Math.sin(angleInRadians)
+      };
+    };
+
+    const start = polarToCartesian(x, y, radius, endAngle);
+    const end = polarToCartesian(x, y, radius, startAngle);
+    const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+    return [
+      "M", start.x, start.y,
+      "A", radius, radius, 0, largeArcFlag, 0, end.x, end.y
+    ].join(" ");
+  }, []);
+
+  const getReadinessLabel = useCallback((score: number | null) => {
+    if (score === null) return 'N/A';
+    if (score >= 90) return 'Excellent';
+    if (score >= 75) return 'Good';
+    if (score >= 50) return 'Fair';
+    if (score >= 35) return 'Needs Attention';
+    return 'Critical';
+  }, []);
+
+  const readinessLabel = useMemo(() => getReadinessLabel(readinessScore), [readinessScore, getReadinessLabel]);
+  const readinessLabelColorClass = useMemo(() => {
+    if (readinessScore === null) return 'fill-muted-foreground';
+    if (readinessScore >= 90) return 'fill-emerald-500';
+    if (readinessScore >= 75) return 'fill-indigo-500 dark:fill-indigo-400';
+    if (readinessScore >= 50) return 'fill-amber-500';
+    return 'fill-rose-500';
+  }, [readinessScore]);
+
+  const segmentsData = useMemo(() => {
+    const total = stats.compliantCount + stats.expiringSoonCount + stats.expiredCount + greyRequirementCount;
+    if (total === 0) {
+      return [
+        { label: 'Not Assessed', count: 0, pct: 1.0, color: 'stroke-zinc-500', id: 'grey' }
+      ];
+    }
+    return [
+      { label: 'Compliant', count: stats.compliantCount, pct: stats.compliantCount / total, color: 'stroke-emerald-500', id: 'green' },
+      { label: 'At Risk', count: stats.expiringSoonCount, pct: stats.expiringSoonCount / total, color: 'stroke-amber-500', id: 'amber' },
+      { label: 'Needs Attention', count: stats.expiredCount, pct: stats.expiredCount / total, color: 'stroke-rose-500', id: 'red' },
+      { label: 'Not Assessed', count: greyRequirementCount, pct: greyRequirementCount / total, color: 'stroke-zinc-500/80 dark:stroke-zinc-700/80', id: 'grey' }
+    ].filter(s => s.count > 0);
+  }, [stats, greyRequirementCount]);
+
+  const segmentedRingPaths = useMemo(() => {
+    const numSegments = segmentsData.length;
+    if (numSegments === 0) return [];
+    
+    const gapDegrees = numSegments === 1 ? 0 : 4;
+    const totalGapDegrees = numSegments * gapDegrees;
+    const availableDegrees = 360 - totalGapDegrees;
+    
+    let currentAngle = 0;
+    
+    return segmentsData.map((seg) => {
+      const segmentDegrees = seg.pct * availableDegrees;
+      const startAngle = currentAngle;
+      const endAngle = currentAngle + segmentDegrees;
+      
+      // Update currentAngle for next iteration, including the gap
+      currentAngle = endAngle + gapDegrees;
+      
+      const d = describeArc(400, 200, 52.5, startAngle, endAngle);
+      return {
+        ...seg,
+        d
+      };
+    });
+  }, [segmentsData, describeArc]);
+
+  const getNodeStatusTone = useCallback((id: string): 'rose' | 'amber' | 'emerald' | 'indigo' | 'zinc' => {
+    switch (id) {
+      case 'requirements':
+        return stats.expiredCount > 0 ? 'rose' : 'emerald';
+      case 'competencies':
+        const compGaps = competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').length;
+        return compGaps > 0 ? 'amber' : 'emerald';
+      case 'vault':
+        return unclassifiedDocs.length > 0 ? 'amber' : 'indigo';
+      case 'matrix':
+        return overdueAssetChecks.length > 0 ? 'rose' : 'emerald';
+      case 'audit-packs':
+        return auditPacks.length === 0 ? 'amber' : 'emerald';
+      case 'reports':
+        return 'emerald';
+      default:
+        return 'zinc';
+    }
+  }, [stats, competencyRecords, unclassifiedDocs, overdueAssetChecks, auditPacks]);
 
   // Central Map Satellite Nodes configuration
   const satelliteNodes = useMemo(() => {
@@ -783,7 +945,6 @@ export default function DashboardPage() {
   // Customization state
   const [isCustomizationOpen, setIsCustomizationOpen] = useState(false);
 
-  // Insight Popover & Drawer states
   const [hoveredInsight, setHoveredInsight] = useState<{
     id: string;
     title: string;
@@ -794,6 +955,9 @@ export default function DashboardPage() {
     records?: Array<{ name: string; info: string; status?: string; link: string }>;
     link?: string;
     linkLabel?: string;
+    secondaryLink?: string;
+    secondaryLinkLabel?: string;
+    suggestedAction?: string;
     x: number;
     y: number;
   } | null>(null);
@@ -808,6 +972,9 @@ export default function DashboardPage() {
     records: Array<{ name: string; info: string; status?: string; link: string }>;
     link?: string;
     linkLabel?: string;
+    secondaryLink?: string;
+    secondaryLinkLabel?: string;
+    suggestedAction?: string;
   } | null>(null);
 
   const [hoveredTrendPoint, setHoveredTrendPoint] = useState<{
@@ -825,7 +992,7 @@ export default function DashboardPage() {
       case 'health':
         return {
           id: 'health',
-          title: "Compliance Health",
+          title: "Compliance Health Rating",
           explanation: "The workspace readiness rating calculated from active requirements, evidence records, competencies, actions, and asset checks.",
           count: `${readinessScore ?? 0}%`,
           countLabel: "Compliance Score",
@@ -853,78 +1020,118 @@ export default function DashboardPage() {
           linkLabel: "Open Reports Overview"
         };
       case 'requirements':
+        const reqRecords = activeRequirements.filter(r => r.status === 'RED' || r.status === 'AMBER').slice(0, 3).map(r => ({
+          name: r.title,
+          info: `${r.category} | Owner: ${r.owner || 'Unassigned'}`,
+          status: r.status,
+          link: `/dashboard/requirements?id=${r.id}`
+        }));
+        if (reqRecords.length === 0) {
+          reqRecords.push({
+            name: "All requirements current",
+            info: "No overdue goals or missing evidence requirements.",
+            status: "GREEN",
+            link: "/dashboard/requirements"
+          });
+        }
         return {
           id: 'requirements',
           title: "Framework Requirements",
-          explanation: "Active requirements assigned to your workspace. Gaps indicate requirements with missing, expiring, or overdue supporting records.",
+          explanation: `Total active goals: ${activeRequirements.length}. Active requirements mapped to compliance metrics. Gaps represent objectives with expired evidence or overdue reviews.`,
           count: `${stats.compliantCount} / ${stats.activeRequirements}`,
           countLabel: "Compliant Objectives",
           statusBreakdown: [
             { label: "Compliant", count: stats.compliantCount, color: "bg-emerald-500" },
-            { label: "At Risk", count: stats.expiringSoonCount, color: "bg-amber-500" },
-            { label: "Needs Attention", count: stats.expiredCount, color: "bg-rose-500" },
-            { label: "Not Assessed", count: greyRequirementCount, color: "bg-zinc-500" }
+            { label: "At Risk (Amber)", count: stats.expiringSoonCount, color: "bg-amber-500" },
+            { label: "Needs Attention (Red)", count: stats.expiredCount, color: "bg-rose-500" },
+            { label: "Not Assessed (Grey)", count: greyRequirementCount, color: "bg-zinc-500" }
           ],
-          records: frameworkRequirements.filter(r => r.status === 'RED' || r.status === 'AMBER').slice(0, 5).map(r => ({
-            name: r.title,
-            info: `${r.category} | Owner: ${r.owner || 'Unassigned'}`,
-            status: r.status,
-            link: `/dashboard/requirements?id=${r.id}`
-          })),
+          records: reqRecords,
           link: "/dashboard/requirements?status=Attention",
           linkLabel: "View Attention Requirements"
         };
       case 'evidence':
       case 'vault':
+        const expiredDocsCount = documents.filter(d => d.expiry_date && new Date(d.expiry_date) < today).length;
+        const expiringDocsCount = documents.filter(d => {
+          if (!d.expiry_date) return false;
+          const exp = new Date(d.expiry_date);
+          const limit = new Date(today);
+          limit.setDate(limit.getDate() + 30);
+          return exp >= today && exp <= limit;
+        }).length;
+        const vaultRecords = [
+          ...unclassifiedDocs.slice(0, 2).map(d => ({
+            name: d.title,
+            info: `Unclassified | Category: ${d.category}`,
+            status: "AMBER",
+            link: `/dashboard/vault?id=${d.id}`
+          })),
+          ...documents.filter(d => d.expiry_date && new Date(d.expiry_date as string) < today).slice(0, 2).map(d => ({
+            name: d.title,
+            info: `Expired: ${d.expiry_date}`,
+            status: "RED",
+            link: `/dashboard/vault?id=${d.id}`
+          }))
+        ];
+        if (vaultRecords.length === 0) {
+          vaultRecords.push({
+            name: "Evidence records fully verified",
+            info: "No unclassified or expired files found.",
+            status: "GREEN",
+            link: "/dashboard/vault"
+          });
+        }
         return {
           id: 'vault',
           title: "Evidence Vault Coverage",
-          explanation: "Percentage of uploaded evidence records successfully classified and linked to active requirements.",
+          explanation: `Total documents: ${documents.length}. Shows files with classified tags vs raw incoming uploads. Expired evidence triggers gaps in related objectives.`,
           count: `${classifiedDocsCount} / ${documents.length}`,
           countLabel: "Classified Documents",
           statusBreakdown: [
-            { label: "Classified", count: classifiedDocsCount, color: "bg-indigo-500" },
-            { label: "Unclassified", count: unclassifiedDocs.length, color: "bg-amber-500" }
+            { label: "Classified & Linked", count: classifiedDocsCount, color: "bg-indigo-500" },
+            { label: "Unclassified Raw Uploads", count: unclassifiedDocs.length, color: "bg-amber-500" },
+            { label: "Expired Evidence Documents", count: expiredDocsCount, color: "bg-rose-500" },
+            { label: "Expiring Within 30 Days", count: expiringDocsCount, color: "bg-amber-400" }
           ],
-          records: [
-            ...unclassifiedDocs.slice(0, 3).map(d => ({
-              name: d.title,
-              info: `Unclassified | Category: ${d.category}`,
-              status: "AMBER",
-              link: `/dashboard/vault?id=${d.id}`
-            })),
-            ...documents.filter(d => d.expiry_date && new Date(d.expiry_date as string) < today).slice(0, 2).map(d => ({
-              name: d.title,
-              info: `Expired: ${d.expiry_date}`,
-              status: "RED",
-              link: `/dashboard/vault?id=${d.id}`
-            }))
-          ],
+          records: vaultRecords,
           link: "/dashboard/vault?status=Unclassified",
           linkLabel: "Open Unclassified Vault Records"
         };
       case 'training':
       case 'competencies':
+        const compExpired = competencyRecords.filter(r => r.status === 'Expired').length;
+        const compMissing = competencyRecords.filter(r => r.status === 'Missing').length;
+        const compRecords = competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').slice(0, 3).map(r => {
+          const p = people.find(item => item.id === r.person_id);
+          const ct = competencyTypes.find(item => item.id === r.competency_type_id);
+          return {
+            name: p?.display_name || 'Teammate',
+            info: `${ct?.title || 'Training'} | ${r.status}`,
+            status: r.status === 'Expired' ? 'RED' : 'AMBER',
+            link: `/dashboard/competencies?person=${p?.id}&competency=${ct?.id}`
+          };
+        });
+        if (compRecords.length === 0) {
+          compRecords.push({
+            name: "Personnel training up-to-date",
+            info: "All team members hold valid competency certificates.",
+            status: "GREEN",
+            link: "/dashboard/competencies"
+          });
+        }
         return {
           id: 'competencies',
-          title: "Personnel Competency Training",
-          explanation: "Summarises current competency records against the skills and training assigned to personnel.",
+          title: "Teammate Training Matrix",
+          explanation: `Total personnel tracked: ${people.length}. Measures compliance rate of training, licenses, and professional requirements assigned to team members.`,
           count: `${competencySummary.compliancePercent}%`,
           countLabel: "Training Compliance",
           statusBreakdown: [
-            { label: "Valid", count: competencySummary.valid, color: "bg-emerald-500" },
-            { label: "Expired/Missing", count: competencySummary.expired, color: "bg-rose-500" }
+            { label: "Valid Qualifications", count: competencySummary.valid, color: "bg-emerald-500" },
+            { label: "Expired Certifications", count: compExpired, color: "bg-rose-500" },
+            { label: "Missing Records", count: compMissing, color: "bg-amber-500" }
           ],
-          records: competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').slice(0, 5).map(r => {
-            const p = people.find(item => item.id === r.person_id);
-            const ct = competencyTypes.find(item => item.id === r.competency_type_id);
-            return {
-              name: p?.display_name || 'Staff member',
-              info: ct?.title || 'Training Requirement',
-              status: r.status === 'Expired' ? 'RED' : 'AMBER',
-              link: `/dashboard/competencies?person=${p?.id}&competency=${ct?.id}`
-            };
-          }),
+          records: compRecords,
           link: "/dashboard/competencies?status=Expired",
           linkLabel: "View Expired Competencies"
         };
@@ -932,15 +1139,15 @@ export default function DashboardPage() {
       case 'actions':
         return {
           id: 'actions',
-          title: "Action Tasks / Gaps",
-          explanation: "Active gap remediation tasks. Overdue actions indicate unresolved risks beyond their target completion dates.",
+          title: "Action Tasks & Remediation",
+          explanation: `Active actions: ${activeActionsCount}. Corrective task items raised during self-audits to close identified framework gaps.`,
           count: activeActionsCount,
-          countLabel: "Open Actions",
+          countLabel: "Open Action Tasks",
           statusBreakdown: [
-            { label: "Overdue", count: overdueActionsCount, color: "bg-rose-500" },
-            { label: "Active", count: activeActionsCount - overdueActionsCount, color: "bg-indigo-500" }
+            { label: "Overdue Actions", count: overdueActionsCount, color: "bg-rose-500" },
+            { label: "Active Actions", count: activeActionsCount - overdueActionsCount, color: "bg-indigo-500" }
           ],
-          records: actions.filter(a => a.status === 'Open' || a.status === 'In Progress').slice(0, 5).map(a => {
+          records: actions.filter(a => a.status === 'Open' || a.status === 'In Progress').slice(0, 3).map(a => {
             const isOver = (a.target_due_date || a.due_date) && new Date(a.target_due_date || a.due_date as string) < today;
             return {
               name: a.title,
@@ -954,49 +1161,85 @@ export default function DashboardPage() {
         };
       case 'asset':
       case 'matrix':
+        const missingAssetChecks = assetMatrixCells.filter(cell => cell.status === 'missing').length;
+        const expiredAssetChecks = assetMatrixCells.filter(cell => cell.status === 'expired' || cell.status === 'overdue').length;
+        const dueSoonAssetChecks = assetMatrixCells.filter(cell => cell.status === 'due_soon').length;
+        const matrixRecords = overdueAssetChecks.slice(0, 3).map(c => ({
+          name: c.requirement.title,
+          info: `Asset Check | Overdue`,
+          status: "RED",
+          link: c.link
+        }));
+        if (matrixRecords.length === 0) {
+          matrixRecords.push({
+            name: "Asset checks current",
+            info: "No overdue maintenance checks or logs.",
+            status: "GREEN",
+            link: "/dashboard/matrix"
+          });
+        }
         return {
           id: 'matrix',
           title: "Asset Assurance Health",
-          explanation: "Vehicles, facility checkups, and safety logs. Gaps indicate checks that have expired or are missing evidence.",
+          explanation: `Total assets: ${assets.length}. Monitors vehicle checks, equipment certifications, and facility maintenance timelines.`,
           count: `${compliantAssetChecks} / ${totalAssetChecks}`,
           countLabel: "Compliant Asset Checks",
           statusBreakdown: [
-            { label: "Compliant", count: compliantAssetChecks, color: "bg-emerald-500" },
-            { label: "Overdue/Expired", count: overdueAssetChecks.length, color: "bg-rose-500" },
-            { label: "Due Soon", count: upcomingAssetChecks.length, color: "bg-amber-500" }
+            { label: "Compliant checks", count: compliantAssetChecks, color: "bg-emerald-500" },
+            { label: "Overdue checks", count: expiredAssetChecks, color: "bg-rose-500" },
+            { label: "Missing check logs", count: missingAssetChecks, color: "bg-rose-500/60" },
+            { label: "Due soon checks", count: dueSoonAssetChecks, color: "bg-amber-500" }
           ],
-          records: overdueAssetChecks.slice(0, 5).map(c => ({
-            name: c.requirement.title,
-            info: `Asset Check | Due: ${c.requirement.next_due_date || 'N/A'}`,
-            status: "RED",
-            link: c.link
-          })),
+          records: matrixRecords,
           link: "/dashboard/matrix?status=Expired",
           linkLabel: "Open Asset Matrix Gaps"
         };
       case 'audit-packs':
+        const draftPacks = auditPacks.filter(p => p.status === 'Draft' || !p.status).length;
+        const readyPacks = auditPacks.filter(p => p.status === 'Ready').length;
+        const sentPacks = auditPacks.filter(p => (p.status as string) === 'Sent' || (p.status as string) === 'Published').length;
+        const packRecords = auditPacks.slice(0, 3).map(p => ({
+          name: p.name,
+          info: `Status: ${p.status || 'Draft'} | Requirements: ${p.requirements?.length || 0}`,
+          status: p.status === 'Ready' ? 'GREEN' : 'AMBER',
+          link: `/dashboard/audit-packs?pack=${p.id}`
+        }));
+        if (packRecords.length === 0) {
+          packRecords.push({
+            name: "No audit packs built",
+            info: "Create a draft package to compile compliance evidence.",
+            status: "AMBER",
+            link: "/dashboard/audit-packs"
+          });
+        }
         return {
           id: 'audit-packs',
           title: "Audit Pack Builder",
-          explanation: "Evidence packages assembled from selected requirements and linked records for review.",
+          explanation: "Evidence packages compiled from selected workspace objectives and linked files to present during audits.",
           count: auditPacks.length,
           countLabel: "Active Packs",
-          records: auditPacks.slice(0, 5).map(p => ({
-            name: p.name,
-            info: `Status: ${p.status || 'Draft'} | Requirements: ${p.requirements?.length || 0}`,
-            status: p.status === 'Ready' ? 'GREEN' : 'AMBER',
-            link: `/dashboard/audit-packs?pack=${p.id}`
-          })),
+          statusBreakdown: [
+            { label: "Draft Packs", count: draftPacks, color: "bg-amber-500" },
+            { label: "Ready to Present", count: readyPacks, color: "bg-emerald-500" },
+            { label: "Shared / Sent Packs", count: sentPacks, color: "bg-indigo-500" }
+          ],
+          records: packRecords,
           link: "/dashboard/audit-packs",
           linkLabel: "Open Pack Builder"
         };
       case 'reports':
         return {
           id: 'reports',
-          title: "Analytics & Reports",
-          explanation: "Available reporting views generated from current workspace records.",
+          title: "Workspace Performance Overview",
+          explanation: "Analytics reports and compliance histories automatically generated from user inputs and vault evidence.",
           count: reportViewCount,
           countLabel: "Available Views",
+          statusBreakdown: [
+            { label: "Executive summary", count: 1, color: "bg-emerald-500" },
+            { label: "Framework audit check", count: 1, color: "bg-emerald-500" },
+            { label: "Training matrix check", count: 1, color: "bg-emerald-500" },
+            { label: "Asset maintenance history", count: 1, color: "bg-emerald-500" }
+          ],
           records: [
             { name: "Executive Readiness Overview", info: "Aggregated health index across framework groups", status: "GREEN", link: "/dashboard/reports?tab=executive" },
             { name: "Framework Requirements breakdown", info: "Detailed checklist completion charts", status: "GREEN", link: "/dashboard/reports?tab=requirements" },
@@ -1007,29 +1250,44 @@ export default function DashboardPage() {
           linkLabel: "Open Analytics Hub"
         };
       case 'hub':
+        const compGapsCount = competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').length;
+        const topReasons = [
+          ...(stats.expiredCount > 0 ? [{ name: `${stats.expiredCount} Overdue goals`, info: "Critical framework requirements pending reviews", status: "RED", link: "/dashboard/requirements?status=RED" }] : []),
+          ...(overdueAssetChecks.length > 0 ? [{ name: `${overdueAssetChecks.length} Expired asset checks`, info: "Equipment or vehicle check gaps", status: "RED", link: "/dashboard/matrix?status=Expired" }] : []),
+          ...(compGapsCount > 0 ? [{ name: `${compGapsCount} Training expiries`, info: "Personnel missing active certifications", status: "AMBER", link: "/dashboard/competencies?status=Expired" }] : []),
+          ...(unclassifiedDocs.length > 0 ? [{ name: `${unclassifiedDocs.length} Unlinked documents`, info: "Unclassified evidence in vault", status: "AMBER", link: "/dashboard/vault?status=Unclassified" }] : [])
+        ].slice(0, 3);
+
+        if (topReasons.length === 0) {
+          topReasons.push({ name: "All items current", info: "Workspace is in optimal compliance health.", status: "GREEN", link: "/dashboard/reports" });
+        }
+
         return {
           id: 'hub',
-          title: "Compliance Program Command Centre",
-          explanation: "SaaS Command Centre Hub synchronizing Framework Objectives, Vault Evidence, Teammate Training, and Fleet Assets.",
+          title: "Compliance Core Status",
+          explanation: `Workspace readiness rating is ${readinessScore ?? 0}%. Computed dynamically from Framework Requirements, Evidence Vault coverage, Personnel Training, and Asset assurance logs.`,
           count: `${readinessScore ?? 0}%`,
-          countLabel: "Current readiness",
+          countLabel: "Readiness Rating",
           statusBreakdown: [
-            { label: "Compliant Objectives", count: stats.compliantCount, color: "bg-emerald-500" },
-            { label: "Active Teammates", count: people.length, color: "bg-indigo-500" },
-            { label: "Assured Fleet Assets", count: assets.length, color: "bg-blue-500" }
+            { label: "Overdue Goals", count: stats.expiredCount, color: "bg-rose-500" },
+            { label: "Missing Evidence", count: unclassifiedDocs.length, color: "bg-amber-500" },
+            { label: "Training Gaps", count: compGapsCount, color: "bg-amber-500" },
+            { label: "Asset Gaps", count: overdueAssetChecks.length, color: "bg-rose-500" }
           ],
-          records: [
-            ...(stats.expiredCount > 0 ? [{ name: `${stats.expiredCount} Expired framework goals`, info: "Critical action required", status: "RED", link: "/dashboard/requirements?status=RED" }] : []),
-            ...(overdueAssetChecks.length > 0 ? [{ name: `${overdueAssetChecks.length} Asset checks overdue`, info: "Action required on assets", status: "RED", link: "/dashboard/matrix?status=Expired" }] : []),
-            ...(unclassifiedDocs.length > 0 ? [{ name: `${unclassifiedDocs.length} Unclassified files in vault`, info: "Needs metadata mapping", status: "AMBER", link: "/dashboard/vault?status=Unclassified" }] : [])
-          ],
+          records: topReasons,
           link: "/dashboard/reports?tab=executive",
-          linkLabel: "Open Workspace Analytics"
+          linkLabel: "Open Workspace Reports",
+          secondaryLink: "/dashboard/requirements?status=Attention",
+          secondaryLinkLabel: "View Attention Items",
+          suggestedAction: stats.expiredCount > 0 ? "Review overdue framework goals" :
+                           overdueAssetChecks.length > 0 ? "Log checklist updates in Asset Matrix" :
+                           unclassifiedDocs.length > 0 ? "Classify vault documents" :
+                           "Perform self-audit export"
         };
       default:
         return null;
     }
-  }, [readinessScore, stats, activeActionsCount, frameworkRequirements, overdueAssetChecks, classifiedDocsCount, documents, unclassifiedDocs, competencySummary, competencyRecords, people, competencyTypes, overdueActionsCount, actions, compliantAssetChecks, totalAssetChecks, upcomingAssetChecks, auditPacks, assets, today, greyRequirementCount, reportViewCount]);
+  }, [readinessScore, stats, activeActionsCount, activeRequirements, frameworkRequirements, overdueAssetChecks, classifiedDocsCount, documents, unclassifiedDocs, competencySummary, competencyRecords, people, competencyTypes, overdueActionsCount, actions, compliantAssetChecks, totalAssetChecks, auditPacks, assets, today, greyRequirementCount, reportViewCount, assetMatrixCells]);
 
   const handleMouseEnter = (id: string) => (e: React.SyntheticEvent<HTMLElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -1132,9 +1390,10 @@ export default function DashboardPage() {
   const handleSaveCustomization = (newCustomization: typeof customization) => {
     const key = `vygilence_dashboard_customization_${user?.id || 'anon'}_${organization?.id || 'default'}`;
     try {
+      setPrevCustomization(customization);
       localStorage.setItem(key, JSON.stringify(newCustomization));
       setCustomization(newCustomization);
-      setViewMode(newCustomization.defaultViewMode);
+      setViewMode(newCustomization.heroStyle === 'list' ? 'list' : newCustomization.defaultViewMode);
       setActiveRailTab(newCustomization.defaultRailTab);
       setToast({ type: 'success', message: 'Dashboard layout preferences saved.' });
       setIsCustomizationOpen(false);
@@ -1156,15 +1415,20 @@ export default function DashboardPage() {
     };
   }, [readinessScore]);
 
+  const activeViewMode = customization.heroStyle === 'list' ? 'list' : viewMode;
+  const showPathsAndSatellites = customization.heroStyle === 'map';
+  const detailLevel = customization.heroDetailLevel || 'balanced';
+  const isMotionReduced = customization.motionPreference === 'reduced';
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
+    <div className={`${densityStyles.spacing} animate-in fade-in duration-300`}>
       {/* 1. Header greeting strip */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card/60 backdrop-blur-xs border border-border/80 rounded-2xl p-6 shadow-xs">
+      <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card/60 backdrop-blur-xs border border-border/80 rounded-2xl ${densityStyles.cardPadding} shadow-xs`}>
         <div className="space-y-1">
-          <h1 className="text-2xl font-black tracking-tight" id="dashboard-heading">
+          <h1 className={`${densityStyles.headingSize} font-black tracking-tight`} id="dashboard-heading">
             Welcome back, {user?.full_name?.split(' ')[0] || 'User'}
           </h1>
-          <p className="text-xs text-muted-foreground flex items-center gap-1.5 font-semibold">
+          <p className={`${densityStyles.subheadingSize} text-muted-foreground flex items-center gap-1.5 font-semibold`}>
             <Building2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
             Active workspace: <strong className="text-foreground">{organization?.name}</strong>
           </p>
@@ -1195,7 +1459,7 @@ export default function DashboardPage() {
       )}
 
       {/* 2. Top KPI strip */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className={`grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 ${densityStyles.gridGap}`}>
         {customization.kpiOrder
           .filter(kpiId => customization.visibleKpis.includes(kpiId))
           .map(kpiId => {
@@ -1208,12 +1472,14 @@ export default function DashboardPage() {
                     onMouseLeave={handleMouseLeave}
                     onFocus={handleMouseEnter('health')}
                     onBlur={handleMouseLeave}
-                    onClick={handleClick('health')}
+                    onClick={() => handleItemClick('health', handleClick('health'))}
                     onKeyDown={handleInsightKeyDown('health')}
                     role="button"
                     tabIndex={0}
                     aria-label="Inspect Compliance Health"
-                    className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none"
+                    className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none ${
+                      clickedItemId === 'health' ? 'scale-95 border-indigo-600 bg-indigo-500/10' : ''
+                    }`}
                   >
                     <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Compliance Health</span>
                     <div className="flex items-baseline gap-1.5">
@@ -1231,12 +1497,14 @@ export default function DashboardPage() {
                     onMouseLeave={handleMouseLeave}
                     onFocus={handleMouseEnter('requirements')}
                     onBlur={handleMouseLeave}
-                    onClick={handleClick('requirements')}
+                    onClick={() => handleItemClick('requirements', handleClick('requirements'))}
                     onKeyDown={handleInsightKeyDown('requirements')}
                     role="button"
                     tabIndex={0}
                     aria-label="Inspect Requirements"
-                    className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none"
+                    className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none ${
+                      clickedItemId === 'requirements' ? 'scale-95 border-indigo-600 bg-indigo-500/10' : ''
+                    }`}
                   >
                     <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Requirements</span>
                     <div className="flex items-baseline gap-1">
@@ -1259,12 +1527,14 @@ export default function DashboardPage() {
                     onMouseLeave={handleMouseLeave}
                     onFocus={handleMouseEnter('evidence')}
                     onBlur={handleMouseLeave}
-                    onClick={handleClick('evidence')}
+                    onClick={() => handleItemClick('evidence', handleClick('evidence'))}
                     onKeyDown={handleInsightKeyDown('evidence')}
                     role="button"
                     tabIndex={0}
                     aria-label="Inspect Evidence Coverage"
-                    className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none"
+                    className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none ${
+                      clickedItemId === 'evidence' ? 'scale-95 border-indigo-600 bg-indigo-500/10' : ''
+                    }`}
                   >
                     <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Evidence Coverage</span>
                     <div className="flex items-baseline gap-1">
@@ -1287,12 +1557,14 @@ export default function DashboardPage() {
                     onMouseLeave={handleMouseLeave}
                     onFocus={handleMouseEnter('training')}
                     onBlur={handleMouseLeave}
-                    onClick={handleClick('training')}
+                    onClick={() => handleItemClick('training', handleClick('training'))}
                     onKeyDown={handleInsightKeyDown('training')}
                     role="button"
                     tabIndex={0}
                     aria-label="Inspect Personnel Training"
-                    className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none"
+                    className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none ${
+                      clickedItemId === 'training' ? 'scale-95 border-indigo-600 bg-indigo-500/10' : ''
+                    }`}
                   >
                     <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Personnel Training</span>
                     <div className="flex items-baseline gap-1.5">
@@ -1309,12 +1581,14 @@ export default function DashboardPage() {
                     onMouseLeave={handleMouseLeave}
                     onFocus={handleMouseEnter('tasks')}
                     onBlur={handleMouseLeave}
-                    onClick={handleClick('tasks')}
+                    onClick={() => handleItemClick('tasks', handleClick('tasks'))}
                     onKeyDown={handleInsightKeyDown('tasks')}
                     role="button"
                     tabIndex={0}
                     aria-label="Inspect Open Tasks and Gaps"
-                    className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none"
+                    className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none ${
+                      clickedItemId === 'tasks' ? 'scale-95 border-indigo-600 bg-indigo-500/10' : ''
+                    }`}
                   >
                     <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Open Tasks / Gaps</span>
                     <div className="flex items-baseline gap-1">
@@ -1336,12 +1610,14 @@ export default function DashboardPage() {
                     onMouseLeave={handleMouseLeave}
                     onFocus={handleMouseEnter('asset')}
                     onBlur={handleMouseLeave}
-                    onClick={handleClick('asset')}
+                    onClick={() => handleItemClick('asset', handleClick('asset'))}
                     onKeyDown={handleInsightKeyDown('asset')}
                     role="button"
                     tabIndex={0}
                     aria-label="Inspect Asset Assurance"
-                    className="bg-card border border-border rounded-2xl p-4.5 hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none"
+                    className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none ${
+                      clickedItemId === 'asset' ? 'scale-95 border-indigo-600 bg-indigo-500/10' : ''
+                    }`}
                   >
                     <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Asset Assurance</span>
                     <div className="flex items-baseline gap-1">
@@ -1363,9 +1639,9 @@ export default function DashboardPage() {
       </div>
 
       {/* 3. Core content grid with Sidebar Live Rail */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className={`grid grid-cols-1 lg:grid-cols-4 ${densityStyles.outerGridGap}`}>
         {/* Main Central compliance program map */}
-        <div className="lg:col-span-3 space-y-5">
+        <div className={`lg:col-span-3 ${densityStyles.panelSpacing}`}>
           <div className="bg-card border border-border rounded-xl shadow-xs overflow-hidden">
             {/* Header controls for central overview */}
             <div className="p-4 border-b border-border/60 bg-muted/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -1384,32 +1660,47 @@ export default function DashboardPage() {
                 >
                   <Settings className="w-3.5 h-3.5" /> Customize
                 </button>
-                <div className="flex items-center bg-muted border border-border p-0.5 rounded-lg shrink-0">
-                <button
-                  onClick={() => setViewMode('system')}
-                  className={`px-2.5 py-1 rounded-md text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                    viewMode === 'system' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  aria-label="View graphical system map"
-                >
-                  <Network className="w-3.5 h-3.5" /> System View
-                </button>
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={`px-2.5 py-1 rounded-md text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                    viewMode === 'list' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  aria-label="View list format"
-                >
-                  <List className="w-3.5 h-3.5" /> List View
-                </button>
+                {prevCustomization && (
+                  <button
+                    onClick={() => {
+                      const temp = customization;
+                      handleSaveCustomization(prevCustomization);
+                      setPrevCustomization(temp);
+                      setToast({ type: 'success', message: 'Reverted to previous customization.' });
+                    }}
+                    className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/25 border border-amber-500/30 text-amber-600 dark:text-amber-400 rounded-md text-[10px] font-bold transition-all cursor-pointer"
+                  >
+                    Undo last save
+                  </button>
+                )}
+                {customization.heroStyle !== 'list' && (
+                  <div className="flex items-center bg-muted border border-border p-0.5 rounded-lg shrink-0">
+                    <button
+                      onClick={() => setViewMode('system')}
+                      className={`px-2.5 py-1 rounded-md text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        activeViewMode === 'system' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                      aria-label="View graphical system map"
+                    >
+                      <Network className="w-3.5 h-3.5" /> System View
+                    </button>
+                    <button
+                      onClick={() => setViewMode('list')}
+                      className={`px-2.5 py-1 rounded-md text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        activeViewMode === 'list' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                      aria-label="View list format"
+                    >
+                      <List className="w-3.5 h-3.5" /> List View
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
 
             {/* Central content depending on toggle */}
             <div className="p-5">
-              {viewMode === 'system' ? (
+              {activeViewMode === 'system' ? (
                 /* Upgraded Premium Graphical System Map Layout */
                 <>
                   <div className="w-full max-w-[800px] aspect-[2/1] mx-auto relative select-none hidden md:block">
@@ -1427,7 +1718,7 @@ export default function DashboardPage() {
                         </radialGradient>
                       </defs>
 
-                      <style>{`
+                      <style>{isMotionReduced ? '' : `
                         @keyframes flow-animation {
                           from { stroke-dashoffset: 48; }
                           to { stroke-dashoffset: 0; }
@@ -1442,7 +1733,7 @@ export default function DashboardPage() {
                       <circle cx="400" cy="200" r="120" fill="url(#hub-glow-gradient)" />
 
                       {/* Connecting lines from Core to satellites */}
-                      {satelliteNodes.map(node => {
+                      {showPathsAndSatellites && satelliteNodes.map(node => {
                         const isHovered = hoveredNode === node.id;
                         let pathD = '';
                         if (node.id === 'requirements') pathD = 'M 400 200 L 400 55';
@@ -1452,33 +1743,52 @@ export default function DashboardPage() {
                         else if (node.id === 'vault') pathD = 'M 400 200 L 520 200 L 520 120 L 600 120';
                         else if (node.id === 'audit-packs') pathD = 'M 400 200 L 520 200 L 520 280 L 600 280';
 
+                        const tone = getNodeStatusTone(node.id);
+                        const bgStrokeColor = 
+                          tone === 'rose' ? 'stroke-rose-500/20' :
+                          tone === 'amber' ? 'stroke-amber-500/20' :
+                          tone === 'emerald' ? 'stroke-emerald-500/20' :
+                          tone === 'indigo' ? 'stroke-indigo-500/20' :
+                          'stroke-zinc-500/10';
+
+                        const flowStrokeColor = 
+                          tone === 'rose' ? 'text-rose-500' :
+                          tone === 'amber' ? 'text-amber-500' :
+                          tone === 'emerald' ? 'text-emerald-500' :
+                          tone === 'indigo' ? 'text-indigo-500' :
+                          'text-indigo-500/40';
+
                         return (
                           <g key={node.id}>
                             {/* Background path with thin subtle opacity */}
                             <path
                               d={pathD}
                               fill="none"
-                              className={`transition-all duration-300 stroke-[1.5] ${
-                                isHovered
-                                  ? 'stroke-indigo-500/60'
-                                  : 'stroke-indigo-500/15 dark:stroke-indigo-500/10'
-                              }`}
+                              className={`transition-all duration-300 stroke-[1.5] ${bgStrokeColor}`}
                             />
                             {/* Animated glowing data flow line */}
-                            <path
-                              d={pathD}
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              className="glowing-flow-line opacity-75 text-indigo-500"
-                              style={{ strokeLinecap: 'round' }}
-                            />
+                            {!isMotionReduced && (
+                              <path
+                                d={pathD}
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                className={`glowing-flow-line opacity-75 ${flowStrokeColor}`}
+                                style={{ strokeLinecap: 'round' }}
+                              />
+                            )}
                             {/* Thick glow overlay when node is hovered */}
                             {isHovered && (
                               <path
                                 d={pathD}
                                 fill="none"
-                                className="stroke-indigo-400 opacity-40 stroke-[4] animate-pulse"
+                                className={`opacity-40 stroke-[4] animate-pulse ${
+                                  tone === 'rose' ? 'stroke-rose-400' :
+                                  tone === 'amber' ? 'stroke-amber-400' :
+                                  tone === 'emerald' ? 'stroke-emerald-400' :
+                                  tone === 'indigo' ? 'stroke-indigo-400' :
+                                  'stroke-indigo-400'
+                                }`}
                                 filter="url(#core-glow)"
                                 style={{ strokeLinecap: 'round' }}
                               />
@@ -1492,12 +1802,16 @@ export default function DashboardPage() {
                       <circle cx="400" cy="200" r="54" stroke="rgba(6, 182, 212, 0.25)" strokeWidth="1.5" fill="none" />
 
                       {/* Glowing circuit bends dots */}
-                      <circle cx="280" cy="200" r="2.5" className="fill-indigo-500/70" />
-                      <circle cx="280" cy="120" r="2.5" className="fill-indigo-500/70" />
-                      <circle cx="280" cy="280" r="2.5" className="fill-indigo-500/70" />
-                      <circle cx="520" cy="200" r="2.5" className="fill-indigo-500/70" />
-                      <circle cx="520" cy="120" r="2.5" className="fill-indigo-500/70" />
-                      <circle cx="520" cy="280" r="2.5" className="fill-indigo-500/70" />
+                      {showPathsAndSatellites && (
+                        <>
+                          <circle cx="280" cy="200" r="2.5" className="fill-indigo-500/70" />
+                          <circle cx="280" cy="120" r="2.5" className="fill-indigo-500/70" />
+                          <circle cx="280" cy="280" r="2.5" className="fill-indigo-500/70" />
+                          <circle cx="520" cy="200" r="2.5" className="fill-indigo-500/70" />
+                          <circle cx="520" cy="120" r="2.5" className="fill-indigo-500/70" />
+                          <circle cx="520" cy="280" r="2.5" className="fill-indigo-500/70" />
+                        </>
+                      )}
 
                       {/* Central Glowing Orb Core (fill/glow) */}
                       <circle
@@ -1506,7 +1820,12 @@ export default function DashboardPage() {
                         r="46"
                         fill="#070A13"
                         stroke="currentColor"
-                        className="text-indigo-500 cursor-pointer hover:text-indigo-400 transition-colors"
+                        className={`text-indigo-500 cursor-pointer hover:text-indigo-400 transition-all ${
+                          hoveredNode === 'hub' ? 'scale-105' : ''
+                        } ${
+                          clickedItemId === 'hub' ? 'scale-95 text-indigo-600' : ''
+                        }`}
+                        style={{ transformOrigin: '400px 200px' }}
                         strokeWidth="2.5"
                         filter="url(#core-glow)"
                         onMouseEnter={(e) => {
@@ -1521,7 +1840,7 @@ export default function DashboardPage() {
                           }
                         }}
                         onMouseLeave={handleMouseLeave}
-                        onClick={handleClick('hub')}
+                        onClick={() => handleItemClick('hub', handleClick('hub'))}
                         onFocus={(e) => {
                           const rect = e.currentTarget.getBoundingClientRect();
                           const data = getInsightData('hub');
@@ -1537,7 +1856,7 @@ export default function DashboardPage() {
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
-                            handleClick('hub')();
+                            handleItemClick('hub', handleClick('hub'));
                           }
                         }}
                         role="button"
@@ -1545,8 +1864,8 @@ export default function DashboardPage() {
                         aria-label="Inspect workspace readiness"
                       />
 
-                      {/* Slow spinning starburst emblem inside the core (matching the Lumen radial style) */}
-                      <g style={{ transformOrigin: '400px 200px', animation: 'spin 120s linear infinite' }}>
+                      {/* Slow spinning starburst emblem inside the core (watermark) */}
+                      <g style={{ transformOrigin: '400px 200px', animation: isMotionReduced ? 'none' : 'spin 120s linear infinite' }} className="opacity-12 pointer-events-none">
                         {Array.from({ length: 32 }).map((_, i) => {
                           const angle = i * (360 / 32);
                           const rad = (angle * Math.PI) / 180;
@@ -1572,10 +1891,88 @@ export default function DashboardPage() {
                           );
                         })}
                       </g>
+
+                      {/* Segmented Compliance Ring */}
+                      {segmentedRingPaths.map((seg) => {
+                        if (segmentsData.length === 1 || seg.pct >= 0.999) {
+                          return (
+                            <circle
+                              key={seg.id}
+                              cx="400"
+                              cy="200"
+                              r="52.5"
+                              fill="none"
+                              className={`${seg.color} transition-all pointer-events-none`}
+                              strokeWidth="3.5"
+                            />
+                          );
+                        }
+                        return (
+                          <path
+                            key={seg.id}
+                            d={seg.d}
+                            fill="none"
+                            className={`${seg.color} transition-all pointer-events-none`}
+                            strokeWidth="3.5"
+                            strokeLinecap="round"
+                          />
+                        );
+                      })}
+
+                      {/* Score Text Overlay inside Core */}
+                      <text
+                        x="400"
+                        y="192"
+                        textAnchor="middle"
+                        className="fill-foreground font-black text-lg select-none pointer-events-none"
+                      >
+                        {readinessScore ?? 0}%
+                      </text>
+
+                      {/* Status Label Text Overlay inside Core */}
+                      <text
+                        x="400"
+                        y="206"
+                        textAnchor="middle"
+                        className={`${readinessLabelColorClass} font-black text-[9px] uppercase tracking-wider select-none pointer-events-none`}
+                      >
+                        {readinessLabel}
+                      </text>
+
+                      {/* Live Snapshot Indicator inside Core */}
+                      <g className="select-none opacity-80 pointer-events-none">
+                        <circle cx={customization.dataWindow === 'snapshot' ? 384 : 368} cy="221" r="2.5" className="fill-emerald-500 animate-pulse" />
+                        <text
+                          x={customization.dataWindow === 'snapshot' ? 390 : 374}
+                          y="224"
+                          textAnchor="start"
+                          className="fill-muted-foreground font-extrabold text-[8px] tracking-widest"
+                        >
+                          {customization.dataWindow === 'snapshot' ? 'LIVE' : 'SNAPSHOT'}
+                        </text>
+                      </g>
+
+                      {/* Animated warning exit pulses */}
+                      {showPathsAndSatellites && [
+                        { id: 'requirements', cx: 400, cy: 110, active: stats.expiredCount > 0, color: 'fill-rose-500' },
+                        { id: 'competencies', cx: 280, cy: 120, active: competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').length > 0, color: 'fill-amber-500' },
+                        { id: 'vault', cx: 520, cy: 120, active: unclassifiedDocs.length > 0, color: 'fill-amber-500' },
+                        { id: 'matrix', cx: 280, cy: 280, active: overdueAssetChecks.length > 0, color: 'fill-rose-500' }
+                      ].map(p => {
+                        if (!p.active) return null;
+                        return (
+                          <g key={p.id}>
+                            <circle cx={p.cx} cy={p.cy} r="4" className={p.color} />
+                            {!isMotionReduced && (
+                              <circle cx={p.cx} cy={p.cy} r="9" className={`${p.color} opacity-40 animate-ping`} style={{ transformOrigin: `${p.cx}px ${p.cy}px` }} />
+                            )}
+                          </g>
+                        );
+                      })}
                     </svg>
 
                     {/* Absolute positioned module nodes with symmetric side-labels */}
-                    {satelliteNodes.map(node => {
+                    {showPathsAndSatellites && satelliteNodes.map(node => {
                       const isHovered = hoveredNode === node.id;
                       let posClass = '';
                       let isLeftNode = false;
@@ -1610,25 +2007,34 @@ export default function DashboardPage() {
                               setHoveredNode(null);
                               setHoveredInsight(null);
                             }}
-                            onClick={(e) => {
-                              e.preventDefault();
+                            onFocus={(e) => {
+                              setHoveredNode(node.id);
+                              const rect = e.currentTarget.getBoundingClientRect();
                               const data = getInsightData(node.id);
                               if (data) {
-                                setActiveInsightDrawer(data);
+                                setHoveredInsight({
+                                  ...data,
+                                  x: rect.left + rect.width / 2,
+                                  y: rect.bottom + 8
+                                });
                               }
                             }}
+                            onBlur={() => {
+                              setHoveredNode(null);
+                              setHoveredInsight(null);
+                            }}
+                            onClick={() => handleItemClick(node.id, handleClick(node.id))}
                             tabIndex={0}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' || e.key === ' ') {
                                 e.preventDefault();
-                                const data = getInsightData(node.id);
-                                if (data) {
-                                  setActiveInsightDrawer(data);
-                                }
+                                handleItemClick(node.id, handleClick(node.id));
                               }
                             }}
                             className={`w-12 h-12 rounded-full bg-card border-2 flex items-center justify-center transition-all duration-300 shadow-xs hover:scale-110 hover:shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 shrink-0 cursor-pointer ${
                               isHovered ? 'border-indigo-500 shadow-md scale-105' : 'border-border text-foreground'
+                            } ${
+                              clickedItemId === node.id ? 'scale-90 border-indigo-600 bg-indigo-500/20' : ''
                             }`}
                           >
                             <div className="relative">
@@ -1654,7 +2060,7 @@ export default function DashboardPage() {
                           {isLeftNode ? (
                             <div className="absolute right-full mr-3.5 flex flex-col text-right select-none pointer-events-none min-w-[170px] items-end">
                               <div className="flex items-center gap-1.5 justify-end">
-                                {node.badge !== undefined && node.badge > 0 && (
+                                {detailLevel !== 'minimal' && node.badge !== undefined && node.badge > 0 && (
                                   <span className={`px-1.5 py-0.5 rounded text-[8px] font-black leading-none shrink-0 ${node.badgeColor}`}>
                                     {node.badge}
                                   </span>
@@ -1665,13 +2071,22 @@ export default function DashboardPage() {
                                   {node.name}
                                 </span>
                               </div>
-                              <span className="text-[10px] text-muted-foreground font-semibold leading-tight mt-0.5">
-                                {isHovered ? (
-                                  <span className="text-indigo-500 dark:text-indigo-400 font-bold transition-all">{node.description}</span>
-                                ) : (
-                                  `${node.count} ${node.id === 'competencies' ? 'staff' : node.id === 'reports' ? 'views' : 'items'}`
-                                )}
-                              </span>
+                              {detailLevel !== 'minimal' && (
+                                <span className="text-[10px] text-muted-foreground font-semibold leading-tight mt-0.5">
+                                  {detailLevel === 'full' ? (
+                                    <span className="space-y-0.5">
+                                      <span className="block text-indigo-500 dark:text-indigo-400 font-bold">{node.description}</span>
+                                      <span className="block text-muted-foreground text-[9px]">
+                                        {node.count} {node.id === 'competencies' ? 'staff' : node.id === 'reports' ? 'views' : 'items'}
+                                      </span>
+                                    </span>
+                                  ) : isHovered ? (
+                                    <span className="text-indigo-500 dark:text-indigo-400 font-bold transition-all">{node.description}</span>
+                                  ) : (
+                                    `${node.count} ${node.id === 'competencies' ? 'staff' : node.id === 'reports' ? 'views' : 'items'}`
+                                  )}
+                                </span>
+                              )}
                             </div>
                           ) : (
                             <div className="absolute left-full ml-3.5 flex flex-col text-left select-none pointer-events-none min-w-[170px] items-start">
@@ -1681,19 +2096,28 @@ export default function DashboardPage() {
                                 }`}>
                                   {node.name}
                                 </span>
-                                {node.badge !== undefined && node.badge > 0 && (
+                                {detailLevel !== 'minimal' && node.badge !== undefined && node.badge > 0 && (
                                   <span className={`px-1.5 py-0.5 rounded text-[8px] font-black leading-none shrink-0 ${node.badgeColor}`}>
                                     {node.badge}
                                   </span>
                                 )}
                               </div>
-                              <span className="text-[10px] text-muted-foreground font-semibold leading-tight mt-0.5">
-                                {isHovered ? (
-                                  <span className="text-indigo-500 dark:text-indigo-400 font-bold transition-all">{node.description}</span>
-                                ) : (
-                                  `${node.count} ${node.id === 'vault' ? 'files' : node.id === 'reports' ? 'views' : 'items'}`
-                                )}
-                              </span>
+                              {detailLevel !== 'minimal' && (
+                                <span className="text-[10px] text-muted-foreground font-semibold leading-tight mt-0.5">
+                                  {detailLevel === 'full' ? (
+                                    <span className="space-y-0.5">
+                                      <span className="block text-indigo-500 dark:text-indigo-400 font-bold">{node.description}</span>
+                                      <span className="block text-muted-foreground text-[9px]">
+                                        {node.count} {node.id === 'vault' ? 'files' : node.id === 'reports' ? 'views' : 'items'}
+                                      </span>
+                                    </span>
+                                  ) : isHovered ? (
+                                    <span className="text-indigo-500 dark:text-indigo-400 font-bold transition-all">{node.description}</span>
+                                  ) : (
+                                    `${node.count} ${node.id === 'vault' ? 'files' : node.id === 'reports' ? 'views' : 'items'}`
+                                  )}
+                                </span>
+                              )}
                             </div>
                           )}
                         </div>
@@ -1850,250 +2274,281 @@ export default function DashboardPage() {
         {/* Right-side live intelligence rail */}
         <aside className="space-y-5">
           {/* Rail Section 1: Circular Compliance gauge */}
-          <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Compliance Snapshot</span>
-              <span className="flex items-center gap-1 text-[9px] font-bold text-muted-foreground uppercase">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <div
-                className="relative w-24 h-24 flex items-center justify-center shrink-0 cursor-pointer"
-                onMouseEnter={handleMouseEnter('health')}
-                onMouseLeave={handleMouseLeave}
-                onClick={handleClick('health')}
-                title="Click to view posture summary"
-              >
-                {/* SVG Circular progress arch */}
-                <svg viewBox="0 0 120 120" className="w-full h-full">
-                  <defs>
-                    <linearGradient id="compliance-gauge-grad" x1="0%" y1="100%" x2="100%" y2="0%">
-                      <stop offset="0%" stopColor="#ef4444" />
-                      <stop offset="35%" stopColor="#f59e0b" />
-                      <stop offset="70%" stopColor="#10b981" />
-                      <stop offset="100%" stopColor="#6366f1" />
-                    </linearGradient>
-                  </defs>
-                  {/* Background Track */}
-                  <path
-                    d="M 30 95 A 40 40 0 1 1 90 95"
-                    fill="transparent"
-                    stroke="currentColor"
-                    className="text-muted/15 dark:text-muted/10"
-                    strokeWidth="9"
-                    strokeLinecap="round"
-                  />
-                  {/* Active Arc */}
-                  <path
-                    d="M 30 95 A 40 40 0 1 1 90 95"
-                    fill="transparent"
-                    stroke="url(#compliance-gauge-grad)"
-                    strokeWidth="9"
-                    strokeLinecap="round"
-                    strokeDasharray="188.5"
-                    strokeDashoffset={188.5 - ((readinessScore ?? 0) / 100) * 188.5}
-                    className="transition-all duration-1000 ease-out"
-                  />
-                </svg>
-                <div className="absolute flex flex-col items-center justify-center text-center mt-[-8px]">
-                  <span className="text-xl font-black text-foreground">{readinessScore}%</span>
-                  <span className="text-[7px] font-bold text-muted-foreground uppercase tracking-wider">Overall</span>
-                  <div className={`flex items-center gap-0.5 mt-0.5 text-[8px] font-bold ${readinessScore && readinessScore >= 75 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    <span>{readinessScore && readinessScore >= 75 ? 'Current' : 'Review'}</span>
-                    <span>live calculation</span>
+          {customization.visibleRightRailSections.includes('snapshot') && (
+            <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Compliance Snapshot</span>
+                <span className="flex items-center gap-1 text-[9px] font-bold text-muted-foreground uppercase">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> {customization.dataWindow === 'snapshot' ? 'Live' : 'Snapshot'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <div
+                  className="relative w-24 h-24 flex items-center justify-center shrink-0 cursor-pointer"
+                  onMouseEnter={handleMouseEnter('health')}
+                  onMouseLeave={handleMouseLeave}
+                  onClick={handleClick('health')}
+                  title="Click to view posture summary"
+                >
+                  {/* SVG Circular progress arch */}
+                  <svg viewBox="0 0 120 120" className="w-full h-full">
+                    <defs>
+                      <linearGradient id="compliance-gauge-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#ef4444" />
+                        <stop offset="35%" stopColor="#f59e0b" />
+                        <stop offset="70%" stopColor="#10b981" />
+                        <stop offset="100%" stopColor="#6366f1" />
+                      </linearGradient>
+                    </defs>
+                    {/* Background Track */}
+                    <path
+                      d="M 30 95 A 40 40 0 1 1 90 95"
+                      fill="transparent"
+                      stroke="currentColor"
+                      className="text-muted/15 dark:text-muted/10"
+                      strokeWidth="9"
+                      strokeLinecap="round"
+                    />
+                    {/* Active Arc */}
+                    <path
+                      d="M 30 95 A 40 40 0 1 1 90 95"
+                      fill="transparent"
+                      stroke="url(#compliance-gauge-grad)"
+                      strokeWidth="9"
+                      strokeLinecap="round"
+                      strokeDasharray="188.5"
+                      strokeDashoffset={188.5 - ((readinessScore ?? 0) / 100) * 188.5}
+                      className="transition-all duration-1000 ease-out"
+                    />
+                  </svg>
+                  <div className="absolute flex flex-col items-center justify-center text-center mt-[-8px]">
+                    <span className="text-xl font-black text-foreground">{readinessScore}%</span>
+                    <span className="text-[7px] font-bold text-muted-foreground uppercase tracking-wider">Overall</span>
+                    <div className={`flex items-center gap-0.5 mt-0.5 text-[8px] font-bold ${readinessScore && readinessScore >= 75 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                      <span>{readinessScore && readinessScore >= 75 ? 'Current' : 'Review'}</span>
+                      <span>live calculation</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="flex-1 space-y-1.5 text-[10.5px]">
-                <Link
-                  href="/dashboard/requirements?status=GREEN"
-                  className="flex items-center justify-between gap-2 p-1 hover:bg-muted/30 border border-transparent hover:border-border/40 rounded-lg transition-all cursor-pointer block text-xs text-foreground font-bold"
-                  title="Click to view compliant requirements"
-                >
-                  <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                    <span>Compliant</span>
-                  </div>
-                  <span className="font-bold text-foreground">{stats.compliantCount}</span>
-                </Link>
-                <Link
-                  href="/dashboard/requirements?filter=actions"
-                  className="flex items-center justify-between gap-2 p-1 hover:bg-muted/30 border border-transparent hover:border-border/40 rounded-lg transition-all cursor-pointer block text-xs text-foreground font-bold"
-                  title="Click to view action tasks"
-                >
-                  <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
-                    <span>In Progress</span>
-                  </div>
-                  <span className="font-bold text-foreground">{activeActionsCount}</span>
-                </Link>
-                <Link
-                  href="/dashboard/requirements?status=AMBER"
-                  className="flex items-center justify-between gap-2 p-1 hover:bg-muted/30 border border-transparent hover:border-border/40 rounded-lg transition-all cursor-pointer block text-xs text-foreground font-bold"
-                  title="Click to view at-risk requirements"
-                >
-                  <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-                    <span>At Risk</span>
-                  </div>
-                  <span className="font-bold text-foreground">{stats.expiringSoonCount}</span>
-                </Link>
-                <Link
-                  href="/dashboard/requirements?status=RED"
-                  className="flex items-center justify-between gap-2 p-1 hover:bg-muted/30 border border-transparent hover:border-border/40 rounded-lg transition-all cursor-pointer block text-xs text-foreground font-bold"
-                  title="Click to view requirements needing attention"
-                >
-                  <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
-                    <span>Needs Attention</span>
-                  </div>
-                  <span className="font-bold text-foreground">{stats.expiredCount}</span>
-                </Link>
+                <div className="flex-1 space-y-1.5 text-[10.5px]">
+                  <Link
+                    href="/dashboard/requirements?status=GREEN"
+                    className="flex items-center justify-between gap-2 p-1 hover:bg-muted/30 border border-transparent hover:border-border/40 rounded-lg transition-all cursor-pointer block text-xs text-foreground font-bold"
+                    title="Click to view compliant requirements"
+                  >
+                    <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      <span>Compliant</span>
+                    </div>
+                    <span className="font-bold text-foreground">{stats.compliantCount}</span>
+                  </Link>
+                  <Link
+                    href="/dashboard/requirements?filter=actions"
+                    className="flex items-center justify-between gap-2 p-1 hover:bg-muted/30 border border-transparent hover:border-border/40 rounded-lg transition-all cursor-pointer block text-xs text-foreground font-bold"
+                    title="Click to view action tasks"
+                  >
+                    <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                      <span>In Progress</span>
+                    </div>
+                    <span className="font-bold text-foreground">{activeActionsCount}</span>
+                  </Link>
+                  <Link
+                    href="/dashboard/requirements?status=AMBER"
+                    className="flex items-center justify-between gap-2 p-1 hover:bg-muted/30 border border-transparent hover:border-border/40 rounded-lg transition-all cursor-pointer block text-xs text-foreground font-bold"
+                    title="Click to view at-risk requirements"
+                  >
+                    <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                      <span>At Risk</span>
+                    </div>
+                    <span className="font-bold text-foreground">{stats.expiringSoonCount}</span>
+                  </Link>
+                  <Link
+                    href="/dashboard/requirements?status=RED"
+                    className="flex items-center justify-between gap-2 p-1 hover:bg-muted/30 border border-transparent hover:border-border/40 rounded-lg transition-all cursor-pointer block text-xs text-foreground font-bold"
+                    title="Click to view requirements needing attention"
+                  >
+                    <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                      <span>Needs Attention</span>
+                    </div>
+                    <span className="font-bold text-foreground">{stats.expiredCount}</span>
+                  </Link>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Rail Section 2: Tabbed Workspace Intelligence card */}
-          <div className="bg-card border border-border rounded-xl p-4 shadow-xs flex flex-col h-[382px]">
-            {/* Tab bar headers */}
-            <div className="flex border-b border-border/60 pb-1.5 mb-2.5">
-              {[
-                { id: 'tasks', label: 'Tasks', count: allTasksAndExpiries.length },
-                { id: 'activity', label: 'Activity', count: 0 },
-                { id: 'suggestions', label: 'Focus', count: smartSuggestions.filter(s => s !== "No current priority suggestions were identified from the available workspace records.").length }
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveRailTab(tab.id as 'tasks' | 'activity' | 'suggestions')}
-                  className={`flex-1 text-center pb-1 text-[9px] font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer relative ${
-                    activeRailTab === tab.id
-                      ? 'border-indigo-500 text-foreground'
-                      : 'border-transparent text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <span className="flex items-center justify-center gap-1.5">
-                    {tab.label}
-                    {tab.count > 0 && (
-                      <span className={`w-1.5 h-1.5 rounded-full ${tab.id === 'tasks' ? 'bg-rose-500' : 'bg-indigo-500'}`} />
-                    )}
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            {/* Tab contents */}
-            <div className="flex-1 overflow-y-auto pr-0.5 no-scrollbar">
-              {activeRailTab === 'tasks' && (
-                <div className="space-y-2 animate-in fade-in duration-200">
-                  {allTasksAndExpiries.slice(0, 5).map(item => (
-                    <Link
-                      key={item.id}
-                      href={item.link}
-                      className="flex items-start gap-2.5 p-2 bg-muted/20 hover:bg-muted/40 border border-border/50 rounded-xl transition-all text-xs outline-none focus-visible:ring-1 focus-visible:ring-indigo-500"
+          {['tasks', 'activity', 'suggestions', 'expiring'].some(id => customization.visibleRightRailSections.includes(id)) && (
+            <div className="bg-card border border-border rounded-xl p-4 shadow-xs flex flex-col h-[382px]">
+              {/* Tab bar headers */}
+              <div className="flex border-b border-border/60 pb-1.5 mb-2.5">
+                {[
+                  { id: 'tasks', label: 'Tasks', count: allTasksAndExpiries.length },
+                  { id: 'activity', label: 'Activity', count: safeActivity.length },
+                  { id: 'suggestions', label: 'Focus', count: smartSuggestions.filter(s => s !== "No current priority suggestions were identified from the available workspace records.").length },
+                  { id: 'expiring', label: 'Expiring', count: radarBuckets.length }
+                ]
+                  .filter(tab => customization.visibleRightRailSections.includes(tab.id))
+                  .map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveRailTab(tab.id as any)}
+                      className={`flex-1 text-center pb-1 text-[9px] font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer relative ${
+                        activeRailTab === tab.id
+                          ? 'border-indigo-500 text-foreground'
+                          : 'border-transparent text-muted-foreground hover:text-foreground'
+                      }`}
                     >
-                      {item.isOverdue ? (
-                        <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
-                      ) : (
-                        <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <span className="font-extrabold block text-foreground truncate text-[11px] leading-tight">{item.requirement.title}</span>
-                        <span className="text-[9px] text-muted-foreground block truncate leading-none mt-0.5">{item.requirement.category}</span>
-                        <span className={`text-[9px] font-black block mt-1 ${item.isOverdue ? 'text-rose-500' : 'text-amber-500'}`}>
-                          Due: {item.requirement.next_due_date || 'N/A'}
-                        </span>
-                      </div>
-                    </Link>
+                      <span className="flex items-center justify-center gap-1.5">
+                        {tab.label}
+                        {tab.count > 0 && (
+                          <span className={`w-1.5 h-1.5 rounded-full ${tab.id === 'tasks' || tab.id === 'expiring' ? 'bg-rose-500' : 'bg-indigo-500'}`} />
+                        )}
+                      </span>
+                    </button>
                   ))}
-                  {allTasksAndExpiries.length === 0 && (
-                    <p className="text-[10px] text-muted-foreground italic text-center py-20">No pending items due.</p>
-                  )}
-                </div>
-              )}
+              </div>
 
-              {activeRailTab === 'activity' && (
-                <div className="space-y-3 relative border-l border-border pl-3.5 ml-1.5 py-1 animate-in fade-in duration-200 text-xs">
-                  {safeActivity.map(log => {
-                    const isAdminOrOwner = user?.role === 'Owner' || user?.role === 'Admin';
-                    return (
-                      <div
-                        key={log.id}
-                        onClick={() => {
-                          if (isAdminOrOwner) {
-                            router.push('/dashboard/reports?tab=history');
-                          } else {
-                            setToast({
-                              type: 'error',
-                              message: 'Access Denied: Standard users cannot view the full audit logs.'
-                            });
-                          }
-                        }}
-                        className="text-[11px] relative space-y-0.5 cursor-pointer hover:bg-muted/30 p-1.5 rounded-lg transition-all"
-                        title={isAdminOrOwner ? "Click to view full Audit Trail logs in Reports." : "Audit event details"}
+              {/* Tab contents */}
+              <div className="flex-1 overflow-y-auto pr-0.5 no-scrollbar">
+                {activeRailTab === 'tasks' && (
+                  <div className="space-y-2 animate-in fade-in duration-200">
+                    {allTasksAndExpiries.slice(0, 5).map(item => (
+                      <Link
+                        key={item.id}
+                        href={item.link}
+                        className="flex items-start gap-2.5 p-2 bg-muted/20 hover:bg-muted/40 border border-border/50 rounded-xl transition-all text-xs outline-none focus-visible:ring-1 focus-visible:ring-indigo-500"
                       >
-                        <div className="absolute -left-[18.5px] top-2.5 w-2.5 h-2.5 rounded-full border-2 border-card bg-indigo-500 shadow-xs" />
-                        <span className="font-extrabold block text-foreground truncate text-[10px] leading-tight" title={log.action}>{log.action}</span>
-                        <p className="text-muted-foreground text-[9.5px] leading-relaxed line-clamp-2 mt-0.5">{log.details}</p>
-                      </div>
-                    );
-                  })}
-                  {safeActivity.length === 0 && (
-                    <p className="text-[10px] text-muted-foreground italic text-center py-20">No recent activities.</p>
-                  )}
-                </div>
-              )}
+                        {item.isOverdue ? (
+                          <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
+                        ) : (
+                          <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <span className="font-extrabold block text-foreground truncate text-[11px] leading-tight">{item.requirement.title}</span>
+                          <span className="text-[9px] text-muted-foreground block truncate leading-none mt-0.5">{item.requirement.category}</span>
+                          <span className={`text-[9px] font-black block mt-1 ${item.isOverdue ? 'text-rose-500' : 'text-amber-500'}`}>
+                            Due: {item.requirement.next_due_date || 'N/A'}
+                          </span>
+                        </div>
+                      </Link>
+                    ))}
+                    {allTasksAndExpiries.length === 0 && (
+                      <p className="text-[10px] text-muted-foreground italic text-center py-20">No pending items due.</p>
+                    )}
+                  </div>
+                )}
 
-              {activeRailTab === 'suggestions' && (
-                <div className="space-y-2 animate-in fade-in duration-200">
-                  {smartSuggestions.map((suggestion, idx) => {
-                    let targetLink = '';
-                    if (suggestion.includes('Asset Matrix')) {
-                      targetLink = '/dashboard/matrix?status=Expired';
-                    } else if (suggestion.includes('expired framework requirements')) {
-                      targetLink = '/dashboard/requirements?status=RED';
-                    } else if (suggestion.includes('vault documents')) {
-                      targetLink = '/dashboard/vault?status=Unclassified';
-                    } else if (suggestion.includes('gap action tasks')) {
-                      targetLink = '/dashboard/requirements?filter=actions';
-                    }
-
-                    if (targetLink) {
+                {activeRailTab === 'activity' && (
+                  <div className="space-y-3 relative border-l border-border pl-3.5 ml-1.5 py-1 animate-in fade-in duration-200 text-xs">
+                    {safeActivity.map(log => {
+                      const isAdminOrOwner = user?.role === 'Owner' || user?.role === 'Admin';
                       return (
-                        <Link
-                          key={idx}
-                          href={targetLink}
-                          className="flex gap-2.5 p-2.5 bg-indigo-500/5 dark:bg-indigo-500/10 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/20 border border-indigo-500/15 hover:border-indigo-500/30 rounded-xl text-[10px] text-indigo-650 dark:text-indigo-300 font-semibold leading-relaxed transition-all cursor-pointer block text-left"
-                          title="Click to navigate to filter"
+                        <div
+                          key={log.id}
+                          onClick={() => {
+                            if (isAdminOrOwner) {
+                              router.push('/dashboard/reports?tab=history');
+                            } else {
+                              setToast({
+                                type: 'error',
+                                message: 'Access Denied: Standard users cannot view the full audit logs.'
+                              });
+                            }
+                          }}
+                          className="text-[11px] relative space-y-0.5 cursor-pointer hover:bg-muted/30 p-1.5 rounded-lg transition-all"
+                          title={isAdminOrOwner ? "Click to view full Audit Trail logs in Reports." : "Audit event details"}
                         >
-                          <div className="flex items-start gap-2.5">
-                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0 animate-pulse" />
-                            <span>{suggestion}</span>
-                          </div>
-                        </Link>
+                          <div className="absolute -left-[18.5px] top-2.5 w-2.5 h-2.5 rounded-full border-2 border-card bg-indigo-500 shadow-xs" />
+                          <span className="font-extrabold block text-foreground truncate text-[10px] leading-tight" title={log.action}>{log.action}</span>
+                          <p className="text-muted-foreground text-[9.5px] leading-relaxed line-clamp-2 mt-0.5">{log.details}</p>
+                        </div>
                       );
-                    }
+                    })}
+                    {safeActivity.length === 0 && (
+                      <p className="text-[10px] text-muted-foreground italic text-center py-20">No recent activities.</p>
+                    )}
+                  </div>
+                )}
 
-                    return (
-                      <div key={idx} className="flex gap-2.5 p-2.5 bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/15 rounded-xl text-[10px] text-indigo-650 dark:text-indigo-300 font-semibold leading-relaxed">
-                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0 animate-pulse" />
-                        <span>{suggestion}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                {activeRailTab === 'suggestions' && (
+                  <div className="space-y-2 animate-in fade-in duration-200">
+                    {smartSuggestions.map((suggestion, idx) => {
+                      let targetLink = '';
+                      if (suggestion.includes('Asset Matrix')) {
+                        targetLink = '/dashboard/matrix?status=Expired';
+                      } else if (suggestion.includes('expired framework requirements')) {
+                        targetLink = '/dashboard/requirements?status=RED';
+                      } else if (suggestion.includes('vault documents')) {
+                        targetLink = '/dashboard/vault?status=Unclassified';
+                      } else if (suggestion.includes('gap action tasks')) {
+                        targetLink = '/dashboard/requirements?filter=actions';
+                      }
+
+                      if (targetLink) {
+                        return (
+                          <Link
+                            key={idx}
+                            href={targetLink}
+                            className="flex gap-2.5 p-2.5 bg-indigo-500/5 dark:bg-indigo-500/10 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/20 border border-indigo-500/15 hover:border-indigo-500/30 rounded-xl text-[10px] text-indigo-650 dark:text-indigo-300 font-semibold leading-relaxed transition-all cursor-pointer block text-left"
+                            title="Click to navigate to filter"
+                          >
+                            <div className="flex items-start gap-2.5">
+                              <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0 animate-pulse" />
+                              <span>{suggestion}</span>
+                            </div>
+                          </Link>
+                        );
+                      }
+
+                      return (
+                        <div key={idx} className="flex gap-2.5 p-2.5 bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/15 rounded-xl text-[10px] text-indigo-650 dark:text-indigo-300 font-semibold leading-relaxed">
+                          <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0 animate-pulse" />
+                          <span>{suggestion}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {activeRailTab === 'expiring' && (
+                  <div className="space-y-2 animate-in fade-in duration-200">
+                    {radarBuckets.slice(0, 5).map(item => (
+                      <Link
+                        key={item.id}
+                        href={item.link || '#'}
+                        className="flex items-start gap-2.5 p-2 bg-muted/20 hover:bg-muted/40 border border-border/50 rounded-xl transition-all text-xs outline-none focus-visible:ring-1 focus-visible:ring-indigo-500"
+                      >
+                        <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                        <div className="min-w-0 flex-1">
+                          <span className="font-extrabold block text-foreground truncate text-[11px] leading-tight">{item.title}</span>
+                          <span className="text-[9px] text-muted-foreground block truncate leading-none mt-0.5">{item.type}</span>
+                          <span className="text-[9px] font-black text-amber-500 block mt-1">
+                            Expiry: {item.dueDate || 'N/A'}
+                          </span>
+                        </div>
+                      </Link>
+                    ))}
+                    {radarBuckets.length === 0 && (
+                      <p className="text-[10px] text-muted-foreground italic text-center py-20">No expiring items found.</p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </aside>
       </div>
 
       {/* 4. Lower Dashboard Panels - Tier 1: Key Performance Dials */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 ${densityStyles.gridGap} transition-all duration-300`}>
         {/* Card 1: Compliance Trend */}
         {customization.visiblePanels.includes('trend') && (
-          <div className="bg-card border border-border rounded-xl p-4 shadow-xs flex flex-col justify-between">
+          <div className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs flex flex-col justify-between transition-all duration-300`}>
             <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
               <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Readiness Snapshot</span>
               <span className="text-[8px] font-bold text-muted-foreground">Historical trend unavailable</span>
@@ -2151,7 +2606,7 @@ export default function DashboardPage() {
 
         {/* Card 2: Requirement Status Donut Chart */}
         {customization.visiblePanels.includes('statusDonut') && (
-          <div className="bg-card border border-border rounded-xl p-4 shadow-xs flex flex-col justify-between">
+          <div className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs flex flex-col justify-between transition-all duration-300`}>
             <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
               <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Requirement Status</span>
               <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">Active Requirements</span>
@@ -2269,7 +2724,7 @@ export default function DashboardPage() {
         {/* Card 3: Audit Readiness */}
         {customization.visiblePanels.includes('readinessGauge') && (
           <div
-            className="bg-card border border-border rounded-xl p-4 shadow-xs flex flex-col justify-between cursor-pointer hover:border-indigo-500/50 transition-all select-none"
+            className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs flex flex-col justify-between cursor-pointer hover:border-indigo-500/50 transition-all duration-300 select-none`}
             onMouseEnter={handleMouseEnter('health')}
             onMouseLeave={handleMouseLeave}
             onClick={handleClick('health')}
@@ -2324,7 +2779,7 @@ export default function DashboardPage() {
         {/* Card 4: Training Completion */}
         {customization.visiblePanels.includes('trainingRing') && (
           <div
-            className="bg-card border border-border rounded-xl p-4 shadow-xs flex flex-col justify-between cursor-pointer hover:border-indigo-500/50 transition-all select-none"
+            className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs flex flex-col justify-between cursor-pointer hover:border-indigo-500/50 transition-all duration-300 select-none`}
             onMouseEnter={handleMouseEnter('training')}
             onMouseLeave={handleMouseLeave}
             onClick={handleClick('training')}
@@ -2370,10 +2825,10 @@ export default function DashboardPage() {
           </div>
         )}
       </div>      {/* Tier 2: Lower Lists Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 ${densityStyles.gridGap} transition-all duration-300`}>
         {/* Panel 1: Asset Compliance Categories */}
         {customization.visiblePanels.includes('assetCategory') && (
-          <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-4">
+          <div className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs ${densityStyles.panelSpacing} transition-all duration-300`}>
             <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Asset Category Health</span>
             <div className="space-y-3 py-1 text-xs">
               {assetCategoryCompliance.map(category => (
@@ -2404,7 +2859,7 @@ export default function DashboardPage() {
 
         {/* Panel 2: Risk Level Areas */}
         {customization.visiblePanels.includes('riskGaps') && (
-          <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-4">
+          <div className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs ${densityStyles.panelSpacing} transition-all duration-300`}>
             <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Top Risk Gaps</span>
             <div className="space-y-3 text-xs">
               {[
@@ -2431,7 +2886,7 @@ export default function DashboardPage() {
 
         {/* Panel 3: Workspace Alerts */}
         {customization.visiblePanels.includes('alerts') && (
-          <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-4">
+          <div className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs ${densityStyles.panelSpacing} transition-all duration-300`}>
             <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Active Alerts</span>
             <div className="space-y-3 text-xs">
               {stats.expiredCount > 0 && (
@@ -2895,76 +3350,189 @@ export default function DashboardPage() {
                 </button>
               </div>
 
-              <div className="bg-muted/30 border border-border/50 rounded-2xl p-4 flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">{activeInsightDrawer.countLabel || 'Current Posture'}</span>
-                  <span className="text-3xl font-black block text-foreground mt-1">{activeInsightDrawer.count}</span>
-                </div>
-                {activeInsightDrawer.statusBreakdown && (
-                  <div className="space-y-1.5 text-[10px] font-bold">
-                    {activeInsightDrawer.statusBreakdown.map((item, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${item.color}`} />
-                        <span className="text-muted-foreground">{item.label}:</span>
-                        <span className="text-foreground">{item.count}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-3">
-                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Items Requiring Attention</span>
-                <div className="space-y-2.5 max-h-[40vh] overflow-y-auto pr-1">
-                  {activeInsightDrawer.records && activeInsightDrawer.records.length > 0 ? (
-                    activeInsightDrawer.records.map((rec, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center justify-between p-3 bg-muted/20 border border-border/60 hover:border-indigo-500/30 rounded-xl transition-all"
-                      >
-                        <div className="min-w-0 flex-1 pr-3">
-                          <span className="font-extrabold text-xs block text-foreground truncate">{rec.name}</span>
-                          <span className="text-[10px] text-muted-foreground block truncate mt-0.5">{rec.info}</span>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {rec.status && (
-                            <span className={`px-1.5 py-0.5 text-[8px] font-black rounded-md border ${
-                              rec.status === 'RED' ? 'bg-rose-500/10 border-rose-500/20 text-rose-500' :
-                              rec.status === 'AMBER' ? 'bg-amber-500/10 border-amber-500/20 text-amber-500' :
-                              'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
-                            }`}>
-                              {rec.status}
-                            </span>
-                          )}
-                          <Link
-                            href={rec.link}
-                            className="p-1 bg-muted hover:bg-indigo-500/10 text-muted-foreground hover:text-indigo-500 rounded-lg transition-colors"
-                            onClick={() => setActiveInsightDrawer(null)}
-                          >
-                            <ArrowRight className="w-3.5 h-3.5" />
-                          </Link>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-8 bg-muted/10 border border-dashed border-border rounded-xl">
-                      <p className="text-xs text-muted-foreground italic">No pending action items found.</p>
+              {activeInsightDrawer.id === 'hub' ? (
+                /* Compliance Core Custom Layout */
+                <div className="space-y-6">
+                  {/* Overall Readiness Breakdown */}
+                  <div className="bg-muted/30 border border-border/50 rounded-2xl p-4 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">{activeInsightDrawer.countLabel || 'Readiness Rating'}</span>
+                      <span className="text-3xl font-black block text-foreground mt-1">{activeInsightDrawer.count}</span>
                     </div>
-                  )}
+                    {activeInsightDrawer.statusBreakdown && (
+                      <div className="space-y-1.5 text-[10px] font-bold">
+                        {activeInsightDrawer.statusBreakdown.map((item, idx) => (
+                          <div key={idx} className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full ${item.color}`} />
+                            <span className="text-muted-foreground">{item.label}:</span>
+                            <span className="text-foreground">{item.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Module Contribution Cards */}
+                  <div className="space-y-3">
+                    <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Module Health Contributions</span>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      {satelliteNodes.map(node => {
+                        let healthVal = '';
+                        if (node.id === 'requirements') {
+                          healthVal = `${Math.round((stats.compliantCount / (stats.activeRequirements || 1)) * 100)}%`;
+                        } else if (node.id === 'competencies') {
+                          healthVal = `${competencySummary.compliancePercent}%`;
+                        } else if (node.id === 'vault') {
+                          healthVal = `${Math.round((classifiedDocsCount / (documents.length || 1)) * 100)}%`;
+                        } else if (node.id === 'matrix') {
+                          healthVal = `${Math.round((compliantAssetChecks / (totalAssetChecks || 1)) * 100)}%`;
+                        } else if (node.id === 'audit-packs') {
+                          healthVal = `${node.count} packs`;
+                        } else if (node.id === 'reports') {
+                          healthVal = `${node.count} views`;
+                        }
+                        return (
+                          <Link
+                            key={node.id}
+                            href={node.path}
+                            onClick={() => setActiveInsightDrawer(null)}
+                            className="p-3 bg-muted/20 border border-border/60 hover:border-indigo-500/30 rounded-xl flex flex-col justify-between text-xs transition-all cursor-pointer block text-left"
+                          >
+                            <div className="flex items-center gap-1.5 font-bold text-foreground">
+                              <span className="text-indigo-500 shrink-0">{node.icon}</span>
+                              <span className="truncate">{node.name}</span>
+                            </div>
+                            <div className="mt-2 flex items-baseline justify-between">
+                              <span className="text-[9px] text-muted-foreground truncate">{node.description}</span>
+                              <span className="font-extrabold text-indigo-650 dark:text-indigo-400">{healthVal}</span>
+                            </div>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Risk Summary */}
+                  <div className="space-y-3">
+                    <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Top Risk Gaps Summary</span>
+                    <div className="space-y-2.5 max-h-[30vh] overflow-y-auto pr-1">
+                      {activeInsightDrawer.records.map((rec, idx) => (
+                        <Link
+                          key={idx}
+                          href={rec.link}
+                          onClick={() => setActiveInsightDrawer(null)}
+                          className="flex items-center justify-between p-3 bg-muted/20 border border-border/60 hover:border-indigo-500/30 rounded-xl transition-all cursor-pointer block text-left"
+                        >
+                          <div className="min-w-0 flex-1 pr-3">
+                            <span className="font-extrabold text-xs block text-foreground truncate">{rec.name}</span>
+                            <span className="text-[10px] text-muted-foreground block truncate mt-0.5">{rec.info}</span>
+                          </div>
+                          <span className={`px-1.5 py-0.5 text-[8px] font-black rounded-md border shrink-0 ${
+                            rec.status === 'RED' ? 'bg-rose-500/10 border-rose-500/20 text-rose-500' :
+                            rec.status === 'AMBER' ? 'bg-amber-500/10 border-amber-500/20 text-amber-500' :
+                            'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
+                          }`}>
+                            {rec.status}
+                          </span>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                /* Generic module details layout */
+                <>
+                  <div className="bg-muted/30 border border-border/50 rounded-2xl p-4 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">{activeInsightDrawer.countLabel || 'Current Posture'}</span>
+                      <span className="text-3xl font-black block text-foreground mt-1">{activeInsightDrawer.count}</span>
+                    </div>
+                    {activeInsightDrawer.statusBreakdown && (
+                      <div className="space-y-1.5 text-[10px] font-bold">
+                        {activeInsightDrawer.statusBreakdown.map((item, idx) => (
+                          <div key={idx} className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full ${item.color}`} />
+                            <span className="text-muted-foreground">{item.label}:</span>
+                            <span className="text-foreground">{item.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-3">
+                    <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Items Requiring Attention</span>
+                    <div className="space-y-2.5 max-h-[40vh] overflow-y-auto pr-1">
+                      {activeInsightDrawer.records && activeInsightDrawer.records.length > 0 ? (
+                        activeInsightDrawer.records.map((rec, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center justify-between p-3 bg-muted/20 border border-border/60 hover:border-indigo-500/30 rounded-xl transition-all"
+                          >
+                            <div className="min-w-0 flex-1 pr-3">
+                              <span className="font-extrabold text-xs block text-foreground truncate">{rec.name}</span>
+                              <span className="text-[10px] text-muted-foreground block truncate mt-0.5">{rec.info}</span>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {rec.status && (
+                                <span className={`px-1.5 py-0.5 text-[8px] font-black rounded-md border ${
+                                  rec.status === 'RED' ? 'bg-rose-500/10 border-rose-500/20 text-rose-500' :
+                                  rec.status === 'AMBER' ? 'bg-amber-500/10 border-amber-500/20 text-amber-500' :
+                                  'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
+                                }`}>
+                                  {rec.status}
+                                </span>
+                              )}
+                              <Link
+                                href={rec.link}
+                                className="p-1 bg-muted hover:bg-indigo-500/10 text-muted-foreground hover:text-indigo-500 rounded-lg transition-colors"
+                                onClick={() => setActiveInsightDrawer(null)}
+                              >
+                                <ArrowRight className="w-3.5 h-3.5" />
+                              </Link>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-8 bg-muted/10 border border-dashed border-border rounded-xl">
+                          <p className="text-xs text-muted-foreground italic">No pending action items found.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
-            {activeInsightDrawer.link && (
-              <div className="border-t border-border/60 pt-4 mt-auto">
-                <Link
-                  href={activeInsightDrawer.link}
-                  onClick={() => setActiveInsightDrawer(null)}
-                  className="w-full py-3 bg-indigo-650 hover:bg-indigo-750 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/10 transition-all"
-                >
-                  {activeInsightDrawer.linkLabel || 'Open Module'}
-                  <ArrowRight className="w-4 h-4" />
-                </Link>
+            {(activeInsightDrawer.link || activeInsightDrawer.secondaryLink || activeInsightDrawer.suggestedAction) && (
+              <div className="border-t border-border/60 pt-4 mt-auto space-y-3">
+                {activeInsightDrawer.suggestedAction && (
+                  <div className="bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/15 rounded-xl p-3 text-left">
+                    <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest block">Suggested Next Action</span>
+                    <p className="text-xs text-foreground font-semibold mt-1">{activeInsightDrawer.suggestedAction}</p>
+                  </div>
+                )}
+                <div className="flex gap-2.5">
+                  {activeInsightDrawer.secondaryLink && (
+                    <Link
+                      href={activeInsightDrawer.secondaryLink}
+                      onClick={() => setActiveInsightDrawer(null)}
+                      className="flex-1 py-3 border border-border hover:bg-muted text-foreground font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all text-center"
+                    >
+                      {activeInsightDrawer.secondaryLinkLabel || 'View Attention'}
+                    </Link>
+                  )}
+                  {activeInsightDrawer.link && (
+                    <Link
+                      href={activeInsightDrawer.link}
+                      onClick={() => setActiveInsightDrawer(null)}
+                      className="flex-1 py-3 bg-indigo-650 hover:bg-indigo-750 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/10 transition-all text-center"
+                    >
+                      {activeInsightDrawer.linkLabel || 'Open Module'}
+                      <ArrowRight className="w-4 h-4" />
+                    </Link>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -3079,29 +3647,129 @@ export default function DashboardPage() {
                 </div>
               </div>
 
+              {/* Right Rail Sections Configuration */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Right Rail Sections</span>
+                <div className="grid grid-cols-2 gap-2 border border-border/60 rounded-xl p-3 bg-muted/10">
+                  {[
+                    { id: 'snapshot', label: 'Compliance Snapshot' },
+                    { id: 'tasks', label: 'Tasks Feed' },
+                    { id: 'activity', label: 'Recent Activity' },
+                    { id: 'suggestions', label: 'Focus Suggestions' },
+                    { id: 'expiring', label: 'Expiring Soon' }
+                  ].map(sec => {
+                    const isVisible = modalCustomization.visibleRightRailSections.includes(sec.id);
+                    return (
+                      <label key={sec.id} className="flex items-center gap-2 p-1.5 bg-card border border-border/60 rounded-lg text-xs font-semibold cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={isVisible}
+                          onChange={(e) => {
+                            const newVisible = e.target.checked
+                              ? [...modalCustomization.visibleRightRailSections, sec.id]
+                              : modalCustomization.visibleRightRailSections.filter(id => id !== sec.id);
+                            setModalCustomization({ ...modalCustomization, visibleRightRailSections: newVisible });
+                          }}
+                          className="rounded border-border focus:ring-indigo-500"
+                        />
+                        <span className={isVisible ? 'text-foreground' : 'text-muted-foreground'}>{sec.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Layout & Hero Aesthetics */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Layout & Hero Aesthetics</span>
+                <div className="grid grid-cols-2 gap-3 border border-border/60 rounded-xl p-3 bg-muted/10">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Layout Density</label>
+                    <select
+                      value={modalCustomization.density}
+                      onChange={(e) => setModalCustomization({ ...modalCustomization, density: e.target.value as any })}
+                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                    >
+                      <option value="comfortable">Comfortable</option>
+                      <option value="compact">Compact</option>
+                      <option value="executive">Executive</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Hero Style</label>
+                    <select
+                      value={modalCustomization.heroStyle}
+                      onChange={(e) => setModalCustomization({ ...modalCustomization, heroStyle: e.target.value as any })}
+                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                    >
+                      <option value="map">System Map</option>
+                      <option value="core">Compliance Core Only</option>
+                      <option value="list">List Overview</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Hero Detail Level</label>
+                    <select
+                      value={modalCustomization.heroDetailLevel}
+                      onChange={(e) => setModalCustomization({ ...modalCustomization, heroDetailLevel: e.target.value as any })}
+                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                    >
+                      <option value="minimal">Minimal</option>
+                      <option value="balanced">Balanced</option>
+                      <option value="full">Full</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Motion Settings</label>
+                    <select
+                      value={modalCustomization.motionPreference}
+                      onChange={(e) => setModalCustomization({ ...modalCustomization, motionPreference: e.target.value as any })}
+                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                    >
+                      <option value="standard">Standard animations</option>
+                      <option value="reduced">Reduced motion</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
               {/* Defaults Configuration */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Default View Mode</label>
+                  <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Default View Mode</label>
                   <select
                     value={modalCustomization.defaultViewMode}
                     onChange={(e) => setModalCustomization({ ...modalCustomization, defaultViewMode: e.target.value as 'system' | 'list' })}
-                    className="w-full px-3 py-2 bg-muted border border-border focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
+                    className="w-full px-2.5 py-1.5 bg-muted border border-border focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
                   >
-                    <option value="system">System graphical map</option>
-                    <option value="list">Module tables list</option>
+                    <option value="system">System graphical</option>
+                    <option value="list">Module list</option>
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Default Right Rail Tab</label>
+                  <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Default Right Rail Tab</label>
                   <select
                     value={modalCustomization.defaultRailTab}
-                    onChange={(e) => setModalCustomization({ ...modalCustomization, defaultRailTab: e.target.value as 'tasks' | 'activity' | 'suggestions' })}
-                    className="w-full px-3 py-2 bg-muted border border-border focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
+                    onChange={(e) => setModalCustomization({ ...modalCustomization, defaultRailTab: e.target.value as any })}
+                    className="w-full px-2.5 py-1.5 bg-muted border border-border focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
                   >
-                    <option value="tasks">Tasks pending list</option>
-                    <option value="activity">Recent workspace activity</option>
+                    <option value="tasks">Tasks list</option>
+                    <option value="activity">Recent activity</option>
                     <option value="suggestions">Smart suggestions</option>
+                    <option value="expiring">Expiring soon</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Default Data Window</label>
+                  <select
+                    value={modalCustomization.dataWindow}
+                    onChange={(e) => setModalCustomization({ ...modalCustomization, dataWindow: e.target.value as any })}
+                    className="w-full px-2.5 py-1.5 bg-muted border border-border focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
+                  >
+                    <option value="snapshot">Current snapshot</option>
+                    <option value="7days">Next 7 days</option>
+                    <option value="30days">Next 30 days</option>
+                    <option value="90days">Next 90 days</option>
                   </select>
                 </div>
               </div>
@@ -3115,7 +3783,13 @@ export default function DashboardPage() {
                     kpiOrder: ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
                     visiblePanels: ['trend', 'statusDonut', 'readinessGauge', 'trainingRing', 'assetCategory', 'riskGaps', 'alerts'],
                     defaultViewMode: 'system' as const,
-                    defaultRailTab: 'tasks' as const
+                    defaultRailTab: 'tasks' as const,
+                    density: 'comfortable' as const,
+                    heroStyle: 'map' as const,
+                    heroDetailLevel: 'balanced' as const,
+                    visibleRightRailSections: ['snapshot', 'tasks', 'activity', 'suggestions', 'expiring'],
+                    dataWindow: 'snapshot' as const,
+                    motionPreference: 'standard' as const
                   };
                   setModalCustomization(defaultVal);
                 }}

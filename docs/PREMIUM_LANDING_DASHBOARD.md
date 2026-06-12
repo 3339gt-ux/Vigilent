@@ -35,16 +35,22 @@ Displays six core compliance indicators, fully data-backed:
 6. **Asset Assurance**: Compliance progress across all active asset checks.
 
 ### Central Compliance Program Overview
-An interactive interactive map visualizing the Vygilence Core compliance status.
-- **System View**: Renders a glowing central hub with a slowly rotating 32-spike radial starburst spark. Nested concentric rings border the hub.
-- **Circuit Pathways**: Circuit board trace style orthogonal paths connect the central hub to six satellite nodes. Small glowing arrowheads or dashes infinitely flow along the paths from the center outwards to represent data packet transmission.
-- **Satellite Nodes**: Each point of contact features a hover-scaling circular node (with sub-module icon) and a text label adjacent to the right displaying the module title, badge issues count, and total items (e.g., "Requirements [badge 21]" and "236 Requirements").
+An interactive visual map representing the core compliance posture of the active organization.
+- **Compliance Core centerpiece**: The abstract rotating spinner is replaced with a data-rich circular layout:
+  - **Center displays**: The overall readiness score percentage.
+  - **Readiness label**: Dynamic semantic status label (Excellent, Good, Fair, Needs Attention, Critical) matches the score tone.
+  - **Status badge**: Small overlay showing `LIVE` or `SNAPSHOT` alongside a pulsing status indicator dot.
+  - **Watermark**: The rotating starburst spikes are integrated as a faint watermark (opacity `0.12`) to preserve the brand signature without obscuring the reading score.
+- **Segmented Compliance Ring**: An outer concentric SVG ring at radius `r=52.5` represents the breakdown of requirements: Compliant (Green), At Risk (Amber), Needs Attention (Red), and Not Assessed (Grey). Individual segments are cleanly separated by a visual 3px gap.
+- **Animated Risk Pulses**: Exits from the centerpiece targeting any sub-module with active warning or expired items display warning dots with pulsing animations (`animate-ping`). Under reduced-motion settings, the ping animations are automatically disabled.
+- **State-Responsive Pathways**: Orthogonal data flow lines connect the core to satellite nodes. The pathway strokes dynamically indicate the destination node's health (emerald-500/20 for green, amber-500/20 for warning, rose-500/20 for critical, neutral for others). Data packets flow animation is suspended under reduced motion mode.
+- **Satellite Nodes**: Hover-scaling circular nodes displaying sub-module icons. Label text adjacent to the right displays the module title, badge warning counts, and total items (e.g. "Requirements [badge 21]" and "236 Requirements").
 - **List View**: Toggles to a clean list/tabular overview of the modules with summary statistics.
 - **Interactions**:
-  - Hovering over a satellite node highlights the SVG arc, pulses the node, and populates the details panel.
-  - Clicking a node routes the user directly to that section.
-  - Interactive badges display warning counts (e.g., overdue requirements, expired competencies).
-- **Responsive Stack**: On mobile screens (`block md:hidden`), the system map collapses into a grid of 6 sleek glassmorphic cards. On desktop (`hidden md:block`), it renders the full animated network diagram.
+  - Hovering a satellite node highlights its SVG path, scales the node, and populates the details panel.
+  - Clicking a satellite node triggers the slide-out detail drawer populated with attention-required records.
+  - Clicking the Compliance Core centerpiece displays overall posture diagnostics and dual navigation buttons.
+- **Responsive Stack**: On mobile screens, the map collapses into a clean grid of glassmorphic cards. On desktop, it renders the full interactive network diagram.
 
 ### Right-Side Live Intelligence Rail
 Provides continuous context-aware insights and shortcuts:
@@ -103,39 +109,40 @@ All metrics leverage the existing canonical calculators inside `AppContext` to a
 The dashboard incorporates a live interactive intelligence layer enabling deep inspection and workspace personalization:
 
 ### Hover Popovers & Tooltips
-- **Insight Popovers**: Triggered when hovering or focusing the six top KPI cards and the central command orb. Asset category bars provide direct filtered links and native hover labels.
-- **Readiness Point Tooltip**: Hovering over the current readiness point displays the live calculated score and its source.
+- **Insight Popovers**: Triggered when hovering or focusing the six top KPI cards and the central Compliance Core orb. Popovers show driver scores, next action suggestions, and attention-required items.
+- **Readiness Point Tooltip**: Hovering over the compliance trend point displays the month's readiness score.
 - **Donut Chart Segment Hover**: Displays calculated GREEN, AMBER, RED, and GREY requirement counts and supports filtered click-through.
 
 ### Reusable Insight Detail Drawer
-- Triggered when clicking a satellite node or any of the Top KPI cards.
+- Triggered by clicking the Compliance Core centerpiece, satellite nodes, or KPI cards.
 - Slides in from the right to present a comprehensive inspection view of the selected system module.
 - Displays a status breakdown, the metrics context value, and a list of associated records needing attention.
 - Clicking any record inside the drawer navigates directly to that specific item's details.
-- Includes a primary action button at the bottom to navigate directly to the filtered module view.
+- **Dual CTAs**: Provides primary action buttons at the bottom: "Open Reports" and "View Attention Items" for the hub, or module-specific actions (e.g. "Create Requirement" and "Open Module").
 
-### Dashboard Customization Panel
+### Advanced Layout Customization Panel
 - Triggered by clicking the **"Customize"** button in the dashboard controls.
 - Opens an overlay dialog permitting users to:
-  - Toggle visibility of individual Top KPI cards.
-  - Reorder the Top KPI cards using visual up/down sorting controls.
-  - Toggle visibility of lower widgets and panels (Trend, Donut Chart, Readiness, Training, Asset Health, Risk Gaps, Alerts).
-  - Configure the default layout view mode (`system` graphical vs `list` module overview) and the default active Live Rail tab (`tasks`, `activity`, `suggestions`).
-- Customization preferences contain display settings only and are persisted to `localStorage` under a key scoped by the active user and organisation (`vygilence_dashboard_customization_${userId}_${orgId}`). This is a convenience preference, not a security boundary.
+  - **Layout Density**: Toggle between **Comfortable**, **Compact**, and **Executive** density levels. Adjusts margins, grid gaps, card padding, and heading typography dynamically.
+  - **Hero Style**: Choose between **System Map** (full diagram), **Compliance Core Only** (hides satellite nodes & paths), and **List Overview** (tabular module overview).
+  - **Hero Detail Level**: Toggle between **Minimal**, **Balanced**, and **Full** representation styles.
+  - **Motion Preference**: Toggle between **Standard animations** and **Reduced motion** (which suppresses pings and flow line packet animations).
+  - **Default Data Window**: Configure default timeline range (**Snapshot**, **7 Days**, **30 Days**, **90 Days**).
+  - **Right Rail Sections**: Multi-select visible sections (Snapshot, Tasks, Activity, Suggestions, Expiring).
+  - **KPI Sorting & Visibility**: Hide or reorder the Top KPI cards.
+- **Undo Capability**: Stashes the previous customization configuration. Clicking the **"Undo"** button in the dashboard header reverts the layout change immediately.
+- **Reset Defaults**: Instantly restores the default configuration settings.
+- Scoped to `vygilence_dashboard_customization_${userId}_${orgId}` in `localStorage`.
 
-### Filter & Drill-down Parameterized Routing
-All navigation links from popovers, donut segments, risk gap rows, alert items, and drawer CTA buttons pass detailed query parameters to direct the user to pre-filtered lists:
-- **Evidence Vault**: Evaluates query parameters for `status` (`Expired`, `Expiring Soon`, `Unclassified`), `link` / `linkFilter` (`Unlinked Only`, `Linked Only`), and `category`.
-- **Competency Matrix**: Evaluates supported `status` query parameters to pre-filter staff records (`Expired`, `Missing`, `Expiring Soon`, `Valid`) and ignores unsupported values.
-- **Asset Matrix**: Evaluates supported `status` (`Expired`, `Missing`, `Expiring Soon`, `Compliant`) and valid `category` parameters.
-- **Requirements**: Evaluates supported `status` (`Attention`, `RED`, `AMBER`, `GREEN`, `GREY`), `filter` (`actions`, `due-week`), and `risk` (`Critical`, `High`, `Medium`, `Low`) values.
+### Historical Trend Honesty Assertions
+- The compliance trend widget charts current workspace statistics and does not simulate fake historical progression coordinates. In compliance mode, it explicitly prints "Historical trend unavailable" next to the current snapshot point to prevent auditing inaccuracies.
 
 ---
 
 ## 5. Accessibility (a11y)
 
-- All clickable elements are fully keyboard focusable and support native `<button>` or `<Link>` semantics.
-- Visual focus outlines are provided for keyboard-navigating users.
-- Connective animations and pulses respects `prefers-reduced-motion` settings.
+- All interactive controls are fully keyboard focusable with visible focus outlines and support native `<button>` or `<Link>` semantics.
+- SVG hubs and interactive elements map `onFocus` and `onBlur` listeners to support popover display via keyboard navigation.
+- SVG animations, pings, and dashboard visual flows strictly respect the customization's `motionPreference` settings (and fall back to system `prefers-reduced-motion` settings).
 - Aria-labels are applied to icon-only controls.
 - Color alone is never used to convey status; warning badges are backed by descriptive texts.
