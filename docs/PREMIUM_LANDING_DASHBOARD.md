@@ -14,7 +14,7 @@ The dashboard is structured as a modern, responsive, two-column workspace on des
 - Includes navigation access to all existing modules (Dashboard, Favourites, Requirements, Competency Matrix, Evidence Vault, Asset Matrix, Audit Pack Builder, Reports, Audit Trail, Settings, Billing, Organisation Management).
 
 ### Top Header
-- **Greeting**: Greets the logged-in user dynamically using `user.full_name` or `user.email`.
+- **Greeting**: Greets the logged-in user dynamically with time-aware and day-aware greetings (e.g. "Good morning", "Happy Friday").
 - **Organisation Name**: Displays the active workspace/organisation name (`organization.name`).
 - **Global Search**: Preserves the command palette entry point (top-right button matching the theme with support for `Ctrl+K` / `Cmd+K`).
 - **Notification Panel**: A modern drop-down listing recent notifications.
@@ -47,20 +47,18 @@ An interactive visual map representing the current readiness posture of the acti
 - **Satellite Nodes**: Hover-scaling circular nodes display sub-module icons, live record counts, and warning badges where current data indicates attention is needed.
 - **List View**: Toggles to a clean list/tabular overview of the modules with summary statistics.
 - **Interactions**:
-  - Hovering a satellite node highlights its SVG path, scales the node, and populates the details panel.
-  - Clicking a satellite node triggers the slide-out detail drawer populated with attention-required records.
+  - Hovering a satellite node highlights its SVG path, scales the node, and populates the popover detail panel. Popovers persist on hover to allow interacting with internal links.
+  - Clicking a satellite node triggers the slide-out detail drawer populated with attention-required records. The source node stays visually highlighted while its drawer is active.
   - Clicking the Compliance Core centerpiece displays overall posture diagnostics and dual navigation buttons.
 - **Responsive Stack**: On mobile screens, the map collapses into a clean grid of glassmorphic cards. On desktop, it renders the full interactive network diagram.
 
 ### Right-Side Live Intelligence Rail
 Provides continuous context-aware insights and shortcuts:
-1. **Compliance Snapshot**: A premium horizontal split panel featuring:
-   - **Left**: A thick semi-circular speedometer gauge arc mapped to a colorful multi-stop gradient (red -> orange -> emerald -> indigo) indicating the current readiness score.
-   - **Right**: Status legends representing valid, due soon, and needs-attention records with live counts.
-2. **Due & Overdue**: Combined feed of overdue framework requirements, upcoming actions, and expired asset checks.
-3. **Recent Activity**: Displays workspace activity made available by the existing audit-log permissions.
-4. **Expiring Soon**: Aggregated list of evidence or competencies expiring within the next 30 days.
-5. **Smart Insights**: Suggests focus areas based on data (e.g. classification of raw files or linking empty matrices).
+1. **Compliance Snapshot**: A premium horizontal split panel featuring a speedometer gauge indicating the current readiness score and status legends.
+2. **Focus**: Smart Insights suggesting high-impact areas based on data (e.g. classification of raw files or linking empty matrices).
+3. **Next 7 Days**: Combined feed of upcoming actions, framework requirements, and expiring asset checks due in the next week.
+4. **Needs Action**: Overdue and critical items across requirements and asset checks that demand immediate intervention.
+5. **Activity**: Displays workspace activity made available by the existing audit-log permissions.
 
 ### Lower Dashboard Panels
 1. **Readiness Snapshot**: Displays the current calculated readiness score. Historical trend lines are intentionally not shown until a persisted historical dataset exists.
@@ -109,7 +107,7 @@ All metrics leverage the existing canonical calculators inside `AppContext` to a
 The dashboard incorporates a live interactive intelligence layer enabling deep inspection and workspace personalization:
 
 ### Hover Popovers & Tooltips
-- **Insight Popovers**: Triggered when hovering or focusing the six top KPI cards and the central Compliance Core orb. Popovers show the current calculation context and attention-required records.
+- **Insight Popovers**: Triggered when hovering or focusing the six top KPI cards and the central Compliance Core orb. Popovers persist smoothly, allowing users to hover inside and click on listed records for direct navigation.
 - **Readiness Point Tooltip**: Hovering over the readiness snapshot point displays the current calculated score.
 - **Donut Chart Segment Hover**: Displays calculated GREEN, AMBER, RED, and GREY requirement counts and supports filtered click-through.
 
@@ -127,10 +125,11 @@ The dashboard incorporates a live interactive intelligence layer enabling deep i
   - **Hero Style**: Choose between **System Map** (full diagram), **Compliance Core Only** (hides satellite nodes & paths), and **List Overview** (tabular module overview).
   - **Hero Detail Level**: Toggle between **Minimal**, **Balanced**, and **Full** representation styles.
   - **Motion Preference**: Toggle between **Standard animations** and **Reduced motion** (which suppresses pings and flow line packet animations).
+  - **Effect Intensity**: Choose between **Subtle**, **Standard**, and **Vibrant** rendering of SVG path glows and shadows.
   - **Upcoming Items Window**: Controls how far ahead the right-rail due-item list looks (**Due Today**, **7 Days**, **30 Days**, **90 Days**). It does not alter the readiness score or create historical data.
-  - **Right Rail Sections**: Multi-select visible sections (Snapshot, Tasks, Activity, Suggestions, Expiring).
+  - **Right Rail Sections**: Multi-select visible sections (Snapshot, Focus, Next 7 Days, Needs Action, Activity).
   - **KPI Sorting & Visibility**: Hide or reorder the Top KPI cards.
-- **Undo Capability**: Stashes the previous saved customization configuration. Clicking **"Undo last save"** restores it once.
+- **Undo Capability**: A dedicated **"Undo Changes"** button instantly reverts all un-saved tweaks to the previously stored configuration.
 - **Reset Defaults**: Loads the default configuration into the customization form; **Save Changes** applies it.
 - Scoped to `vygilence_dashboard_customization_${userId}_${orgId}` in `localStorage`.
 

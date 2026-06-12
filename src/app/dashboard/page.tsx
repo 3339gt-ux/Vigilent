@@ -58,18 +58,29 @@ type RadarItem = {
 
 type DashboardModal = 'requirement' | 'competency' | 'action' | 'audit-pack' | null;
 type ViewMode = 'system' | 'list';
+
+const getGreeting = () => {
+  const hour = new Date().getHours();
+  const day = new Date().getDay(); // 0 is Sunday, 5 is Friday
+  if (day === 5 && hour >= 12 && hour < 18) return 'Happy Friday';
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+};
+
 type DashboardCustomization = {
   visibleKpis: string[];
   kpiOrder: string[];
   visiblePanels: string[];
   defaultViewMode: 'system' | 'list';
-  defaultRailTab: 'tasks' | 'activity' | 'suggestions' | 'expiring';
+  defaultRailTab: 'focus' | 'upcoming' | 'action' | 'activity';
   density: 'comfortable' | 'compact' | 'executive';
   heroStyle: 'map' | 'core' | 'list';
   heroDetailLevel: 'minimal' | 'balanced' | 'full';
   visibleRightRailSections: string[];
   dataWindow: 'snapshot' | '7days' | '30days' | '90days';
   motionPreference: 'standard' | 'reduced';
+  effectIntensity: 'subtle' | 'standard' | 'vibrant';
 };
 
 export default function DashboardPage() {
@@ -120,13 +131,14 @@ export default function DashboardPage() {
       kpiOrder: ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
       visiblePanels: ['trend', 'statusDonut', 'readinessGauge', 'trainingRing', 'assetCategory', 'riskGaps', 'alerts'],
       defaultViewMode: 'system' as const,
-      defaultRailTab: 'tasks' as const,
+      defaultRailTab: 'focus' as const,
       density: 'comfortable' as const,
       heroStyle: 'map' as const,
       heroDetailLevel: 'balanced' as const,
-      visibleRightRailSections: ['snapshot', 'tasks', 'activity', 'suggestions', 'expiring'],
+      visibleRightRailSections: ['snapshot', 'focus', 'upcoming', 'action', 'activity'],
       dataWindow: 'snapshot' as const,
-      motionPreference: 'standard' as const
+      motionPreference: 'standard' as const,
+      effectIntensity: 'standard' as const
     };
     if (typeof window === 'undefined') return defaultSettings;
     try {
@@ -145,7 +157,8 @@ export default function DashboardPage() {
           heroDetailLevel: parsed.heroDetailLevel || defaultSettings.heroDetailLevel,
           visibleRightRailSections: parsed.visibleRightRailSections || defaultSettings.visibleRightRailSections,
           dataWindow: parsed.dataWindow || defaultSettings.dataWindow,
-          motionPreference: parsed.motionPreference || defaultSettings.motionPreference
+          motionPreference: parsed.motionPreference || defaultSettings.motionPreference,
+          effectIntensity: parsed.effectIntensity || defaultSettings.effectIntensity
         };
       }
     } catch {}
@@ -156,7 +169,7 @@ export default function DashboardPage() {
     customization.heroStyle === 'list' ? 'list' : customization.defaultViewMode
   );
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
-  const [activeRailTab, setActiveRailTab] = useState<'tasks' | 'activity' | 'suggestions' | 'expiring'>(
+  const [activeRailTab, setActiveRailTab] = useState<'focus' | 'upcoming' | 'action' | 'activity'>(
     customization.defaultRailTab
   );
   const [prevCustomization, setPrevCustomization] = useState<DashboardCustomization | null>(null);
@@ -541,6 +554,21 @@ export default function DashboardPage() {
     });
   }, [overdueAndUpcoming, radarBuckets]);
 
+  const next7DaysItems = useMemo(() => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + 7);
+    return allTasksAndExpiries.filter(item => {
+      if (item.isOverdue) return false;
+      if (!item.requirement.next_due_date) return false;
+      const dueDate = new Date(item.requirement.next_due_date);
+      return dueDate <= d && dueDate >= today;
+    });
+  }, [allTasksAndExpiries, today]);
+
+  const needsActionItems = useMemo(() => {
+    return allTasksAndExpiries.filter(item => item.isOverdue || item.requirement.category === 'Action');
+  }, [allTasksAndExpiries]);
+
   // Helper for drawing SVG arc paths
   const describeArc = useCallback((x: number, y: number, radius: number, startAngle: number, endAngle: number) => {
     const polarToCartesian = (centerX: number, centerY: number, radiusVal: number, angleInDegrees: number) => {
@@ -654,7 +682,8 @@ export default function DashboardPage() {
         description: 'Assurance Objectives',
         actionLabel: 'View Objectives',
         badge: stats.expiredCount,
-        badgeColor: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+        badgeColor: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20',
+        metric: `${stats.compliantCount}/${stats.activeRequirements} Compliant`
       },
       {
         id: 'competencies',
@@ -668,7 +697,8 @@ export default function DashboardPage() {
         description: 'Personnel matrix',
         actionLabel: 'View Matrix',
         badge: competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').length,
-        badgeColor: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+        badgeColor: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20',
+        metric: `${competencySummary.compliancePercent}% Compliant`
       },
       {
         id: 'vault',
@@ -682,7 +712,8 @@ export default function DashboardPage() {
         description: 'Audit evidence repository',
         actionLabel: 'Open Vault',
         badge: unclassifiedDocs.length,
-        badgeColor: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20'
+        badgeColor: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20',
+        metric: `${classifiedDocsCount}/${documents.length} Classified`
       },
       {
         id: 'matrix',
@@ -696,7 +727,8 @@ export default function DashboardPage() {
         description: 'Equipment & facility checks',
         actionLabel: 'Open Matrix',
         badge: overdueAssetChecks.length,
-        badgeColor: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+        badgeColor: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20',
+        metric: `${compliantAssetChecks}/${totalAssetChecks} Compliant`
       },
       {
         id: 'audit-packs',
@@ -710,7 +742,8 @@ export default function DashboardPage() {
         description: 'Readiness reports compiler',
         actionLabel: 'Configure Packs',
         badge: auditPacks.length,
-        badgeColor: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
+        badgeColor: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20',
+        metric: `${auditPacks.filter(p => p.status === 'Ready').length}/${auditPacks.length} Ready`
       },
       {
         id: 'reports',
@@ -724,7 +757,8 @@ export default function DashboardPage() {
         description: 'Performance overview analytics',
         actionLabel: 'Open Analytics',
         badge: 0,
-        badgeColor: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+        badgeColor: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20',
+        metric: `${reportViewCount} Views Available`
       }
     ];
   }, [stats, people, competencyRecords, documents, unclassifiedDocs, assets, overdueAssetChecks, auditPacks, reportViewCount]);
@@ -988,6 +1022,7 @@ export default function DashboardPage() {
   } | null>(null);
 
   const [modalCustomization, setModalCustomization] = useState(customization);
+  const hoverTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
@@ -1310,6 +1345,7 @@ export default function DashboardPage() {
   }, [readinessScore, readinessDisplay, stats, activeActionsCount, activeRequirements, frameworkRequirements, overdueAssetChecks, classifiedDocsCount, documents, unclassifiedDocs, competencySummary, competencyRecords, people, competencyTypes, overdueActionsCount, actions, compliantAssetChecks, totalAssetChecks, auditPacks, assets, today, greyRequirementCount, reportViewCount, assetMatrixCells]);
 
   const handleMouseEnter = (id: string) => (e: React.SyntheticEvent<HTMLElement>) => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
     const rect = e.currentTarget.getBoundingClientRect();
     const data = getInsightData(id);
     if (data) {
@@ -1322,7 +1358,10 @@ export default function DashboardPage() {
   };
 
   const handleMouseLeave = () => {
-    setHoveredInsight(null);
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = setTimeout(() => {
+      setHoveredInsight(null);
+    }, 300);
   };
 
   const handleClick = (id: string) => () => {
@@ -1460,8 +1499,8 @@ export default function DashboardPage() {
       {/* 1. Header greeting strip */}
       <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card/60 backdrop-blur-xs border border-border/80 rounded-2xl ${densityStyles.cardPadding} shadow-xs`}>
         <div className="space-y-1">
-          <h1 className={`${densityStyles.headingSize} font-black tracking-tight`} id="dashboard-heading">
-            Welcome back, {user?.full_name?.split(' ')[0] || 'User'}
+          <h1 className={`${densityStyles.headingSize} font-black tracking-tight`} id="dashboard-heading" suppressHydrationWarning>
+            {getGreeting()}, {user?.full_name?.split(' ')[0] || 'User'}
           </h1>
           <p className={`${densityStyles.subheadingSize} text-muted-foreground flex items-center gap-1.5 font-semibold`}>
             <Building2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
@@ -1749,11 +1788,7 @@ export default function DashboardPage() {
                     {/* Background SVG connections */}
                     <svg viewBox="0 0 800 400" className="absolute inset-0 w-full h-full pointer-events-none">
                       <defs>
-                        {/* Glowing effect filter definition */}
-                        <filter id="core-glow" x="-20%" y="-20%" width="140%" height="140%">
-                          <feGaussianBlur stdDeviation="8" result="blur" />
-                          <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                        </filter>
+
                         <radialGradient id="hub-glow-gradient" cx="50%" cy="50%" r="50%">
                           <stop offset="0%" stopColor="rgba(99, 102, 241, 0.25)" />
                           <stop offset="100%" stopColor="rgba(99, 102, 241, 0)" />
@@ -1824,14 +1859,13 @@ export default function DashboardPage() {
                               <path
                                 d={pathD}
                                 fill="none"
-                                className={`opacity-40 stroke-[4] animate-pulse ${
-                                  tone === 'rose' ? 'stroke-rose-400' :
-                                  tone === 'amber' ? 'stroke-amber-400' :
-                                  tone === 'emerald' ? 'stroke-emerald-400' :
-                                  tone === 'indigo' ? 'stroke-indigo-400' :
-                                  'stroke-indigo-400'
+                                className={`opacity-60 dark:opacity-40 stroke-[4] animate-pulse drop-shadow-md transition-all ${
+                                  tone === 'rose' ? 'stroke-rose-500 dark:stroke-rose-400' :
+                                  tone === 'amber' ? 'stroke-amber-500 dark:stroke-amber-400' :
+                                  tone === 'emerald' ? 'stroke-emerald-500 dark:stroke-emerald-400' :
+                                  tone === 'indigo' ? 'stroke-indigo-500 dark:stroke-indigo-400' :
+                                  'stroke-indigo-500 dark:stroke-indigo-400'
                                 }`}
-                                filter="url(#core-glow)"
                                 style={{ strokeLinecap: 'round' }}
                               />
                             )}
@@ -1840,8 +1874,8 @@ export default function DashboardPage() {
                       })}
 
                       {/* Concentric rings surrounding the central hub */}
-                      <circle cx="400" cy="200" r="76" stroke="rgba(99, 102, 241, 0.12)" strokeWidth="1" fill="none" strokeDasharray="6 12" />
-                      <circle cx="400" cy="200" r="54" stroke="rgba(6, 182, 212, 0.25)" strokeWidth="1.5" fill="none" />
+                      <circle cx="400" cy="200" r="76" className="stroke-indigo-500/20 dark:stroke-indigo-500/12" strokeWidth="1" fill="none" strokeDasharray="6 12" />
+                      <circle cx="400" cy="200" r="54" className="stroke-cyan-500/40 dark:stroke-cyan-500/25" strokeWidth="1.5" fill="none" />
 
                       {/* Glowing circuit bends dots */}
                       {showPathsAndSatellites && (
@@ -1860,17 +1894,15 @@ export default function DashboardPage() {
                         cx="400"
                         cy="200"
                         r="46"
-                        fill="#070A13"
-                        stroke="currentColor"
-                        className={`text-indigo-500 cursor-pointer hover:text-indigo-400 transition-all ${
-                          hoveredNode === 'hub' ? 'scale-105' : ''
+                        className={`fill-card dark:fill-[#070A13] stroke-indigo-500 dark:stroke-indigo-400 ${customization.effectIntensity === 'subtle' ? '' : customization.effectIntensity === 'vibrant' ? 'drop-shadow-[0_0_12px_rgba(99,102,241,0.6)] dark:drop-shadow-[0_0_20px_rgba(99,102,241,1)]' : 'drop-shadow-[0_0_8px_rgba(99,102,241,0.3)] dark:drop-shadow-[0_0_12px_rgba(99,102,241,0.5)]'} cursor-pointer hover:stroke-indigo-400 active:scale-95 transition-all ${
+                          hoveredNode === 'hub' ? 'scale-105 drop-shadow-[0_0_12px_rgba(99,102,241,0.5)] dark:drop-shadow-[0_0_16px_rgba(99,102,241,0.8)]' : ''
                         } ${
-                          clickedItemId === 'hub' ? 'scale-95 text-indigo-600' : ''
+                          (clickedItemId === 'hub' || activeInsightDrawer?.id === 'hub') ? 'scale-95 stroke-indigo-600 drop-shadow-[0_0_16px_rgba(99,102,241,0.8)]' : ''
                         }`}
                         style={{ transformOrigin: '400px 200px' }}
                         strokeWidth="2.5"
-                        filter="url(#core-glow)"
                         onMouseEnter={(e) => {
+                          if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
                           const rect = e.currentTarget.getBoundingClientRect();
                           const data = getInsightData('hub');
                           if (data) {
@@ -1884,6 +1916,7 @@ export default function DashboardPage() {
                         onMouseLeave={handleMouseLeave}
                         onClick={() => handleItemClick('hub', handleClick('hub'))}
                         onFocus={(e) => {
+                          if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
                           const rect = e.currentTarget.getBoundingClientRect();
                           const data = getInsightData('hub');
                           if (data) {
@@ -2016,6 +2049,7 @@ export default function DashboardPage() {
                     {/* Absolute positioned module nodes with symmetric side-labels */}
                     {showPathsAndSatellites && satelliteNodes.map(node => {
                       const isHovered = hoveredNode === node.id;
+                      const isActive = activeInsightDrawer?.id === node.id || clickedItemId === node.id;
                       let posClass = '';
                       let isLeftNode = false;
 
@@ -2034,6 +2068,7 @@ export default function DashboardPage() {
                           <div
                             id={`program-node-${node.id}`}
                             onMouseEnter={(e) => {
+                              if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
                               setHoveredNode(node.id);
                               const rect = e.currentTarget.getBoundingClientRect();
                               const data = getInsightData(node.id);
@@ -2047,9 +2082,10 @@ export default function DashboardPage() {
                             }}
                             onMouseLeave={() => {
                               setHoveredNode(null);
-                              setHoveredInsight(null);
+                              handleMouseLeave();
                             }}
                             onFocus={(e) => {
+                              if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
                               setHoveredNode(node.id);
                               const rect = e.currentTarget.getBoundingClientRect();
                               const data = getInsightData(node.id);
@@ -2063,7 +2099,7 @@ export default function DashboardPage() {
                             }}
                             onBlur={() => {
                               setHoveredNode(null);
-                              setHoveredInsight(null);
+                              handleMouseLeave();
                             }}
                             onClick={() => handleItemClick(node.id, handleClick(node.id))}
                             tabIndex={0}
@@ -2073,14 +2109,14 @@ export default function DashboardPage() {
                                 handleItemClick(node.id, handleClick(node.id));
                               }
                             }}
-                            className={`w-12 h-12 rounded-full bg-card border-2 flex items-center justify-center transition-all duration-300 shadow-xs hover:scale-110 hover:shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 shrink-0 cursor-pointer ${
-                              isHovered ? 'border-indigo-500 shadow-md scale-105' : 'border-border text-foreground'
+                            className={`w-12 h-12 rounded-full bg-card border-2 flex items-center justify-center transition-all duration-300 shadow-xs hover:scale-110 active:scale-95 hover:shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 shrink-0 cursor-pointer ${
+                              isHovered || isActive ? 'border-indigo-500 shadow-md scale-105' : 'border-border text-foreground'
                             } ${
-                              clickedItemId === node.id ? 'scale-90 border-indigo-600 bg-indigo-500/20' : ''
+                              isActive ? 'border-indigo-600 bg-indigo-500/20 shadow-lg scale-95' : ''
                             }`}
                           >
                             <div className="relative">
-                              <span className={isHovered ? 'text-indigo-500 dark:text-indigo-400' : 'text-foreground'}>
+                              <span className={isHovered || isActive ? 'text-indigo-500 dark:text-indigo-400' : 'text-foreground'}>
                                 {node.icon}
                               </span>
                               {node.warnings > 0 && (
@@ -2119,13 +2155,13 @@ export default function DashboardPage() {
                                     <span className="space-y-0.5">
                                       <span className="block text-indigo-500 dark:text-indigo-400 font-bold">{node.description}</span>
                                       <span className="block text-muted-foreground text-[9px]">
-                                        {node.count} {node.id === 'competencies' ? 'staff' : node.id === 'reports' ? 'views' : 'items'}
+                                        {node.metric || `${node.count} ${node.id === 'competencies' ? 'staff' : node.id === 'reports' ? 'views' : 'items'}`}
                                       </span>
                                     </span>
                                   ) : isHovered ? (
                                     <span className="text-indigo-500 dark:text-indigo-400 font-bold transition-all">{node.description}</span>
                                   ) : (
-                                    `${node.count} ${node.id === 'competencies' ? 'staff' : node.id === 'reports' ? 'views' : 'items'}`
+                                    node.metric || `${node.count} ${node.id === 'competencies' ? 'staff' : node.id === 'reports' ? 'views' : 'items'}`
                                   )}
                                 </span>
                               )}
@@ -2150,13 +2186,13 @@ export default function DashboardPage() {
                                     <span className="space-y-0.5">
                                       <span className="block text-indigo-500 dark:text-indigo-400 font-bold">{node.description}</span>
                                       <span className="block text-muted-foreground text-[9px]">
-                                        {node.count} {node.id === 'vault' ? 'files' : node.id === 'reports' ? 'views' : 'items'}
+                                        {node.metric || `${node.count} ${node.id === 'vault' ? 'files' : node.id === 'reports' ? 'views' : 'items'}`}
                                       </span>
                                     </span>
                                   ) : isHovered ? (
                                     <span className="text-indigo-500 dark:text-indigo-400 font-bold transition-all">{node.description}</span>
                                   ) : (
-                                    `${node.count} ${node.id === 'vault' ? 'files' : node.id === 'reports' ? 'views' : 'items'}`
+                                    node.metric || `${node.count} ${node.id === 'vault' ? 'files' : node.id === 'reports' ? 'views' : 'items'}`
                                   )}
                                 </span>
                               )}
@@ -2423,15 +2459,15 @@ export default function DashboardPage() {
           )}
 
           {/* Rail Section 2: Tabbed Workspace Intelligence card */}
-          {['tasks', 'activity', 'suggestions', 'expiring'].some(id => customization.visibleRightRailSections.includes(id)) && (
+          {['focus', 'upcoming', 'action', 'activity'].some(id => customization.visibleRightRailSections.includes(id)) && (
             <div className="bg-card border border-border rounded-xl p-4 shadow-xs flex flex-col h-[382px]">
               {/* Tab bar headers */}
               <div className="flex border-b border-border/60 pb-1.5 mb-2.5">
                 {[
-                  { id: 'tasks', label: 'Tasks', count: allTasksAndExpiries.length },
-                  { id: 'activity', label: 'Activity', count: safeActivity.length },
-                  { id: 'suggestions', label: 'Focus', count: smartSuggestions.filter(s => s !== "No current priority suggestions were identified from the available workspace records.").length },
-                  { id: 'expiring', label: 'Expiring', count: radarBuckets.length }
+                  { id: 'focus', label: 'Focus', count: smartSuggestions.filter(s => s !== "No current priority suggestions were identified from the available workspace records.").length },
+                  { id: 'upcoming', label: 'Next 7 Days', count: next7DaysItems.length },
+                  { id: 'action', label: 'Needs Action', count: needsActionItems.length },
+                  { id: 'activity', label: 'Activity', count: safeActivity.length }
                 ]
                   .filter(tab => customization.visibleRightRailSections.includes(tab.id))
                   .map(tab => (
@@ -2447,7 +2483,7 @@ export default function DashboardPage() {
                       <span className="flex items-center justify-center gap-1.5">
                         {tab.label}
                         {tab.count > 0 && (
-                          <span className={`w-1.5 h-1.5 rounded-full ${tab.id === 'tasks' || tab.id === 'expiring' ? 'bg-rose-500' : 'bg-indigo-500'}`} />
+                          <span className={`w-1.5 h-1.5 rounded-full ${tab.id === 'action' || tab.id === 'upcoming' ? 'bg-rose-500' : 'bg-indigo-500'}`} />
                         )}
                       </span>
                     </button>
@@ -2456,13 +2492,15 @@ export default function DashboardPage() {
 
               {/* Tab contents */}
               <div className="flex-1 overflow-y-auto pr-0.5 no-scrollbar">
-                {activeRailTab === 'tasks' && (
-                  <div className="space-y-2 animate-in fade-in duration-200">
-                    {allTasksAndExpiries.slice(0, 5).map(item => (
+                {activeRailTab === 'action' && (
+                  <div className="space-y-2 pb-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                    {needsActionItems.slice(0, 5).map(item => (
                       <Link
                         key={item.id}
                         href={item.link}
-                        className="flex items-start gap-2.5 p-2 bg-muted/20 hover:bg-muted/40 border border-border/50 rounded-xl transition-all text-xs outline-none focus-visible:ring-1 focus-visible:ring-indigo-500"
+                        className={`p-2.5 bg-card hover:bg-muted/40 border border-border rounded-xl text-left transition-all duration-200 group flex items-start gap-3 cursor-pointer shadow-xs hover:shadow-md hover:border-indigo-500/30 active:scale-[0.98] ${
+                          (typeof window !== 'undefined' && window.location.search.includes(`id=${item.id}`)) ? 'ring-2 ring-indigo-500/50' : ''
+                        }`}
                       >
                         {item.isOverdue ? (
                           <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
@@ -2478,7 +2516,7 @@ export default function DashboardPage() {
                         </div>
                       </Link>
                     ))}
-                    {allTasksAndExpiries.length === 0 && (
+                    {needsActionItems.length === 0 && (
                       <p className="text-[10px] text-muted-foreground italic text-center py-20">No pending items due.</p>
                     )}
                   </div>
@@ -2501,7 +2539,9 @@ export default function DashboardPage() {
                               });
                             }
                           }}
-                          className="text-[11px] relative space-y-0.5 cursor-pointer hover:bg-muted/30 p-1.5 rounded-lg transition-all"
+                          className={`text-[11px] relative space-y-0.5 cursor-pointer hover:bg-muted/30 p-1.5 rounded-lg transition-all active:scale-95 ${
+                            (typeof window !== 'undefined' && window.location.search.includes(`id=${log.id}`)) ? 'bg-indigo-500/10' : ''
+                          }`}
                           title={isAdminOrOwner ? "Click to view full Audit Trail logs in Reports." : "Audit event details"}
                         >
                           <div className="absolute -left-[18.5px] top-2.5 w-2.5 h-2.5 rounded-full border-2 border-card bg-indigo-500 shadow-xs" />
@@ -2516,7 +2556,7 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                {activeRailTab === 'suggestions' && (
+                {activeRailTab === 'focus' && (
                   <div className="space-y-2 animate-in fade-in duration-200">
                     {smartSuggestions.map((suggestion, idx) => {
                       let targetLink = '';
@@ -2535,7 +2575,7 @@ export default function DashboardPage() {
                           <Link
                             key={idx}
                             href={targetLink}
-                            className="flex gap-2.5 p-2.5 bg-indigo-500/5 dark:bg-indigo-500/10 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/20 border border-indigo-500/15 hover:border-indigo-500/30 rounded-xl text-[10px] text-indigo-650 dark:text-indigo-300 font-semibold leading-relaxed transition-all cursor-pointer block text-left"
+                            className="flex gap-2.5 p-2.5 bg-indigo-500/5 dark:bg-indigo-500/10 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/20 border border-indigo-500/15 hover:border-indigo-500/30 rounded-xl text-[10px] text-indigo-650 dark:text-indigo-300 font-semibold leading-relaxed transition-all cursor-pointer block text-left active:scale-95"
                             title="Click to navigate to filter"
                           >
                             <div className="flex items-start gap-2.5">
@@ -2556,25 +2596,27 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                {activeRailTab === 'expiring' && (
-                  <div className="space-y-2 animate-in fade-in duration-200">
-                    {radarBuckets.slice(0, 5).map(item => (
+                {activeRailTab === 'upcoming' && (
+                  <div className="space-y-2 pb-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                    {next7DaysItems.slice(0, 5).map(item => (
                       <Link
                         key={item.id}
                         href={item.link || '#'}
-                        className="flex items-start gap-2.5 p-2 bg-muted/20 hover:bg-muted/40 border border-border/50 rounded-xl transition-all text-xs outline-none focus-visible:ring-1 focus-visible:ring-indigo-500"
+                        className={`p-2.5 bg-card hover:bg-muted/40 border border-border rounded-xl text-left transition-all duration-200 group flex items-start gap-3 cursor-pointer shadow-xs hover:shadow-md hover:border-indigo-500/30 active:scale-[0.98] ${
+                          (typeof window !== 'undefined' && window.location.search.includes(`id=${item.id}`)) ? 'ring-2 ring-indigo-500/50' : ''
+                        }`}
                       >
                         <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
                         <div className="min-w-0 flex-1">
-                          <span className="font-extrabold block text-foreground truncate text-[11px] leading-tight">{item.title}</span>
-                          <span className="text-[9px] text-muted-foreground block truncate leading-none mt-0.5">{item.type}</span>
+                          <span className="font-extrabold block text-foreground truncate text-[11px] leading-tight">{item.requirement.title}</span>
+                          <span className="text-[9px] text-muted-foreground block truncate leading-none mt-0.5">{item.requirement.category}</span>
                           <span className="text-[9px] font-black text-amber-500 block mt-1">
-                            Expiry: {item.dueDate || 'N/A'}
+                            Expiry: {item.requirement.next_due_date || 'N/A'}
                           </span>
                         </div>
                       </Link>
                     ))}
-                    {radarBuckets.length === 0 && (
+                    {next7DaysItems.length === 0 && (
                       <p className="text-[10px] text-muted-foreground italic text-center py-20">No expiring items found.</p>
                     )}
                   </div>
@@ -3325,8 +3367,10 @@ export default function DashboardPage() {
       {/* Insight Popover Tooltip */}
       {hoveredInsight && (
         <div
+          onMouseEnter={() => { if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current); }}
+          onMouseLeave={handleMouseLeave}
           style={getPopoverStyle(hoveredInsight)}
-          className="z-50 bg-card/95 backdrop-blur-md border border-indigo-500/30 rounded-xl p-4 shadow-2xl space-y-3 pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95 text-left"
+          className="z-50 bg-card/95 backdrop-blur-md border border-indigo-500/30 rounded-xl p-4 shadow-2xl space-y-3 pointer-events-auto transition-all duration-150 animate-in fade-in zoom-in-95 text-left"
         >
           <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
             <span className="text-[10px] font-black text-foreground uppercase tracking-widest">{hoveredInsight.title}</span>
@@ -3353,10 +3397,10 @@ export default function DashboardPage() {
               <span className="text-[8px] font-black text-muted-foreground uppercase tracking-widest block">Needs Attention</span>
               <div className="space-y-1 max-h-24 overflow-y-auto no-scrollbar">
                 {hoveredInsight.records.slice(0, 3).map((rec, idx) => (
-                  <div key={idx} className="flex justify-between items-center text-[9px] p-1 bg-muted/30 border border-border/40 rounded-lg">
+                  <Link key={idx} href={rec.link || '#'} className="flex justify-between items-center text-[9px] p-1.5 bg-muted/30 hover:bg-muted/70 border border-border/40 hover:border-indigo-500/30 rounded-lg transition-colors cursor-pointer pointer-events-auto">
                     <span className="font-extrabold text-foreground truncate max-w-[150px]" title={rec.name}>{rec.name}</span>
                     <span className="text-muted-foreground text-[8px] truncate">{rec.info}</span>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </div>
@@ -3704,7 +3748,7 @@ export default function DashboardPage() {
                     { id: 'snapshot', label: 'Compliance Snapshot' },
                     { id: 'tasks', label: 'Tasks Feed' },
                     { id: 'activity', label: 'Recent Activity' },
-                    { id: 'suggestions', label: 'Focus Suggestions' },
+                    { id: 'focus', label: 'Focus' },
                     { id: 'expiring', label: 'Expiring Soon' }
                   ].map(sec => {
                     const isVisible = modalCustomization.visibleRightRailSections.includes(sec.id);
@@ -3804,7 +3848,7 @@ export default function DashboardPage() {
                   >
                     <option value="tasks">Tasks list</option>
                     <option value="activity">Recent activity</option>
-                    <option value="suggestions">Smart suggestions</option>
+                    <option value="focus">Focus</option>
                     <option value="expiring">Expiring soon</option>
                   </select>
                 </div>
@@ -3832,14 +3876,15 @@ export default function DashboardPage() {
                     kpiOrder: ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
                     visiblePanels: ['trend', 'statusDonut', 'readinessGauge', 'trainingRing', 'assetCategory', 'riskGaps', 'alerts'],
                     defaultViewMode: 'system' as const,
-                    defaultRailTab: 'tasks' as const,
+                    defaultRailTab: 'focus' as const,
                     density: 'comfortable' as const,
                     heroStyle: 'map' as const,
                     heroDetailLevel: 'balanced' as const,
-                    visibleRightRailSections: ['snapshot', 'tasks', 'activity', 'suggestions', 'expiring'],
+                    visibleRightRailSections: ['snapshot', 'focus', 'upcoming', 'action', 'activity'],
                     dataWindow: 'snapshot' as const,
-                    motionPreference: 'standard' as const
-                  };
+                    motionPreference: 'standard' as const,
+      effectIntensity: 'standard' as const
+    };
                   setModalCustomization(defaultVal);
                 }}
                 className="px-4 py-2 border border-border rounded-xl text-xs font-bold text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
