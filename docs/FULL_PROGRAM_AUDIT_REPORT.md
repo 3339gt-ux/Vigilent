@@ -1,5 +1,7 @@
 # Vygilence Full Program Product Audit Report
 
+> **Codex review status:** Not accepted as a standalone release-readiness assessment. Several critical/high findings are contradicted by the audited source, the reported high-volume dataset counts are inaccurate, and no browser evidence was produced. Use this report as a partial source-led UX checklist together with `docs/FULL_PROGRAM_AUDIT_CODEX_REVIEW.md`.
+
 This report presents a comprehensive, end-to-end product audit of the Vygilence application. It details the operational, visual, technical, security, and compliance readiness of the codebase as of June 13, 2026.
 
 ---
