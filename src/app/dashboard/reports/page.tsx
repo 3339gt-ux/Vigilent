@@ -36,8 +36,7 @@ import {
   Requirement,
   AuditTrailEvent,
   SavedReport,
-  CompetencyRecord,
-  CompetencyType
+  CompetencyRecord
 } from '@/lib/types';
 import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
 import { REPORT_CAPABILITIES, BuilderSource } from '@/lib/reportCapabilities';
@@ -386,7 +385,6 @@ export default function ReportsPage() {
     competencyRecords,
     competencyRecordDocuments,
     requirementDocuments,
-    requirementCompetencyTypes,
     auditPacks,
     readinessReport,
     readinessScore,
@@ -1018,11 +1016,11 @@ export default function ReportsPage() {
       recordsByType.set(r.competency_type_id, list);
     });
 
-    const activePeople = people.filter(p => p.active);
+    const activePersonIds = new Set(people.filter(person => person.active).map(person => person.id));
 
     const competencyBreakdown = competencyTypes.map(type => {
-      const typeRecords = recordsByType.get(type.id) || [];
-      const recordByPersonId = new Map(typeRecords.map(r => [r.person_id, r]));
+      const typeRecords = (recordsByType.get(type.id) || [])
+        .filter(record => activePersonIds.has(record.person_id));
       
       let valid = 0;
       let expiring = 0;
@@ -1030,8 +1028,7 @@ export default function ReportsPage() {
       let missing = 0;
       let notRequired = 0;
       
-      activePeople.forEach(p => {
-        const record = recordByPersonId.get(p.id) || null;
+      typeRecords.forEach(record => {
         const status = calculateCompetencyStatus(record, new Date(), type.warning_days);
         if (status === 'Valid') valid++;
         else if (status === 'Expiring Soon') expiring++;
@@ -1040,7 +1037,7 @@ export default function ReportsPage() {
         else if (status === 'Not Required') notRequired++;
       });
 
-      const assigned = activePeople.length - notRequired;
+      const assigned = typeRecords.length - notRequired;
       const gapsCount = expired + missing;
 
       const recordIds = new Set(typeRecords.map(r => r.id));
@@ -3110,9 +3107,9 @@ export default function ReportsPage() {
                     <span className="text-[9px] text-muted-foreground block font-semibold">{competencyRegistryReportMetrics.coveredEvidenceCount} / {competencyRegistryReportMetrics.evidenceRequiredCount} with linked files</span>
                   </div>
                   <div className="bg-card border border-border p-4 rounded-xl text-center space-y-1">
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Unassigned Competencies</span>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Types Without Records</span>
                     <span className="text-2xl font-black text-amber-600">{competencyRegistryReportMetrics.unassignedCount}</span>
-                    <span className="text-[9px] text-muted-foreground block font-semibold">Not required for any teammate</span>
+                    <span className="text-[9px] text-muted-foreground block font-semibold">No active person records</span>
                   </div>
                 </div>
 
@@ -3131,7 +3128,7 @@ export default function ReportsPage() {
                   </div>
 
                   <div className="bg-card border border-border p-5 rounded-2xl space-y-4">
-                    <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest font-sans">High-Gap Competencies (Top 10)</h3>
+                    <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest font-sans">Recorded Competency Gaps (Top 10)</h3>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
@@ -3164,8 +3161,8 @@ export default function ReportsPage() {
 
                 {competencyRegistryReportMetrics.unassignedCount > 0 && (
                   <div className="bg-card border border-border p-5 rounded-2xl space-y-4">
-                    <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Unassigned Competencies</h3>
-                    <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">These competency definitions currently have no active personnel assignments (all records marked Not Required).</p>
+                    <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Competency Types Without Records</h3>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">These competency definitions currently have no records for active people. The current data model does not store a separate assignment list.</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                       {competencyRegistryReportMetrics.unassignedList.map(item => (
                         <div key={item.id} className="p-3 bg-muted/30 border border-border rounded-xl flex items-center justify-between text-xs">

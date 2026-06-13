@@ -4,7 +4,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
 import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
-import { buildCompetencyMatrix } from '@/lib/competencyEngine';
+import { buildCompetencyMatrix, calculateCompetencyStatus } from '@/lib/competencyEngine';
 import { COMPETENCY_TEMPLATE_PACKS } from '@/lib/competencyTemplates';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import { exportCsv, exportDateStamp, ExportRow } from '@/lib/exportData';
@@ -271,8 +271,9 @@ export default function CompetencyMatrixPage() {
 
   // Authorisation and permission checks
   const currentUserRole = user?.role || 'Viewer';
-  const canManage = isDemoMode && (currentUserRole === 'Owner' || currentUserRole === 'Admin' || currentUserRole === 'Editor');
-  const canArchive = isDemoMode && (currentUserRole === 'Owner' || currentUserRole === 'Admin');
+  const canManage = currentUserRole === 'Owner' || currentUserRole === 'Admin' || currentUserRole === 'Editor';
+  const canArchive = currentUserRole === 'Owner' || currentUserRole === 'Admin';
+  const supportsCustomRegistryPeriods = isDemoMode;
 
   const activePeople = useMemo(() => people.filter(person => person.active), [people]);
   const activeTypes = useMemo(() => {
@@ -286,14 +287,6 @@ export default function CompetencyMatrixPage() {
 
   // Registry Stats Memoization
   const registryStats = useMemo(() => {
-    const allCells = buildCompetencyMatrix(people, competencyTypes, competencyRecords);
-    const cellsByType = new Map<string, typeof allCells>();
-    allCells.forEach(cell => {
-      const list = cellsByType.get(cell.competencyType.id) || [];
-      list.push(cell);
-      cellsByType.set(cell.competencyType.id, list);
-    });
-
     const statsMap = new Map<string, {
       assigned: number;
       valid: number;
@@ -302,15 +295,32 @@ export default function CompetencyMatrixPage() {
       missing: number;
     }>();
 
+    const activePersonIds = new Set(people.filter(person => person.active).map(person => person.id));
+    const latestRecordByPersonAndType = new Map<string, CompetencyRecord>();
+    competencyRecords.forEach(record => {
+      if (!activePersonIds.has(record.person_id)) return;
+      const key = `${record.person_id}:${record.competency_type_id}`;
+      const current = latestRecordByPersonAndType.get(key);
+      if (!current || new Date(record.updated_at || record.created_at).getTime() > new Date(current.updated_at || current.created_at).getTime()) {
+        latestRecordByPersonAndType.set(key, record);
+      }
+    });
+
     competencyTypes.forEach(type => {
-      const cells = cellsByType.get(type.id) || [];
-      const assignedCells = cells.filter(c => c.status !== 'Not Required');
+      const typeRecords = Array.from(latestRecordByPersonAndType.values())
+        .filter(record => record.competency_type_id === type.id)
+        .map(record => ({
+          record,
+          status: calculateCompetencyStatus(record, new Date(), type.warning_days)
+        }))
+        .filter(item => item.status !== 'Not Required');
+
       statsMap.set(type.id, {
-        assigned: assignedCells.length,
-        valid: assignedCells.filter(c => c.status === 'Valid').length,
-        expired: assignedCells.filter(c => c.status === 'Expired').length,
-        expiringSoon: assignedCells.filter(c => c.status === 'Expiring Soon').length,
-        missing: assignedCells.filter(c => c.status === 'Missing').length,
+        assigned: typeRecords.length,
+        valid: typeRecords.filter(item => item.status === 'Valid').length,
+        expired: typeRecords.filter(item => item.status === 'Expired').length,
+        expiringSoon: typeRecords.filter(item => item.status === 'Expiring Soon').length,
+        missing: typeRecords.filter(item => item.status === 'Missing').length,
       });
     });
 
@@ -485,10 +495,11 @@ export default function CompetencyMatrixPage() {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       params.set('tab', tab);
+      params.delete('id');
+      params.delete('competencyId');
+      params.delete('competency');
       if (compId) {
-        params.set('competencyId', compId);
-      } else {
-        params.delete('competencyId');
+        params.set('competency', compId);
       }
       const newUrl = `${window.location.pathname}?${params.toString()}`;
       window.history.pushState(null, '', newUrl);
@@ -497,6 +508,11 @@ export default function CompetencyMatrixPage() {
 
   const handleTabChange = (tab: 'matrix' | 'registry') => {
     setActiveTab(tab);
+    if (tab === 'matrix') {
+      setSelectedCompetencyId(null);
+      updateUrlParams(tab, null);
+      return;
+    }
     updateUrlParams(tab, selectedCompetencyId);
   };
 
@@ -508,36 +524,29 @@ export default function CompetencyMatrixPage() {
     }
   };
 
-  // URL query params load hook
+  // Registry deep links are handled separately from person/cell links below.
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');
-      const idParam = params.get('id') || params.get('competencyId') || params.get('competency');
+      const personParam = params.get('person');
+      const competencyParam = params.get('competency') || params.get('competencyId');
       
       if (tabParam === 'registry') {
         setActiveTab('registry');
       } else if (tabParam === 'matrix') {
         setActiveTab('matrix');
       }
-      if (idParam) {
-        const exists = competencyTypes.some(t => t.id === idParam);
+
+      if (!personParam && competencyParam) {
+        const exists = competencyTypes.some(type => type.id === competencyParam);
         if (exists) {
-          setSelectedCompetencyId(idParam);
+          setSelectedCompetencyId(competencyParam);
           setActiveTab('registry');
-        } else {
-          const personExists = people.some(p => p.id === idParam);
-          if (personExists) {
-            const p = people.find(person => person.id === idParam);
-            if (p) {
-              setSelectedPerson(p);
-              setActiveTab('matrix');
-            }
-          }
         }
       }
     }
-  }, [competencyTypes, people]);
+  }, [competencyTypes]);
 
   // Create Competency handler
   const handleCreateCompetency = async (e: React.FormEvent) => {
@@ -551,10 +560,12 @@ export default function CompetencyMatrixPage() {
         description: competencyForm.description || null,
         default_risk_level: competencyForm.default_risk_level,
         evidence_required: competencyForm.evidence_required,
-        review_period_months: competencyForm.review_period_months || null,
         validity_period_months: competencyForm.validity_period_months || null,
-        warning_days: competencyForm.warning_days || null,
-        active: competencyForm.active
+        active: competencyForm.active,
+        ...(supportsCustomRegistryPeriods ? {
+          review_period_months: competencyForm.review_period_months || null,
+          warning_days: competencyForm.warning_days || null
+        } : {})
       };
       
       const newType = await upsertCompetencyType(payload);
@@ -586,10 +597,12 @@ export default function CompetencyMatrixPage() {
         description: type.description,
         default_risk_level: type.default_risk_level,
         evidence_required: type.evidence_required,
-        review_period_months: type.review_period_months,
         validity_period_months: type.validity_period_months,
-        warning_days: type.warning_days,
-        active: true
+        active: true,
+        ...(supportsCustomRegistryPeriods ? {
+          review_period_months: type.review_period_months,
+          warning_days: type.warning_days
+        } : {})
       };
       const newType = await upsertCompetencyType(payload);
       setToast({ type: 'success', message: `Duplicated competency "${type.title}" to "${newType.title}".` });
@@ -2520,15 +2533,15 @@ export default function CompetencyMatrixPage() {
             </div>
 
             <div className="flex flex-col gap-1 text-xs">
-              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Assignment Scope</label>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Record Coverage</label>
               <select
                 value={registryAssignedFilter}
                 onChange={e => setRegistryAssignedFilter(e.target.value)}
                 className="w-full bg-muted border border-border rounded-lg px-3 py-2 font-semibold text-foreground outline-none cursor-pointer"
               >
-                <option value="All">All Assignment</option>
-                <option value="Assigned">Assigned to Teammates</option>
-                <option value="Unassigned">Not Assigned / Required</option>
+                <option value="All">All Record Coverage</option>
+                <option value="Assigned">Has Person Records</option>
+                <option value="Unassigned">No Person Records</option>
               </select>
             </div>
           </div>
@@ -2582,21 +2595,25 @@ export default function CompetencyMatrixPage() {
                 Apply
               </button>
 
-              <input
-                type="number"
-                placeholder="Warning days..."
-                value={bulkWarning}
-                onChange={e => setBulkWarning(e.target.value)}
-                className="w-24 px-2.5 py-1.5 bg-card border border-border rounded-lg font-semibold text-foreground outline-none"
-              />
-              <button
-                type="button"
-                disabled={!bulkWarning}
-                onClick={() => executeBulkAction('Change Warning Window', () => ({ warning_days: bulkWarning ? Number(bulkWarning) : null }))}
-                className="px-3 py-1.5 bg-indigo-650 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg font-bold cursor-pointer transition-colors"
-              >
-                Apply
-              </button>
+              {supportsCustomRegistryPeriods && (
+                <>
+                  <input
+                    type="number"
+                    placeholder="Warning days..."
+                    value={bulkWarning}
+                    onChange={e => setBulkWarning(e.target.value)}
+                    className="w-24 px-2.5 py-1.5 bg-card border border-border rounded-lg font-semibold text-foreground outline-none"
+                  />
+                  <button
+                    type="button"
+                    disabled={!bulkWarning}
+                    onClick={() => executeBulkAction('Change Warning Window', () => ({ warning_days: bulkWarning ? Number(bulkWarning) : null }))}
+                    className="px-3 py-1.5 bg-indigo-650 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg font-bold cursor-pointer transition-colors"
+                  >
+                    Apply
+                  </button>
+                </>
+              )}
 
               <select
                 value={bulkEvidence}
@@ -2748,20 +2765,20 @@ export default function CompetencyMatrixPage() {
                         </div>
                         <div className="flex items-center gap-1.5 text-[10px]">
                           <span className="font-bold text-foreground">Warning:</span>
-                          <span>{type.warning_days ?? 30} days</span>
+                          <span>{supportsCustomRegistryPeriods && type.warning_days ? `${type.warning_days} days` : '30 days (system)'}</span>
                         </div>
                       </td>
                       <td className="p-3">
                         {stats.assigned === 0 ? (
-                          <span className="text-muted-foreground italic text-[10px]">No assigned teammates</span>
+                          <span className="text-muted-foreground italic text-[10px]">No active person records</span>
                         ) : (
                           <div className="space-y-1">
                             <div className="flex items-center gap-1">
-                              <span className="text-[10px] text-muted-foreground">Compliance:</span>
+                              <span className="text-[10px] text-muted-foreground">Record health:</span>
                               <strong className="text-indigo-650 dark:text-indigo-400 font-bold">
                                 {Math.round(((stats.valid + stats.expiringSoon * 0.5) / stats.assigned) * 100)}%
                               </strong>
-                              <span className="text-[9px] text-muted-foreground font-semibold">({stats.assigned} required)</span>
+                              <span className="text-[9px] text-muted-foreground font-semibold">({stats.assigned} records)</span>
                             </div>
                             <div className="flex flex-wrap items-center gap-1 text-[9px] font-bold uppercase">
                               {stats.valid > 0 && <span className="text-emerald-600 bg-emerald-500/15 px-1.5 py-0.5 rounded">{stats.valid} Valid</span>}
@@ -2877,7 +2894,7 @@ export default function CompetencyMatrixPage() {
                 <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Description</span>
                 <textarea
                   rows={2}
-                  placeholder="Describe training criteria, standards, or reference protocols..."
+                  placeholder="Describe the competency, expected outcome, or reference process..."
                   value={competencyForm.description}
                   onChange={e => setCompetencyForm({ ...competencyForm, description: e.target.value })}
                   className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none resize-none leading-normal"
@@ -2914,6 +2931,7 @@ export default function CompetencyMatrixPage() {
                   <input
                     type="number"
                     min="1"
+                    disabled={!supportsCustomRegistryPeriods}
                     value={competencyForm.review_period_months}
                     onChange={e => setCompetencyForm({ ...competencyForm, review_period_months: Number(e.target.value) })}
                     className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none text-foreground"
@@ -2936,12 +2954,19 @@ export default function CompetencyMatrixPage() {
                   <input
                     type="number"
                     min="1"
+                    disabled={!supportsCustomRegistryPeriods}
                     value={competencyForm.warning_days}
                     onChange={e => setCompetencyForm({ ...competencyForm, warning_days: Number(e.target.value) })}
                     className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none text-foreground"
                   />
                 </label>
               </div>
+
+              {!supportsCustomRegistryPeriods && (
+                <p className="text-[10px] text-muted-foreground">
+                  Review period and custom warning window are demo/local settings until matching Supabase columns are provisioned. Renewal/expiry persists in production.
+                </p>
+              )}
 
               <div className="flex gap-2 items-center pt-2">
                 <input
@@ -3061,7 +3086,7 @@ export default function CompetencyMatrixPage() {
                 <div className="space-y-6 text-xs">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="p-4 bg-muted/30 border border-border rounded-xl">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Compliance Rate</span>
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Record Health</span>
                       <span className="text-2xl font-extrabold block mt-1 text-indigo-505 text-indigo-600 dark:text-indigo-400">
                         {(() => {
                           const stats = registryStats.get(selectedCompetency.id);
@@ -3071,7 +3096,7 @@ export default function CompetencyMatrixPage() {
                       </span>
                     </div>
                     <div className="p-4 bg-muted/30 border border-border rounded-xl">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Assigned People</span>
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">People With Records</span>
                       <span className="text-2xl font-extrabold block mt-1 text-foreground">
                         {registryStats.get(selectedCompetency.id)?.assigned || 0}
                       </span>
@@ -3104,7 +3129,9 @@ export default function CompetencyMatrixPage() {
                     <div className="bg-card border border-border p-4 rounded-xl space-y-1">
                       <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Default Review Period</span>
                       <span className="font-bold text-foreground block">
-                        {selectedCompetency.review_period_months ? `${selectedCompetency.review_period_months} months` : 'Not set'}
+                        {supportsCustomRegistryPeriods
+                          ? (selectedCompetency.review_period_months ? `${selectedCompetency.review_period_months} months` : 'Not set')
+                          : 'Demo/local only'}
                       </span>
                     </div>
                     <div className="bg-card border border-border p-4 rounded-xl space-y-1">
@@ -3116,7 +3143,9 @@ export default function CompetencyMatrixPage() {
                     <div className="bg-card border border-border p-4 rounded-xl space-y-1">
                       <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Warning Window</span>
                       <span className="font-bold text-foreground block">
-                        {selectedCompetency.warning_days ? `${selectedCompetency.warning_days} days` : '30 days (default)'}
+                        {supportsCustomRegistryPeriods && selectedCompetency.warning_days
+                          ? `${selectedCompetency.warning_days} days`
+                          : '30 days (system default)'}
                       </span>
                     </div>
                   </div>
@@ -3137,10 +3166,12 @@ export default function CompetencyMatrixPage() {
                         description: editForm.description || null,
                         default_risk_level: editForm.default_risk_level,
                         evidence_required: editForm.evidence_required,
-                        review_period_months: editForm.review_period_months,
                         validity_period_months: editForm.validity_period_months,
-                        warning_days: editForm.warning_days,
-                        active: editForm.active
+                        active: editForm.active,
+                        ...(supportsCustomRegistryPeriods ? {
+                          review_period_months: editForm.review_period_months,
+                          warning_days: editForm.warning_days
+                        } : {})
                       });
                       setToast({ type: 'success', message: 'Successfully updated competency settings.' });
                     } catch (e) {
@@ -3151,7 +3182,7 @@ export default function CompetencyMatrixPage() {
                 >
                   {!canManage && (
                     <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 rounded-xl animate-in fade-in duration-200">
-                      Changes are disabled. You must be in Demo mode with Editor/Admin/Owner permission to update configuration settings.
+                      Changes are disabled. Editor, Admin, or Owner permission is required to update competency settings.
                     </div>
                   )}
 
@@ -3205,13 +3236,19 @@ export default function CompetencyMatrixPage() {
                       </label>
                     </div>
 
+                    {!supportsCustomRegistryPeriods && (
+                      <p className="text-[10px] text-muted-foreground">
+                        Review period and custom warning window are not columns in the current Supabase schema, so they are read-only in production. Renewal/expiry is stored remotely.
+                      </p>
+                    )}
+
                     <div className="grid grid-cols-3 gap-3">
                       <label className="block space-y-1">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Review Period (months)</span>
                         <input
                           type="number"
                           min="1"
-                          disabled={!canManage}
+                          disabled={!canManage || !supportsCustomRegistryPeriods}
                           value={editForm.review_period_months ?? ''}
                           onChange={e => setEditForm({ ...editForm, review_period_months: e.target.value ? Number(e.target.value) : null })}
                           className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none text-foreground"
@@ -3235,7 +3272,7 @@ export default function CompetencyMatrixPage() {
                         <input
                           type="number"
                           min="1"
-                          disabled={!canManage}
+                          disabled={!canManage || !supportsCustomRegistryPeriods}
                           value={editForm.warning_days ?? ''}
                           onChange={e => setEditForm({ ...editForm, warning_days: e.target.value ? Number(e.target.value) : null })}
                           className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none text-foreground"
@@ -3283,11 +3320,12 @@ export default function CompetencyMatrixPage() {
               {/* people tab */}
               {competencyWorkspaceTab === 'people' && (
                 <div className="space-y-4 text-xs">
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Assigned Teammates</h3>
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">People With Competency Records</h3>
                   {(() => {
-                    const assignedCells = buildCompetencyMatrix(people, [selectedCompetency], competencyRecords).filter(c => c.status !== 'Not Required');
+                    const assignedCells = buildCompetencyMatrix(people, [selectedCompetency], competencyRecords)
+                      .filter(cell => cell.record && cell.status !== 'Not Required');
                     if (assignedCells.length === 0) {
-                      return <p className="italic text-muted-foreground">No teammates currently assigned or required to have this competency.</p>;
+                      return <p className="italic text-muted-foreground">No active people currently have a record for this competency.</p>;
                     }
 
                     return (
@@ -3308,8 +3346,7 @@ export default function CompetencyMatrixPage() {
                                   <button
                                     onClick={() => {
                                       setSelectedPerson(cell.person);
-                                      setActiveTab('matrix');
-                                      handleSelectCompetency(null);
+                                      handleTabChange('matrix');
                                     }}
                                     className="font-extrabold text-indigo-600 dark:text-indigo-400 hover:underline text-left cursor-pointer"
                                   >
@@ -3386,7 +3423,7 @@ export default function CompetencyMatrixPage() {
                                 </span>
                                 <button
                                   type="button"
-                                  onClick={async () => window.open(await getDocumentSignedUrl(doc.id), '_blank')}
+                                  onClick={async () => window.open(await getDocumentSignedUrl(doc.id), '_blank', 'noopener,noreferrer')}
                                   className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg cursor-pointer transition-colors"
                                 >
                                   Open File
@@ -3602,7 +3639,7 @@ export default function CompetencyMatrixPage() {
                     <span className="text-[10px] text-muted-foreground truncate block">{document.file_name}</span>
                   </div>
                   <div className="flex gap-2 shrink-0">
-                    <button onClick={async () => window.open(await getDocumentSignedUrl(document.id), '_blank')} className="px-2 py-1 bg-indigo-500/10 text-indigo-500 rounded font-bold">Open</button>
+                    <button onClick={async () => window.open(await getDocumentSignedUrl(document.id), '_blank', 'noopener,noreferrer')} className="px-2 py-1 bg-indigo-500/10 text-indigo-500 rounded font-bold">Open</button>
                     {activeCell.record && <button onClick={() => unlinkDocumentFromCompetencyRecord(activeCell.record!.id, document.id)} className="px-2 py-1 bg-muted border border-border rounded font-bold">Unlink</button>}
                   </div>
                 </div>
@@ -4117,7 +4154,7 @@ export default function CompetencyMatrixPage() {
                               <span className="text-[8px] text-muted-foreground truncate block">{document.file_name}</span>
                             </div>
                             <div className="flex gap-1 shrink-0">
-                              <button type="button" onClick={async () => window.open(await getDocumentSignedUrl(document.id), '_blank')} className="px-1.5 py-0.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded text-[9px] font-bold hover:bg-indigo-500/20 transition-colors">Open</button>
+                              <button type="button" onClick={async () => window.open(await getDocumentSignedUrl(document.id), '_blank', 'noopener,noreferrer')} className="px-1.5 py-0.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded text-[9px] font-bold hover:bg-indigo-500/20 transition-colors">Open</button>
                               {activeCell.record && <button type="button" onClick={() => unlinkDocumentFromCompetencyRecord(activeCell.record!.id, document.id)} className="px-1.5 py-0.5 bg-muted border border-border hover:bg-rose-500/10 hover:text-rose-500 rounded text-[9px] font-bold transition-colors">Unlink</button>}
                             </div>
                           </div>
