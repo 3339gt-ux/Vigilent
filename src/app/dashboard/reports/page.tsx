@@ -35,7 +35,9 @@ import {
 import {
   Requirement,
   AuditTrailEvent,
-  SavedReport
+  SavedReport,
+  CompetencyRecord,
+  CompetencyType
 } from '@/lib/types';
 import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
 import { REPORT_CAPABILITIES, BuilderSource } from '@/lib/reportCapabilities';
@@ -382,7 +384,9 @@ export default function ReportsPage() {
     people,
     competencyTypes,
     competencyRecords,
+    competencyRecordDocuments,
     requirementDocuments,
+    requirementCompetencyTypes,
     auditPacks,
     readinessReport,
     readinessScore,
@@ -397,6 +401,7 @@ export default function ReportsPage() {
   const router = useRouter();
 
   const [selectedAssetCategoryId, setSelectedAssetCategoryId] = useState<string>('All');
+  const [competencyReportSubTab, setCompetencyReportSubTab] = useState<'roster' | 'registry'>('roster');
 
   // Loading admin trail logs
   const [auditTrailEvents, setAuditTrailEvents] = useState<AuditTrailEvent[]>([]);
@@ -995,6 +1000,90 @@ export default function ReportsPage() {
       compliancePercent: scored > 0 ? Math.round((counts.valid / scored) * 100) : 0
     };
   }, [competencyTypes, filteredCompetencyRecords, filteredPeople]);
+
+  const competencyRegistryReportMetrics = useMemo(() => {
+    const byCategoryMap = new Map<string, number>();
+    competencyTypes.forEach(t => {
+      byCategoryMap.set(t.category, (byCategoryMap.get(t.category) || 0) + 1);
+    });
+    const typesByCategory = Array.from(byCategoryMap.entries()).map(([label, value]) => ({
+      label,
+      value
+    }));
+
+    const recordsByType = new Map<string, CompetencyRecord[]>();
+    competencyRecords.forEach(r => {
+      const list = recordsByType.get(r.competency_type_id) || [];
+      list.push(r);
+      recordsByType.set(r.competency_type_id, list);
+    });
+
+    const activePeople = people.filter(p => p.active);
+
+    const competencyBreakdown = competencyTypes.map(type => {
+      const typeRecords = recordsByType.get(type.id) || [];
+      const recordByPersonId = new Map(typeRecords.map(r => [r.person_id, r]));
+      
+      let valid = 0;
+      let expiring = 0;
+      let expired = 0;
+      let missing = 0;
+      let notRequired = 0;
+      
+      activePeople.forEach(p => {
+        const record = recordByPersonId.get(p.id) || null;
+        const status = calculateCompetencyStatus(record, new Date(), type.warning_days);
+        if (status === 'Valid') valid++;
+        else if (status === 'Expiring Soon') expiring++;
+        else if (status === 'Expired') expired++;
+        else if (status === 'Missing') missing++;
+        else if (status === 'Not Required') notRequired++;
+      });
+
+      const assigned = activePeople.length - notRequired;
+      const gapsCount = expired + missing;
+
+      const recordIds = new Set(typeRecords.map(r => r.id));
+      const evidenceCount = competencyRecordDocuments.filter(link => recordIds.has(link.competency_record_id)).length;
+
+      return {
+        id: type.id,
+        title: type.title,
+        category: type.category,
+        assigned,
+        valid,
+        expiring,
+        expired,
+        missing,
+        gapsCount,
+        evidenceCount,
+        evidenceRequired: type.evidence_required
+      };
+    });
+
+    const evidenceRequiredComps = competencyBreakdown.filter(c => c.evidenceRequired);
+    const coveredEvidenceComps = evidenceRequiredComps.filter(c => c.evidenceCount > 0).length;
+    const evidenceCoveragePercent = evidenceRequiredComps.length > 0
+      ? Math.round((coveredEvidenceComps / evidenceRequiredComps.length) * 100)
+      : 0;
+
+    const unassignedCompetencies = competencyBreakdown.filter(c => c.assigned === 0);
+
+    const highGapsCompetencies = [...competencyBreakdown]
+      .filter(c => c.gapsCount > 0)
+      .sort((a, b) => b.gapsCount - a.gapsCount)
+      .slice(0, 10);
+
+    return {
+      typesByCategory,
+      evidenceCoveragePercent,
+      evidenceRequiredCount: evidenceRequiredComps.length,
+      coveredEvidenceCount: coveredEvidenceComps,
+      unassignedCount: unassignedCompetencies.length,
+      unassignedList: unassignedCompetencies,
+      highGapsList: highGapsCompetencies
+    };
+  }, [competencyTypes, competencyRecords, people, competencyRecordDocuments]);
 
   const evidenceLinkMetrics = useMemo(() => {
     const linkedDocumentIds = new Set(requirementDocuments.map(link => link.document_id));
@@ -2935,52 +3024,160 @@ export default function ReportsPage() {
         {/* Tab 4: Competencies & People */}
         {activeTab === 'competencies' && (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-card border border-border p-5 rounded-2xl space-y-4">
-                <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Roster Competency Status</h3>
-                {renderHorizontalBarList(
-                  filteredPeople.map(person => {
-                    const records = filteredCompetencyRecords.filter(r => r.person_id === person.id);
-                    const valid = records.filter(r => calculateCompetencyStatus(r) === 'Valid').length;
-                    return {
-                      label: person.display_name,
-                      count: valid,
-                      total: records.length,
-                      colorClass: 'bg-emerald-500',
-                      id: person.id
-                    };
-                  }),
-                  'Competencies'
-                )}
-                {filteredPeople.length === 0 && (
-                  <div className="text-xs text-muted-foreground text-center py-6">No personnel records found.</div>
-                )}
-              </div>
+            {/* Sub Tabs */}
+            <div className="flex border-b border-border/60">
+              <button
+                type="button"
+                onClick={() => setCompetencyReportSubTab('roster')}
+                className={`px-4 py-2 border-b-2 font-bold text-xs -mb-[2px] transition-colors ${
+                  competencyReportSubTab === 'roster'
+                    ? 'border-indigo-655 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Roster Compliance
+              </button>
+              <button
+                type="button"
+                onClick={() => setCompetencyReportSubTab('registry')}
+                className={`px-4 py-2 border-b-2 font-bold text-xs -mb-[2px] transition-colors ${
+                  competencyReportSubTab === 'registry'
+                    ? 'border-indigo-655 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Competency Registry Analysis
+              </button>
+            </div>
 
-              <div className="bg-card border border-border p-5 rounded-2xl space-y-4">
-                <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Competency Gaps by Risk Level</h3>
-                <div className="space-y-3 text-xs">
-                  <div onClick={() => handleDrillDown('Competencies', { status: 'Expired' })} className="flex justify-between items-center p-3 bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-400 rounded-xl cursor-pointer hover:bg-rose-500/20 transition-all">
-                    <span className="font-bold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> High Risk Competency Gaps</span>
-                    <span className="font-extrabold">{filteredCompetencySummary.expired + filteredCompetencySummary.missing} records</span>
-                  </div>
-                  <div onClick={() => handleDrillDown('Competencies', { status: 'Expiring Soon' })} className="flex justify-between items-center p-3 bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 rounded-xl cursor-pointer hover:bg-amber-500/20 transition-all">
-                    <span className="font-bold flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Expiring Soon / Due Gaps</span>
-                    <span className="font-extrabold">{filteredCompetencySummary.expiringSoon} records</span>
-                  </div>
-                  <div className="p-3 bg-muted/40 rounded-xl border border-border/40 space-y-1.5 text-muted-foreground">
-                    <div className="flex justify-between items-center font-bold">
-                      <span>Total Assigned Competency Types:</span>
-                      <span className="text-foreground">{activeCompetencyTypeIds.size}</span>
+            {competencyReportSubTab === 'roster' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-card border border-border p-5 rounded-2xl space-y-4">
+                  <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Roster Competency Status</h3>
+                  {renderHorizontalBarList(
+                    filteredPeople.map(person => {
+                      const records = filteredCompetencyRecords.filter(r => r.person_id === person.id);
+                      const valid = records.filter(r => calculateCompetencyStatus(r) === 'Valid').length;
+                      return {
+                        label: person.display_name,
+                        count: valid,
+                        total: records.length,
+                        colorClass: 'bg-emerald-500',
+                        id: person.id
+                      };
+                    }),
+                    'Competencies'
+                  )}
+                  {filteredPeople.length === 0 && (
+                    <div className="text-xs text-muted-foreground text-center py-6">No personnel records found.</div>
+                  )}
+                </div>
+
+                <div className="bg-card border border-border p-5 rounded-2xl space-y-4">
+                  <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Competency Gaps by Risk Level</h3>
+                  <div className="space-y-3 text-xs">
+                    <div onClick={() => handleDrillDown('Competencies', { status: 'Expired' })} className="flex justify-between items-center p-3 bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-400 rounded-xl cursor-pointer hover:bg-rose-500/20 transition-all">
+                      <span className="font-bold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> High Risk Competency Gaps</span>
+                      <span className="font-extrabold">{filteredCompetencySummary.expired + filteredCompetencySummary.missing} records</span>
                     </div>
-                    <div className="flex justify-between items-center font-bold">
-                      <span>Roster Compliance score:</span>
-                      <span className="text-foreground">{filteredCompetencySummary.compliancePercent}%</span>
+                    <div onClick={() => handleDrillDown('Competencies', { status: 'Expiring Soon' })} className="flex justify-between items-center p-3 bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 rounded-xl cursor-pointer hover:bg-amber-500/20 transition-all">
+                      <span className="font-bold flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Expiring Soon / Due Gaps</span>
+                      <span className="font-extrabold">{filteredCompetencySummary.expiringSoon} records</span>
+                    </div>
+                    <div className="p-3 bg-muted/40 rounded-xl border border-border/40 space-y-1.5 text-muted-foreground">
+                      <div className="flex justify-between items-center font-bold">
+                        <span>Total Assigned Competency Types:</span>
+                        <span className="text-foreground">{activeCompetencyTypeIds.size}</span>
+                      </div>
+                      <div className="flex justify-between items-center font-bold">
+                        <span>Roster Compliance score:</span>
+                        <span className="text-foreground">{filteredCompetencySummary.compliancePercent}%</span>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-6 animate-fadeIn">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                  <div className="bg-card border border-border p-4 rounded-xl text-center space-y-1">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Total Competency Types</span>
+                    <span className="text-2xl font-black text-foreground">{competencyTypes.length}</span>
+                  </div>
+                  <div className="bg-card border border-border p-4 rounded-xl text-center space-y-1">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Evidence-Required Coverage</span>
+                    <span className="text-2xl font-black text-indigo-650 dark:text-indigo-400">{competencyRegistryReportMetrics.evidenceCoveragePercent}%</span>
+                    <span className="text-[9px] text-muted-foreground block font-semibold">{competencyRegistryReportMetrics.coveredEvidenceCount} / {competencyRegistryReportMetrics.evidenceRequiredCount} with linked files</span>
+                  </div>
+                  <div className="bg-card border border-border p-4 rounded-xl text-center space-y-1">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Unassigned Competencies</span>
+                    <span className="text-2xl font-black text-amber-600">{competencyRegistryReportMetrics.unassignedCount}</span>
+                    <span className="text-[9px] text-muted-foreground block font-semibold">Not required for any teammate</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="bg-card border border-border p-5 rounded-2xl space-y-4">
+                    <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Competency Types by Category</h3>
+                    {renderHorizontalBarList(
+                      competencyRegistryReportMetrics.typesByCategory.map(item => ({
+                        label: item.label,
+                        count: item.value,
+                        total: competencyTypes.length,
+                        colorClass: 'bg-indigo-650'
+                      })),
+                      'Competencies'
+                    )}
+                  </div>
+
+                  <div className="bg-card border border-border p-5 rounded-2xl space-y-4">
+                    <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest font-sans">High-Gap Competencies (Top 10)</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-border text-muted-foreground uppercase font-bold text-[9px] tracking-wider">
+                            <th className="py-2 text-left">Competency</th>
+                            <th className="py-2 text-center">Expired</th>
+                            <th className="py-2 text-center">Missing</th>
+                            <th className="py-2 text-center">Total Gaps</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/60">
+                          {competencyRegistryReportMetrics.highGapsList.map(item => (
+                            <tr key={item.id} className="hover:bg-muted/10">
+                              <td className="py-2 font-semibold text-foreground">{item.title}</td>
+                              <td className="py-2 text-center font-bold text-rose-500">{item.expired}</td>
+                              <td className="py-2 text-center font-bold text-rose-550">{item.missing}</td>
+                              <td className="py-2 text-center font-black text-rose-650">{item.gapsCount}</td>
+                            </tr>
+                          ))}
+                          {competencyRegistryReportMetrics.highGapsList.length === 0 && (
+                            <tr>
+                              <td colSpan={4} className="py-6 text-center text-muted-foreground italic">No gaps recorded across any competencies.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                {competencyRegistryReportMetrics.unassignedCount > 0 && (
+                  <div className="bg-card border border-border p-5 rounded-2xl space-y-4">
+                    <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Unassigned Competencies</h3>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">These competency definitions currently have no active personnel assignments (all records marked Not Required).</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                      {competencyRegistryReportMetrics.unassignedList.map(item => (
+                        <div key={item.id} className="p-3 bg-muted/30 border border-border rounded-xl flex items-center justify-between text-xs">
+                          <span className="font-semibold text-foreground truncate">{item.title}</span>
+                          <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest bg-muted px-2 py-0.5 rounded">{item.category}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

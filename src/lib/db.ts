@@ -3767,6 +3767,8 @@ export const dbService = {
       evidence_required: input.evidence_required ?? true,
       default_risk_level: input.default_risk_level || 'Medium',
       active: input.active ?? true,
+      review_period_months: input.review_period_months ?? null,
+      warning_days: input.warning_days ?? null,
       updated_at: nowIso()
     };
 
@@ -3790,9 +3792,22 @@ export const dbService = {
         before = await fetchRecordById('competency_types', existingId);
       }
 
+      const cleanPayload = {
+        title: payload.title,
+        category: payload.category,
+        organisation_id: payload.organisation_id,
+        description: payload.description,
+        validity_period_months: payload.validity_period_months,
+        refresher_period_months: payload.refresher_period_months,
+        evidence_required: payload.evidence_required,
+        default_risk_level: payload.default_risk_level,
+        active: payload.active,
+        updated_at: payload.updated_at
+      };
+
       const query = existingId
-        ? supabase!.from('competency_types').update(payload).eq('id', existingId).eq('organisation_id', orgId)
-        : supabase!.from('competency_types').insert([payload]);
+        ? supabase!.from('competency_types').update(cleanPayload).eq('id', existingId).eq('organisation_id', orgId)
+        : supabase!.from('competency_types').insert([cleanPayload]);
       const { data, error } = await query.select().single();
       if (error) throwSupabaseError('competency_types.upsert active organisation', error);
       await this.logActivity('Competency Type Saved', `Saved competency type "${data.title}".`);
@@ -3820,12 +3835,14 @@ export const dbService = {
           evidence_required: input.evidence_required ?? true,
           default_risk_level: input.default_risk_level || 'Medium',
           active: input.active ?? true,
+          review_period_months: input.review_period_months ?? null,
+          warning_days: input.warning_days ?? null,
           created_at: nowIso(),
           updated_at: nowIso()
         };
-        types.unshift(after);
+        types.push(after);
         setStorageItem('vigilen_competency_types', types);
-        await this.logActivity('Competency Type Added', `Created competency type "${after.title}".`);
+        await this.logActivity('Competency Type Saved', `Saved competency type "${after.title}".`);
       }
     }
 

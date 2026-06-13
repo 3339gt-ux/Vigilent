@@ -362,6 +362,8 @@ export interface CompetencyType {
   active: boolean;
   created_at: string;
   updated_at: string;
+  review_period_months?: number | null;
+  warning_days?: number | null;
 }
 
 export interface CompetencyRecord {

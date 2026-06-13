@@ -35,7 +35,8 @@ const daysUntil = (value: string | null | undefined, today: Date) => {
 
 export const calculateCompetencyStatus = (
   record: Pick<CompetencyRecord, 'completed_date' | 'expiry_date' | 'status'> | null,
-  today: Date = new Date()
+  today: Date = new Date(),
+  warningDays?: number | null
 ): CompetencyStatus => {
   if (!record) return 'Missing';
   if (record.status === 'Not Required') return 'Not Required';
@@ -43,7 +44,8 @@ export const calculateCompetencyStatus = (
 
   const remaining = daysUntil(record.expiry_date, today);
   if (remaining !== null && remaining < 0) return 'Expired';
-  if (remaining !== null && remaining <= COMPETENCY_WARNING_DAYS) return 'Expiring Soon';
+  const limit = warningDays ?? COMPETENCY_WARNING_DAYS;
+  if (remaining !== null && remaining <= limit) return 'Expiring Soon';
   return 'Valid';
 };
 
@@ -68,7 +70,7 @@ export const buildCompetencyMatrix = (
   today: Date = new Date()
 ): CompetencyMatrixCell[] => {
   const activePeople = people.filter(person => person.active);
-  const activeTypes = competencyTypes.filter(type => type.active);
+  const activeTypes = competencyTypes;
 
   // Group records by person_id and competency_type_id to optimize lookup from O(R) to O(1)
   const recordMap = new Map<string, CompetencyRecord[]>();
@@ -91,7 +93,7 @@ export const buildCompetencyMatrix = (
       const key = `${person.id}_${competencyType.id}`;
       const personRecords = recordMap.get(key) || [];
       const record = personRecords[0] || null;
-      const status = calculateCompetencyStatus(record, today);
+      const status = calculateCompetencyStatus(record, today, competencyType.warning_days);
       return {
         person,
         competencyType,
@@ -109,7 +111,7 @@ export const buildCompetencySummary = (
   records: CompetencyRecord[],
   today: Date = new Date()
 ): CompetencySummary => {
-  const cells = buildCompetencyMatrix(people, competencyTypes, records, today);
+  const cells = buildCompetencyMatrix(people, competencyTypes.filter(t => t.active), records, today);
   const assessed = cells.filter(cell => cell.status !== 'Not Required');
   const valid = cells.filter(cell => cell.status === 'Valid').length;
   const expiringSoon = cells.filter(cell => cell.status === 'Expiring Soon').length;

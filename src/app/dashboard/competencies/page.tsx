@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
 import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
@@ -9,7 +9,8 @@ import { COMPETENCY_TEMPLATE_PACKS } from '@/lib/competencyTemplates';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import { exportCsv, exportDateStamp, ExportRow } from '@/lib/exportData';
 import type { Action, CompetencyCategory, CompetencyRecord, CompetencyStatus, CompetencyType, Person, PersonType, RequirementRiskLevel } from '@/lib/types';
-import { Link as LinkIcon, Plus, Search, Upload, UserCheck, X, ArrowLeft, Calendar, Paperclip, AlertCircle, Eye, EyeOff, Download } from 'lucide-react';
+import { Link as LinkIcon, Plus, Search, Upload, UserCheck, X, ArrowLeft, Calendar, Paperclip, AlertCircle, Download } from 'lucide-react';
+import { isDemoMode } from '@/lib/env';
 import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
 import {
   useFilterFavourites,
@@ -87,7 +88,11 @@ export default function CompetencyMatrixPage() {
     unlinkDocumentFromAction,
     uploadActionAttachment,
     findPossibleDuplicateDocuments,
-    getDocumentSignedUrl
+    getDocumentSignedUrl,
+    requirementCompetencyTypes,
+    linkCompetencyTypeToRequirement,
+    unlinkCompetencyTypeFromRequirement,
+    auditLogs
   } = useApp();
 
   const [search, setSearch] = useState('');
@@ -214,11 +219,413 @@ export default function CompetencyMatrixPage() {
   } = useSavedViews(user?.id || 'guest', 'matrix', defaultViews, organization?.id);
   const { globalDensity, setGlobalDensity } = useGlobalDensityPreference(user?.id || 'guest', organization?.id);
 
+  const [activeTab, setActiveTab] = useState<'matrix' | 'registry'>('matrix');
+  const [selectedCompetencyId, setSelectedCompetencyId] = useState<string | null>(null);
+  const [competencyWorkspaceTab, setCompetencyWorkspaceTab] = useState<'overview' | 'settings' | 'people' | 'evidence' | 'requirements' | 'actions' | 'history'>('overview');
+  const [isCreatingCompetency, setIsCreatingCompetency] = useState(false);
+  const [showArchivedCompetencies, setShowArchivedCompetencies] = useState(false);
+
+  // Registry Filters Setup
+  const [registrySearch, setRegistrySearch] = useState('');
+  const [registryCategoryFilter, setRegistryCategoryFilter] = useState('All');
+  const [registryRiskFilter, setRegistryRiskFilter] = useState('All');
+  const [registryStatusFilter, setRegistryStatusFilter] = useState<'All' | 'active' | 'archived'>('active');
+  const [registryEvidenceFilter, setRegistryEvidenceFilter] = useState('All');
+  const [registryRenewalFilter, setRegistryRenewalFilter] = useState('All');
+  const [registryImpactFilter, setRegistryImpactFilter] = useState('All');
+  const [registryAssignedFilter, setRegistryAssignedFilter] = useState('All');
+
+  // Registry Sorting Setup
+  const [registrySortBy, setRegistrySortBy] = useState<'name' | 'category' | 'risk' | 'assigned' | 'expired' | 'expiring' | 'updated'>('name');
+  const [registrySortOrder, setRegistrySortOrder] = useState<'asc' | 'desc'>('asc');
+
+  // Registry Bulk Selection Updates Setup
+  const [bulkCategory, setBulkCategory] = useState('');
+  const [bulkRenewal, setBulkRenewal] = useState('');
+  const [bulkWarning, setBulkWarning] = useState('');
+  const [bulkEvidence, setBulkEvidence] = useState('');
+
+  // Forms setup
+  const [competencyForm, setCompetencyForm] = useState({
+    title: '',
+    description: '',
+    category: 'Safety' as CompetencyCategory,
+    default_risk_level: 'Medium' as RequirementRiskLevel,
+    evidence_required: true,
+    review_period_months: 12,
+    validity_period_months: 12,
+    warning_days: 30,
+    active: true
+  });
+  const [editForm, setEditForm] = useState<{
+    title: string;
+    description: string;
+    category: CompetencyCategory;
+    default_risk_level: RequirementRiskLevel;
+    evidence_required: boolean;
+    review_period_months: number | null;
+    validity_period_months: number | null;
+    warning_days: number | null;
+    active: boolean;
+  } | null>(null);
+
+  // Authorisation and permission checks
+  const currentUserRole = user?.role || 'Viewer';
+  const canManage = isDemoMode && (currentUserRole === 'Owner' || currentUserRole === 'Admin' || currentUserRole === 'Editor');
+  const canArchive = isDemoMode && (currentUserRole === 'Owner' || currentUserRole === 'Admin');
+
   const activePeople = useMemo(() => people.filter(person => person.active), [people]);
-  const activeTypes = useMemo(() => competencyTypes.filter(type => type.active), [competencyTypes]);
+  const activeTypes = useMemo(() => {
+    return showArchivedCompetencies
+      ? competencyTypes
+      : competencyTypes.filter(type => type.active);
+  }, [competencyTypes, showArchivedCompetencies]);
   const departments = useMemo(() => ['All', ...Array.from(new Set(activePeople.map(person => person.department).filter(Boolean) as string[]))], [activePeople]);
   const roles = useMemo(() => ['All', ...Array.from(new Set(activePeople.map(person => person.role).filter(Boolean) as string[]))], [activePeople]);
   const selectedPack = COMPETENCY_TEMPLATE_PACKS.find(pack => pack.id === selectedPackId) || COMPETENCY_TEMPLATE_PACKS[0];
+
+  // Registry Stats Memoization
+  const registryStats = useMemo(() => {
+    const allCells = buildCompetencyMatrix(people, competencyTypes, competencyRecords);
+    const cellsByType = new Map<string, typeof allCells>();
+    allCells.forEach(cell => {
+      const list = cellsByType.get(cell.competencyType.id) || [];
+      list.push(cell);
+      cellsByType.set(cell.competencyType.id, list);
+    });
+
+    const statsMap = new Map<string, {
+      assigned: number;
+      valid: number;
+      expired: number;
+      expiringSoon: number;
+      missing: number;
+    }>();
+
+    competencyTypes.forEach(type => {
+      const cells = cellsByType.get(type.id) || [];
+      const assignedCells = cells.filter(c => c.status !== 'Not Required');
+      statsMap.set(type.id, {
+        assigned: assignedCells.length,
+        valid: assignedCells.filter(c => c.status === 'Valid').length,
+        expired: assignedCells.filter(c => c.status === 'Expired').length,
+        expiringSoon: assignedCells.filter(c => c.status === 'Expiring Soon').length,
+        missing: assignedCells.filter(c => c.status === 'Missing').length,
+      });
+    });
+
+    return statsMap;
+  }, [people, competencyTypes, competencyRecords]);
+
+  // Registry evidence counts mapping
+  const registryEvidenceCountMap = useMemo(() => {
+    const counts = new Map<string, number>();
+    const docsByRecord = new Map<string, number>();
+    competencyRecordDocuments.forEach(link => {
+      const current = docsByRecord.get(link.competency_record_id) || 0;
+      docsByRecord.set(link.competency_record_id, current + 1);
+    });
+
+    competencyRecords.forEach(record => {
+      const docCount = docsByRecord.get(record.id) || 0;
+      const currentCount = counts.get(record.competency_type_id) || 0;
+      counts.set(record.competency_type_id, currentCount + docCount);
+    });
+
+    return counts;
+  }, [competencyRecords, competencyRecordDocuments]);
+
+  // Registry requirements counts mapping
+  const registryRequirementsCountMap = useMemo(() => {
+    const counts = new Map<string, number>();
+    requirementCompetencyTypes.forEach(link => {
+      const current = counts.get(link.competency_type_id) || 0;
+      counts.set(link.competency_type_id, current + 1);
+    });
+    return counts;
+  }, [requirementCompetencyTypes]);
+
+  // Filtering registry types
+  const filteredCompetencyTypes = useMemo(() => {
+    return competencyTypes.filter(type => {
+      const matchesSearch = !registrySearch ||
+        type.title.toLowerCase().includes(registrySearch.toLowerCase()) ||
+        (type.description || '').toLowerCase().includes(registrySearch.toLowerCase());
+      
+      const matchesCategory = registryCategoryFilter === 'All' || type.category === registryCategoryFilter;
+      const matchesRisk = registryRiskFilter === 'All' || type.default_risk_level === registryRiskFilter;
+      const matchesStatus = registryStatusFilter === 'All' || 
+        (registryStatusFilter === 'active' && type.active) ||
+        (registryStatusFilter === 'archived' && !type.active);
+
+      const matchesEvidence = registryEvidenceFilter === 'All' ||
+        (registryEvidenceFilter === 'Yes' && type.evidence_required) ||
+        (registryEvidenceFilter === 'No' && !type.evidence_required);
+
+      const stats = registryStats.get(type.id) || { assigned: 0, valid: 0, expired: 0, expiringSoon: 0, missing: 0 };
+
+      let matchesImpact = true;
+      if (registryImpactFilter === 'Expired') matchesImpact = stats.expired > 0;
+      else if (registryImpactFilter === 'Expiring Soon') matchesImpact = stats.expiringSoon > 0;
+      else if (registryImpactFilter === 'Missing') matchesImpact = stats.missing > 0;
+
+      let matchesAssigned = true;
+      if (registryAssignedFilter === 'Assigned') matchesAssigned = stats.assigned > 0;
+      else if (registryAssignedFilter === 'Unassigned') matchesAssigned = stats.assigned === 0;
+
+      let matchesRenewal = true;
+      if (registryRenewalFilter !== 'All') {
+        const months = type.validity_period_months;
+        if (registryRenewalFilter === 'No expiry') matchesRenewal = months === null;
+        else if (registryRenewalFilter === '3m') matchesRenewal = months === 3;
+        else if (registryRenewalFilter === '6m') matchesRenewal = months === 6;
+        else if (registryRenewalFilter === '12m') matchesRenewal = months === 12;
+        else if (registryRenewalFilter === '24m') matchesRenewal = months === 24;
+        else if (registryRenewalFilter === '36m') matchesRenewal = months === 36;
+        else if (registryRenewalFilter === '60m') matchesRenewal = months === 60;
+        else if (registryRenewalFilter === 'custom') matchesRenewal = months !== null && ![3, 6, 12, 24, 36, 60].includes(months);
+      }
+
+      return matchesSearch && matchesCategory && matchesRisk && matchesStatus && matchesEvidence && matchesImpact && matchesAssigned && matchesRenewal;
+    });
+  }, [competencyTypes, registrySearch, registryCategoryFilter, registryRiskFilter, registryStatusFilter, registryEvidenceFilter, registryImpactFilter, registryAssignedFilter, registryRenewalFilter, registryStats]);
+
+  // Sorting registry types
+  const sortedCompetencyTypes = useMemo(() => {
+    const list = [...filteredCompetencyTypes];
+    list.sort((a, b) => {
+      let valA: string | number = '';
+      let valB: string | number = '';
+
+      if (registrySortBy === 'name') {
+        valA = a.title.toLowerCase();
+        valB = b.title.toLowerCase();
+      } else if (registrySortBy === 'category') {
+        valA = a.category.toLowerCase();
+        valB = b.category.toLowerCase();
+      } else if (registrySortBy === 'risk') {
+        const riskWeight = { Low: 1, Medium: 2, High: 3, Critical: 4 };
+        valA = riskWeight[a.default_risk_level] || 0;
+        valB = riskWeight[b.default_risk_level] || 0;
+      } else if (registrySortBy === 'assigned') {
+        valA = registryStats.get(a.id)?.assigned || 0;
+        valB = registryStats.get(b.id)?.assigned || 0;
+      } else if (registrySortBy === 'expired') {
+        valA = registryStats.get(a.id)?.expired || 0;
+        valB = registryStats.get(b.id)?.expired || 0;
+      } else if (registrySortBy === 'expiring') {
+        valA = registryStats.get(a.id)?.expiringSoon || 0;
+        valB = registryStats.get(b.id)?.expiringSoon || 0;
+      } else if (registrySortBy === 'updated') {
+        valA = new Date(a.updated_at || 0).getTime();
+        valB = new Date(b.updated_at || 0).getTime();
+      }
+
+      if (typeof valA === 'string' && typeof valB === 'string') {
+        return registrySortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      }
+      const numA = Number(valA);
+      const numB = Number(valB);
+      return registrySortOrder === 'asc' ? numA - numB : numB - numA;
+    });
+    return list;
+  }, [filteredCompetencyTypes, registrySortBy, registrySortOrder, registryStats]);
+
+  // Pagination for registry
+  const registryPagination = usePagination(
+    sortedCompetencyTypes,
+    user?.id || 'guest',
+    organization?.id,
+    'competency-registry',
+    [registrySearch, registryCategoryFilter, registryRiskFilter, registryStatusFilter, registryEvidenceFilter, registryRenewalFilter, registryImpactFilter, registryAssignedFilter, registrySortBy, registrySortOrder]
+  );
+
+  // Bulk selection for registry
+  const registrySelection = useBulkSelection(registryPagination.paginatedItems);
+  const selectedBulkCompetencies = useMemo(() => {
+    return sortedCompetencyTypes.filter(type => registrySelection.isSelected(type.id));
+  }, [sortedCompetencyTypes, registrySelection]);
+
+  // Sync edit form on selection changes
+  const selectedCompetency = useMemo(() => {
+    return competencyTypes.find(t => t.id === selectedCompetencyId) || null;
+  }, [competencyTypes, selectedCompetencyId]);
+
+  useEffect(() => {
+    if (selectedCompetency) {
+      setEditForm({
+        title: selectedCompetency.title,
+        description: selectedCompetency.description || '',
+        category: selectedCompetency.category,
+        default_risk_level: selectedCompetency.default_risk_level,
+        evidence_required: selectedCompetency.evidence_required,
+        review_period_months: selectedCompetency.review_period_months ?? 12,
+        validity_period_months: selectedCompetency.validity_period_months ?? 12,
+        warning_days: selectedCompetency.warning_days ?? 30,
+        active: selectedCompetency.active
+      });
+    } else {
+      setEditForm(null);
+    }
+  }, [selectedCompetency]);
+
+  // Competency History memo
+  const competencyHistory = useMemo(() => {
+    if (!selectedCompetencyId) return [];
+    const compType = competencyTypes.find(t => t.id === selectedCompetencyId);
+    if (!compType) return [];
+    return auditLogs.filter(log =>
+      log.action.toLowerCase().includes('competency') &&
+      (log.details.includes(compType.title) || log.details.includes(selectedCompetencyId))
+    );
+  }, [auditLogs, selectedCompetencyId, competencyTypes]);
+
+  // Url params syncing helpers
+  const updateUrlParams = (tab: 'matrix' | 'registry', compId: string | null) => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      params.set('tab', tab);
+      if (compId) {
+        params.set('competencyId', compId);
+      } else {
+        params.delete('competencyId');
+      }
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
+      window.history.pushState(null, '', newUrl);
+    }
+  };
+
+  const handleTabChange = (tab: 'matrix' | 'registry') => {
+    setActiveTab(tab);
+    updateUrlParams(tab, selectedCompetencyId);
+  };
+
+  const handleSelectCompetency = (id: string | null) => {
+    setSelectedCompetencyId(id);
+    updateUrlParams(activeTab, id);
+    if (id) {
+      setCompetencyWorkspaceTab('overview');
+    }
+  };
+
+  // URL query params load hook
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      const idParam = params.get('id') || params.get('competencyId') || params.get('competency');
+      
+      if (tabParam === 'registry') {
+        setActiveTab('registry');
+      } else if (tabParam === 'matrix') {
+        setActiveTab('matrix');
+      }
+      if (idParam) {
+        const exists = competencyTypes.some(t => t.id === idParam);
+        if (exists) {
+          setSelectedCompetencyId(idParam);
+          setActiveTab('registry');
+        } else {
+          const personExists = people.some(p => p.id === idParam);
+          if (personExists) {
+            const p = people.find(person => person.id === idParam);
+            if (p) {
+              setSelectedPerson(p);
+              setActiveTab('matrix');
+            }
+          }
+        }
+      }
+    }
+  }, [competencyTypes, people]);
+
+  // Create Competency handler
+  const handleCreateCompetency = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canManage) return;
+
+    try {
+      const payload = {
+        title: competencyForm.title,
+        category: competencyForm.category,
+        description: competencyForm.description || null,
+        default_risk_level: competencyForm.default_risk_level,
+        evidence_required: competencyForm.evidence_required,
+        review_period_months: competencyForm.review_period_months || null,
+        validity_period_months: competencyForm.validity_period_months || null,
+        warning_days: competencyForm.warning_days || null,
+        active: competencyForm.active
+      };
+      
+      const newType = await upsertCompetencyType(payload);
+      setToast({ type: 'success', message: `Successfully created competency "${newType.title}".` });
+      setIsCreatingCompetency(false);
+      setCompetencyForm({
+        title: '',
+        description: '',
+        category: 'Safety',
+        default_risk_level: 'Medium',
+        evidence_required: true,
+        review_period_months: 12,
+        validity_period_months: 12,
+        warning_days: 30,
+        active: true
+      });
+    } catch (e) {
+      setToast({ type: 'error', message: `Failed to create competency: ${e instanceof Error ? e.message : 'Unknown error'}` });
+    }
+  };
+
+  // Duplicate Competency handler
+  const handleDuplicateCompetency = async (type: CompetencyType) => {
+    if (!canManage) return;
+    try {
+      const payload = {
+        title: `${type.title} (Copy)`,
+        category: type.category,
+        description: type.description,
+        default_risk_level: type.default_risk_level,
+        evidence_required: type.evidence_required,
+        review_period_months: type.review_period_months,
+        validity_period_months: type.validity_period_months,
+        warning_days: type.warning_days,
+        active: true
+      };
+      const newType = await upsertCompetencyType(payload);
+      setToast({ type: 'success', message: `Duplicated competency "${type.title}" to "${newType.title}".` });
+    } catch (e) {
+      setToast({ type: 'error', message: `Failed to duplicate competency: ${e instanceof Error ? e.message : 'Unknown error'}` });
+    }
+  };
+
+  // Bulk action update handler
+  const executeBulkAction = async (actionName: string, updateFn: (type: CompetencyType) => Partial<CompetencyType>) => {
+    if (!canManage) {
+      setToast({ type: 'error', message: 'You do not have permission to manage competencies.' });
+      return;
+    }
+    const count = selectedBulkCompetencies.length;
+    if (count === 0) return;
+
+    setConfirmRequest({
+      title: `Confirm Bulk Action: ${actionName}?`,
+      description: `You are about to modify ${count} competency record${count === 1 ? '' : 's'}. This will update their configurations. Are you sure you want to proceed?`,
+      confirmLabel: 'Apply Updates',
+      tone: 'primary',
+      onConfirm: async () => {
+        try {
+          for (const type of selectedBulkCompetencies) {
+            const updates = updateFn(type);
+            await upsertCompetencyType({ id: type.id, title: type.title, category: type.category, ...updates });
+          }
+          setToast({ type: 'success', message: `Successfully updated ${count} competencies.` });
+          registrySelection.clearSelection();
+        } catch (e) {
+          setToast({ type: 'error', message: `Failed to update competencies: ${e instanceof Error ? e.message : 'Unknown error'}` });
+        }
+      }
+    });
+  };
 
   const matrix = useMemo(
     () => buildCompetencyMatrix(people, competencyTypes, competencyRecords),
@@ -244,20 +651,20 @@ export default function CompetencyMatrixPage() {
     const starred = list.filter(d => isFavourite(`dept:${d}`));
     const regular = list.filter(d => !isFavourite(`dept:${d}`));
     return ['All', ...starred, ...regular];
-  }, [departments, favourites]);
+  }, [departments, favourites, isFavourite]);
 
   const sortedRoles = useMemo(() => {
     const list = roles.filter(r => r !== 'All');
     const starred = list.filter(r => isFavourite(`role:${r}`));
     const regular = list.filter(r => !isFavourite(`role:${r}`));
     return ['All', ...starred, ...regular];
-  }, [roles, favourites]);
+  }, [roles, favourites, isFavourite]);
 
   const sortedCompetencyCategories = useMemo(() => {
     const starred = categories.filter(c => isFavourite(`cat:${c}`));
     const regular = categories.filter(c => !isFavourite(`cat:${c}`));
     return [...starred, ...regular];
-  }, [favourites]);
+  }, [favourites, isFavourite]);
 
   // Filtering People
   const filteredPeople = useMemo(() => {
@@ -378,7 +785,7 @@ export default function CompetencyMatrixPage() {
         try {
           exportCsv(`vygilence-people-${scope}-export-${exportDateStamp()}.csv`, peopleExportRows(rows));
           setToast({ type: 'success', message: 'Teammates list exported successfully.' });
-        } catch (e) {
+        } catch {
           setToast({ type: 'error', message: 'Failed to export teammates list.' });
         }
       }
@@ -393,7 +800,7 @@ export default function CompetencyMatrixPage() {
       const isNotHidden = !hiddenColumns.includes(type.id);
       return matchesCategory && matchesFavourite && isNotHidden;
     });
-  }, [activeTypes, typeFilter, showOnlyFavourites, hiddenColumns, favourites]);
+  }, [activeTypes, typeFilter, showOnlyFavourites, hiddenColumns, favourites, isFavourite]);
 
   // Group and sort visible types by category to align them visually
   const visibleTypes = useMemo(() => {
@@ -402,28 +809,7 @@ export default function CompetencyMatrixPage() {
     return list;
   }, [filteredTypes, collapsedCategories]);
 
-  // Calculate spans for visible categories for the table header row
-  const categorySpans = useMemo(() => {
-    const spans: { category: string; span: number }[] = [];
-    let currentCategory = '';
-    let currentSpan = 0;
 
-    visibleTypes.forEach(t => {
-      if (t.category !== currentCategory) {
-        if (currentSpan > 0) {
-          spans.push({ category: currentCategory, span: currentSpan });
-        }
-        currentCategory = t.category;
-        currentSpan = 1;
-      } else {
-        currentSpan++;
-      }
-    });
-    if (currentSpan > 0) {
-      spans.push({ category: currentCategory, span: currentSpan });
-    }
-    return spans;
-  }, [visibleTypes]);
 
   const handleResetFilters = () => {
     setSearch('');
@@ -631,10 +1017,10 @@ export default function CompetencyMatrixPage() {
         }
       }
     }
-  }, [competencyTypes, activePeople]);
+  }, [competencyTypes, activePeople, openCell, openPersonWorkspace]);
 
   const filterChips = useMemo(() => {
-    const chips: any[] = [];
+    const chips: Array<{ key: string; label: string; valueLabel: string; onClear: () => void }> = [];
     if (search) {
       chips.push({
         key: 'search',
@@ -1293,11 +1679,35 @@ export default function CompetencyMatrixPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
-        <div className="xl:col-span-2 space-y-4">
-          {/* Main search and quick actions bar */}
-          <div className="bg-card border border-border p-3 rounded-xl space-y-2.5 shadow-xs">
-            {interfaceDetailLevel === 'focused' ? (
+      {/* Tabs */}
+      <div className="border-b border-border bg-card/50 backdrop-blur-sm p-1 rounded-xl flex items-center gap-1 w-fit">
+        <button
+          onClick={() => handleTabChange('matrix')}
+          className={`px-4 py-2 font-bold text-xs rounded-lg transition-all cursor-pointer ${
+            activeTab === 'matrix'
+              ? 'bg-indigo-650 text-white shadow-sm'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+          }`}
+        >
+          People Matrix
+        </button>
+        <button
+          onClick={() => handleTabChange('registry')}
+          className={`px-4 py-2 font-bold text-xs rounded-lg transition-all cursor-pointer ${
+            activeTab === 'registry'
+              ? 'bg-indigo-650 text-white shadow-sm'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+          }`}
+        >
+          Competency Registry
+        </button>
+      </div>
+
+      {activeTab === 'matrix' && (
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start animate-in fade-in duration-200">
+          <div className="xl:col-span-2 space-y-4">
+            <div className="bg-card border border-border p-3 rounded-xl space-y-2.5 shadow-xs">
+              {interfaceDetailLevel === 'focused' ? (
               // FOCUSED VIEW LAYOUT
               <>
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -1643,6 +2053,15 @@ export default function CompetencyMatrixPage() {
                           className="accent-indigo-650 w-3.5 h-3.5"
                         />
                         <span>People with gaps only</span>
+                      </label>
+                      <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={showArchivedCompetencies}
+                          onChange={e => setShowArchivedCompetencies(e.target.checked)}
+                          className="accent-indigo-650 w-3.5 h-3.5"
+                        />
+                        <span>Show archived columns</span>
                       </label>
                     </div>
                   </div>
@@ -1998,6 +2417,1141 @@ export default function CompetencyMatrixPage() {
           )}
         </div>
       </div>
+      )}
+
+      {/* Competency Registry Tab */}
+      {activeTab === 'registry' && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          {/* Registry Header Toolbar */}
+          <div className="bg-card border border-border p-4 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-xs">
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+              <div className="relative min-w-[240px]">
+                <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  value={registrySearch}
+                  onChange={e => setRegistrySearch(e.target.value)}
+                  placeholder="Search competency registry..."
+                  className="w-full pl-9 pr-3 py-2 bg-muted border border-border rounded-lg text-xs outline-none text-foreground placeholder-muted-foreground"
+                />
+              </div>
+              
+              <select
+                value={registryCategoryFilter}
+                onChange={e => setRegistryCategoryFilter(e.target.value)}
+                className="bg-muted border border-border rounded-lg px-2.5 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+              >
+                <option value="All">All Categories</option>
+                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+
+              <select
+                value={registryRiskFilter}
+                onChange={e => setRegistryRiskFilter(e.target.value)}
+                className="bg-muted border border-border rounded-lg px-2.5 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+              >
+                <option value="All">All Risks</option>
+                {riskLevels.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+
+              <select
+                value={registryStatusFilter}
+                onChange={e => setRegistryStatusFilter(e.target.value as 'All' | 'active' | 'archived')}
+                className="bg-muted border border-border rounded-lg px-2.5 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+              >
+                <option value="active">Active Only</option>
+                <option value="archived">Archived Only</option>
+                <option value="All">All Statuses</option>
+              </select>
+
+              <select
+                value={registryEvidenceFilter}
+                onChange={e => setRegistryEvidenceFilter(e.target.value)}
+                className="bg-muted border border-border rounded-lg px-2.5 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+              >
+                <option value="All">All Evidence</option>
+                <option value="Yes">Evidence Required</option>
+                <option value="No">No Evidence Required</option>
+              </select>
+            </div>
+
+            {canManage && (
+              <button
+                onClick={() => setIsCreatingCompetency(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-md transition-colors cursor-pointer"
+              >
+                <Plus className="w-4 h-4" /> Create Competency
+              </button>
+            )}
+          </div>
+
+          {/* Advanced Filters */}
+          <div className="bg-card border border-border p-4 rounded-xl grid grid-cols-1 sm:grid-cols-3 gap-3 shadow-xs">
+            <div className="flex flex-col gap-1 text-xs">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Renewal Period</label>
+              <select
+                value={registryRenewalFilter}
+                onChange={e => setRegistryRenewalFilter(e.target.value)}
+                className="w-full bg-muted border border-border rounded-lg px-3 py-2 font-semibold text-foreground outline-none cursor-pointer"
+              >
+                <option value="All">All Expiry Periods</option>
+                <option value="No expiry">No expiry</option>
+                <option value="3m">3 months</option>
+                <option value="6m">6 months</option>
+                <option value="12m">12 months</option>
+                <option value="24m">24 months</option>
+                <option value="36m">36 months</option>
+                <option value="60m">60 months</option>
+                <option value="custom">Custom interval</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1 text-xs">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Fulfillment Impact</label>
+              <select
+                value={registryImpactFilter}
+                onChange={e => setRegistryImpactFilter(e.target.value)}
+                className="w-full bg-muted border border-border rounded-lg px-3 py-2 font-semibold text-foreground outline-none cursor-pointer"
+              >
+                <option value="All">All Fulfillment</option>
+                <option value="Expired">Has Expired Records</option>
+                <option value="Expiring Soon">Has Expiring Soon Records</option>
+                <option value="Missing">Has Missing Records</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1 text-xs">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Assignment Scope</label>
+              <select
+                value={registryAssignedFilter}
+                onChange={e => setRegistryAssignedFilter(e.target.value)}
+                className="w-full bg-muted border border-border rounded-lg px-3 py-2 font-semibold text-foreground outline-none cursor-pointer"
+              >
+                <option value="All">All Assignment</option>
+                <option value="Assigned">Assigned to Teammates</option>
+                <option value="Unassigned">Not Assigned / Required</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Bulk Action Toolbar */}
+          <BulkSelectionToolbar
+            selectedCount={registrySelection.selectedCount}
+            recordLabel="competencies"
+            onSelectVisible={registrySelection.selectVisible}
+            onClear={registrySelection.clearSelection}
+            message="Apply modifications to all selected competency definitions."
+          >
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <select
+                value={bulkCategory}
+                onChange={e => setBulkCategory(e.target.value)}
+                className="px-2.5 py-1.5 bg-card border border-border rounded-lg font-bold text-foreground outline-none cursor-pointer"
+              >
+                <option value="">Category...</option>
+                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <button
+                type="button"
+                disabled={!bulkCategory}
+                onClick={() => executeBulkAction('Change Category', () => ({ category: bulkCategory as CompetencyCategory }))}
+                className="px-3 py-1.5 bg-indigo-650 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg font-bold cursor-pointer transition-colors"
+              >
+                Apply
+              </button>
+
+              <select
+                value={bulkRenewal}
+                onChange={e => setBulkRenewal(e.target.value)}
+                className="px-2.5 py-1.5 bg-card border border-border rounded-lg font-bold text-foreground outline-none cursor-pointer"
+              >
+                <option value="">Renewal...</option>
+                <option value="null">No expiry</option>
+                <option value="3">3 months</option>
+                <option value="6">6 months</option>
+                <option value="12">12 months</option>
+                <option value="24">24 months</option>
+                <option value="36">36 months</option>
+                <option value="60">60 months</option>
+              </select>
+              <button
+                type="button"
+                disabled={!bulkRenewal}
+                onClick={() => executeBulkAction('Change Renewal Period', () => ({ validity_period_months: bulkRenewal === 'null' ? null : Number(bulkRenewal) }))}
+                className="px-3 py-1.5 bg-indigo-650 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg font-bold cursor-pointer transition-colors"
+              >
+                Apply
+              </button>
+
+              <input
+                type="number"
+                placeholder="Warning days..."
+                value={bulkWarning}
+                onChange={e => setBulkWarning(e.target.value)}
+                className="w-24 px-2.5 py-1.5 bg-card border border-border rounded-lg font-semibold text-foreground outline-none"
+              />
+              <button
+                type="button"
+                disabled={!bulkWarning}
+                onClick={() => executeBulkAction('Change Warning Window', () => ({ warning_days: bulkWarning ? Number(bulkWarning) : null }))}
+                className="px-3 py-1.5 bg-indigo-650 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg font-bold cursor-pointer transition-colors"
+              >
+                Apply
+              </button>
+
+              <select
+                value={bulkEvidence}
+                onChange={e => setBulkEvidence(e.target.value)}
+                className="px-2.5 py-1.5 bg-card border border-border rounded-lg font-bold text-foreground outline-none cursor-pointer"
+              >
+                <option value="">Evidence...</option>
+                <option value="true">Evidence Required</option>
+                <option value="false">No Evidence Required</option>
+              </select>
+              <button
+                type="button"
+                disabled={!bulkEvidence}
+                onClick={() => executeBulkAction('Toggle Evidence Requirement', () => ({ evidence_required: bulkEvidence === 'true' }))}
+                className="px-3 py-1.5 bg-indigo-650 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg font-bold cursor-pointer transition-colors"
+              >
+                Apply
+              </button>
+
+              {canArchive && (
+                <button
+                  type="button"
+                  onClick={() => executeBulkAction('Archive Selected Competencies', () => ({ active: false }))}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold cursor-pointer transition-colors ml-auto"
+                >
+                  Archive Selected
+                </button>
+              )}
+            </div>
+          </BulkSelectionToolbar>
+
+          {/* Table */}
+          <div className="border border-border rounded-xl overflow-hidden bg-card shadow-sm">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-muted/50 border-b border-border text-muted-foreground font-bold uppercase tracking-wider text-[10px]">
+                  <th className="p-3 w-10">
+                    <input
+                      type="checkbox"
+                      checked={registrySelection.allVisibleSelected}
+                      onChange={event => {
+                        if (event.target.checked) registrySelection.selectVisible();
+                        else registrySelection.clearSelection();
+                      }}
+                      className="rounded border-border text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 bg-muted/40 cursor-pointer"
+                    />
+                  </th>
+                  <th className="p-3 cursor-pointer select-none" onClick={() => {
+                    setRegistrySortBy('name');
+                    setRegistrySortOrder(registrySortBy === 'name' && registrySortOrder === 'asc' ? 'desc' : 'asc');
+                  }}>
+                    Competency definition {registrySortBy === 'name' ? (registrySortOrder === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th className="p-3 cursor-pointer select-none" onClick={() => {
+                    setRegistrySortBy('category');
+                    setRegistrySortOrder(registrySortBy === 'category' && registrySortOrder === 'asc' ? 'desc' : 'asc');
+                  }}>
+                    Category {registrySortBy === 'category' ? (registrySortOrder === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th className="p-3 cursor-pointer select-none" onClick={() => {
+                    setRegistrySortBy('risk');
+                    setRegistrySortOrder(registrySortBy === 'risk' && registrySortOrder === 'asc' ? 'desc' : 'asc');
+                  }}>
+                    Risk {registrySortBy === 'risk' ? (registrySortOrder === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th className="p-3">Defaults (Renewal / Warning)</th>
+                  <th className="p-3 cursor-pointer select-none" onClick={() => {
+                    setRegistrySortBy('assigned');
+                    setRegistrySortOrder(registrySortBy === 'assigned' && registrySortOrder === 'asc' ? 'desc' : 'asc');
+                  }}>
+                    Fulfillment status {registrySortBy === 'assigned' ? (registrySortOrder === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th className="p-3 text-right">Registry options</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {registryPagination.paginatedItems.map(type => {
+                  const stats = registryStats.get(type.id) || { assigned: 0, valid: 0, expired: 0, expiringSoon: 0, missing: 0 };
+                  const isSelected = registrySelection.isSelected(type.id);
+                  const evidenceCount = registryEvidenceCountMap.get(type.id) || 0;
+                  const reqCount = registryRequirementsCountMap.get(type.id) || 0;
+
+                  return (
+                    <tr
+                      key={type.id}
+                      className={`hover:bg-muted/15 transition-colors ${
+                        isSelected ? 'bg-indigo-500/5' : ''
+                      } ${!type.active ? 'opacity-70' : ''}`}
+                    >
+                      <td className="p-3">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => registrySelection.toggleSelected(type.id)}
+                          className="rounded border-border text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 bg-muted/40 cursor-pointer"
+                        />
+                      </td>
+                      <td className="p-3">
+                        <div>
+                          <button
+                            onClick={() => handleSelectCompetency(type.id)}
+                            className="font-extrabold text-foreground hover:text-indigo-650 hover:underline text-left cursor-pointer"
+                          >
+                            {type.title}
+                          </button>
+                          {!type.active && (
+                            <span className="ml-2 px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase tracking-wider bg-zinc-500/10 text-zinc-500 border border-zinc-500/20">
+                              Archived
+                            </span>
+                          )}
+                          <p className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5 max-w-sm">
+                            {type.description || 'No description provided.'}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                            {type.evidence_required ? (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase tracking-wide bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                📎 Evidence Required ({evidenceCount})
+                              </span>
+                            ) : (
+                              evidenceCount > 0 && (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase tracking-wide bg-zinc-500/10 text-zinc-650 border border-zinc-500/20">
+                                  📎 Evidence ({evidenceCount})
+                                </span>
+                              )
+                            )}
+                            {reqCount > 0 && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase tracking-wide bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                                📋 {reqCount} Requirement{reqCount > 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-3 font-semibold text-foreground">{type.category}</td>
+                      <td className="p-3 font-semibold">
+                        <span className={`px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase ${
+                          type.default_risk_level === 'Low' ? 'bg-zinc-500/10 text-zinc-650 border-zinc-500/25' :
+                          type.default_risk_level === 'Medium' ? 'bg-blue-500/10 text-blue-650 border-blue-500/25' :
+                          type.default_risk_level === 'High' ? 'bg-amber-500/10 text-amber-650 border-amber-500/25' :
+                          'bg-rose-500/10 text-rose-650 border-rose-500/25'
+                        }`}>
+                          {type.default_risk_level}
+                        </span>
+                      </td>
+                      <td className="p-3 font-semibold text-muted-foreground space-y-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold text-foreground">Renewal:</span>
+                          <span>{type.validity_period_months ? `${type.validity_period_months}m` : 'No expiry'}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[10px]">
+                          <span className="font-bold text-foreground">Warning:</span>
+                          <span>{type.warning_days ?? 30} days</span>
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        {stats.assigned === 0 ? (
+                          <span className="text-muted-foreground italic text-[10px]">No assigned teammates</span>
+                        ) : (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] text-muted-foreground">Compliance:</span>
+                              <strong className="text-indigo-650 dark:text-indigo-400 font-bold">
+                                {Math.round(((stats.valid + stats.expiringSoon * 0.5) / stats.assigned) * 100)}%
+                              </strong>
+                              <span className="text-[9px] text-muted-foreground font-semibold">({stats.assigned} required)</span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1 text-[9px] font-bold uppercase">
+                              {stats.valid > 0 && <span className="text-emerald-600 bg-emerald-500/15 px-1.5 py-0.5 rounded">{stats.valid} Valid</span>}
+                              {stats.expiringSoon > 0 && <span className="text-amber-600 bg-amber-500/15 px-1.5 py-0.5 rounded">{stats.expiringSoon} Expiring</span>}
+                              {stats.expired > 0 && <span className="text-rose-600 bg-rose-500/15 px-1.5 py-0.5 rounded">{stats.expired} Expired</span>}
+                              {stats.missing > 0 && <span className="text-rose-600 bg-rose-500/15 px-1.5 py-0.5 rounded">{stats.missing} Missing</span>}
+                            </div>
+                          </div>
+                        )}
+                      </td>
+                      <td className="p-3 text-right">
+                        <div className="flex items-center gap-1.5 justify-end">
+                          <button
+                            onClick={() => handleSelectCompetency(type.id)}
+                            className="px-2 py-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold hover:bg-indigo-500/20 rounded-lg cursor-pointer transition-colors"
+                          >
+                            Details
+                          </button>
+                          
+                          {canManage && (
+                            <>
+                              <button
+                                onClick={() => handleDuplicateCompetency(type)}
+                                className="px-2 py-1 bg-muted border border-border text-foreground font-semibold hover:bg-muted/80 rounded-lg cursor-pointer transition-colors"
+                                title="Duplicate Definition"
+                              >
+                                Duplicate
+                              </button>
+                              
+                              {canArchive && (
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      await upsertCompetencyType({
+                                        id: type.id,
+                                        title: type.title,
+                                        category: type.category,
+                                        active: !type.active
+                                      });
+                                      setToast({ type: 'success', message: `${type.active ? 'Archived' : 'Restored'} competency definition successfully.` });
+                                    } catch {
+                                      setToast({ type: 'error', message: 'Failed to toggle status.' });
+                                    }
+                                  }}
+                                  className={`px-2 py-1 rounded-lg font-bold border transition-colors cursor-pointer ${
+                                    type.active
+                                      ? 'bg-rose-500/10 border-rose-500/20 text-rose-700 dark:text-rose-300 hover:bg-rose-500/20'
+                                      : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20'
+                                  }`}
+                                >
+                                  {type.active ? 'Archive' : 'Restore'}
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {registryPagination.paginatedItems.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-muted-foreground italic">
+                      No competency definitions match your search filters. Try clearing filters or creating a new competency.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Registry Pagination Controls */}
+          <PaginationControls
+            pageSize={registryPagination.pageSize}
+            onPageSizeChange={registryPagination.setPageSize}
+            currentPage={registryPagination.currentPage}
+            totalPages={registryPagination.totalPages}
+            totalItems={registryPagination.totalItems}
+            startItem={registryPagination.startItem}
+            endItem={registryPagination.endItem}
+            onPageChange={registryPagination.setCurrentPage}
+            itemLabel="competencies"
+          />
+        </div>
+      )}
+
+      {/* Create Competency Modal Overlay */}
+      {isCreatingCompetency && (
+        <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-card solid-panel border border-border w-full max-w-md rounded-2xl p-6 relative shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex justify-between items-center border-b border-border pb-3">
+              <h2 className="text-base font-extrabold text-foreground flex items-center gap-1.5">
+                <Plus className="w-5 h-5 text-indigo-500" /> Create Competency Definition
+              </h2>
+              <button onClick={() => setIsCreatingCompetency(false)} className="p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded-lg cursor-pointer"><X className="w-4 h-4" /></button>
+            </div>
+
+            <form onSubmit={handleCreateCompetency} className="space-y-3.5 text-xs">
+              <label className="block space-y-1">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Title</span>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Forklift Certification Level 2"
+                  value={competencyForm.title}
+                  onChange={e => setCompetencyForm({ ...competencyForm, title: e.target.value })}
+                  className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none text-foreground font-semibold"
+                />
+              </label>
+
+              <label className="block space-y-1">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Description</span>
+                <textarea
+                  rows={2}
+                  placeholder="Describe training criteria, standards, or reference protocols..."
+                  value={competencyForm.description}
+                  onChange={e => setCompetencyForm({ ...competencyForm, description: e.target.value })}
+                  className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none resize-none leading-normal"
+                />
+              </label>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block space-y-1">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Category</span>
+                  <select
+                    value={competencyForm.category}
+                    onChange={e => setCompetencyForm({ ...competencyForm, category: e.target.value as CompetencyCategory })}
+                    className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none cursor-pointer font-semibold text-foreground"
+                  >
+                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </label>
+
+                <label className="block space-y-1">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Risk Level</span>
+                  <select
+                    value={competencyForm.default_risk_level}
+                    onChange={e => setCompetencyForm({ ...competencyForm, default_risk_level: e.target.value as RequirementRiskLevel })}
+                    className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none cursor-pointer font-semibold text-foreground"
+                  >
+                    {riskLevels.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <label className="block space-y-1">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Review Period (months)</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={competencyForm.review_period_months}
+                    onChange={e => setCompetencyForm({ ...competencyForm, review_period_months: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none text-foreground"
+                  />
+                </label>
+
+                <label className="block space-y-1">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Renewal Period (months)</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={competencyForm.validity_period_months}
+                    onChange={e => setCompetencyForm({ ...competencyForm, validity_period_months: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none text-foreground"
+                  />
+                </label>
+
+                <label className="block space-y-1">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Warning Window (days)</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={competencyForm.warning_days}
+                    onChange={e => setCompetencyForm({ ...competencyForm, warning_days: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none text-foreground"
+                  />
+                </label>
+              </div>
+
+              <div className="flex gap-2 items-center pt-2">
+                <input
+                  type="checkbox"
+                  id="create-evidence-req"
+                  checked={competencyForm.evidence_required}
+                  onChange={e => setCompetencyForm({ ...competencyForm, evidence_required: e.target.checked })}
+                  className="accent-indigo-650 rounded w-3.5 h-3.5"
+                />
+                <label htmlFor="create-evidence-req" className="font-bold text-foreground cursor-pointer select-none">Evidence upload required</label>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsCreatingCompetency(false)}
+                  className="w-1/2 py-2 bg-muted hover:bg-muted/80 text-foreground font-bold border border-border rounded-lg text-center cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="w-1/2 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md cursor-pointer"
+                >
+                  Create definition
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Competency Detail Workspace Drawer/Modal */}
+      {selectedCompetency && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleSelectCompetency(null);
+          }}
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-xs"
+        >
+          <div className="bg-card border border-border w-full max-w-4xl h-[85vh] rounded-2xl flex flex-col relative shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            {/* Workspace Header */}
+            <div className="flex justify-between items-start border-b border-border/60 p-6 bg-muted/10">
+              <div className="space-y-1 min-w-0">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Competency Workspace</span>
+                <h2 className="text-lg font-extrabold truncate text-foreground">{selectedCompetency.title}</h2>
+                <div className="flex flex-wrap items-center gap-2 mt-1">
+                  <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full border bg-muted text-muted-foreground">
+                    {selectedCompetency.category}
+                  </span>
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full border leading-none ${
+                    selectedCompetency.active
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                      : 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20'
+                  }`}>
+                    {selectedCompetency.active ? 'Active' : 'Archived'}
+                  </span>
+                  <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full border bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/20">
+                    {selectedCompetency.default_risk_level} Risk
+                  </span>
+                  {selectedCompetency.evidence_required && (
+                    <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full border bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20">
+                      Evidence Required
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {canManage && (
+                  <button
+                    onClick={() => handleDuplicateCompetency(selectedCompetency)}
+                    className="px-3 py-1.5 bg-muted hover:bg-muted/80 border border-border text-foreground text-xs font-bold rounded-lg cursor-pointer transition-colors"
+                  >
+                    Duplicate
+                  </button>
+                )}
+                <button
+                  onClick={() => handleSelectCompetency(null)}
+                  className="p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground rounded-lg transition-colors border border-border/40 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Workspace Tab Bar */}
+            <div className="flex items-center gap-1 border-b border-border/40 px-6 bg-muted/20">
+              <div className="flex items-center gap-1 overflow-x-auto scrollbar-none py-2">
+                {[
+                  ['overview', 'Overview'] as const,
+                  ['settings', 'Settings'] as const,
+                  ['people', 'Assigned People'] as const,
+                  ['evidence', 'Linked Evidence'] as const,
+                  ['requirements', 'Linked Requirements'] as const,
+                  ['actions', 'Linked Actions'] as const,
+                  ['history', 'History / Audit Trail'] as const,
+                ].map(([tab, label]) => (
+                  <button
+                    key={tab}
+                    onClick={() => setCompetencyWorkspaceTab(tab)}
+                    className={`relative px-3 py-1.5 text-[11px] font-bold whitespace-nowrap transition-colors cursor-pointer rounded-lg ${
+                      competencyWorkspaceTab === tab
+                        ? 'bg-indigo-600/10 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Workspace Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* overview tab */}
+              {competencyWorkspaceTab === 'overview' && (
+                <div className="space-y-6 text-xs">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="p-4 bg-muted/30 border border-border rounded-xl">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Compliance Rate</span>
+                      <span className="text-2xl font-extrabold block mt-1 text-indigo-505 text-indigo-600 dark:text-indigo-400">
+                        {(() => {
+                          const stats = registryStats.get(selectedCompetency.id);
+                          if (!stats || stats.assigned === 0) return '0%';
+                          return `${Math.round(((stats.valid + stats.expiringSoon * 0.5) / stats.assigned) * 100)}%`;
+                        })()}
+                      </span>
+                    </div>
+                    <div className="p-4 bg-muted/30 border border-border rounded-xl">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Assigned People</span>
+                      <span className="text-2xl font-extrabold block mt-1 text-foreground">
+                        {registryStats.get(selectedCompetency.id)?.assigned || 0}
+                      </span>
+                    </div>
+                    <div className="p-4 bg-muted/30 border border-border rounded-xl">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Expired / Missing</span>
+                      <span className="text-2xl font-extrabold block mt-1 text-rose-600 dark:text-rose-400">
+                        {(() => {
+                          const stats = registryStats.get(selectedCompetency.id);
+                          return (stats?.expired || 0) + (stats?.missing || 0);
+                        })()}
+                      </span>
+                    </div>
+                    <div className="p-4 bg-muted/30 border border-border rounded-xl">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Expiring Soon</span>
+                      <span className="text-2xl font-extrabold block mt-1 text-amber-500">
+                        {registryStats.get(selectedCompetency.id)?.expiringSoon || 0}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+                    <h3 className="text-sm font-bold border-b border-border/40 pb-2">Description</h3>
+                    <p className="text-muted-foreground leading-relaxed">
+                      {selectedCompetency.description || 'No description provided for this competency.'}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-card border border-border p-4 rounded-xl space-y-1">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Default Review Period</span>
+                      <span className="font-bold text-foreground block">
+                        {selectedCompetency.review_period_months ? `${selectedCompetency.review_period_months} months` : 'Not set'}
+                      </span>
+                    </div>
+                    <div className="bg-card border border-border p-4 rounded-xl space-y-1">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Default Renewal / Expiry</span>
+                      <span className="font-bold text-foreground block">
+                        {selectedCompetency.validity_period_months ? `${selectedCompetency.validity_period_months} months` : 'No expiry'}
+                      </span>
+                    </div>
+                    <div className="bg-card border border-border p-4 rounded-xl space-y-1">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Warning Window</span>
+                      <span className="font-bold text-foreground block">
+                        {selectedCompetency.warning_days ? `${selectedCompetency.warning_days} days` : '30 days (default)'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* settings tab */}
+              {competencyWorkspaceTab === 'settings' && editForm && (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!canManage) return;
+                    try {
+                      await upsertCompetencyType({
+                        id: selectedCompetency.id,
+                        title: editForm.title,
+                        category: editForm.category,
+                        description: editForm.description || null,
+                        default_risk_level: editForm.default_risk_level,
+                        evidence_required: editForm.evidence_required,
+                        review_period_months: editForm.review_period_months,
+                        validity_period_months: editForm.validity_period_months,
+                        warning_days: editForm.warning_days,
+                        active: editForm.active
+                      });
+                      setToast({ type: 'success', message: 'Successfully updated competency settings.' });
+                    } catch (e) {
+                      setToast({ type: 'error', message: `Failed to update: ${e instanceof Error ? e.message : 'Unknown error'}` });
+                    }
+                  }}
+                  className="space-y-4 max-w-xl text-xs"
+                >
+                  {!canManage && (
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 rounded-xl animate-in fade-in duration-200">
+                      Changes are disabled. You must be in Demo mode with Editor/Admin/Owner permission to update configuration settings.
+                    </div>
+                  )}
+
+                  <div className="space-y-3">
+                    <label className="block space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Competency Title</span>
+                      <input
+                        type="text"
+                        disabled={!canManage}
+                        required
+                        value={editForm.title}
+                        onChange={e => setEditForm({ ...editForm, title: e.target.value })}
+                        className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none text-foreground font-semibold"
+                      />
+                    </label>
+
+                    <label className="block space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Description</span>
+                      <textarea
+                        rows={3}
+                        disabled={!canManage}
+                        value={editForm.description}
+                        onChange={e => setEditForm({ ...editForm, description: e.target.value })}
+                        className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none resize-none leading-normal"
+                      />
+                    </label>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Category</span>
+                        <select
+                          disabled={!canManage}
+                          value={editForm.category}
+                          onChange={e => setEditForm({ ...editForm, category: e.target.value as CompetencyCategory })}
+                          className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none cursor-pointer font-semibold text-foreground"
+                        >
+                          {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </label>
+
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Default Risk Level</span>
+                        <select
+                          disabled={!canManage}
+                          value={editForm.default_risk_level}
+                          onChange={e => setEditForm({ ...editForm, default_risk_level: e.target.value as RequirementRiskLevel })}
+                          className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none cursor-pointer font-semibold text-foreground"
+                        >
+                          {riskLevels.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Review Period (months)</span>
+                        <input
+                          type="number"
+                          min="1"
+                          disabled={!canManage}
+                          value={editForm.review_period_months ?? ''}
+                          onChange={e => setEditForm({ ...editForm, review_period_months: e.target.value ? Number(e.target.value) : null })}
+                          className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none text-foreground"
+                        />
+                      </label>
+
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Renewal / Expiry (months)</span>
+                        <input
+                          type="number"
+                          min="1"
+                          disabled={!canManage}
+                          value={editForm.validity_period_months ?? ''}
+                          onChange={e => setEditForm({ ...editForm, validity_period_months: e.target.value ? Number(e.target.value) : null })}
+                          className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none text-foreground"
+                        />
+                      </label>
+
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Warning Window (days)</span>
+                        <input
+                          type="number"
+                          min="1"
+                          disabled={!canManage}
+                          value={editForm.warning_days ?? ''}
+                          onChange={e => setEditForm({ ...editForm, warning_days: e.target.value ? Number(e.target.value) : null })}
+                          className="w-full px-3 py-2 bg-muted border border-border rounded-lg outline-none text-foreground"
+                        />
+                      </label>
+                    </div>
+
+                    <div className="flex flex-wrap gap-4 pt-2">
+                      <label className="flex items-center gap-2 font-bold text-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          disabled={!canManage}
+                          checked={editForm.evidence_required}
+                          onChange={e => setEditForm({ ...editForm, evidence_required: e.target.checked })}
+                          className="accent-indigo-650 w-3.5 h-3.5"
+                        />
+                        <span>Evidence Required to Verify</span>
+                      </label>
+
+                      {canArchive && (
+                        <label className="flex items-center gap-2 font-bold text-foreground cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={editForm.active}
+                            onChange={e => setEditForm({ ...editForm, active: e.target.checked })}
+                            className="accent-indigo-650 w-3.5 h-3.5"
+                          />
+                          <span>Active in Registry</span>
+                        </label>
+                      )}
+                    </div>
+                  </div>
+
+                  {canManage && (
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-sm transition-colors cursor-pointer"
+                    >
+                      Save Configuration Settings
+                    </button>
+                  )}
+                </form>
+              )}
+
+              {/* people tab */}
+              {competencyWorkspaceTab === 'people' && (
+                <div className="space-y-4 text-xs">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Assigned Teammates</h3>
+                  {(() => {
+                    const assignedCells = buildCompetencyMatrix(people, [selectedCompetency], competencyRecords).filter(c => c.status !== 'Not Required');
+                    if (assignedCells.length === 0) {
+                      return <p className="italic text-muted-foreground">No teammates currently assigned or required to have this competency.</p>;
+                    }
+
+                    return (
+                      <div className="border border-border rounded-xl overflow-hidden bg-card">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-muted/50 border-b border-border text-muted-foreground font-bold uppercase tracking-wider text-[10px]">
+                              <th className="p-3">Teammate</th>
+                              <th className="p-3">Department & Role</th>
+                              <th className="p-3">Compliance Status</th>
+                              <th className="p-3">Completed / Expiry</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/60">
+                            {assignedCells.map(cell => (
+                              <tr key={cell.person.id} className="hover:bg-muted/10 transition-colors">
+                                <td className="p-3">
+                                  <button
+                                    onClick={() => {
+                                      setSelectedPerson(cell.person);
+                                      setActiveTab('matrix');
+                                      handleSelectCompetency(null);
+                                    }}
+                                    className="font-extrabold text-indigo-600 dark:text-indigo-400 hover:underline text-left cursor-pointer"
+                                  >
+                                    {cell.person.display_name}
+                                  </button>
+                                </td>
+                                <td className="p-3">
+                                  <span className="font-semibold">{cell.person.department || '—'}</span>
+                                  <span className="text-muted-foreground block text-[10px] mt-0.5">{cell.person.role || '—'}</span>
+                                </td>
+                                <td className="p-3">
+                                  <span className={`px-2 py-0.5 rounded-full border text-[9px] font-bold ${statusClass(cell.status)}`}>
+                                    {cell.status}
+                                  </span>
+                                </td>
+                                <td className="p-3 font-semibold text-muted-foreground">
+                                  {cell.record?.completed_date ? (
+                                    <>
+                                      <span>Comp: {cell.record.completed_date}</span>
+                                      {cell.record.expiry_date && <span className="block text-[10px] mt-0.5">Exp: {cell.record.expiry_date}</span>}
+                                    </>
+                                  ) : (
+                                    <span className="italic text-muted-foreground/60">No records</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* evidence tab */}
+              {competencyWorkspaceTab === 'evidence' && (
+                <div className="space-y-4 text-xs">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Linked Evidence Documents</h3>
+                  {(() => {
+                    const typeRecords = competencyRecords.filter(r => r.competency_type_id === selectedCompetency.id);
+                    const recordIds = typeRecords.map(r => r.id);
+                    const typeDocs = competencyRecordDocuments.filter(d => recordIds.includes(d.competency_record_id));
+                    const docIds = typeDocs.map(d => d.document_id);
+                    const linkedDocs = documents.filter(doc => docIds.includes(doc.id));
+
+                    if (linkedDocs.length === 0) {
+                      return <p className="italic text-muted-foreground">No evidence documents are currently linked to this competency.</p>;
+                    }
+
+                    return (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {linkedDocs.map(doc => {
+                          const recordLink = typeDocs.find(d => d.document_id === doc.id);
+                          const record = typeRecords.find(r => r.id === recordLink?.competency_record_id);
+                          const person = people.find(p => p.id === record?.person_id);
+
+                          return (
+                            <div key={doc.id} className="p-4 bg-muted/20 border border-border rounded-xl flex flex-col justify-between gap-3">
+                              <div className="min-w-0">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-650 dark:text-indigo-400 block">
+                                  Owner: {person?.display_name || 'Unknown'}
+                                </span>
+                                <h4 className="font-extrabold text-foreground mt-1 truncate">{doc.title}</h4>
+                                <span className="text-[10px] text-muted-foreground block truncate">{doc.file_name}</span>
+                              </div>
+                              <div className="flex justify-between items-center border-t border-border/40 pt-2.5">
+                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                                  doc.status === 'Active' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' :
+                                  doc.status === 'Expiring Soon' ? 'bg-amber-500/10 text-amber-600 border-amber-500/20' :
+                                  'bg-rose-500/10 text-rose-600 border-rose-500/20'
+                                } border`}>
+                                  {doc.status}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={async () => window.open(await getDocumentSignedUrl(doc.id), '_blank')}
+                                  className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg cursor-pointer transition-colors"
+                                >
+                                  Open File
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* requirements tab */}
+              {competencyWorkspaceTab === 'requirements' && (
+                <div className="space-y-4 text-xs">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Linked Requirements</h3>
+                  </div>
+
+                  {(() => {
+                    const links = requirementCompetencyTypes.filter(l => l.competency_type_id === selectedCompetency.id);
+                    const reqIds = links.map(l => l.requirement_id);
+                    const linkedReqs = frameworkRequirements.filter(r => reqIds.includes(r.id));
+                    const unlinkedReqs = frameworkRequirements.filter(r => !reqIds.includes(r.id));
+
+                    return (
+                      <div className="space-y-5">
+                        {linkedReqs.length === 0 ? (
+                          <p className="italic text-muted-foreground">No compliance framework requirements are linked to this competency definition.</p>
+                        ) : (
+                          <div className="border border-border rounded-xl overflow-hidden bg-card">
+                            <table className="w-full text-left border-collapse">
+                              <thead>
+                                <tr className="bg-muted/50 border-b border-border text-muted-foreground font-bold uppercase tracking-wider text-[10px]">
+                                  <th className="p-3">Requirement Title</th>
+                                  <th className="p-3">Category</th>
+                                  <th className="p-3">Risk Level</th>
+                                  <th className="p-3 text-right">Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-border/60">
+                                {linkedReqs.map(req => (
+                                  <tr key={req.id} className="hover:bg-muted/10 transition-colors">
+                                    <td className="p-3 font-extrabold text-foreground">{req.title}</td>
+                                    <td className="p-3 font-semibold text-muted-foreground">{req.category}</td>
+                                    <td className="p-3 font-semibold text-muted-foreground">{req.risk_level}</td>
+                                    <td className="p-3 text-right">
+                                      {canManage && (
+                                        <button
+                                          onClick={() => unlinkCompetencyTypeFromRequirement(req.id, selectedCompetency.id)}
+                                          className="px-2.5 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-500/10 border border-transparent rounded-lg cursor-pointer transition-colors"
+                                        >
+                                          Unlink
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {canManage && unlinkedReqs.length > 0 && (
+                          <div className="bg-muted/30 border border-border rounded-xl p-5 space-y-3">
+                            <h4 className="font-bold text-foreground">Link Framework Requirement</h4>
+                            <div className="flex gap-2 max-w-md">
+                              <select
+                                id="link-req-select"
+                                className="flex-1 px-3 py-2 bg-card border border-border rounded-lg outline-none cursor-pointer font-semibold text-foreground font-sans"
+                                defaultValue=""
+                                onChange={async (e) => {
+                                  const reqId = e.target.value;
+                                  if (reqId) {
+                                    try {
+                                      await linkCompetencyTypeToRequirement(reqId, selectedCompetency.id);
+                                      setToast({ type: 'success', message: 'Linked requirement successfully.' });
+                                      e.target.value = '';
+                                    } catch {
+                                      setToast({ type: 'error', message: 'Failed to link.' });
+                                    }
+                                  }
+                                }}
+                              >
+                                <option value="">Select a requirement to link...</option>
+                                {unlinkedReqs.map(r => (
+                                  <option key={r.id} value={r.id}>{r.title} ({r.category})</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* actions tab */}
+              {competencyWorkspaceTab === 'actions' && (
+                <div className="space-y-4 text-xs">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Linked Corrective Action Tasks</h3>
+                  {(() => {
+                    const links = actionObjectLinks.filter(l => l.object_type === 'competency_type' && l.object_id === selectedCompetency.id);
+                    const actIds = links.map(l => l.action_id);
+                    const linkedActions = actions.filter(a => actIds.includes(a.id));
+
+                    if (linkedActions.length === 0) {
+                      return <p className="italic text-muted-foreground">No corrective actions or tasks are linked to this competency.</p>;
+                    }
+
+                    return (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {linkedActions.map(action => (
+                          <div key={action.id} className="p-4 bg-muted/20 border border-border rounded-xl flex flex-col justify-between gap-3">
+                            <div>
+                              <h4 className="font-extrabold text-foreground truncate">{action.title}</h4>
+                              <p className="text-muted-foreground mt-1 text-[10px] line-clamp-2">{action.description || 'No description.'}</p>
+                            </div>
+                            <div className="flex justify-between items-center border-t border-border/40 pt-2.5">
+                              <span className="text-[10px] text-muted-foreground font-semibold">
+                                Status: <strong className="text-foreground">{action.status}</strong>
+                              </span>
+                              <button
+                                onClick={() => setSelectedAction(action)}
+                                className="px-3 py-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold rounded-lg cursor-pointer transition-colors"
+                              >
+                                Open Task
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* history tab */}
+              {competencyWorkspaceTab === 'history' && (
+                <div className="space-y-4 text-xs">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Audit Trail Logs</h3>
+                  {competencyHistory.length === 0 ? (
+                    <p className="italic text-muted-foreground">No recent audit log history records found for this competency definition.</p>
+                  ) : (
+                    <div className="border border-border rounded-xl overflow-hidden bg-card divide-y divide-border/60">
+                      {competencyHistory.slice(0, 10).map(log => (
+                        <div key={log.id} className="p-4 hover:bg-muted/10 transition-colors space-y-1">
+                          <div className="flex justify-between items-center">
+                            <span className="font-extrabold text-foreground">{log.action}</span>
+                            <span className="text-muted-foreground font-semibold text-[10px]">{new Date(log.created_at).toLocaleString()}</span>
+                          </div>
+                          <p className="text-muted-foreground">{log.details}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {activeCell && !selectedPerson && (
         <div className="fixed inset-0 z-[70] bg-black/60 flex justify-end">
@@ -2330,7 +3884,7 @@ export default function CompetencyMatrixPage() {
                           try {
                             exportCsv(`vygilence-competency-records-${selectedPerson.id}-${exportDateStamp()}.csv`, competencyRecordExportRows(filteredPersonRows));
                             setToast({ type: 'success', message: 'Teammate records exported successfully.' });
-                          } catch (e) {
+                          } catch {
                             setToast({ type: 'error', message: 'Failed to export records.' });
                           }
                         }
@@ -2363,7 +3917,7 @@ export default function CompetencyMatrixPage() {
                   </div>
                   <select
                     value={workspaceStatusFilter}
-                    onChange={event => setWorkspaceStatusFilter(event.target.value as any)}
+                    onChange={event => setWorkspaceStatusFilter(event.target.value as 'All' | CompetencyStatus)}
                     className="bg-card border border-border/80 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-foreground outline-none cursor-pointer"
                   >
                     <option value="All">All Statuses</option>
