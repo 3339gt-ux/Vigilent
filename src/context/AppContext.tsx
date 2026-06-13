@@ -16,7 +16,7 @@ import {
 import { isDemoMode, requireProductionEnv } from '@/lib/env';
 import { generateHighVolumeDataset } from '@/lib/demoGenerator';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
-import { formatSupabaseError, logSupabaseError } from '@/lib/supabaseDiagnostics';
+import { getFriendlyErrorMessage, logSupabaseError } from '@/lib/supabaseDiagnostics';
 import { buildReadinessReport, ReadinessReport } from '@/lib/readinessEngine';
 import { buildCompetencySummary, CompetencySummary } from '@/lib/competencyEngine';
 import {
@@ -620,7 +620,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const { data: { session }, error } = await supabase.auth.getSession();
     if (error) {
       const diagnostics = logSupabaseError('auth.getSession', error);
-      throw new Error(formatSupabaseError(diagnostics));
+      throw new Error(getFriendlyErrorMessage(diagnostics, 'Unable to verify your session. Please sign in again.'));
     }
 
     const currentAuthUser = session?.user || null;
@@ -691,7 +691,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     } catch (err) {
       const diagnostics = logSupabaseError('AppContext.loadData', err);
-      const message = formatSupabaseError(diagnostics);
+      const message = getFriendlyErrorMessage(
+        diagnostics,
+        'Unable to load the workspace. Please refresh and try again.'
+      );
       setAuthError(message);
       const currentSessionUser = !isDemoMode && supabase
         ? (await supabase.auth.getSession()).data.session?.user || null
@@ -823,7 +826,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     if (error) {
       const diagnostics = logSupabaseError('rpc.create_organization_for_current_user', error);
-      const message = formatSupabaseError(diagnostics);
+      const message = getFriendlyErrorMessage(
+        diagnostics,
+        'Unable to create the organisation. Please try again or contact support.'
+      );
       setAuthError(message);
       throw new Error(message);
     }

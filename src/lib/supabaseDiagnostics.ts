@@ -70,24 +70,37 @@ export const formatSupabaseError = (diagnostics: SupabaseErrorDiagnostics): stri
 
 export const logSupabaseError = (context: string, error: unknown): SupabaseErrorDiagnostics => {
   const diagnostics = getSupabaseErrorDiagnostics(context, error);
-  console.error('Supabase query failed', diagnostics);
+  if (process.env.NODE_ENV !== 'production') {
+    console.error('Supabase query failed', diagnostics);
+  } else {
+    console.error('A Supabase request failed.');
+  }
   return diagnostics;
 };
 
 export const throwSupabaseError = (context: string, error: unknown): never => {
   const diagnostics = logSupabaseError(context, error);
-  // Throw a masked, safe error message to prevent database/RLS details from leaking to UI
-  const friendlyMsg = getFriendlyErrorMessage(diagnostics.message);
+  const friendlyMsg = getFriendlyErrorMessage(diagnostics);
   throw new Error(friendlyMsg);
 };
 
-export const getFriendlyErrorMessage = (error: unknown): string => {
-  if (!error) return 'An unexpected error occurred.';
-  const rawMsg = error instanceof Error ? error.message : String(error);
+export const getFriendlyErrorMessage = (
+  error: unknown,
+  fallback = 'An unexpected error occurred. Please try again.'
+): string => {
+  if (!error) return fallback;
+  const diagnostics = isRecord(error) ? error as SupabaseErrorLike : null;
+  const rawMsg =
+    error instanceof Error
+      ? error.message
+      : typeof diagnostics?.message === 'string'
+        ? diagnostics.message
+        : String(error);
   const lowerMsg = rawMsg.toLowerCase();
+  const code = typeof diagnostics?.code === 'string' ? diagnostics.code.toLowerCase() : '';
 
-  // If it's a database-level, schema, connection, or PostgREST error, map to friendly text
   if (
+    /^2[23]|^42|^pgrst/.test(code) ||
     lowerMsg.includes('pgrst') ||
     lowerMsg.includes('postgres') ||
     lowerMsg.includes('relation') ||
@@ -101,7 +114,10 @@ export const getFriendlyErrorMessage = (error: unknown): string => {
     lowerMsg.includes('row-level security') ||
     lowerMsg.includes('rls') ||
     lowerMsg.includes('violates row-level security') ||
-    lowerMsg.includes('policy')
+    lowerMsg.includes('policy') ||
+    lowerMsg.includes('duplicate key') ||
+    lowerMsg.includes('null value in column') ||
+    lowerMsg.includes('permission denied')
   ) {
     if (
       lowerMsg.includes('does not exist') ||
@@ -117,5 +133,16 @@ export const getFriendlyErrorMessage = (error: unknown): string => {
     return 'A database operation could not be completed. Please check your connection and try again. If this continues, contact support.';
   }
 
-  return rawMsg;
+  const safeAuthMessages = [
+    'invalid login credentials',
+    'email not confirmed',
+    'password should be at least',
+    'new password should be different from the old password',
+    'for security purposes, you can only request this after',
+  ];
+  if (safeAuthMessages.some(message => lowerMsg.includes(message))) {
+    return rawMsg;
+  }
+
+  return fallback;
 };

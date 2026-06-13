@@ -8,6 +8,7 @@ import { useApp } from '@/context/AppContext';
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 import { isDemoMode } from '@/lib/env';
 import { supabase } from '@/lib/supabaseClient';
+import { getFriendlyErrorMessage } from '@/lib/supabaseDiagnostics';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -20,23 +21,63 @@ export default function LoginPage() {
   const [agreedDisclaimers, setAgreedDisclaimers] = useState(false);
 
   const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+  const [recoveryComplete, setRecoveryComplete] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
   React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const hash = window.location.hash;
-      if (hash.includes('type=recovery') || hash.includes('access_token=')) {
-        setIsRecoveryMode(true);
+    if (isDemoMode || !supabase) return;
+
+    const authClient = supabase;
+    let mounted = true;
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const queryParams = new URLSearchParams(window.location.search);
+    const hasRecoveryIntent =
+      hashParams.get('type') === 'recovery' || queryParams.get('type') === 'recovery';
+
+    const confirmRecoveryTokens = async () => {
+      if (!hasRecoveryIntent) return;
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
+      if (!accessToken || !refreshToken) return;
+
+      const { data, error: sessionError } = await authClient.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+      if (!mounted) return;
+
+      if (sessionError || !data.session?.user) {
+        setError('This password recovery link is invalid or has expired. Request a new link and try again.');
+        return;
       }
-    }
+
+      setIsRecoveryMode(true);
+    };
+
+    const { data: { subscription } } = authClient.auth.onAuthStateChange((event, session) => {
+      if (!mounted || event !== 'PASSWORD_RECOVERY') return;
+      if (session?.user) {
+        setError('');
+        setIsRecoveryMode(true);
+      } else {
+        setError('This password recovery link is invalid or has expired. Request a new link and try again.');
+      }
+    });
+
+    void confirmRecoveryTokens();
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   React.useEffect(() => {
-    if (!isLoading && isAuthenticated && !isRecoveryMode) {
+    if (!isLoading && isAuthenticated && !isRecoveryMode && !recoveryComplete) {
       router.push(hasOrganization ? '/dashboard' : '/onboarding');
     }
-  }, [isLoading, isAuthenticated, hasOrganization, router, isRecoveryMode]);
+  }, [isLoading, isAuthenticated, hasOrganization, router, isRecoveryMode, recoveryComplete]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,8 +100,8 @@ export default function LoginPage() {
       } else {
         setError('Invalid credentials.');
       }
-    } catch (err: any) {
-      setError(err.message || 'An error occurred during authentication.');
+    } catch (err: unknown) {
+      setError(getFriendlyErrorMessage(err, 'An error occurred during authentication.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -78,8 +119,8 @@ export default function LoginPage() {
     try {
       await resetPassword(email);
       setNotice('Password reset instructions have been sent if the email is registered.');
-    } catch (err: any) {
-      setError(err.message || 'Unable to send password reset instructions.');
+    } catch (err: unknown) {
+      setError(getFriendlyErrorMessage(err, 'Unable to send password reset instructions.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -113,15 +154,17 @@ export default function LoginPage() {
       const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
       if (updateError) throw updateError;
 
-      setNotice('Password updated successfully. You can now sign in.');
+      setRecoveryComplete(true);
+      await supabase.auth.signOut({ scope: 'local' });
+      setNotice('Password updated successfully. Sign in with your new password.');
       setIsRecoveryMode(false);
       setNewPassword('');
       setConfirmPassword('');
       if (typeof window !== 'undefined') {
-        window.location.hash = '';
+        window.history.replaceState(null, '', '/login');
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to update password.');
+    } catch (err: unknown) {
+      setError(getFriendlyErrorMessage(err, 'Failed to update password.'));
     } finally {
       setIsSubmitting(false);
     }

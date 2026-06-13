@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useApp, VygilenceTheme, InterfaceStyle, ThemePreference } from '@/context/AppContext';
 import { isDemoMode, evidenceStorageBucket } from '@/lib/env';
-import { Save, ShieldAlert, Key, Bell, User, CheckCircle2, Copy, Check, Palette, Sun, Moon, CircleDot, ArrowRight, Eye, Sparkles, ShieldCheck, Database, Activity } from 'lucide-react';
+import { Save, ShieldAlert, Key, Bell, User, CheckCircle2, Copy, Check, Palette, Sun, Moon, CircleDot, ArrowRight, Eye, Sparkles, ShieldCheck, Activity } from 'lucide-react';
 import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
 
 export default function SettingsPage() {
@@ -761,7 +761,9 @@ export default function SettingsPage() {
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground font-semibold">Local Mock Record Count:</span>
+                  <span className="text-muted-foreground font-semibold">
+                    {isDemoMode ? 'Local Demo Record Count:' : 'Loaded Workspace Record Count:'}
+                  </span>
                   <span className="font-bold font-mono">
                     {requirements.length + documents.length + assets.length + people.length + competencyRecords.length}
                   </span>
