@@ -2,8 +2,8 @@
 
 import React, { useState } from 'react';
 import { useApp, VygilenceTheme, InterfaceStyle, ThemePreference } from '@/context/AppContext';
-import { isDemoMode } from '@/lib/env';
-import { Save, ShieldAlert, Key, Bell, User, CheckCircle2, Copy, Check, Palette, Sun, Moon, CircleDot, ArrowRight, Eye, Sparkles } from 'lucide-react';
+import { isDemoMode, evidenceStorageBucket } from '@/lib/env';
+import { Save, ShieldAlert, Key, Bell, User, CheckCircle2, Copy, Check, Palette, Sun, Moon, CircleDot, ArrowRight, Eye, Sparkles, ShieldCheck, Database, Activity } from 'lucide-react';
 import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
 
 export default function SettingsPage() {
@@ -19,8 +19,15 @@ export default function SettingsPage() {
     setInterfaceDetailLevel,
     refreshSession,
     resetDemoData,
-    loadHighVolumeDemoDataset
+    loadHighVolumeDemoDataset,
+    requirements,
+    documents,
+    assets,
+    people,
+    competencyRecords
   } = useApp();
+
+  const isOwnerOrAdmin = user?.role === 'Owner' || user?.role === 'Admin';
 
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>(null);
   const [toast, setToast] = useState<ToastState>(null);
@@ -689,6 +696,125 @@ export default function SettingsPage() {
                 <span>Demo database cleared: All localStorage collections wiped.</span>
               </p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* System Readiness & Diagnostics Section (Admin/Developer only) */}
+      {isOwnerOrAdmin && (
+        <div className="bg-card border border-border rounded-xl p-6 shadow-sm space-y-6">
+          <div className="flex items-center gap-2 border-b border-border pb-3.5">
+            <Activity className="w-5 h-5 text-indigo-500" />
+            <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">System Readiness & Diagnostics</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+            {/* Environment Variables & Mode */}
+            <div className="bg-muted/30 border border-border/60 rounded-xl p-4 space-y-3">
+              <span className="font-extrabold text-[10px] uppercase tracking-widest text-indigo-650 dark:text-indigo-400 block">Environment & Mode</span>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-semibold">Application Mode:</span>
+                  <span className={`px-2 py-0.5 rounded-full font-black text-[9px] uppercase tracking-wider ${
+                    isDemoMode ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20' : 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                  }`}>
+                    {isDemoMode ? 'Demo / Local' : 'Production'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-semibold">Supabase URL configured:</span>
+                  <span className={`font-bold ${process.env.NEXT_PUBLIC_SUPABASE_URL ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    {process.env.NEXT_PUBLIC_SUPABASE_URL ? 'Yes (Present)' : 'No (Missing)'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-semibold">Supabase Anon Key:</span>
+                  <span className={`font-bold ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    {process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'Yes (Present)' : 'No (Missing)'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-semibold">Auth Redirect Config:</span>
+                  <span className="text-muted-foreground">Redirects to `/login`</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Storage & Data Store */}
+            <div className="bg-muted/30 border border-border/60 rounded-xl p-4 space-y-3">
+              <span className="font-extrabold text-[10px] uppercase tracking-widest text-indigo-650 dark:text-indigo-400 block">Storage & Data Store</span>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-semibold">Evidence Storage Bucket:</span>
+                  <span className="font-mono text-[10px] text-foreground font-bold">{evidenceStorageBucket}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-semibold">Bucket Setup:</span>
+                  <span className={`font-bold ${isDemoMode ? 'text-muted-foreground' : 'text-amber-500'}`}>
+                    {isDemoMode ? 'N/A (Local DB)' : 'Staging Verification Pending'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-semibold">Local Storage DB status:</span>
+                  <span className="text-foreground font-bold">
+                    {isDemoMode ? 'Active (Initialized)' : 'Disabled'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-semibold">Local Mock Record Count:</span>
+                  <span className="font-bold font-mono">
+                    {requirements.length + documents.length + assets.length + people.length + competencyRecords.length}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Schema & Migrations */}
+            <div className="bg-muted/30 border border-border/60 rounded-xl p-4 space-y-3">
+              <span className="font-extrabold text-[10px] uppercase tracking-widest text-indigo-650 dark:text-indigo-400 block">Schema & Migrations</span>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-semibold">Database Schema Verification:</span>
+                  <span className={`font-bold ${isDemoMode ? 'text-muted-foreground' : 'text-amber-500'}`}>
+                    {isDemoMode ? 'N/A' : 'Pending Verification'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-semibold">Saved Reports Migration:</span>
+                  <span className={`font-bold ${isDemoMode ? 'text-muted-foreground' : 'text-amber-500'}`}>
+                    {isDemoMode ? 'N/A' : 'Pending Verification'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-semibold">Asset Matrix Migrations:</span>
+                  <span className={`font-bold ${isDemoMode ? 'text-muted-foreground' : 'text-amber-500'}`}>
+                    {isDemoMode ? 'N/A' : 'Pending Verification'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-semibold">CI Smoke Tests:</span>
+                  <span className="text-rose-500 font-bold font-mono">Pending checklist</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Warnings & Boundary Diagnostics */}
+          <div className="p-4 bg-amber-500/5 border border-amber-500/25 rounded-xl space-y-2 text-xs leading-relaxed">
+            <span className="font-bold flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+              <ShieldCheck className="w-4 h-4 shrink-0" /> Important Readiness Warnings:
+            </span>
+            <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+              <li>
+                <strong>Competency Registry Expiry:</strong> Target warning values (`review_period_months` and `warning_days`) are local/demo-only unless corresponding columns exist in your active staging database schema.
+              </li>
+              <li>
+                <strong>Password Recovery:</strong> In-app password update flow is completed for production Supabase redirects. In demo mode, it is cleanly disabled.
+              </li>
+              <li>
+                <strong>Invitations:</strong> Member invitation workflows are currently simulation-only. They are disabled outside of demo mode.
+              </li>
+            </ul>
           </div>
         </div>
       )}

@@ -558,19 +558,37 @@ export default function OrganisationManagement() {
             </div>
 
             {isAuthorized ? (
-              <button
-                onClick={() => setShowInviteModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-md cursor-pointer"
-                id="org-invite-open-btn"
-              >
-                <UserPlus className="w-4 h-4" /> Invite Member
-              </button>
+              isDemoMode ? (
+                <button
+                  onClick={() => setShowInviteModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-md cursor-pointer"
+                  id="org-invite-open-btn"
+                >
+                  <UserPlus className="w-4 h-4" /> Invite Member
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted border border-border text-muted-foreground text-xs font-semibold rounded-lg select-none" title="Production invitations are currently disabled.">
+                  <Ban className="w-3.5 h-3.5" /> Production Invites Disabled
+                </div>
+              )
             ) : (
               <span className="text-[10px] font-extrabold uppercase bg-muted border border-border px-2.5 py-1 text-muted-foreground rounded-lg flex items-center gap-1 leading-none select-none">
                 <Shield className="w-3.5 h-3.5" /> Read Only View
               </span>
             )}
           </div>
+
+          {!isDemoMode && (
+            <div className="mb-6 p-4 bg-indigo-500/5 border border-indigo-550/20 text-indigo-650 dark:text-indigo-400 rounded-xl text-xs space-y-1.5">
+              <div className="flex items-center gap-1.5 font-bold">
+                <Info className="w-4 h-4 text-indigo-500" />
+                <span>Production Member Management & Invitations</span>
+              </div>
+              <p className="leading-relaxed">
+                Collaborative team membership features are currently disabled in production mode. Real database organization membership and email invitation services must be provisioned and verified in Supabase before these features can be enabled.
+              </p>
+            </div>
+          )}
 
           {/* Table */}
           <div className="overflow-x-auto">

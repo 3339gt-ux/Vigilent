@@ -200,7 +200,7 @@ export default function LandingPage() {
                 <div className="bg-card border border-border rounded-xl p-6 flex flex-col justify-between h-48">
                   <div>
                     <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Shareable Audit Packs</h3>
-                    <p className="text-xs text-muted-foreground mt-1">Compiled packages for DVSA or safety audits.</p>
+                    <p className="text-xs text-muted-foreground mt-1">Compiled packages for fleet or safety audits.</p>
                   </div>
                   <div className="mt-4">
                     <div className="border border-border/80 rounded-lg p-3 bg-muted/40">
@@ -409,7 +409,7 @@ export default function LandingPage() {
                   <AlertCircle className="w-4 h-4" /> NO Claims of Compliance
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  An active readiness indicator inside Vygilence does not constitute a legal or official certification of regulatory compliance. Vygilence cannot certify fitness for licensing audits, DVSA inspections, or court audits.
+                  An active readiness indicator inside Vygilence does not constitute a legal or official certification of regulatory compliance. Vygilence cannot certify fitness for licensing audits, external agency inspections, or court audits.
                 </p>
               </div>
             </div>
@@ -546,7 +546,7 @@ export default function LandingPage() {
           <div className="pt-8 border-t border-border/40 flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
             <p>&copy; {new Date().getFullYear()} Vygilence Inc. All rights reserved.</p>
             <p className="max-w-md text-[10px] leading-normal">
-              Disclaimer: Vygilence is a storage utility. It does not provide legal advice, safety reviews, or safety statement templates. Use of the software does not warrant compliance with DVSA, HSE, or other regulatory audits.
+              Disclaimer: Vygilence is a storage utility. It does not provide legal advice, safety reviews, or safety statement templates. Use of the software does not warrant compliance with transport, health and safety, or other regulatory audits.
             </p>
           </div>
         </div>

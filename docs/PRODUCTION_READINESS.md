@@ -36,7 +36,7 @@ Future production variables:
 - Tenant-sensitive mutations still need deeper role enforcement and test coverage beyond baseline RLS and client scoping.
 - Evidence files are stored in the private `evidence-documents` Supabase Storage bucket when production mode is configured.
 - Storage bucket and `storage.objects` policies are applied from `supabase/storage_setup.sql`, after `supabase/schema.sql`.
-- Signed URLs are not implemented.
+- Signed URLs are implemented for authenticated evidence downloads, but external secure sharing remains incomplete.
 - Billing is simulated and must be replaced with Stripe-hosted flows.
 - Audit-pack sharing is simulated and exposes prototype PIN behavior.
 - No automated RLS, auth, storage, or billing tests exist.

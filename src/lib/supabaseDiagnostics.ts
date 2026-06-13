@@ -76,5 +76,46 @@ export const logSupabaseError = (context: string, error: unknown): SupabaseError
 
 export const throwSupabaseError = (context: string, error: unknown): never => {
   const diagnostics = logSupabaseError(context, error);
-  throw new Error(formatSupabaseError(diagnostics));
+  // Throw a masked, safe error message to prevent database/RLS details from leaking to UI
+  const friendlyMsg = getFriendlyErrorMessage(diagnostics.message);
+  throw new Error(friendlyMsg);
+};
+
+export const getFriendlyErrorMessage = (error: unknown): string => {
+  if (!error) return 'An unexpected error occurred.';
+  const rawMsg = error instanceof Error ? error.message : String(error);
+  const lowerMsg = rawMsg.toLowerCase();
+
+  // If it's a database-level, schema, connection, or PostgREST error, map to friendly text
+  if (
+    lowerMsg.includes('pgrst') ||
+    lowerMsg.includes('postgres') ||
+    lowerMsg.includes('relation') ||
+    lowerMsg.includes('42p01') ||
+    lowerMsg.includes('does not exist') ||
+    lowerMsg.includes('column ') ||
+    lowerMsg.includes('table ') ||
+    lowerMsg.includes('database error') ||
+    lowerMsg.includes('schema') ||
+    lowerMsg.includes('sql') ||
+    lowerMsg.includes('row-level security') ||
+    lowerMsg.includes('rls') ||
+    lowerMsg.includes('violates row-level security') ||
+    lowerMsg.includes('policy')
+  ) {
+    if (
+      lowerMsg.includes('does not exist') ||
+      lowerMsg.includes('42p01') ||
+      lowerMsg.includes('relation') ||
+      lowerMsg.includes('missing')
+    ) {
+      return 'The requested feature is not currently available or configured in this environment.';
+    }
+    if (lowerMsg.includes('row-level security') || lowerMsg.includes('violates') || lowerMsg.includes('policy')) {
+      return 'You do not have permission to perform this action.';
+    }
+    return 'A database operation could not be completed. Please check your connection and try again. If this continues, contact support.';
+  }
+
+  return rawMsg;
 };

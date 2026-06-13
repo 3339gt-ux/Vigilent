@@ -6,6 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useApp } from '@/context/AppContext';
 import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
+import { getFriendlyErrorMessage } from '@/lib/supabaseDiagnostics';
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -58,35 +59,7 @@ export default function OnboardingPage() {
   const getFriendlyError = () => {
     const rawError = error || authError;
     if (!rawError) return '';
-
-    const errMsg = rawError;
-    const lowerMsg = errMsg.toLowerCase();
-
-    // Check for technical database schema/cache/connection or relation errors
-    if (
-      lowerMsg.includes('pgrst') ||
-      lowerMsg.includes('postgres') ||
-      lowerMsg.includes('relation') ||
-      lowerMsg.includes('42p01') ||
-      lowerMsg.includes('does not exist') ||
-      lowerMsg.includes('column ') ||
-      lowerMsg.includes('table ') ||
-      lowerMsg.includes('database error') ||
-      lowerMsg.includes('schema') ||
-      lowerMsg.includes('sql')
-    ) {
-      if (
-        lowerMsg.includes('does not exist') ||
-        lowerMsg.includes('42p01') ||
-        lowerMsg.includes('relation') ||
-        lowerMsg.includes('missing')
-      ) {
-        return 'This workspace feature is not enabled in this environment yet.';
-      }
-      return 'We could not complete workspace setup. Please check your connection and try again. If this continues, contact support.';
-    }
-
-    return errMsg;
+    return getFriendlyErrorMessage(rawError);
   };
 
   if (isLoading || hasOrganization) {
