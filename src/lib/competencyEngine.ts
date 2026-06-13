@@ -70,11 +70,26 @@ export const buildCompetencyMatrix = (
   const activePeople = people.filter(person => person.active);
   const activeTypes = competencyTypes.filter(type => type.active);
 
+  // Group records by person_id and competency_type_id to optimize lookup from O(R) to O(1)
+  const recordMap = new Map<string, CompetencyRecord[]>();
+  for (let i = 0; i < records.length; i++) {
+    const record = records[i];
+    const key = `${record.person_id}_${record.competency_type_id}`;
+    if (!recordMap.has(key)) {
+      recordMap.set(key, []);
+    }
+    recordMap.get(key)!.push(record);
+  }
+
+  // Pre-sort each grouped list
+  for (const list of recordMap.values()) {
+    list.sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime());
+  }
+
   return activePeople.flatMap(person =>
     activeTypes.map(competencyType => {
-      const personRecords = records
-        .filter(record => record.person_id === person.id && record.competency_type_id === competencyType.id)
-        .sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime());
+      const key = `${person.id}_${competencyType.id}`;
+      const personRecords = recordMap.get(key) || [];
       const record = personRecords[0] || null;
       const status = calculateCompetencyStatus(record, today);
       return {

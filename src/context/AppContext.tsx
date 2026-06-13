@@ -14,6 +14,7 @@ import {
   getCurrentSupabaseOrganization
 } from '@/lib/db';
 import { isDemoMode, requireProductionEnv } from '@/lib/env';
+import { generateHighVolumeDataset } from '@/lib/demoGenerator';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { formatSupabaseError, logSupabaseError } from '@/lib/supabaseDiagnostics';
 import { buildReadinessReport, ReadinessReport } from '@/lib/readinessEngine';
@@ -91,6 +92,7 @@ interface AppContextType {
   createOrganization: (name: string, industry?: string | null, country?: string) => Promise<Organization>;
   refreshSession: () => Promise<void>;
   resetDemoData: () => Promise<void>;
+  loadHighVolumeDemoDataset: () => Promise<void>;
   updateOrgProfile: (updates: Partial<Organization>) => Promise<void>;
 
   requirements: ComplianceRequirement[];
@@ -955,6 +957,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await loadDemoData();
   };
 
+  const loadHighVolumeDemoDataset = async () => {
+    if (!isDemoMode) {
+      throw new Error('High-volume demo dataset is only available when NEXT_PUBLIC_VIGILEN_APP_MODE=demo.');
+    }
+
+    const dataset = generateHighVolumeDataset(12345);
+
+    localStorage.setItem('vigilen_org', JSON.stringify(dataset.org));
+    localStorage.setItem('vigilen_profile', JSON.stringify(dataset.profile));
+    localStorage.setItem('vigilen_requirements', JSON.stringify(dataset.requirements));
+    localStorage.setItem('vigilen_documents', JSON.stringify(dataset.documents));
+    localStorage.setItem('vigilen_cells', JSON.stringify(dataset.matrixCells));
+    localStorage.setItem('vigilen_audit_packs', JSON.stringify(dataset.auditPacks));
+    localStorage.setItem('vigilen_logs', JSON.stringify(dataset.auditLogs));
+    localStorage.setItem('vigilen_framework_requirements', JSON.stringify(dataset.frameworkRequirements));
+    localStorage.setItem('vigilen_requirement_evidence_types', JSON.stringify(dataset.requirementEvidenceTypes));
+    localStorage.setItem('vigilen_requirement_documents', JSON.stringify(dataset.requirementDocuments));
+    localStorage.setItem('vigilen_requirement_evidence_criteria', JSON.stringify(dataset.requirementEvidenceCriteria));
+    localStorage.setItem('vigilen_requirement_evidence_criterion_matches', JSON.stringify(dataset.requirementEvidenceCriterionMatches));
+    localStorage.setItem('vigilen_reviews', JSON.stringify(dataset.reviews));
+    localStorage.setItem('vigilen_actions', JSON.stringify(dataset.actions));
+    localStorage.setItem('vigilen_requirement_actions', JSON.stringify(dataset.requirementActions));
+    localStorage.setItem('vigilen_action_updates', JSON.stringify(dataset.actionUpdates));
+    localStorage.setItem('vigilen_action_documents', JSON.stringify(dataset.actionDocuments));
+    localStorage.setItem('vigilen_action_object_links', JSON.stringify(dataset.actionObjectLinks));
+    localStorage.setItem('vigilen_people', JSON.stringify(dataset.people));
+    localStorage.setItem('vigilen_competency_types', JSON.stringify(dataset.competencyTypes));
+    localStorage.setItem('vigilen_competency_records', JSON.stringify(dataset.competencyRecords));
+    localStorage.setItem('vigilen_competency_record_documents', JSON.stringify(dataset.competencyRecordDocuments));
+    localStorage.setItem('vigilen_requirement_competency_types', JSON.stringify(dataset.requirementCompetencyTypeTypes));
+    localStorage.setItem('vigilen_requirement_categories', JSON.stringify(dataset.requirementCategories));
+    localStorage.setItem('vigilen_evidence_categories', JSON.stringify(dataset.evidenceCategories));
+    localStorage.setItem('vygilence_workspace_notifications', JSON.stringify(dataset.notifications));
+    localStorage.setItem('vigilen_assets', JSON.stringify(dataset.assets));
+    localStorage.setItem('vigilen_asset_categories', JSON.stringify(dataset.assetCategories));
+    localStorage.setItem('vigilen_asset_check_types', JSON.stringify(dataset.assetCheckTypes));
+    localStorage.setItem('vigilen_asset_check_assignments', JSON.stringify(dataset.assetCheckAssignments));
+    localStorage.setItem('vigilen_asset_check_records', JSON.stringify(dataset.assetCheckRecords));
+    localStorage.setItem('vigilen_asset_check_evidence_links', JSON.stringify(dataset.assetCheckEvidenceLinks));
+    localStorage.setItem('vigilen_asset_requirement_links', JSON.stringify(dataset.assetRequirementLinks));
+    localStorage.setItem('vigilen_asset_history_events', JSON.stringify(dataset.assetHistoryEvents));
+    localStorage.setItem('vigilen_initialized', 'true');
+
+    await loadDemoData();
+  };
+
   const updateOrgProfile = async (updates: Partial<Organization>) => {
     if (!organization) return;
     const updated = await dbService.updateOrganization(organization.id, updates);
@@ -1543,6 +1591,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createOrganization,
         refreshSession: loadData,
         resetDemoData,
+        loadHighVolumeDemoDataset,
         updateOrgProfile,
         requirements,
         documents,

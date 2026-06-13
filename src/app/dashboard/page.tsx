@@ -3593,7 +3593,7 @@ export default function DashboardPage() {
                     </button>
                     {hasRecords && isExpanded && (
                       <div className="pl-3 space-y-1 max-h-32 overflow-y-auto no-scrollbar pt-0.5 pb-1">
-                        {item.records.map((rec, recIdx) => (
+                        {item.records.slice(0, 5).map((rec, recIdx) => (
                           <Link
                             key={recIdx}
                             href={rec.link || '#'}
@@ -3603,6 +3603,11 @@ export default function DashboardPage() {
                             <span className="text-muted-foreground text-[8px] truncate">{rec.info}</span>
                           </Link>
                         ))}
+                        {item.records.length > 5 && (
+                          <div className="text-[8.5px] text-muted-foreground italic pl-1.5 pt-0.5">
+                            ...and {item.records.length - 5} more records.
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -3621,6 +3626,17 @@ export default function DashboardPage() {
                   </Link>
                 ))}
               </div>
+            </div>
+          )}
+          {hoveredInsight.link && (
+            <div className="pt-2 border-t border-border/40 text-center pointer-events-auto">
+              <Link
+                href={hoveredInsight.link}
+                className="text-[9.5px] font-black text-indigo-500 hover:text-indigo-600 hover:underline inline-flex items-center gap-1 cursor-pointer"
+              >
+                {hoveredInsight.linkLabel || 'Open full view'}
+                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/></svg>
+              </Link>
             </div>
           )}
         </div>

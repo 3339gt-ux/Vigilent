@@ -18,7 +18,8 @@ export default function SettingsPage() {
     setInterfaceStyle,
     setInterfaceDetailLevel,
     refreshSession,
-    resetDemoData
+    resetDemoData,
+    loadHighVolumeDemoDataset
   } = useApp();
 
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>(null);
@@ -31,10 +32,12 @@ export default function SettingsPage() {
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   // Demo Seeding States
-  const [seedingLoading, setSeedingLoading] = useState(false);
-  const [seedingSuccess, setSeedingSuccess] = useState(false);
+  const [highVolumeLoading, setHighVolumeLoading] = useState(false);
+  const [highVolumeSuccess, setHighVolumeSuccess] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
+  const [clearLoading, setClearLoading] = useState(false);
+  const [clearSuccess, setClearSuccess] = useState(false);
 
   // Notification States
   const [alertDays30, setAlertDays30] = useState(true);
@@ -68,69 +71,42 @@ export default function SettingsPage() {
     setTimeout(() => setIsCopied(false), 2000);
   };
 
-  const handleLocalSeed = async () => {
-    setSeedingLoading(true);
-    setSeedingSuccess(false);
-    setResetSuccess(false);
-    try {
-      const res = await fetch('/seeded-demo-data.json');
-      if (!res.ok) throw new Error('Failed to fetch demo data JSON');
-      const data = await res.json();
-
-      // Write everything to localStorage
-      localStorage.setItem('vigilen_org', JSON.stringify(data.org));
-      localStorage.setItem('vigilen_profile', JSON.stringify(data.profile));
-      localStorage.setItem('vigilen_people', JSON.stringify(data.people));
-      localStorage.setItem('vigilen_competency_types', JSON.stringify(data.competencyTypes));
-      localStorage.setItem('vigilen_competency_records', JSON.stringify(data.competencyRecords));
-      localStorage.setItem('vigilen_competency_record_documents', JSON.stringify(data.competencyRecordDocuments));
-      localStorage.setItem('vigilen_documents', JSON.stringify(data.evidenceDocuments));
-      localStorage.setItem('vigilen_requirements', JSON.stringify(data.requirements));
-      localStorage.setItem('vigilen_requirement_documents', JSON.stringify(data.requirementDocuments));
-      localStorage.setItem('vigilen_requirement_evidence_criteria', JSON.stringify(data.requirementEvidenceCriteria));
-      localStorage.setItem('vigilen_requirement_evidence_criterion_matches', JSON.stringify(data.requirementEvidenceCriterionMatches));
-      localStorage.setItem('vigilen_actions', JSON.stringify(data.actions));
-      localStorage.setItem('vigilen_requirement_actions', JSON.stringify(data.requirementActions));
-      localStorage.setItem('vigilen_action_documents', JSON.stringify(data.actionDocuments));
-      localStorage.setItem('vigilen_action_updates', JSON.stringify(data.actionUpdates));
-      localStorage.setItem('vigilen_audit_packs', JSON.stringify(data.auditPacks));
-      localStorage.setItem('vigilen_audit_trail_events', JSON.stringify(data.auditTrailEvents));
-      localStorage.setItem('vigilen_cells', JSON.stringify(data.matrixCells));
-
-      // Clear empty arrays for other mock items to ensure consistency
-      localStorage.setItem('vigilen_reviews', JSON.stringify([]));
-      localStorage.setItem('vigilen_framework_requirements', JSON.stringify([]));
-      localStorage.setItem('vigilen_requirement_evidence_types', JSON.stringify([]));
-      localStorage.setItem('vigilen_action_object_links', JSON.stringify([]));
-      localStorage.setItem('vigilen_requirement_competency_types', JSON.stringify([]));
-
-      // Overwrite the current active session organization and user
-      localStorage.setItem('vigilen_session_user', JSON.stringify(data.profile));
-      localStorage.setItem('vigilen_session_org', JSON.stringify(data.org));
-
-      localStorage.setItem('vigilen_initialized', 'true');
-
-      // Refresh the app session state
-      await refreshSession();
-      setSeedingSuccess(true);
-    } catch (err) {
-      console.error(err);
-      setToast({ type: 'error', message: 'Error seeding local demo data: ' + (err instanceof Error ? err.message : String(err)) });
-    } finally {
-      setSeedingLoading(false);
-    }
+  const handleLoadHighVolumeDemo = () => {
+    setConfirmRequest({
+      title: 'Load High-Volume Demo Dataset',
+      description: 'Are you sure you want to load the high-volume demo dataset? This will replace your current demo workspace data with 200 assets, 200 people, 100 requirements, 300 competency types, and 500 evidence records to stress-test the UI, filters, pagination, and performance.',
+      confirmLabel: 'Load Dataset',
+      tone: 'warning',
+      onConfirm: async () => {
+        setHighVolumeLoading(true);
+        setHighVolumeSuccess(false);
+        setResetSuccess(false);
+        setClearSuccess(false);
+        try {
+          await loadHighVolumeDemoDataset();
+          setHighVolumeSuccess(true);
+          setToast({ type: 'success', message: 'High-volume demo dataset loaded successfully.' });
+        } catch (err) {
+          console.error(err);
+          setToast({ type: 'error', message: 'Error loading dataset: ' + (err instanceof Error ? err.message : String(err)) });
+        } finally {
+          setHighVolumeLoading(false);
+        }
+      }
+    });
   };
 
   const handleLocalReset = () => {
     setConfirmRequest({
-      title: 'Reset to Default Sandbox',
-      description: 'Are you sure you want to reset the database? This will clear all current demo data.',
+      title: 'Reset to Standard Demo Dataset',
+      description: 'Are you sure you want to reset the database? This will clear current high-volume data and restore the standard sample dataset.',
       confirmLabel: 'Reset Data',
       tone: 'danger',
       onConfirm: async () => {
         setResetLoading(true);
         setResetSuccess(false);
-        setSeedingSuccess(false);
+        setHighVolumeSuccess(false);
+        setClearSuccess(false);
         try {
           await resetDemoData();
           localStorage.removeItem('vigilen_session_user');
@@ -142,6 +118,48 @@ export default function SettingsPage() {
           setToast({ type: 'error', message: 'Error resetting local data: ' + (err instanceof Error ? err.message : String(err)) });
         } finally {
           setResetLoading(false);
+        }
+      }
+    });
+  };
+
+  const handleClearDemoData = () => {
+    setConfirmRequest({
+      title: 'Clear Demo Data',
+      description: 'Are you sure you want to clear all demo data? This will wipe the local workspace database clean, removing all assets, people, requirements, evidence, and actions.',
+      confirmLabel: 'Clear All Data',
+      tone: 'danger',
+      onConfirm: async () => {
+        setClearLoading(true);
+        setClearSuccess(false);
+        setResetSuccess(false);
+        setHighVolumeSuccess(false);
+        try {
+          [
+            'vigilen_requirements', 'vigilen_documents', 'vigilen_cells', 'vigilen_audit_packs',
+            'vigilen_logs', 'vigilen_framework_requirements', 'vigilen_requirement_evidence_types',
+            'vigilen_requirement_documents', 'vigilen_requirement_evidence_criteria',
+            'vigilen_requirement_evidence_criterion_matches', 'vigilen_reviews', 'vigilen_actions',
+            'vigilen_requirement_actions', 'vigilen_action_updates', 'vigilen_action_documents',
+            'vigilen_action_object_links', 'vigilen_people', 'vigilen_competency_types',
+            'vigilen_competency_records', 'vigilen_competency_record_documents',
+            'vigilen_requirement_competency_types', 'vigilen_audit_trail_events',
+            'vygilence_workspace_notifications', 'vigilen_asset_categories', 'vigilen_assets',
+            'vigilen_asset_check_types', 'vigilen_asset_check_assignments', 'vigilen_asset_check_records',
+            'vigilen_asset_check_evidence_links', 'vigilen_asset_requirement_links', 'vigilen_asset_history_events'
+          ].forEach(key => localStorage.setItem(key, JSON.stringify([])));
+
+          localStorage.setItem('vigilen_initialized', 'true');
+          localStorage.removeItem('vigilen_session_user');
+          localStorage.removeItem('vigilen_session_org');
+          await refreshSession();
+          setClearSuccess(true);
+          setToast({ type: 'success', message: 'Demo data cleared successfully.' });
+        } catch (err) {
+          console.error(err);
+          setToast({ type: 'error', message: 'Error clearing demo data: ' + (err instanceof Error ? err.message : String(err)) });
+        } finally {
+          setClearLoading(false);
         }
       }
     });
@@ -620,40 +638,54 @@ export default function SettingsPage() {
         <div className="bg-card border border-border rounded-xl p-6 shadow-sm space-y-6">
           <div className="flex items-center gap-2 border-b border-border pb-3">
             <Sparkles className="w-5 h-5 text-indigo-500" />
-            <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">High-Volume Demo Data Seeding</h2>
+            <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">Demo Workspace Seeding & Diagnostics</h2>
           </div>
           <div className="space-y-4">
             <p className="text-xs text-muted-foreground leading-relaxed">
-              For testing performance and visual layouts, you can seed the local workspace with high-volume realistic compliance logs, documents, requirements, employees and audit trail events.
+              Load seed data configurations locally to stress-test layout rendering, pagination, global search limits, and overall interface responsiveness.
             </p>
             <div className="flex flex-wrap gap-3">
               <button
                 id="settings-seed-demo-btn"
-                onClick={handleLocalSeed}
-                disabled={seedingLoading}
-                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                onClick={handleLoadHighVolumeDemo}
+                disabled={highVolumeLoading}
+                className="px-4 py-2.5 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50 cursor-pointer"
               >
-                {seedingLoading ? 'Seeding Data...' : 'Seed High-Volume Demo Data'}
+                {highVolumeLoading ? 'Generating Data...' : 'Load High-Volume Demo Dataset'}
               </button>
               <button
                 id="settings-reset-demo-btn"
                 onClick={handleLocalReset}
                 disabled={resetLoading}
+                className="px-4 py-2.5 bg-muted hover:bg-muted/80 text-foreground font-bold border border-border rounded-lg text-xs shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                {resetLoading ? 'Resetting...' : 'Reset to Standard Demo Dataset'}
+              </button>
+              <button
+                id="settings-clear-demo-btn"
+                onClick={handleClearDemoData}
+                disabled={clearLoading}
                 className="px-4 py-2.5 bg-rose-650 hover:bg-rose-700 text-white font-bold rounded-lg text-xs shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50 cursor-pointer border border-rose-700/30"
               >
-                {resetLoading ? 'Resetting...' : 'Reset to Default Sandbox'}
+                {clearLoading ? 'Clearing...' : 'Clear Demo Data'}
               </button>
             </div>
-             {seedingSuccess && (
-              <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1.5">
+            {highVolumeSuccess && (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-1 duration-200">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>Seeding complete! 2,100+ demo compliance logs successfully loaded.</span>
+                <span>Success: High-volume dataset generated! loaded 200 assets, 200 people, 100 requirements, 300 competency types, and 500 evidence records.</span>
               </p>
             )}
             {resetSuccess && (
-              <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold flex items-center gap-1.5">
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-1 duration-200">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>Reset complete! Reverted to clean template.</span>
+                <span>Reset complete! Reverted to clean standard sample dataset.</span>
+              </p>
+            )}
+            {clearSuccess && (
+              <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-1 duration-200">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>Demo database cleared: All localStorage collections wiped.</span>
               </p>
             )}
           </div>
