@@ -943,6 +943,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       'vigilen_requirement_competency_types',
       'vigilen_requirement_categories',
       'vigilen_evidence_categories',
+      'vygilence_workspace_notifications',
+      'vigilen_audit_trail_events',
       'vigilen_assets',
       'vigilen_asset_categories',
       'vigilen_asset_check_types',

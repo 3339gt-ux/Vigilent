@@ -7,6 +7,7 @@ import {
   CompetencyRecord,
   CompetencyRecordDocument,
   Asset,
+  AssetCategory,
   AssetCheckType,
   AssetCheckAssignment,
   AssetCheckRecord,
@@ -80,11 +81,11 @@ const COMP_PREFIXES = [
 const COMP_SUBJECTS = [
   'Manual Handling', 'Chemical Hazards', 'Working at Heights', 'Lockout Tagout',
   'Vehicle Inspection', 'First Aid Response', 'Fire Extinguisher Use', 'Driver Fatigue Management',
-  'Racking Safety', 'Cybersecurity Awareness', 'Data Protection GDPR', 'DSE Assessment',
+  'Racking Safety', 'Cybersecurity Awareness', 'Data Protection Awareness', 'DSE Assessment',
   'Warehouse Lighting', 'Cold Chain Logistics', 'Forklift Counterbalance', 'VNA Truck Operation',
   'Reach Truck Operation', 'Power Pallet Truck', 'Lifting Gear Inspections', 'Asbestos Awareness',
-  'Noise at Work Regulations', 'Confined Spaces Entry', 'Electrical Safety Code', 'Spill Kit Deployment',
-  'Tail-lift Competency', 'Load Restraint Systems', 'Route Planning Safety', 'Tachograph Regulation compliance'
+  'Noise Exposure Awareness', 'Confined Spaces Entry', 'Electrical Safety Code', 'Spill Kit Deployment',
+  'Tail-lift Competency', 'Load Restraint Systems', 'Route Planning Safety', 'Driver Hours Recordkeeping'
 ];
 
 const COMP_LEVELS = [
@@ -104,12 +105,12 @@ const ASSET_MAKES: Record<string, string[]> = {
 };
 
 const REQUIREMENT_TITLES = [
-  'LOLER Lifting Inspection Check', 'CVRT Annual Commercial Road Testing', 'COSHH Hazardous Substance Log',
-  'PUWER Work Equipment Conformity', 'Operator Licence Renewal Validation', 'CPC Card Driver Period Certification',
+  'Lifting Equipment Inspection Record', 'Commercial Vehicle Annual Test Record', 'Hazardous Materials Register',
+  'Work Equipment Inspection Record', 'Operating Licence Renewal Record', 'Driver Qualification Renewal Record',
   'Fire Safety Drills Register', 'Racking Damage Visual Survey', 'Cold Chain Thermometer Calibration',
-  'ISO 9001 Quality Audit Compliance', 'Risk Assessment Annual Sign-Off', 'First Aid Box Periodic Inventory',
+  'Quality Management Internal Audit', 'Risk Review Annual Sign-Off', 'First Aid Box Periodic Inventory',
   'Forklift Pre-Use Check Logs', 'Driver Hours Tachograph Audits', 'Warehouse Dock Leveller Servicing',
-  'GDPR Data Consent Periodic Review'
+  'Data Consent Periodic Review'
 ];
 
 const REQUIREMENT_CATEGORIES = [
@@ -122,9 +123,11 @@ export function generateHighVolumeDataset(seed: number = 12345) {
   const rand = createPrng(seed);
   const orgId = MOCK_ORG.id;
   const profileId = MOCK_PROFILE.id;
+  const generatedAt = new Date().toISOString();
+  const baseDateMs = new Date().setHours(12, 0, 0, 0);
 
   const daysFromNow = (days: number) => {
-    return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    return new Date(baseDateMs + days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   };
 
   const getRandomElement = <T>(arr: T[]): T => {
@@ -158,8 +161,8 @@ export function generateHighVolumeDataset(seed: number = 12345) {
       end_date: isActive ? null : daysFromNow(-Math.floor(rand() * 180)),
       active: isActive,
       notes: `Generated stress-test profile for department ${dept}.`,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      created_at: generatedAt,
+      updated_at: generatedAt
     });
   }
 
@@ -192,8 +195,8 @@ export function generateHighVolumeDataset(seed: number = 12345) {
       evidence_required: isEvidenceRequired,
       default_risk_level: defaultRisk,
       active: rand() > 0.05, // 95% active
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      created_at: generatedAt,
+      updated_at: generatedAt
     });
   }
 
@@ -260,8 +263,8 @@ export function generateHighVolumeDataset(seed: number = 12345) {
           certificate_number: `CERT-${100000 + recordCounter}`,
           status,
           notes: `stress-test competency record generated with status ${status}.`,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          created_at: generatedAt,
+          updated_at: generatedAt
         });
       }
     });
@@ -278,7 +281,34 @@ export function generateHighVolumeDataset(seed: number = 12345) {
     'Equipment': ['Fire Safety', 'Racking', 'Dock Equipment', 'Workshop Equipment']
   };
 
-  const parentCategories = getStorageItem('vigilen_asset_categories', []);
+  const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  const parentCategories: AssetCategory[] = assetTypes.map((assetType, index) => ({
+    id: `asset-cat-gen-${slug(assetType)}`,
+    organisation_id: orgId,
+    parent_id: null,
+    name: `[DEMO] ${assetType}`,
+    description: `Generated ${assetType.toLowerCase()} category for local high-volume testing.`,
+    sort_order: index,
+    active: true,
+    created_at: generatedAt,
+    updated_at: generatedAt,
+    archived_at: null
+  }));
+  const childCategories: AssetCategory[] = Object.entries(subCategories).flatMap(([assetType, children]) =>
+    children.map((child, index) => ({
+      id: `asset-cat-gen-${slug(assetType)}-${slug(child)}`,
+      organisation_id: orgId,
+      parent_id: `asset-cat-gen-${slug(assetType)}`,
+      name: `[DEMO] ${child}`,
+      description: `Generated ${child.toLowerCase()} subcategory for local high-volume testing.`,
+      sort_order: index,
+      active: true,
+      created_at: generatedAt,
+      updated_at: generatedAt,
+      archived_at: null
+    }))
+  );
+  const assetCategories = [...parentCategories, ...childCategories];
 
   for (let i = 1; i <= 200; i++) {
     const parentType = getRandomElement(assetTypes);
@@ -295,7 +325,7 @@ export function generateHighVolumeDataset(seed: number = 12345) {
     assets.push({
       id: `asset-gen-${i}`,
       organisation_id: orgId,
-      category_id: null,
+      category_id: `asset-cat-gen-${slug(parentType)}-${slug(subCat)}`,
       asset_number: `AST-${parentType[0].toUpperCase()}-${i}`,
       name: `[DEMO] ${parentType} - ${reference}`,
       asset_type: parentType,
@@ -309,8 +339,8 @@ export function generateHighVolumeDataset(seed: number = 12345) {
       owner: lead.display_name,
       status: 'active',
       notes: `Deterministic stress-test asset in ${location}. Lead owner is ${lead.display_name}.`,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: generatedAt,
+      updated_at: generatedAt,
       archived_at: null
     });
   }
@@ -318,14 +348,14 @@ export function generateHighVolumeDataset(seed: number = 12345) {
   // 5. Generate Asset Checks, Assignments, and Records
   // Asset Check Types
   const assetCheckTypes: AssetCheckType[] = [
-    { id: 'check-type-cvrt', organisation_id: orgId, title: 'CVRT / MOT Inspection', description: 'Statutory safety test', default_frequency_value: 1, default_frequency_unit: 'years', default_warning_days: 30, evidence_required: true, category: 'Vehicle', default_status: 'Missing', risk_level: 'Critical', active: true, created_at: nowIso(), updated_at: nowIso() },
-    { id: 'check-type-tax', organisation_id: orgId, title: 'Road Tax Renewal', description: 'Licencing tax', default_frequency_value: 1, default_frequency_unit: 'years', default_warning_days: 14, evidence_required: true, category: 'Vehicle', default_status: 'Missing', risk_level: 'Medium', active: true, created_at: nowIso(), updated_at: nowIso() },
-    { id: 'check-type-tacho', organisation_id: orgId, title: 'Tachograph Calibration', description: '24-month calibration', default_frequency_value: 2, default_frequency_unit: 'years', default_warning_days: 60, evidence_required: true, category: 'Vehicle', default_status: 'Missing', risk_level: 'High', active: true, created_at: nowIso(), updated_at: nowIso() },
-    { id: 'check-type-fridge', organisation_id: orgId, title: 'Fridge Temp Calibration', description: 'Cold chain integrity check', default_frequency_value: 1, default_frequency_unit: 'years', default_warning_days: 30, evidence_required: true, category: 'Trailer', default_status: 'Missing', risk_level: 'High', active: true, created_at: nowIso(), updated_at: nowIso() },
-    { id: 'check-type-loler', organisation_id: orgId, title: 'LOLER Thorough Exam', description: 'Lifting gear inspection', default_frequency_value: 1, default_frequency_unit: 'years', default_warning_days: 30, evidence_required: true, category: 'Forklift', default_status: 'Missing', risk_level: 'High', active: true, created_at: nowIso(), updated_at: nowIso() },
-    { id: 'check-type-forklift-service', organisation_id: orgId, title: 'Forklift Service', description: 'Scheduled maintenance', default_frequency_value: 6, default_frequency_unit: 'months', default_warning_days: 15, evidence_required: false, category: 'Forklift', default_status: 'Missing', risk_level: 'Medium', active: true, created_at: nowIso(), updated_at: nowIso() },
-    { id: 'check-type-racking', organisation_id: orgId, title: 'Racking Load Check', description: 'Annual racking compliance check', default_frequency_value: 1, default_frequency_unit: 'years', default_warning_days: 30, evidence_required: true, category: 'Equipment', default_status: 'Missing', risk_level: 'High', active: true, created_at: nowIso(), updated_at: nowIso() },
-    { id: 'check-type-fire-ext', organisation_id: orgId, title: 'Fire Safety Test', description: 'Fire extinguisher verification', default_frequency_value: 1, default_frequency_unit: 'years', default_warning_days: 30, evidence_required: true, category: 'Equipment', default_status: 'Missing', risk_level: 'Critical', active: true, created_at: nowIso(), updated_at: nowIso() }
+    { id: 'check-type-vehicle-inspection', organisation_id: orgId, title: 'Annual Vehicle Inspection', description: 'Periodic vehicle inspection record', default_frequency_value: 1, default_frequency_unit: 'years', default_warning_days: 30, evidence_required: true, category: 'Vehicle', default_status: 'Missing', risk_level: 'Critical', active: true, created_at: generatedAt, updated_at: generatedAt },
+    { id: 'check-type-tax', organisation_id: orgId, title: 'Road Charge Renewal', description: 'Periodic road charge record', default_frequency_value: 1, default_frequency_unit: 'years', default_warning_days: 14, evidence_required: true, category: 'Vehicle', default_status: 'Missing', risk_level: 'Medium', active: true, created_at: generatedAt, updated_at: generatedAt },
+    { id: 'check-type-tacho', organisation_id: orgId, title: 'Driver Hours Device Calibration', description: 'Periodic device calibration record', default_frequency_value: 2, default_frequency_unit: 'years', default_warning_days: 60, evidence_required: true, category: 'Vehicle', default_status: 'Missing', risk_level: 'High', active: true, created_at: generatedAt, updated_at: generatedAt },
+    { id: 'check-type-fridge', organisation_id: orgId, title: 'Fridge Temperature Calibration', description: 'Cold chain calibration record', default_frequency_value: 1, default_frequency_unit: 'years', default_warning_days: 30, evidence_required: true, category: 'Trailer', default_status: 'Missing', risk_level: 'High', active: true, created_at: generatedAt, updated_at: generatedAt },
+    { id: 'check-type-lifting', organisation_id: orgId, title: 'Lifting Equipment Examination', description: 'Periodic lifting equipment inspection record', default_frequency_value: 1, default_frequency_unit: 'years', default_warning_days: 30, evidence_required: true, category: 'Forklift', default_status: 'Missing', risk_level: 'High', active: true, created_at: generatedAt, updated_at: generatedAt },
+    { id: 'check-type-forklift-service', organisation_id: orgId, title: 'Forklift Service', description: 'Scheduled maintenance record', default_frequency_value: 6, default_frequency_unit: 'months', default_warning_days: 15, evidence_required: false, category: 'Forklift', default_status: 'Missing', risk_level: 'Medium', active: true, created_at: generatedAt, updated_at: generatedAt },
+    { id: 'check-type-racking', organisation_id: orgId, title: 'Racking Load Check', description: 'Annual racking inspection record', default_frequency_value: 1, default_frequency_unit: 'years', default_warning_days: 30, evidence_required: true, category: 'Equipment', default_status: 'Missing', risk_level: 'High', active: true, created_at: generatedAt, updated_at: generatedAt },
+    { id: 'check-type-fire-ext', organisation_id: orgId, title: 'Fire Equipment Test', description: 'Periodic fire equipment verification record', default_frequency_value: 1, default_frequency_unit: 'years', default_warning_days: 30, evidence_required: true, category: 'Equipment', default_status: 'Missing', risk_level: 'Critical', active: true, created_at: generatedAt, updated_at: generatedAt }
   ];
 
   const checkAssignments: AssetCheckAssignment[] = [];
@@ -341,6 +371,7 @@ export function generateHighVolumeDataset(seed: number = 12345) {
     if (asset.asset_type === 'Equipment' && asset.category === 'Racking') {
       matchingTypes = assetCheckTypes.filter(t => t.id === 'check-type-racking');
     }
+    matchingTypes = [...new Map(matchingTypes.map(type => [type.id, type])).values()];
 
     matchingTypes.forEach(type => {
       const roll = rand();
@@ -383,8 +414,8 @@ export function generateHighVolumeDataset(seed: number = 12345) {
         status,
         notes: `stress-test checks for asset category ${asset.category}.`,
         active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        created_at: generatedAt,
+        updated_at: generatedAt
       });
 
       if (lastCompleted) {
@@ -400,9 +431,9 @@ export function generateHighVolumeDataset(seed: number = 12345) {
           result_status: 'Pass',
           performed_by: 'Authorized Testing Inspector',
           reference: `CHK-${100000 + checkRecordCounter}`,
-          notes: 'Standard periodic review passes compliance guidelines.',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          notes: 'Generated periodic check record for local interface testing.',
+          created_at: generatedAt,
+          updated_at: generatedAt
         });
       }
     });
@@ -433,8 +464,8 @@ export function generateHighVolumeDataset(seed: number = 12345) {
       lifecycle_status: 'ACTIVE',
       organisation_id: orgId,
       created_by: profileId,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: generatedAt,
+      updated_at: generatedAt,
       notes: 'Mock notes generated to fulfill stress testing criteria.'
     });
   }
@@ -480,7 +511,7 @@ export function generateHighVolumeDataset(seed: number = 12345) {
       file_name: filename,
       original_file_name: filename,
       safe_file_name: filename,
-      storage_path: `private/documents/gen-${i}.pdf`,
+      storage_path: null,
       mime_type: 'application/pdf',
       file_hash: `hash_demo_${Math.floor(rand() * 10000000)}`,
       file_size_bytes: 50 * 1024 + Math.floor(rand() * 1000000), // 50KB to 1MB
@@ -490,8 +521,8 @@ export function generateHighVolumeDataset(seed: number = 12345) {
       issue_date: issue,
       review_date: daysFromNow(-30),
       metadata: { demo_seeding_mode: true, seed },
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      created_at: generatedAt,
+      updated_at: generatedAt
     });
   }
 
@@ -508,7 +539,7 @@ export function generateHighVolumeDataset(seed: number = 12345) {
       requirement_id: req.id,
       document_id: doc.id,
       linked_by: profileId,
-      created_at: new Date().toISOString()
+      created_at: generatedAt
     });
   }
 
@@ -524,7 +555,7 @@ export function generateHighVolumeDataset(seed: number = 12345) {
       competency_record_id: rec.id,
       document_id: doc.id,
       linked_by: profileId,
-      linked_at: new Date().toISOString()
+      linked_at: generatedAt
     });
   }
 
@@ -541,7 +572,7 @@ export function generateHighVolumeDataset(seed: number = 12345) {
       asset_check_record_id: rec.id,
       document_id: doc.id,
       created_by: profileId,
-      created_at: new Date().toISOString()
+      created_at: generatedAt
     });
   });
 
@@ -556,7 +587,7 @@ export function generateHighVolumeDataset(seed: number = 12345) {
         organisation_id: orgId,
         asset_check_type_id: checkType.id,
         requirement_id: req.id,
-        created_at: new Date().toISOString()
+        created_at: generatedAt
       });
     }
   });
@@ -597,7 +628,7 @@ export function generateHighVolumeDataset(seed: number = 12345) {
           : 'Facility',
         document_id: docId,
         status: cellStatus,
-        last_checked_at: new Date().toISOString()
+        last_checked_at: generatedAt
       });
     });
   });
@@ -633,8 +664,8 @@ export function generateHighVolumeDataset(seed: number = 12345) {
       created_by: profileId,
       opened_by: profileId,
       opened_at: daysFromNow(-30),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: generatedAt,
+      updated_at: generatedAt,
       status_changed_at: daysFromNow(-2),
       status_changed_by: profileId
     };
@@ -651,7 +682,7 @@ export function generateHighVolumeDataset(seed: number = 12345) {
         object_type: 'Requirement',
         object_id: targetReq.id,
         linked_by: profileId,
-        linked_at: new Date().toISOString()
+        linked_at: generatedAt
       });
     }
 
@@ -664,7 +695,7 @@ export function generateHighVolumeDataset(seed: number = 12345) {
         update_type: 'Note',
         note: 'Stresstest update logged for this corrective task.',
         user_id: profileId,
-        created_at: new Date().toISOString()
+        created_at: generatedAt
       });
     }
   }
@@ -715,7 +746,7 @@ export function generateHighVolumeDataset(seed: number = 12345) {
     auditLogs,
     notifications: [],
     assets,
-    assetCategories: parentCategories,
+    assetCategories,
     assetCheckTypes,
     assetCheckAssignments: checkAssignments,
     assetCheckRecords: checkRecords,
@@ -723,15 +754,4 @@ export function generateHighVolumeDataset(seed: number = 12345) {
     assetRequirementLinks,
     assetHistoryEvents: []
   };
-}
-
-// Utility wrapper helper to get storage items safely
-function getStorageItem(key: string, defaultVal: any) {
-  if (typeof window === 'undefined') return defaultVal;
-  const item = localStorage.getItem(key);
-  return item ? JSON.parse(item) : defaultVal;
-}
-
-function nowIso() {
-  return new Date().toISOString();
 }

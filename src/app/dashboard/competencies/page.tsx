@@ -224,6 +224,19 @@ export default function CompetencyMatrixPage() {
     () => buildCompetencyMatrix(people, competencyTypes, competencyRecords),
     [competencyRecords, competencyTypes, people]
   );
+  const matrixCellMap = useMemo(
+    () => new Map(matrix.map(cell => [`${cell.person.id}:${cell.competencyType.id}`, cell])),
+    [matrix]
+  );
+  const matrixCellsByPerson = useMemo(() => {
+    const cellsByPerson = new Map<string, typeof matrix>();
+    matrix.forEach(cell => {
+      const cells = cellsByPerson.get(cell.person.id);
+      if (cells) cells.push(cell);
+      else cellsByPerson.set(cell.person.id, [cell]);
+    });
+    return cellsByPerson;
+  }, [matrix]);
 
   // Sorting and Favourites for Dropdowns
   const sortedDepartments = useMemo(() => {
@@ -256,7 +269,7 @@ export default function CompetencyMatrixPage() {
       const matchesType = personTypeFilter === 'All' || person.person_type === personTypeFilter;
 
       // Matrix cells for this person
-      const personCells = matrix.filter(item => item.person.id === person.id);
+      const personCells = matrixCellsByPerson.get(person.id) || [];
 
       // Filter by status if selected
       const matchesStatus = statusFilter === 'All' || personCells.some(cell => {
@@ -283,7 +296,7 @@ export default function CompetencyMatrixPage() {
 
       return matchesSearch && matchesDept && matchesRole && matchesType && matchesStatus && matchesMissingExpired && matchesExpiringSoon && matchesGaps;
     });
-  }, [activePeople, search, departmentFilter, roleFilter, personTypeFilter, statusFilter, showOnlyMissingExpired, showOnlyExpiringSoon, showOnlyPeopleWithGaps, matrix]);
+  }, [activePeople, search, departmentFilter, roleFilter, personTypeFilter, statusFilter, showOnlyMissingExpired, showOnlyExpiringSoon, showOnlyPeopleWithGaps, matrixCellsByPerson]);
 
   // Sorting People
   const sortedPeople = useMemo(() => {
@@ -294,25 +307,25 @@ export default function CompetencyMatrixPage() {
       list.sort((a, b) => (a.department || '').localeCompare(b.department || ''));
     } else if (sortBy === 'gaps') {
       list.sort((a, b) => {
-        const countA = matrix.filter(cell => cell.person.id === a.id && (cell.status === 'Missing' || cell.status === 'Expired')).length;
-        const countB = matrix.filter(cell => cell.person.id === b.id && (cell.status === 'Missing' || cell.status === 'Expired')).length;
+        const countA = (matrixCellsByPerson.get(a.id) || []).filter(cell => cell.status === 'Missing' || cell.status === 'Expired').length;
+        const countB = (matrixCellsByPerson.get(b.id) || []).filter(cell => cell.status === 'Missing' || cell.status === 'Expired').length;
         return countB - countA;
       });
     } else if (sortBy === 'expired') {
       list.sort((a, b) => {
-        const countA = matrix.filter(cell => cell.person.id === a.id && cell.status === 'Expired').length;
-        const countB = matrix.filter(cell => cell.person.id === b.id && cell.status === 'Expired').length;
+        const countA = (matrixCellsByPerson.get(a.id) || []).filter(cell => cell.status === 'Expired').length;
+        const countB = (matrixCellsByPerson.get(b.id) || []).filter(cell => cell.status === 'Expired').length;
         return countB - countA;
       });
     } else if (sortBy === 'expiring') {
       list.sort((a, b) => {
-        const countA = matrix.filter(cell => cell.person.id === a.id && cell.status === 'Expiring Soon').length;
-        const countB = matrix.filter(cell => cell.person.id === b.id && cell.status === 'Expiring Soon').length;
+        const countA = (matrixCellsByPerson.get(a.id) || []).filter(cell => cell.status === 'Expiring Soon').length;
+        const countB = (matrixCellsByPerson.get(b.id) || []).filter(cell => cell.status === 'Expiring Soon').length;
         return countB - countA;
       });
     }
     return list;
-  }, [filteredPeople, sortBy, matrix]);
+  }, [filteredPeople, sortBy, matrixCellsByPerson]);
 
   const peoplePagination = usePagination(
     sortedPeople,
@@ -1009,7 +1022,7 @@ export default function CompetencyMatrixPage() {
 
   function openCell(person: Person, competencyType: CompetencyType) {
     setSelectedPerson(person);
-    const cell = matrix.find(item => item.person.id === person.id && item.competencyType.id === competencyType.id);
+    const cell = matrixCellMap.get(`${person.id}:${competencyType.id}`);
     setActiveCell({ person, competencyType, record: cell?.record || null });
     setRecordForm({
       completed_date: cell?.record?.completed_date || '',
@@ -1045,7 +1058,7 @@ export default function CompetencyMatrixPage() {
   const selectedPersonRows = useMemo(() => {
     return selectedPerson
       ? activeTypes.map(type => {
-          const cell = matrix.find(item => item.person.id === selectedPerson.id && item.competencyType.id === type.id);
+          const cell = matrixCellMap.get(`${selectedPerson.id}:${type.id}`);
           const evidenceCount = cell?.record
             ? competencyRecordDocuments.filter(link => link.competency_record_id === cell.record?.id).length
             : 0;
@@ -1062,7 +1075,7 @@ export default function CompetencyMatrixPage() {
           return { type, cell, evidenceCount, openActionCount };
         })
       : [];
-  }, [selectedPerson, activeTypes, matrix, competencyRecordDocuments, actions, actionObjectLinks]);
+  }, [selectedPerson, activeTypes, matrixCellMap, competencyRecordDocuments, actions, actionObjectLinks]);
 
   const selectedPersonActions = useMemo(() => {
     return selectedPerson
@@ -1820,7 +1833,7 @@ export default function CompetencyMatrixPage() {
                       </td>
                     </tr>
                   ) : peoplePagination.paginatedItems.map(person => {
-                    const personGapsCount = matrix.filter(cell => cell.person.id === person.id && (cell.status === 'Missing' || cell.status === 'Expired')).length;
+                    const personGapsCount = (matrixCellsByPerson.get(person.id) || []).filter(cell => cell.status === 'Missing' || cell.status === 'Expired').length;
                     const paddingClass = density === 'comfortable' ? 'p-3' : 'p-1.5';
                     const textClass = density === 'comfortable' ? 'text-xs' : 'text-[11px]';
                     const isPersonSelected = peopleSelection.isSelected(person.id);
@@ -1869,7 +1882,7 @@ export default function CompetencyMatrixPage() {
                           </div>
                         </td>
                         {visibleTypes.map(type => {
-                          const cell = matrix.find(item => item.person.id === person.id && item.competencyType.id === type.id);
+                          const cell = matrixCellMap.get(`${person.id}:${type.id}`);
                           const cellStatus = cell?.status || 'Missing';
 
                           return (

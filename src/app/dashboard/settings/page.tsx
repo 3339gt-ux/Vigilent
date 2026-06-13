@@ -143,7 +143,8 @@ export default function SettingsPage() {
             'vigilen_requirement_actions', 'vigilen_action_updates', 'vigilen_action_documents',
             'vigilen_action_object_links', 'vigilen_people', 'vigilen_competency_types',
             'vigilen_competency_records', 'vigilen_competency_record_documents',
-            'vigilen_requirement_competency_types', 'vigilen_audit_trail_events',
+            'vigilen_requirement_competency_types', 'vigilen_requirement_categories',
+            'vigilen_evidence_categories', 'vigilen_audit_trail_events',
             'vygilence_workspace_notifications', 'vigilen_asset_categories', 'vigilen_assets',
             'vigilen_asset_check_types', 'vigilen_asset_check_assignments', 'vigilen_asset_check_records',
             'vigilen_asset_check_evidence_links', 'vigilen_asset_requirement_links', 'vigilen_asset_history_events'
