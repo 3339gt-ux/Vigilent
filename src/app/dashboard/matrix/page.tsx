@@ -191,7 +191,7 @@ export default function AssetMatrix() {
 
   const { interfaceDetailLevel } = useInterfaceDetailLevel();
 
-  // Load / Save Column Preferences
+  // Load / Save Column Preferences & Query Actions
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const savedMode = localStorage.getItem('vygilence_matrix_column_mode');
@@ -201,6 +201,12 @@ export default function AssetMatrix() {
     const savedGrouping = localStorage.getItem('vygilence_matrix_column_grouping');
     if (savedGrouping === 'none' || savedGrouping === 'category' || savedGrouping === 'risk') {
       setColumnGrouping(savedGrouping as any);
+    }
+
+    // Check for dashboard deep-link actions
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('action') === 'add-asset') {
+      setShowAddAssetModal(true);
     }
   }, []);
 

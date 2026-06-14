@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
 import Link from 'next/link';
 import { InlineToast, ToastState } from '@/components/AppFeedback';
@@ -127,6 +127,32 @@ export default function DashboardPage() {
   const readinessScore = readinessReport.overallScore;
   const readinessDisplay = readinessScore === null ? 'N/A' : `${readinessScore}%`;
 
+  // Hydration-safe greeting state
+  const [greeting, setGreeting] = useState('Good morning');
+  useEffect(() => {
+    const updateGreeting = () => {
+      const hour = new Date().getHours();
+      const day = new Date().getDay();
+      let g = 'Good morning';
+      if (day === 5 && hour >= 12 && hour < 18) {
+        g = 'Happy Friday';
+      } else if (hour >= 12 && hour < 18) {
+        g = 'Good afternoon';
+      } else if (hour >= 18 || hour < 5) {
+        g = 'Good evening';
+      }
+      
+      if (user?.full_name) {
+        setGreeting(`${g}, ${user.full_name.split(' ')[0]}`);
+      } else {
+        setGreeting(g);
+      }
+    };
+    updateGreeting();
+  }, [user?.full_name]);
+
+
+
   // Customization state
   const [customization, setCustomization] = useState<DashboardCustomization>(() => {
     const defaultSettings = {
@@ -242,6 +268,24 @@ export default function DashboardPage() {
   const [quickActionMessage, setQuickActionMessage] = useState('');
   const [quickActionError, setQuickActionError] = useState('');
   const [isQuickActionSaving, setIsQuickActionSaving] = useState(false);
+
+  // Listen for query parameter actions from the Top Command Bar
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (!searchParams) return;
+    const action = searchParams.get('action');
+    if (action === 'upload-evidence') {
+      setIsUploadModalOpen(true);
+    } else if (action === 'add-requirement') {
+      setActiveQuickActionModal('requirement');
+    } else if (action === 'add-competency') {
+      setActiveQuickActionModal('competency');
+    } else if (action === 'create-action') {
+      setActiveQuickActionModal('action');
+    } else if (action === 'build-pack') {
+      setActiveQuickActionModal('audit-pack');
+    }
+  }, [searchParams]);
 
   // Quick Action Form states
   const [requirementForm, setRequirementForm] = useState({
@@ -1665,7 +1709,7 @@ export default function DashboardPage() {
       <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card/60 backdrop-blur-xs border border-border/80 rounded-2xl ${densityStyles.cardPadding} shadow-xs`}>
         <div className="space-y-1">
           <h1 className={`${densityStyles.headingSize} font-black tracking-tight`} id="dashboard-heading" suppressHydrationWarning>
-            {getGreeting()}, {user?.full_name?.split(' ')[0] || 'User'}
+            {greeting}
           </h1>
           <p className={`${densityStyles.subheadingSize} text-muted-foreground flex items-center gap-1.5 font-semibold`}>
             <Building2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
@@ -2038,9 +2082,49 @@ export default function DashboardPage() {
                         );
                       })}
 
-                      {/* Concentric rings surrounding the central hub */}
-                      <circle cx="400" cy="200" r="76" className="stroke-indigo-500/20 dark:stroke-indigo-500/12" strokeWidth="1" fill="none" strokeDasharray="6 12" />
-                      <circle cx="400" cy="200" r="54" className="stroke-cyan-500/40 dark:stroke-cyan-500/25" strokeWidth="1.5" fill="none" />
+                      {/* Upgraded Layered Concentric Rings with Clockwise and Counter-Clockwise Orbiting Dashed Borders */}
+                      {/* Ring 1: Outer dashed ring (clockwise slow spin) */}
+                      <circle
+                        cx="400"
+                        cy="200"
+                        r="90"
+                        className="stroke-indigo-500/20 dark:stroke-indigo-500/10"
+                        strokeWidth="1.5"
+                        fill="none"
+                        strokeDasharray="2 16"
+                        style={{ transformOrigin: '400px 200px', animation: isMotionReduced ? 'none' : 'spin-clockwise 45s linear infinite' }}
+                      />
+                      {/* Ring 2: Medium dashed ring (clockwise spin) */}
+                      <circle
+                        cx="400"
+                        cy="200"
+                        r="76"
+                        className="stroke-indigo-500/30 dark:stroke-indigo-500/15"
+                        strokeWidth="1"
+                        fill="none"
+                        strokeDasharray="4 8"
+                        style={{ transformOrigin: '400px 200px', animation: isMotionReduced ? 'none' : 'spin-clockwise 60s linear infinite' }}
+                      />
+                      {/* Ring 3: Inner dashed ring (counter-clockwise spin) */}
+                      <circle
+                        cx="400"
+                        cy="200"
+                        r="64"
+                        className="stroke-cyan-500/30 dark:stroke-cyan-500/20"
+                        strokeWidth="1"
+                        fill="none"
+                        strokeDasharray="12 6"
+                        style={{ transformOrigin: '400px 200px', animation: isMotionReduced ? 'none' : 'spin-counter 40s linear infinite' }}
+                      />
+                      {/* Ring 4: Solid inner border */}
+                      <circle
+                        cx="400"
+                        cy="200"
+                        r="54"
+                        className="stroke-indigo-500/20 dark:stroke-indigo-500/10"
+                        strokeWidth="1"
+                        fill="none"
+                      />
 
                       {/* Glowing circuit bends dots */}
                       {showPathsAndSatellites && (
@@ -2105,7 +2189,7 @@ export default function DashboardPage() {
                       />
 
                       {/* Slow spinning starburst emblem inside the core (watermark) */}
-                      <g style={{ transformOrigin: '400px 200px', animation: isMotionReduced ? 'none' : 'spin 120s linear infinite' }} className="opacity-12 pointer-events-none">
+                      <g style={{ transformOrigin: '400px 200px', animation: isMotionReduced ? 'none' : 'spin-clockwise 120s linear infinite' }} className="opacity-12 pointer-events-none">
                         {Array.from({ length: 32 }).map((_, i) => {
                           const angle = i * (360 / 32);
                           const rad = (angle * Math.PI) / 180;
@@ -2456,13 +2540,14 @@ export default function DashboardPage() {
                 <h3 className="text-xs font-black text-foreground uppercase tracking-wider">Program Quick Actions</h3>
                 <p className="text-[11px] text-muted-foreground mt-0.5">High-frequency compliance operations and records registration.</p>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2.5 mt-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2.5 mt-2">
                 {[
-                  { label: 'Upload Evidence', desc: 'Add file to vault', icon: <Upload className="w-3.5 h-3.5" />, onClick: () => setIsUploadModalOpen(true) },
-                  { label: 'Create Goal', desc: 'Add requirement', icon: <ShieldCheck className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('requirement') },
-                  { label: 'Add Competency', desc: 'Skills / training', icon: <Briefcase className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('competency') },
-                  { label: 'Create Action', desc: 'Register gap item', icon: <FileSpreadsheet className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('action') },
-                  { label: 'Build Pack', desc: 'Export audit pack', icon: <FileText className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('audit-pack') }
+                  { label: 'Upload Evidence', desc: 'Securely upload a file', icon: <Upload className="w-3.5 h-3.5" />, onClick: () => setIsUploadModalOpen(true) },
+                  { label: 'Add Requirement', desc: 'Add program objective', icon: <ShieldCheck className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('requirement') },
+                  { label: 'Add Competency', desc: 'Register skill/training', icon: <Briefcase className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('competency') },
+                  { label: 'Add Asset', desc: 'Register equipment/checks', icon: <Grid className="w-3.5 h-3.5" />, onClick: () => router.push('/dashboard/matrix?action=add-asset') },
+                  { label: 'Create Action', desc: 'Log gaps or tasks', icon: <FileSpreadsheet className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('action') },
+                  { label: 'Build Audit Pack', desc: 'Compile readiness export', icon: <FileText className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('audit-pack') }
                 ].map(action => (
                   <button
                     key={action.label}
@@ -2641,7 +2726,7 @@ export default function DashboardPage() {
               {/* Tab bar headers */}
               <div className="flex border-b border-border/60 pb-1.5 mb-2.5">
                 {[
-                  { id: 'focus', label: 'Focus', count: smartSuggestions.filter(s => s !== "No current priority suggestions were identified from the available workspace records.").length },
+                  { id: 'focus', label: 'Suggested Focus', count: smartSuggestions.filter(s => s !== "No current priority suggestions were identified from the available workspace records.").length },
                   { id: 'upcoming', label: 'Next 7 Days', count: next7DaysItems.length },
                   { id: 'action', label: 'Needs Action', count: needsActionItems.length },
                   { id: 'activity', label: 'Activity', count: safeActivity.length }
@@ -3982,7 +4067,7 @@ export default function DashboardPage() {
                     { id: 'snapshot', label: 'Compliance Snapshot' },
                     { id: 'tasks', label: 'Tasks Feed' },
                     { id: 'activity', label: 'Recent Activity' },
-                    { id: 'focus', label: 'Focus' },
+                    { id: 'focus', label: 'Suggested Focus' },
                     { id: 'expiring', label: 'Expiring Soon' }
                   ].map(sec => {
                     const isVisible = modalCustomization.visibleRightRailSections.includes(sec.id);
