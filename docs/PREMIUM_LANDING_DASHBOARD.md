@@ -1,153 +1,51 @@
-# Premium Interactive Landing Dashboard
+# Premium Landing Dashboard Architecture
 
-This document provides a technical walkthrough of the redesigned premium interactive landing dashboard implemented for Vygilence on `/dashboard`. It describes the design layout, interactive elements, theme system integration, data sources, and accessibility features.
-
----
-
-## 1. Dashboard Layout & Sections
-
-The dashboard is structured as a modern, responsive, two-column workspace on desktop, folding into a clean stacked layout on smaller screens.
-
-### Left Sidebar
-- Integrates with the existing global application layout.
-- Maintains collapsed, expanded, and pinned behaviors.
-- Includes navigation access to all existing modules (Dashboard, Favourites, Requirements, Competency Matrix, Evidence Vault, Asset Matrix, Audit Pack Builder, Reports, Audit Trail, Settings, Billing, Organisation Management).
-
-### Top Header
-- **Greeting**: Greets the logged-in user dynamically with time-aware and day-aware greetings (e.g. "Good morning", "Happy Friday").
-- **Organisation Name**: Displays the active workspace/organisation name (`organization.name`).
-- **Global Search**: Preserves the command palette entry point (top-right button matching the theme with support for `Ctrl+K` / `Cmd+K`).
-- **Notification Panel**: A modern drop-down listing recent notifications.
-- **Quick Action Menu**: Triggers quick creation of:
-  - Framework Requirements
-  - Competency Requirements
-  - Corrective Actions
-  - Audit Packs
-- **Profile / Avatar Dropdown**: User profile menu.
-
-### Top KPI Strip
-Displays six core operational indicators, fully data-backed:
-1. **Readiness Health**: Shows the canonical requirement readiness score. It displays `N/A` when no active requirements have been assessed.
-2. **Requirements**: Shows compliant/total active requirements count.
-3. **Evidence Coverage**: Displays the percentage of documents classified.
-4. **Training Completion**: Based on active competency records and qualifications.
-5. **Open Actions**: Lists active corrective actions (`Open` and `In Progress`).
-6. **Asset Assurance**: Compliance progress across all active asset checks.
-
-### Central Compliance Program Overview
-An interactive visual map representing the current readiness posture of the active organisation.
-- **Compliance Core centerpiece**: The abstract rotating spinner is replaced with a data-rich circular layout:
-  - **Center displays**: The overall readiness score percentage.
-  - **Readiness label**: Dynamic semantic status label (Excellent, Good, Fair, Needs Attention, Critical) matches the score tone.
-  - **Status badge**: Small `LIVE` overlay identifying the current readiness calculation.
-  - **Watermark**: The rotating starburst spikes are integrated as a faint watermark (opacity `0.12`) to preserve the brand signature without obscuring the reading score.
-- **Segmented Readiness Ring**: An outer concentric SVG ring represents the calculated requirement breakdown: Compliant (Green), At Risk (Amber), Needs Attention (Red), and Not Assessed (Grey).
-- **Animated Risk Pulses**: Exits from the centerpiece targeting any sub-module with active warning or expired items display warning dots with pulsing animations (`animate-ping`). Under reduced-motion settings, the ping animations are automatically disabled.
-- **State-Responsive Pathways**: Orthogonal data flow lines connect the core to satellite nodes. The pathway strokes dynamically indicate the destination node's health (emerald-500/20 for green, amber-500/20 for warning, rose-500/20 for critical, neutral for others). Data packets flow animation is suspended under reduced motion mode.
-- **Satellite Nodes**: Hover-scaling circular nodes display sub-module icons, live record counts, and warning badges where current data indicates attention is needed.
-- **List View**: Toggles to a clean list/tabular overview of the modules with summary statistics.
-- **Interactions**:
-  - Hovering a satellite node highlights its SVG path, scales the node, and populates the popover detail panel. Popovers persist on hover to allow interacting with internal links.
-  - Clicking a satellite node triggers the slide-out detail drawer populated with attention-required records. The source node stays visually highlighted while its drawer is active.
-  - Clicking the Compliance Core centerpiece displays overall posture diagnostics and dual navigation buttons.
-- **Responsive Stack**: On mobile screens, the map collapses into a clean grid of glassmorphic cards. On desktop, it renders the full interactive network diagram.
-
-### Right-Side Live Intelligence Rail
-Provides continuous context-aware insights and shortcuts:
-1. **Compliance Snapshot**: A premium horizontal split panel featuring a speedometer gauge indicating the current readiness score and status legends.
-2. **Focus**: Smart Insights suggesting high-impact areas based on data (e.g. classification of raw files or linking empty matrices).
-3. **Next 7 Days**: Combined feed of upcoming actions, framework requirements, and expiring asset checks due in the next week.
-4. **Needs Action**: Overdue and critical items across requirements and asset checks that demand immediate intervention.
-5. **Activity**: Displays workspace activity made available by the existing audit-log permissions.
-
-### Lower Dashboard Panels
-1. **Readiness Snapshot**: Displays the current calculated readiness score. Historical trend lines are intentionally not shown until a persisted historical dataset exists.
-2. **Requirement Status**: A segmented SVG donut chart mapping the calculated GREEN, AMBER, RED, and GREY requirement states with counts and percentages.
-3. **Readiness**: A speedometer gauge displaying the readiness percentage with needs-attention and due-soon counts below.
-4. **Training Completion**: Concentric progress ring mapping competency completion with details on completed vs overdue staff competency items.
-
-### Tier 2 Lower Lists Row
-1. **Asset Category Health**: Shows compliant percentage bars per parent asset category.
-2. **Top Risk Gaps**: Highlights pending risk levels (Critical, High, Medium, Low).
-3. **Active Alerts**: List of workspace warnings (expired items, checkout lapses, unclassified docs).
-
-### Discreet Quick Upload Card
-Allows drag-and-drop or click-to-upload files directly from the dashboard:
-- Supports dragging or selecting files.
-- Users must associate a context (General, Requirement, Asset, Competency) to link/classify.
-- Tenant scoping and security parameters are strictly enforced.
+This document describes the design decisions, component hierarchy, theme configuration, and customization architecture implemented as part of the dashboard premium command-center overhaul.
 
 ---
 
-## 2. Technical Data Mapping
+## Architecture Overview
 
-All metrics leverage the existing canonical calculators inside `AppContext` to avoid divergent calculations:
-- `readinessScore` for overall compliance.
-- `stats` for requirement and document numbers.
-- `buildAssetMatrix` for asset check status calculations.
-- `competencySummary` for training/qualification progress.
-- `actions` for corrective action items.
+The landing dashboard is refactored into a highly modular, presentational-driven system. The layout, style sheets, and view compositions have been decoupled from the primary route page:
 
----
+1. **`src/app/dashboard/layout.tsx`** (Dashboard Shell):
+   - Serves as the outer framework container.
+   - Houses the top-right command bar containing notifications, avatar dropdown menus, search bar, and workspace actions.
+   - Embeds the workspace identity and warning disclaimer as a hover tooltip in the brand block.
+   - Manages responsive mobile and collapsible sidebar behaviors.
 
-## 3. Responsive & Theme Behavior
+2. **`src/app/dashboard/page.tsx`** (Controller & State Broker):
+   - Fetches and calculates all metrics, active counts, expired/due alerts, list items, and activity logs.
+   - Manages customization preferences state (`DashboardCustomization`) and active drawer overlays.
+   - Delegates the rendering of visual sections to optimized presentational components.
 
-- **Desktop & Laptop**: Full-screen split grid showing the System Map side-by-side with the Live Intelligence Rail.
-- **Tablet / Narrow**: The System Map collapses into responsive cards, and the Live Intelligence Rail wraps underneath.
-- **Mobile**: Simplified list view stack with touch-friendly KPI cards and scrollable lists.
-- **Themes**: Uses standard design tokens for full support across **Light**, **Midtone**, and **Dark** themes.
-  - Borders: `border-border` and `border-border/40`
-  - Cards: `bg-card text-card-foreground`
-  - Highlights: Indigo gradients and HSL semantic success/warning/danger colors.
-
----
-
-## 4. Interactive Intelligence Layer & Customization
-
-The dashboard incorporates a live interactive intelligence layer enabling deep inspection and workspace personalization:
-
-### Hover Popovers & Tooltips
-- **Insight Popovers**: Triggered when hovering or focusing the six top KPI cards, the central Compliance Core orb, and the Compliance Snapshot status items (Compliant, In Progress, At Risk, Needs Attention) in the Right Rail. Popovers persist smoothly to allow hovering inside.
-- **Expandable Drilldowns**: Status rows inside popovers can be expanded by clicking, displaying a list of exact underlying records (up to 5). Clicking any record deep links directly to its workspace detail view (e.g. opening the central Requirement Workspace modal via `requirementId`).
-- **Readiness Point Tooltip**: Hovering over the readiness snapshot point displays the current calculated score.
-- **Donut Chart Segment Hover**: Displays calculated GREEN, AMBER, RED, and GREY requirement counts and supports filtered click-through.
-
-### Reusable Insight Detail Drawer
-- Triggered by clicking the Compliance Core centerpiece, satellite nodes, or KPI cards.
-- Slides in from the right to present a comprehensive inspection view of the selected system module.
-- Displays a status breakdown, the metrics context value, and a list of associated records needing attention.
-- Clicking any record inside the drawer navigates directly to that specific item's details.
-- **Dual CTAs**: Provides primary action buttons at the bottom: "Open Reports" and "View Attention Items" for the hub, or module-specific actions.
-
-### Smart Evidence Dropzone Side Panel
-- **Window Drag Handler**: Dragging files anywhere over the dashboard page automatically slides out a premium dropzone panel from the right.
-- **Context Classification Dialog**: Dropping files opens an interactive classification dialog where users select a target context (General, Requirement, Action, Asset, Competency) and select the specific target record to automatically link files privately upon upload.
-
-### Advanced Layout Customization Panel
-- Triggered by clicking the **"Customize"** button in the dashboard controls.
-- Opens an overlay dialog permitting users to:
-  - **Layout Density**: Toggle between **Comfortable**, **Compact**, and **Executive** density levels. Adjusts margins, grid gaps, card padding, and heading typography dynamically.
-  - **Hero Style**: Choose between **System Map** (full diagram), **Compliance Core Only** (hides satellite nodes & paths), and **List Overview** (tabular module overview).
-  - **Hero Detail Level**: Toggle between **Minimal**, **Balanced**, and **Full** representation styles.
-  - **Motion Preference**: Toggle between **Standard animations** and **Reduced motion** (which suppresses pings and flow line packet animations).
-  - **Effect Intensity**: Choose between **Subtle**, **Standard**, and **Vibrant** rendering of SVG path glows and shadows.
-  - **Upcoming Items Window**: Controls how far ahead the right-rail due-item list looks (**Due Today**, **7 Days**, **30 Days**, **90 Days**). It does not alter the readiness score or create historical data.
-  - **Right Rail Sections**: Multi-select visible sections (Snapshot, Focus, Next 7 Days, Needs Action, Activity).
-  - **KPI Sorting & Visibility**: Hide or reorder the Top KPI cards.
-- **Undo Capability**: A dedicated **"Undo Changes"** button instantly reverts all un-saved tweaks to the previously stored configuration.
-- **Reset Defaults**: Loads the default configuration into the customization form; **Save Changes** applies it.
-- Scoped to `vygilence_dashboard_customization_${userId}_${orgId}` in `localStorage`.
-
-### Historical Trend Honesty Assertions
-- The compliance trend widget charts current workspace statistics and does not simulate fake historical progression coordinates. In compliance mode, it explicitly prints "Historical trend unavailable" next to the current snapshot point to prevent auditing inaccuracies.
+3. **`src/app/dashboard/DashboardComponents.tsx`** (Visual Modules):
+   - Contains all the rewritten visual sections:
+     - `DashboardHeader`: Greetings and quick upload buttons.
+     - `KpiStrip`: Row of meters displaying compliance metrics with progress tracks.
+     - `SystemHeroMap`: Central interactive centerpiece showing readiness score, segmented health gauge, concentric orbital spinners, active pathways, and module satellites.
+     - `RightIntelligenceRail`: Side panel showing compliance snapshots, due and overdue progress indicators, expiring items, recent activities, and priority actions.
+     - `LowerAnalytics`: Renders trend graphs, requirement status donut charts, readiness speedometers, and training completion gauges.
+     - `LowerDetails`: Framework lists, asset assurance checks, top risk metrics, active alerts, and the drag-and-drop vault dropzone.
 
 ---
 
-## 5. Accessibility (a11y)
+## Design Systems & Themes
 
-- All interactive controls are fully keyboard focusable with visible focus outlines and support native `<button>` or `<Link>` semantics.
-- SVG hubs and interactive elements map `onFocus` and `onBlur` listeners to support popover display via keyboard navigation.
-- Compliance Core flow lines, warning pings, watermark rotation, and live indicators respect the dashboard's explicit reduced-motion preference.
-- Escape closes the insight drawer, customization dialog, and dashboard quick-action dialogs.
-- Aria-labels are applied to icon-only controls.
-- Color alone is never used to convey status; warning badges are backed by descriptive texts.
+The redesigned command center uses a high-contrast theme structure that is attractive in Dark, Light, and Midtone modes:
+
+- **Orbital Spinners**: Concentric SVG rings that orbit in alternating directions (`spin-clockwise` and `spin-counter`) to give the centerpiece a premium, active look.
+- **Dynamic Glows**: Ambient drop shadows and radial gradients that adjust based on user's active theme.
+- **Visual Status Signals**: Status indicators reflect real logical counts (Green, Amber, Red, Grey) rather than placeholders.
+- **Motion Reduction**: Clean CSS rules that respect user preferences (`prefers-reduced-motion: reduce`) or the customization menu settings to halt rotations and animations.
+
+---
+
+## Customization Preferences
+
+All layout, density, and visibility choices are preserved in `localStorage` scoped by `user_id` and `organization_id`:
+
+- **Density Modes**: Comfortable, Compact, or Executive.
+- **Hero Styles**: Central interactive map, list view, or minimal dials.
+- **Visibilities**: Toggle right rail sections, KPIs, and lower panels individually.
+- **Effect Intensities**: Standard, vibrant, or subtle glow animations.

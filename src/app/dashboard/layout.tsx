@@ -369,8 +369,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           sidebarCollapsed ? 'w-20 p-3' : 'w-64 p-6'
         }`}>
           <div className="flex min-h-0 flex-1 flex-col">
-            {/* Logo */}
-            <div className={`flex ${sidebarCollapsed ? 'flex-col gap-2' : 'items-start justify-between gap-3'}`}>
+            <div className={`flex ${sidebarCollapsed ? 'justify-center' : 'items-center gap-3'}`}>
               <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3 min-w-0'}`}>
                 <div className="w-9 h-9 flex items-center justify-center shrink-0">
                   <Image
@@ -396,29 +395,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     <span className="text-[10px] text-muted-foreground block truncate">{organization.name}</span>
                   </div>
                 )}
-              </div>
-              <div className={`flex ${sidebarCollapsed ? 'w-full justify-center gap-1' : 'gap-1'}`}>
-                <button
-                  type="button"
-                  onClick={toggleSidebarPinned}
-                  aria-label={sidebarPinned ? 'Unpin sidebar state' : 'Pin sidebar state'}
-                  aria-pressed={sidebarPinned}
-                  title={sidebarPinned ? 'Unpin sidebar state' : 'Pin sidebar state'}
-                  className={`p-1.5 rounded-md border transition-colors focus-visible:outline-2 focus-visible:outline-indigo-500 ${
-                    sidebarPinned ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-500' : 'bg-muted/40 border-border text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {sidebarPinned ? <Pin className="w-3.5 h-3.5" /> : <PinOff className="w-3.5 h-3.5" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={toggleSidebarCollapsed}
-                  aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                  title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                  className="p-1.5 rounded-md border border-border bg-muted/40 text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-2 focus-visible:outline-indigo-500"
-                >
-                  {sidebarCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
-                </button>
               </div>
             </div>
 
@@ -468,37 +444,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           {/* Footer Actions */}
-          <div className={`shrink-0 pt-4 border-t border-border/60 ${sidebarCollapsed ? 'space-y-3' : 'space-y-4'}`}>
-            <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3 px-2 py-1'}`} title={sidebarCollapsed ? `${user.full_name}, ${user.role}` : undefined}>
-              <div className="w-8 h-8 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold flex items-center justify-center text-xs shrink-0">
-                {user.full_name.charAt(0)}
-              </div>
-              {!sidebarCollapsed && <div className="overflow-hidden">
-                <span className="text-xs font-bold block truncate">{user.full_name}</span>
-                <span className="text-[10px] text-muted-foreground block truncate">{user.role}</span>
-              </div>}
-            </div>
-
-            <AppearanceControls compact={sidebarCollapsed} />
-
-            <div className={`flex items-center gap-2 ${sidebarCollapsed ? 'flex-col' : 'justify-between'}`}>
-              <NotificationBell dropdownAlign={sidebarCollapsed ? 'left-full bottom-0 ml-3' : 'left-0 bottom-full mb-2'} />
-              <button
-                onClick={async () => {
-                  await logout();
-                  router.push('/');
-                }}
-                aria-label="Sign out"
-                title={sidebarCollapsed ? 'Sign out' : undefined}
-                className={`flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold transition-colors ${
-                  sidebarCollapsed ? 'p-2' : 'gap-2 flex-grow px-3 py-2'
-                }`}
-                id="sidebar-logout-btn"
-              >
-                <LogOut className="w-4 h-4" />
-                {!sidebarCollapsed && 'Sign Out'}
-              </button>
-            </div>
+          <div className="shrink-0 pt-4 border-t border-border/60">
+            <button
+              onClick={toggleSidebarCollapsed}
+              className={`w-full flex items-center gap-2 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors p-2 rounded-lg hover:bg-muted/40 cursor-pointer ${
+                sidebarCollapsed ? 'justify-center' : 'px-3 py-2'
+              }`}
+            >
+              {sidebarCollapsed ? (
+                <ChevronRight className="w-4 h-4" />
+              ) : (
+                <>
+                  <ChevronLeft className="w-4 h-4" />
+                  <span>Collapse</span>
+                </>
+              )}
+            </button>
           </div>
         </aside>
 
