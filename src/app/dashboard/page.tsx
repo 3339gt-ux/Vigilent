@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
 import Link from 'next/link';
 import { InlineToast, ToastState } from '@/components/AppFeedback';
@@ -33,14 +33,6 @@ import {
   Settings,
   ArrowRight
 } from 'lucide-react';
-import {
-  DashboardHeader,
-  KpiStrip,
-  SystemHeroMap,
-  RightIntelligenceRail,
-  LowerAnalytics,
-  LowerDetails
-} from './DashboardComponents';
 
 const scoreTone = (score: number | null) => {
   if (score === null) return 'text-muted-foreground';
@@ -134,32 +126,6 @@ export default function DashboardPage() {
   } = useApp();
   const readinessScore = readinessReport.overallScore;
   const readinessDisplay = readinessScore === null ? 'N/A' : `${readinessScore}%`;
-
-  // Hydration-safe greeting state
-  const [greeting, setGreeting] = useState('Good morning');
-  useEffect(() => {
-    const updateGreeting = () => {
-      const hour = new Date().getHours();
-      const day = new Date().getDay();
-      let g = 'Good morning';
-      if (day === 5 && hour >= 12 && hour < 18) {
-        g = 'Happy Friday';
-      } else if (hour >= 12 && hour < 18) {
-        g = 'Good afternoon';
-      } else if (hour >= 18 || hour < 5) {
-        g = 'Good evening';
-      }
-      
-      if (user?.full_name) {
-        setGreeting(`${g}, ${user.full_name.split(' ')[0]}`);
-      } else {
-        setGreeting(g);
-      }
-    };
-    updateGreeting();
-  }, [user?.full_name]);
-
-
 
   // Customization state
   const [customization, setCustomization] = useState<DashboardCustomization>(() => {
@@ -276,24 +242,6 @@ export default function DashboardPage() {
   const [quickActionMessage, setQuickActionMessage] = useState('');
   const [quickActionError, setQuickActionError] = useState('');
   const [isQuickActionSaving, setIsQuickActionSaving] = useState(false);
-
-  // Listen for query parameter actions from the Top Command Bar
-  const searchParams = useSearchParams();
-  useEffect(() => {
-    if (!searchParams) return;
-    const action = searchParams.get('action');
-    if (action === 'upload-evidence') {
-      setIsUploadModalOpen(true);
-    } else if (action === 'add-requirement') {
-      setActiveQuickActionModal('requirement');
-    } else if (action === 'add-competency') {
-      setActiveQuickActionModal('competency');
-    } else if (action === 'create-action') {
-      setActiveQuickActionModal('action');
-    } else if (action === 'build-pack') {
-      setActiveQuickActionModal('audit-pack');
-    }
-  }, [searchParams]);
 
   // Quick Action Form states
   const [requirementForm, setRequirementForm] = useState({
@@ -1711,30 +1659,37 @@ export default function DashboardPage() {
   const detailLevel = customization.heroDetailLevel || 'balanced';
   const isMotionReduced = customization.motionPreference === 'reduced';
 
-  const overdueCount = stats.expiredCount;
-  const thisWeekCount = next7DaysItems.length;
-  const dueThisMonthCount = useMemo(() => {
-    const d = new Date(today);
-    d.setDate(d.getDate() + 30);
-    return allTasksAndExpiries.filter(item => {
-      if (item.isOverdue) return false;
-      if (!item.requirement.next_due_date) return false;
-      const dueDate = new Date(item.requirement.next_due_date);
-      return dueDate <= d && dueDate >= today;
-    }).length;
-  }, [allTasksAndExpiries, today]);
-  const notDueCount = Math.max(0, stats.activeRequirements - overdueCount - dueThisMonthCount);
-
   return (
     <div className={`${densityStyles.spacing} animate-in fade-in duration-300`}>
       {/* 1. Header greeting strip */}
-      <DashboardHeader
-        greeting={greeting}
-        isDemoMode={isDemoMode}
-        isResettingDemo={isResettingDemo}
-        handleResetDemoData={handleResetDemoData}
-        setIsUploadModalOpen={setIsUploadModalOpen}
-      />
+      <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card/60 backdrop-blur-xs border border-border/80 rounded-2xl ${densityStyles.cardPadding} shadow-xs`}>
+        <div className="space-y-1">
+          <h1 className={`${densityStyles.headingSize} font-black tracking-tight`} id="dashboard-heading" suppressHydrationWarning>
+            {getGreeting()}, {user?.full_name?.split(' ')[0] || 'User'}
+          </h1>
+          <p className={`${densityStyles.subheadingSize} text-muted-foreground flex items-center gap-1.5 font-semibold`}>
+            <Building2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+            Active workspace: <strong className="text-foreground">{organization?.name}</strong>
+          </p>
+        </div>
+        <div className="flex items-center gap-3 shrink-0 w-full md:w-auto">
+          {isDemoMode && (
+            <button
+              onClick={handleResetDemoData}
+              disabled={isResettingDemo}
+              className="flex-1 md:flex-initial px-3.5 py-2 bg-muted hover:bg-muted/80 border border-border text-foreground font-bold text-xs rounded-xl transition-all cursor-pointer"
+            >
+              {isResettingDemo ? 'Resetting...' : 'Reset Demo Data'}
+            </button>
+          )}
+          <button
+            onClick={() => setIsUploadModalOpen(true)}
+            className="flex-1 md:flex-initial flex items-center justify-center gap-2 px-4 py-2 bg-indigo-650 hover:bg-indigo-750 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/10 transition-all cursor-pointer"
+          >
+            <Upload className="w-4 h-4" /> Quick Upload
+          </button>
+        </div>
+      </div>
 
       {(resetMessage || resetError) && (
         <div className={`p-3.5 rounded-xl border text-xs font-bold ${resetError ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600'}`}>
@@ -1743,116 +1698,1518 @@ export default function DashboardPage() {
       )}
 
       {/* 2. Top KPI strip */}
-      <KpiStrip
-        readinessScore={readinessScore}
-        readinessDisplay={readinessDisplay}
-        stats={stats}
-        reqProgress={reqProgress}
-        docProgress={docProgress}
-        classifiedDocsCount={classifiedDocsCount}
-        documentsCount={documents.length}
-        competencySummary={competencySummary}
-        activeActionsCount={activeActionsCount}
-        overdueActionsCount={overdueActionsCount}
-        compliantAssetChecks={compliantAssetChecks}
-        totalAssetChecks={totalAssetChecks}
-        assetProgress={assetProgress}
-        overdueAssetChecksCount={overdueAssetChecks.length}
-        clickedItemId={clickedItemId}
-        densityStyles={densityStyles}
-        handleMouseEnter={handleMouseEnter}
-        handleMouseLeave={handleMouseLeave}
-        handleItemClick={handleItemClick}
-        handleClick={handleClick}
-        handleInsightKeyDown={handleInsightKeyDown}
-        visibleKpis={customization.visibleKpis}
-        kpiOrder={customization.kpiOrder}
-      />
+      <div className={`grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 ${densityStyles.gridGap}`}>
+        {customization.kpiOrder
+          .filter(kpiId => customization.visibleKpis.includes(kpiId))
+          .map(kpiId => {
+            switch (kpiId) {
+              case 'health':
+                return (
+                  <div
+                    key="health"
+                    onMouseEnter={handleMouseEnter('health')}
+                    onMouseLeave={handleMouseLeave}
+                    onFocus={handleMouseEnter('health')}
+                    onBlur={handleMouseLeave}
+                    onClick={() => handleItemClick('health', handleClick('health'))}
+                    onKeyDown={handleInsightKeyDown('health')}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Inspect Compliance Health"
+                    className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none ${
+                      clickedItemId === 'health' ? 'scale-95 border-indigo-600 bg-indigo-500/10' : ''
+                    }`}
+                  >
+                    <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Compliance Health</span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className={`text-2xl font-black ${scoreTone(readinessScore)}`}>{readinessDisplay}</span>
+                      <span className="text-[10px] text-muted-foreground font-bold leading-none">Score</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground block font-bold">Current Snapshot</span>
+                  </div>
+                );
+              case 'requirements':
+                return (
+                  <div
+                    key="requirements"
+                    onMouseEnter={handleMouseEnter('requirements')}
+                    onMouseLeave={handleMouseLeave}
+                    onFocus={handleMouseEnter('requirements')}
+                    onBlur={handleMouseLeave}
+                    onClick={() => handleItemClick('requirements', handleClick('requirements'))}
+                    onKeyDown={handleInsightKeyDown('requirements')}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Inspect Requirements"
+                    className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none ${
+                      clickedItemId === 'requirements' ? 'scale-95 border-indigo-600 bg-indigo-500/10' : ''
+                    }`}
+                  >
+                    <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Requirements</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-2xl font-black text-foreground">{stats.compliantCount}</span>
+                      <span className="text-muted-foreground text-xs font-bold">/ {stats.activeRequirements}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-full bg-muted h-1 rounded-full overflow-hidden">
+                        <div className="bg-emerald-500 h-1 rounded-full" style={{ width: `${reqProgress}%` }} />
+                      </div>
+                      <span className="text-[9px] font-bold text-muted-foreground">{reqProgress}%</span>
+                    </div>
+                  </div>
+                );
+              case 'evidence':
+                return (
+                  <div
+                    key="evidence"
+                    onMouseEnter={handleMouseEnter('evidence')}
+                    onMouseLeave={handleMouseLeave}
+                    onFocus={handleMouseEnter('evidence')}
+                    onBlur={handleMouseLeave}
+                    onClick={() => handleItemClick('evidence', handleClick('evidence'))}
+                    onKeyDown={handleInsightKeyDown('evidence')}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Inspect Evidence Coverage"
+                    className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none ${
+                      clickedItemId === 'evidence' ? 'scale-95 border-indigo-600 bg-indigo-500/10' : ''
+                    }`}
+                  >
+                    <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Evidence Coverage</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-2xl font-black text-foreground">{classifiedDocsCount}</span>
+                      <span className="text-muted-foreground text-xs font-bold">/ {documents.length}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-full bg-muted h-1 rounded-full overflow-hidden">
+                        <div className="bg-indigo-500 h-1 rounded-full" style={{ width: `${docProgress}%` }} />
+                      </div>
+                      <span className="text-[9px] font-bold text-muted-foreground">{docProgress}%</span>
+                    </div>
+                  </div>
+                );
+              case 'training':
+                return (
+                  <div
+                    key="training"
+                    onMouseEnter={handleMouseEnter('training')}
+                    onMouseLeave={handleMouseLeave}
+                    onFocus={handleMouseEnter('training')}
+                    onBlur={handleMouseLeave}
+                    onClick={() => handleItemClick('training', handleClick('training'))}
+                    onKeyDown={handleInsightKeyDown('training')}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Inspect Personnel Training"
+                    className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none ${
+                      clickedItemId === 'training' ? 'scale-95 border-indigo-600 bg-indigo-500/10' : ''
+                    }`}
+                  >
+                    <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Personnel Training</span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-2xl font-black text-foreground">{competencySummary.compliancePercent}%</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground block font-bold truncate">Active certifications</span>
+                  </div>
+                );
+              case 'tasks':
+                return (
+                  <div
+                    key="tasks"
+                    onMouseEnter={handleMouseEnter('tasks')}
+                    onMouseLeave={handleMouseLeave}
+                    onFocus={handleMouseEnter('tasks')}
+                    onBlur={handleMouseLeave}
+                    onClick={() => handleItemClick('tasks', handleClick('tasks'))}
+                    onKeyDown={handleInsightKeyDown('tasks')}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Inspect Open Tasks and Gaps"
+                    className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none ${
+                      clickedItemId === 'tasks' ? 'scale-95 border-indigo-600 bg-indigo-500/10' : ''
+                    }`}
+                  >
+                    <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Open Tasks / Gaps</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-2xl font-black text-foreground">{activeActionsCount}</span>
+                      {overdueActionsCount > 0 && (
+                        <span className="text-rose-500 text-[10px] font-black uppercase bg-rose-500/10 border border-rose-500/20 px-1 rounded">
+                          {overdueActionsCount} Exp
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-muted-foreground block font-bold">Actions pending</span>
+                  </div>
+                );
+              case 'asset':
+                return (
+                  <div
+                    key="asset"
+                    onMouseEnter={handleMouseEnter('asset')}
+                    onMouseLeave={handleMouseLeave}
+                    onFocus={handleMouseEnter('asset')}
+                    onBlur={handleMouseLeave}
+                    onClick={() => handleItemClick('asset', handleClick('asset'))}
+                    onKeyDown={handleInsightKeyDown('asset')}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Inspect Asset Assurance"
+                    className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none ${
+                      clickedItemId === 'asset' ? 'scale-95 border-indigo-600 bg-indigo-500/10' : ''
+                    }`}
+                  >
+                    <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Asset Assurance</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-2xl font-black text-foreground">{compliantAssetChecks}</span>
+                      <span className="text-muted-foreground text-xs font-bold">/ {totalAssetChecks}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-full bg-muted h-1 rounded-full overflow-hidden">
+                        <div className="bg-indigo-500 h-1 rounded-full" style={{ width: `${assetProgress}%` }} />
+                      </div>
+                      <span className="text-[9px] font-bold text-muted-foreground">{assetProgress}%</span>
+                    </div>
+                  </div>
+                );
+              default:
+                return null;
+            }
+          })}
+      </div>
 
       {/* 3. Core content grid with Sidebar Live Rail */}
       <div className={`grid grid-cols-1 lg:grid-cols-4 ${densityStyles.outerGridGap}`}>
         {/* Main Central compliance program map */}
         <div className={`lg:col-span-3 ${densityStyles.panelSpacing}`}>
-          <SystemHeroMap
-            viewMode={viewMode}
-            setViewMode={setViewMode}
-            activeViewMode={activeViewMode}
-            showPathsAndSatellites={showPathsAndSatellites}
-            satelliteNodes={satelliteNodes}
-            hoveredNode={hoveredNode}
-            setHoveredNode={setHoveredNode}
-            getNodeStatusTone={getNodeStatusTone}
-            clickedItemId={clickedItemId}
-            handleItemClick={handleItemClick}
-            handleClick={handleClick}
-            handleMouseLeave={handleMouseLeave}
-            getInsightData={getInsightData}
-            setHoveredInsight={setHoveredInsight}
-            hoverTimeoutRef={hoverTimeoutRef}
-            activeInsightDrawer={activeInsightDrawer}
-            isMotionReduced={isMotionReduced}
-            customization={customization}
-            readinessScore={readinessScore}
-            readinessDisplay={readinessDisplay}
-            readinessLabel={readinessLabel}
-            segmentedRingPaths={segmentedRingPaths}
-            prevCustomization={prevCustomization}
-            setCustomization={setCustomization}
-            user={user}
-            organization={organization}
-            setToast={setToast}
-            stats={stats}
-            competencyRecords={competencyRecords}
-            unclassifiedDocs={unclassifiedDocs}
-            overdueAssetChecks={overdueAssetChecks}
-            handleInsightKeyDown={handleInsightKeyDown}
-          />
+          <div className="bg-card border border-border rounded-xl shadow-xs overflow-hidden">
+            {/* Header controls for central overview */}
+            <div className="p-4 border-b border-border/60 bg-muted/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div>
+                <h3 className="text-xs font-black text-foreground uppercase tracking-wider">Compliance Program Overview</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Interactive program maps and status monitoring of system modules.</p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => {
+                    setModalCustomization(customization);
+                    setIsCustomizationOpen(true);
+                  }}
+                  className="px-2.5 py-1 bg-muted hover:bg-muted/80 border border-border rounded-md text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer text-muted-foreground hover:text-foreground"
+                  title="Customize Dashboard"
+                >
+                  <Settings className="w-3.5 h-3.5" /> Customize
+                </button>
+                {prevCustomization && (
+                  <button
+                    onClick={() => {
+                      const key = `vygilence_dashboard_customization_${user?.id || 'anon'}_${organization?.id || 'default'}`;
+                      try {
+                        localStorage.setItem(key, JSON.stringify(prevCustomization));
+                        setCustomization(prevCustomization);
+                        setViewMode(prevCustomization.heroStyle === 'list' ? 'list' : prevCustomization.defaultViewMode);
+                        setActiveRailTab(prevCustomization.defaultRailTab);
+                        setPrevCustomization(null);
+                        setToast({ type: 'success', message: 'Reverted to previous customization.' });
+                      } catch {
+                        setToast({ type: 'error', message: 'Failed to restore dashboard preferences.' });
+                      }
+                    }}
+                    className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/25 border border-amber-500/30 text-amber-600 dark:text-amber-400 rounded-md text-[10px] font-bold transition-all cursor-pointer"
+                  >
+                    Undo last save
+                  </button>
+                )}
+                {customization.heroStyle !== 'list' && (
+                  <div className="flex items-center bg-muted border border-border p-0.5 rounded-lg shrink-0">
+                    <button
+                      onClick={() => setViewMode('system')}
+                      className={`px-2.5 py-1 rounded-md text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        activeViewMode === 'system' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                      aria-label="View graphical system map"
+                    >
+                      <Network className="w-3.5 h-3.5" /> System View
+                    </button>
+                    <button
+                      onClick={() => setViewMode('list')}
+                      className={`px-2.5 py-1 rounded-md text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        activeViewMode === 'list' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                      aria-label="View list format"
+                    >
+                      <List className="w-3.5 h-3.5" /> List View
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
 
-          {/* Revised lower analytics composition */}
-          <LowerAnalytics
-            customization={customization}
-            densityStyles={densityStyles}
-            getTrendData={getTrendData}
-            readinessScore={readinessScore}
-            readinessDisplay={readinessDisplay}
-            stats={stats}
-            greyRequirementCount={greyRequirementCount}
-            competencySummary={competencySummary}
-          />
+            {/* Central content depending on toggle */}
+            <div className="p-5">
+              {activeViewMode === 'system' ? (
+                /* Upgraded Premium Graphical System Map Layout */
+                <>
+                  <div className="w-full max-w-[800px] aspect-[2/1] mx-auto relative select-none hidden md:block">
+                    {/* Background SVG connections */}
+                    <svg viewBox="0 0 800 400" className="absolute inset-0 w-full h-full pointer-events-none">
+                      <defs>
+
+                        <radialGradient id="hub-glow-gradient" cx="50%" cy="50%" r="50%">
+                          <stop offset="0%" stopColor="rgba(99, 102, 241, 0.25)" />
+                          <stop offset="100%" stopColor="rgba(99, 102, 241, 0)" />
+                        </radialGradient>
+                      </defs>
+
+                      <style>{isMotionReduced ? '' : `
+                        @keyframes flow-animation {
+                          from { stroke-dashoffset: 48; }
+                          to { stroke-dashoffset: 0; }
+                        }
+                        .glowing-flow-line {
+                          stroke-dasharray: 8 40;
+                          animation: flow-animation 3s linear infinite;
+                        }
+                      `}</style>
+
+                      {/* Radial glow behind the center hub */}
+                      <circle cx="400" cy="200" r="120" fill="url(#hub-glow-gradient)" />
+
+                      {/* Connecting lines from Core to satellites */}
+                      {showPathsAndSatellites && satelliteNodes.map(node => {
+                        const isHovered = hoveredNode === node.id;
+                        let pathD = '';
+                        if (node.id === 'requirements') pathD = 'M 400 200 L 400 55';
+                        else if (node.id === 'reports') pathD = 'M 400 200 L 400 345';
+                        else if (node.id === 'competencies') pathD = 'M 400 200 L 280 200 L 280 120 L 200 120';
+                        else if (node.id === 'matrix') pathD = 'M 400 200 L 280 200 L 280 280 L 200 280';
+                        else if (node.id === 'vault') pathD = 'M 400 200 L 520 200 L 520 120 L 600 120';
+                        else if (node.id === 'audit-packs') pathD = 'M 400 200 L 520 200 L 520 280 L 600 280';
+
+                        const tone = getNodeStatusTone(node.id);
+                        const bgStrokeColor =
+                          tone === 'rose' ? 'stroke-rose-500/20' :
+                          tone === 'amber' ? 'stroke-amber-500/20' :
+                          tone === 'emerald' ? 'stroke-emerald-500/20' :
+                          tone === 'indigo' ? 'stroke-indigo-500/20' :
+                          'stroke-zinc-500/10';
+
+                        const flowStrokeColor =
+                          tone === 'rose' ? 'text-rose-500' :
+                          tone === 'amber' ? 'text-amber-500' :
+                          tone === 'emerald' ? 'text-emerald-500' :
+                          tone === 'indigo' ? 'text-indigo-500' :
+                          'text-indigo-500/40';
+
+                        return (
+                          <g key={node.id}>
+                            {/* Background path with thin subtle opacity */}
+                            <path
+                              d={pathD}
+                              fill="none"
+                              className={`transition-all duration-300 stroke-[1.5] ${bgStrokeColor}`}
+                            />
+                            {/* Animated glowing data flow line */}
+                            {!isMotionReduced && (
+                              <path
+                                d={pathD}
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                className={`glowing-flow-line opacity-75 ${flowStrokeColor}`}
+                                style={{ strokeLinecap: 'round' }}
+                              />
+                            )}
+                            {/* Thick glow overlay when node is hovered */}
+                            {isHovered && (
+                              <path
+                                d={pathD}
+                                fill="none"
+                                className={`opacity-60 dark:opacity-40 stroke-[4] animate-pulse drop-shadow-md transition-all ${
+                                  tone === 'rose' ? 'stroke-rose-500 dark:stroke-rose-400' :
+                                  tone === 'amber' ? 'stroke-amber-500 dark:stroke-amber-400' :
+                                  tone === 'emerald' ? 'stroke-emerald-500 dark:stroke-emerald-400' :
+                                  tone === 'indigo' ? 'stroke-indigo-500 dark:stroke-indigo-400' :
+                                  'stroke-indigo-500 dark:stroke-indigo-400'
+                                }`}
+                                style={{ strokeLinecap: 'round' }}
+                              />
+                            )}
+                          </g>
+                        );
+                      })}
+
+                      {/* Concentric rings surrounding the central hub */}
+                      <circle cx="400" cy="200" r="76" className="stroke-indigo-500/20 dark:stroke-indigo-500/12" strokeWidth="1" fill="none" strokeDasharray="6 12" />
+                      <circle cx="400" cy="200" r="54" className="stroke-cyan-500/40 dark:stroke-cyan-500/25" strokeWidth="1.5" fill="none" />
+
+                      {/* Glowing circuit bends dots */}
+                      {showPathsAndSatellites && (
+                        <>
+                          <circle cx="280" cy="200" r="2.5" className="fill-indigo-500/70" />
+                          <circle cx="280" cy="120" r="2.5" className="fill-indigo-500/70" />
+                          <circle cx="280" cy="280" r="2.5" className="fill-indigo-500/70" />
+                          <circle cx="520" cy="200" r="2.5" className="fill-indigo-500/70" />
+                          <circle cx="520" cy="120" r="2.5" className="fill-indigo-500/70" />
+                          <circle cx="520" cy="280" r="2.5" className="fill-indigo-500/70" />
+                        </>
+                      )}
+
+                      {/* Central Glowing Orb Core (fill/glow) */}
+                      <circle
+                        cx="400"
+                        cy="200"
+                        r="46"
+                        className={`fill-card dark:fill-[#070A13] stroke-indigo-500 dark:stroke-indigo-400 ${customization.effectIntensity === 'subtle' ? '' : customization.effectIntensity === 'vibrant' ? 'drop-shadow-[0_0_12px_rgba(99,102,241,0.6)] dark:drop-shadow-[0_0_20px_rgba(99,102,241,1)]' : 'drop-shadow-[0_0_8px_rgba(99,102,241,0.3)] dark:drop-shadow-[0_0_12px_rgba(99,102,241,0.5)]'} cursor-pointer hover:stroke-indigo-400 active:scale-95 transition-all ${
+                          hoveredNode === 'hub' ? 'scale-105 drop-shadow-[0_0_12px_rgba(99,102,241,0.5)] dark:drop-shadow-[0_0_16px_rgba(99,102,241,0.8)]' : ''
+                        } ${
+                          (clickedItemId === 'hub' || activeInsightDrawer?.id === 'hub') ? 'scale-95 stroke-indigo-600 drop-shadow-[0_0_16px_rgba(99,102,241,0.8)]' : ''
+                        }`}
+                        style={{ transformOrigin: '400px 200px' }}
+                        strokeWidth="2.5"
+                        onMouseEnter={(e) => {
+                          if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const data = getInsightData('hub');
+                          if (data) {
+                            setHoveredInsight({
+                              ...data,
+                              x: rect.left + rect.width / 2,
+                              y: rect.bottom + 8
+                            });
+                          }
+                        }}
+                        onMouseLeave={handleMouseLeave}
+                        onClick={() => handleItemClick('hub', handleClick('hub'))}
+                        onFocus={(e) => {
+                          if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const data = getInsightData('hub');
+                          if (data) {
+                            setHoveredInsight({
+                              ...data,
+                              x: rect.left + rect.width / 2,
+                              y: rect.bottom + 8
+                            });
+                          }
+                        }}
+                        onBlur={handleMouseLeave}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleItemClick('hub', handleClick('hub'));
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        aria-label="Inspect workspace readiness"
+                      />
+
+                      {/* Slow spinning starburst emblem inside the core (watermark) */}
+                      <g style={{ transformOrigin: '400px 200px', animation: isMotionReduced ? 'none' : 'spin 120s linear infinite' }} className="opacity-12 pointer-events-none">
+                        {Array.from({ length: 32 }).map((_, i) => {
+                          const angle = i * (360 / 32);
+                          const rad = (angle * Math.PI) / 180;
+                          const r1 = 12; // starts inside the core
+                          const r2 = i % 2 === 0 ? 38 : 28; // alternating long and short spikes
+                          const x1 = 400 + r1 * Math.cos(rad);
+                          const y1 = 200 + r1 * Math.sin(rad);
+                          const x2 = 400 + r2 * Math.cos(rad);
+                          const y2 = 200 + r2 * Math.sin(rad);
+
+                          return (
+                            <line
+                              key={i}
+                              x1={x1}
+                              y1={y1}
+                              x2={x2}
+                              y2={y2}
+                              className={`stroke-indigo-400 dark:stroke-indigo-300 opacity-90 ${
+                                i % 2 === 0 ? 'stroke-[2]' : 'stroke-[1.5]'
+                              }`}
+                              strokeLinecap="round"
+                            />
+                          );
+                        })}
+                      </g>
+
+                      {/* Segmented Compliance Ring */}
+                      {segmentedRingPaths.map((seg) => {
+                        if (segmentsData.length === 1 || seg.pct >= 0.999) {
+                          return (
+                            <circle
+                              key={seg.id}
+                              cx="400"
+                              cy="200"
+                              r="52.5"
+                              fill="none"
+                              className={`${seg.color} transition-all pointer-events-none`}
+                              strokeWidth="3.5"
+                            />
+                          );
+                        }
+                        return (
+                          <path
+                            key={seg.id}
+                            d={seg.d}
+                            fill="none"
+                            className={`${seg.color} transition-all pointer-events-none`}
+                            strokeWidth="3.5"
+                            strokeLinecap="round"
+                          />
+                        );
+                      })}
+
+                      {/* Score Text Overlay inside Core */}
+                      <text
+                        x="400"
+                        y="192"
+                        textAnchor="middle"
+                        className="fill-foreground font-black text-lg select-none pointer-events-none"
+                      >
+                        {readinessDisplay}
+                      </text>
+
+                      {/* Status Label Text Overlay inside Core */}
+                      <text
+                        x="400"
+                        y="206"
+                        textAnchor="middle"
+                        className={`${readinessLabelColorClass} font-black text-[9px] uppercase tracking-wider select-none pointer-events-none`}
+                      >
+                        {readinessLabel}
+                      </text>
+
+                      {/* Live Snapshot Indicator inside Core */}
+                      <g className="select-none opacity-80 pointer-events-none">
+                        <circle cx="384" cy="221" r="2.5" className={`fill-emerald-500 ${isMotionReduced ? '' : 'animate-pulse'}`} />
+                        <text
+                          x="390"
+                          y="224"
+                          textAnchor="start"
+                          className="fill-muted-foreground font-extrabold text-[8px] tracking-widest"
+                        >
+                          LIVE
+                        </text>
+                      </g>
+
+                      {/* Animated warning exit pulses */}
+                      {showPathsAndSatellites && [
+                        { id: 'requirements', cx: 400, cy: 110, active: stats.expiredCount > 0, color: 'fill-rose-500' },
+                        { id: 'competencies', cx: 280, cy: 120, active: competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').length > 0, color: 'fill-amber-500' },
+                        { id: 'vault', cx: 520, cy: 120, active: unclassifiedDocs.length > 0, color: 'fill-amber-500' },
+                        { id: 'matrix', cx: 280, cy: 280, active: overdueAssetChecks.length > 0, color: 'fill-rose-500' }
+                      ].map(p => {
+                        if (!p.active) return null;
+                        return (
+                          <g key={p.id}>
+                            <circle cx={p.cx} cy={p.cy} r="4" className={p.color} />
+                            {!isMotionReduced && (
+                              <circle cx={p.cx} cy={p.cy} r="9" className={`${p.color} opacity-40 animate-ping`} style={{ transformOrigin: `${p.cx}px ${p.cy}px` }} />
+                            )}
+                          </g>
+                        );
+                      })}
+                    </svg>
+
+                    {/* Absolute positioned module nodes with symmetric side-labels */}
+                    {showPathsAndSatellites && satelliteNodes.map(node => {
+                      const isHovered = hoveredNode === node.id;
+                      const isActive = activeInsightDrawer?.id === node.id || clickedItemId === node.id;
+                      let posClass = '';
+                      let isLeftNode = false;
+
+                      if (node.id === 'requirements') posClass = 'left-[50%] top-[13.75%]';
+                      else if (node.id === 'reports') posClass = 'left-[50%] top-[86.25%]';
+                      else if (node.id === 'competencies') { posClass = 'left-[25%] top-[30%]'; isLeftNode = true; }
+                      else if (node.id === 'matrix') { posClass = 'left-[25%] top-[70%]'; isLeftNode = true; }
+                      else if (node.id === 'vault') posClass = 'left-[75%] top-[30%]';
+                      else if (node.id === 'audit-packs') posClass = 'left-[75%] top-[70%]';
+
+                      return (
+                        <div
+                          key={node.id}
+                          className={`absolute ${posClass} -translate-x-6 -translate-y-6 flex items-center justify-center z-20`}
+                        >
+                          <div
+                            id={`program-node-${node.id}`}
+                            onMouseEnter={(e) => {
+                              if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                              setHoveredNode(node.id);
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const data = getInsightData(node.id);
+                              if (data) {
+                                setHoveredInsight({
+                                  ...data,
+                                  x: rect.left + rect.width / 2,
+                                  y: rect.bottom + 8
+                                });
+                              }
+                            }}
+                            onMouseLeave={() => {
+                              setHoveredNode(null);
+                              handleMouseLeave();
+                            }}
+                            onFocus={(e) => {
+                              if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                              setHoveredNode(node.id);
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const data = getInsightData(node.id);
+                              if (data) {
+                                setHoveredInsight({
+                                  ...data,
+                                  x: rect.left + rect.width / 2,
+                                  y: rect.bottom + 8
+                                });
+                              }
+                            }}
+                            onBlur={() => {
+                              setHoveredNode(null);
+                              handleMouseLeave();
+                            }}
+                            onClick={() => handleItemClick(node.id, handleClick(node.id))}
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                handleItemClick(node.id, handleClick(node.id));
+                              }
+                            }}
+                            className={`w-12 h-12 rounded-full bg-card border-2 flex items-center justify-center transition-all duration-300 shadow-xs hover:scale-110 active:scale-95 hover:shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 shrink-0 cursor-pointer ${
+                              isHovered || isActive ? 'border-indigo-500 shadow-md scale-105' : 'border-border text-foreground'
+                            } ${
+                              isActive ? 'border-indigo-600 bg-indigo-500/20 shadow-lg scale-95' : ''
+                            }`}
+                          >
+                            <div className="relative">
+                              <span className={isHovered || isActive ? 'text-indigo-500 dark:text-indigo-400' : 'text-foreground'}>
+                                {node.icon}
+                              </span>
+                              {node.warnings > 0 && (
+                                <span
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    router.push(getBadgeLink(node.id, node.path));
+                                  }}
+                                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 border border-card text-[8px] font-black text-white flex items-center justify-center animate-pulse cursor-pointer z-30 font-sans"
+                                >
+                                  {node.warnings}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Symmetric label positioning */}
+                          {isLeftNode ? (
+                            <div className="absolute right-full mr-3.5 flex flex-col text-right select-none pointer-events-none min-w-[170px] items-end">
+                              <div className="flex items-center gap-1.5 justify-end">
+                                {detailLevel !== 'minimal' && node.badge !== undefined && node.badge > 0 && (
+                                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-black leading-none shrink-0 ${node.badgeColor}`}>
+                                    {node.badge}
+                                  </span>
+                                )}
+                                <span className={`text-[11px] font-black uppercase tracking-tight transition-colors duration-250 ${
+                                  isHovered ? 'text-indigo-500 dark:text-indigo-400' : 'text-foreground'
+                                }`}>
+                                  {node.name}
+                                </span>
+                              </div>
+                              {detailLevel !== 'minimal' && (
+                                <span className="text-[10px] text-muted-foreground font-semibold leading-tight mt-0.5">
+                                  {detailLevel === 'full' ? (
+                                    <span className="space-y-0.5">
+                                      <span className="block text-indigo-500 dark:text-indigo-400 font-bold">{node.description}</span>
+                                      <span className="block text-muted-foreground text-[9px]">
+                                        {node.metric || `${node.count} ${node.id === 'competencies' ? 'staff' : node.id === 'reports' ? 'views' : 'items'}`}
+                                      </span>
+                                    </span>
+                                  ) : isHovered ? (
+                                    <span className="text-indigo-500 dark:text-indigo-400 font-bold transition-all">{node.description}</span>
+                                  ) : (
+                                    node.metric || `${node.count} ${node.id === 'competencies' ? 'staff' : node.id === 'reports' ? 'views' : 'items'}`
+                                  )}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="absolute left-full ml-3.5 flex flex-col text-left select-none pointer-events-none min-w-[170px] items-start">
+                              <div className="flex items-center gap-1.5 justify-start">
+                                <span className={`text-[11px] font-black uppercase tracking-tight transition-colors duration-250 ${
+                                  isHovered ? 'text-indigo-500 dark:text-indigo-400' : 'text-foreground'
+                                }`}>
+                                  {node.name}
+                                </span>
+                                {detailLevel !== 'minimal' && node.badge !== undefined && node.badge > 0 && (
+                                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-black leading-none shrink-0 ${node.badgeColor}`}>
+                                    {node.badge}
+                                  </span>
+                                )}
+                              </div>
+                              {detailLevel !== 'minimal' && (
+                                <span className="text-[10px] text-muted-foreground font-semibold leading-tight mt-0.5">
+                                  {detailLevel === 'full' ? (
+                                    <span className="space-y-0.5">
+                                      <span className="block text-indigo-500 dark:text-indigo-400 font-bold">{node.description}</span>
+                                      <span className="block text-muted-foreground text-[9px]">
+                                        {node.metric || `${node.count} ${node.id === 'vault' ? 'files' : node.id === 'reports' ? 'views' : 'items'}`}
+                                      </span>
+                                    </span>
+                                  ) : isHovered ? (
+                                    <span className="text-indigo-500 dark:text-indigo-400 font-bold transition-all">{node.description}</span>
+                                  ) : (
+                                    node.metric || `${node.count} ${node.id === 'vault' ? 'files' : node.id === 'reports' ? 'views' : 'items'}`
+                                  )}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Responsive grid for mobile view */}
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4 md:hidden">
+                    {satelliteNodes.map(node => (
+                      <Link
+                        key={node.id}
+                        href={node.path}
+                        className={`p-3 bg-card border rounded-xl flex items-center gap-3 hover:border-indigo-500/50 transition-colors ${node.color}`}
+                      >
+                        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0">
+                          {node.icon}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-black text-foreground uppercase tracking-tight truncate">
+                              {node.name}
+                            </span>
+                            {node.badge !== undefined && node.badge > 0 && (
+                              <span className={`px-1 rounded text-[8px] font-black shrink-0 ${node.badgeColor}`}>
+                                {node.badge}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[9px] text-muted-foreground block truncate">
+                            {node.count} {node.id === 'competencies' ? 'staff' : node.id === 'vault' ? 'files' : node.id === 'reports' ? 'views' : 'items'}
+                          </span>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                /* Tabular List View of Workspace modules */
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-border/80 text-muted-foreground font-bold uppercase tracking-wider">
+                        <th className="p-3">Module</th>
+                        <th className="p-3">Overview Context</th>
+                        <th className="p-3 text-center">Active Items</th>
+                        <th className="p-3 text-center">Alert Gaps</th>
+                        <th className="p-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {satelliteNodes.map(node => (
+                        <tr key={node.id} className="hover:bg-muted/30 transition-colors">
+                          <td className="p-3 font-bold text-foreground flex items-center gap-2">
+                            <span className="text-indigo-500">{node.icon}</span>
+                            {node.name}
+                          </td>
+                          <td className="p-3 text-muted-foreground">{node.description}</td>
+                          <td className="p-3 text-center font-bold">{node.count}</td>
+                          <td className="p-3 text-center">
+                            {node.warnings > 0 ? (
+                              <span className="inline-block px-2.5 py-0.5 text-[10px] font-bold bg-rose-500/10 text-rose-600 rounded-full border border-rose-500/20">
+                                {node.warnings} Issues
+                              </span>
+                            ) : (
+                              <span className="inline-block px-2.5 py-0.5 text-[10px] font-bold bg-emerald-500/10 text-emerald-600 rounded-full border border-emerald-500/20">
+                                Compliant
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right">
+                            <Link
+                              href={node.path}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-muted hover:bg-muted/80 text-foreground font-bold rounded-lg transition-colors border border-border/80"
+                            >
+                              {node.actionLabel} <ChevronRight className="w-3 h-3" />
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Side-by-side Quick Actions & Upload area */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {/* Quick Actions (spans 2 columns) */}
+            <section className="md:col-span-2 bg-card border border-border rounded-xl p-4 flex flex-col justify-between shadow-xs">
+              <div className="mb-2">
+                <h3 className="text-xs font-black text-foreground uppercase tracking-wider">Program Quick Actions</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">High-frequency compliance operations and records registration.</p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2.5 mt-2">
+                {[
+                  { label: 'Upload Evidence', desc: 'Add file to vault', icon: <Upload className="w-3.5 h-3.5" />, onClick: () => setIsUploadModalOpen(true) },
+                  { label: 'Create Goal', desc: 'Add requirement', icon: <ShieldCheck className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('requirement') },
+                  { label: 'Add Competency', desc: 'Skills / training', icon: <Briefcase className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('competency') },
+                  { label: 'Create Action', desc: 'Register gap item', icon: <FileSpreadsheet className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('action') },
+                  { label: 'Build Pack', desc: 'Export audit pack', icon: <FileText className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('audit-pack') }
+                ].map(action => (
+                  <button
+                    key={action.label}
+                    onClick={action.onClick}
+                    className="p-2.5 bg-muted/40 hover:bg-card hover:border-indigo-500/40 hover:shadow-xs border border-border rounded-xl text-left transition-all duration-200 group flex flex-col justify-between min-h-[82px] cursor-pointer"
+                  >
+                    <div className="p-1.5 w-7 h-7 bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-all shrink-0 flex items-center justify-center">
+                      {action.icon}
+                    </div>
+                    <div className="space-y-0.5 mt-2">
+                      <span className="font-extrabold text-foreground text-[10px] block leading-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{action.label}</span>
+                      <p className="text-[8px] text-muted-foreground line-clamp-1 leading-none">{action.desc}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            {/* Quick Upload dropzone (spans 1 column) */}
+            <div className="md:col-span-1 bg-card border border-border rounded-xl p-4 flex flex-col justify-between shadow-xs">
+              <div className="mb-2">
+                <h3 className="text-xs font-black text-foreground uppercase tracking-wider">Discreet Dropzone</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Quickly upload evidence directly to the vault.</p>
+              </div>
+              <div className="flex-1 flex items-center justify-center mt-2 min-h-[82px]">
+                <EvidenceDropzone
+                  label="Drag file here or click"
+                  helperText=""
+                  buttonLabel="Browse"
+                  compact
+                  multiple
+                  onUpload={async (file, updateStatus) => {
+                    updateStatus('saving record');
+                    const doc = await uploadDocument({
+                      file,
+                      title: file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim() || file.name,
+                      category: 'General',
+                      expiry_date: null,
+                      issue_date: new Date().toISOString().split('T')[0],
+                      metadata: { source: 'dashboard_quick_dropper' }
+                    });
+                    return doc;
+                  }}
+                  onComplete={docs => setUploadSuccess(`Uploaded ${docs.length} document${docs.length === 1 ? '' : 's'} successfully.`)}
+                  findDuplicates={findPossibleDuplicateDocuments}
+                />
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Right-side live intelligence rail */}
-        <RightIntelligenceRail
-          readinessScore={readinessScore}
-          readinessDisplay={readinessDisplay}
-          stats={stats}
-          greyRequirementCount={greyRequirementCount}
-          overdueCount={overdueCount}
-          thisWeekCount={thisWeekCount}
-          dueThisMonthCount={dueThisMonthCount}
-          notDueCount={notDueCount}
-          safeActivity={safeActivity}
-          upcomingAssetChecks={upcomingAssetChecks}
-          smartSuggestions={smartSuggestions}
-          activeRailTab={activeRailTab}
-          setActiveRailTab={setActiveRailTab}
-          customization={customization}
-        />
+        <aside className="space-y-5">
+          {/* Rail Section 1: Circular Compliance gauge */}
+          {customization.visibleRightRailSections.includes('snapshot') && (
+            <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Compliance Snapshot</span>
+                <span className="flex items-center gap-1 text-[9px] font-bold text-muted-foreground uppercase">
+                  <span className={`w-1.5 h-1.5 rounded-full bg-emerald-500 ${isMotionReduced ? '' : 'animate-pulse'}`} /> Live
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <div
+                  className="relative w-24 h-24 flex items-center justify-center shrink-0 cursor-pointer"
+                  onMouseEnter={handleMouseEnter('health')}
+                  onMouseLeave={handleMouseLeave}
+                  onClick={handleClick('health')}
+                  title="Click to view posture summary"
+                >
+                  {/* SVG Circular progress arch */}
+                  <svg viewBox="0 0 120 120" className="w-full h-full">
+                    <defs>
+                      <linearGradient id="compliance-gauge-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#ef4444" />
+                        <stop offset="35%" stopColor="#f59e0b" />
+                        <stop offset="70%" stopColor="#10b981" />
+                        <stop offset="100%" stopColor="#6366f1" />
+                      </linearGradient>
+                    </defs>
+                    {/* Background Track */}
+                    <path
+                      d="M 30 95 A 40 40 0 1 1 90 95"
+                      fill="transparent"
+                      stroke="currentColor"
+                      className="text-muted/15 dark:text-muted/10"
+                      strokeWidth="9"
+                      strokeLinecap="round"
+                    />
+                    {/* Active Arc */}
+                    <path
+                      d="M 30 95 A 40 40 0 1 1 90 95"
+                      fill="transparent"
+                      stroke="url(#compliance-gauge-grad)"
+                      strokeWidth="9"
+                      strokeLinecap="round"
+                      strokeDasharray="188.5"
+                      strokeDashoffset={188.5 - ((readinessScore ?? 0) / 100) * 188.5}
+                      className="transition-all duration-1000 ease-out"
+                    />
+                  </svg>
+                  <div className="absolute flex flex-col items-center justify-center text-center mt-[-8px]">
+                    <span className="text-xl font-black text-foreground">{readinessDisplay}</span>
+                    <span className="text-[7px] font-bold text-muted-foreground uppercase tracking-wider">Overall</span>
+                    <span className="mt-0.5 text-[7px] font-bold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+                      {readinessScore === null ? 'Not assessed' : 'Live readiness'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex-1 space-y-1.5 text-[10.5px]">
+                  <Link
+                    href="/dashboard/requirements?status=GREEN"
+                    onMouseEnter={handleMouseEnter('snapshot-compliant')}
+                    onMouseLeave={handleMouseLeave}
+                    onFocus={handleMouseEnter('snapshot-compliant')}
+                    className="flex items-center justify-between gap-2 p-1 hover:bg-muted/30 border border-transparent hover:border-border/40 rounded-lg transition-all cursor-pointer block text-xs text-foreground font-bold"
+                    title="Click to view compliant requirements"
+                  >
+                    <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      <span>Compliant</span>
+                    </div>
+                    <span className="font-bold text-foreground">{stats.compliantCount}</span>
+                  </Link>
+                  <Link
+                    href="/dashboard/requirements?filter=actions"
+                    onMouseEnter={handleMouseEnter('snapshot-inprogress')}
+                    onMouseLeave={handleMouseLeave}
+                    onFocus={handleMouseEnter('snapshot-inprogress')}
+                    className="flex items-center justify-between gap-2 p-1 hover:bg-muted/30 border border-transparent hover:border-border/40 rounded-lg transition-all cursor-pointer block text-xs text-foreground font-bold"
+                    title="Click to view action tasks"
+                  >
+                    <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                      <span>In Progress</span>
+                    </div>
+                    <span className="font-bold text-foreground">{activeActionsCount}</span>
+                  </Link>
+                  <Link
+                    href="/dashboard/requirements?status=AMBER"
+                    onMouseEnter={handleMouseEnter('snapshot-atrisk')}
+                    onMouseLeave={handleMouseLeave}
+                    onFocus={handleMouseEnter('snapshot-atrisk')}
+                    className="flex items-center justify-between gap-2 p-1 hover:bg-muted/30 border border-transparent hover:border-border/40 rounded-lg transition-all cursor-pointer block text-xs text-foreground font-bold"
+                    title="Click to view at-risk requirements"
+                  >
+                    <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                      <span>At Risk</span>
+                    </div>
+                    <span className="font-bold text-foreground">{stats.expiringSoonCount}</span>
+                  </Link>
+                  <Link
+                    href="/dashboard/requirements?status=RED"
+                    onMouseEnter={handleMouseEnter('snapshot-needsattention')}
+                    onMouseLeave={handleMouseLeave}
+                    onFocus={handleMouseEnter('snapshot-needsattention')}
+                    className="flex items-center justify-between gap-2 p-1 hover:bg-muted/30 border border-transparent hover:border-border/40 rounded-lg transition-all cursor-pointer block text-xs text-foreground font-bold"
+                    title="Click to view requirements needing attention"
+                  >
+                    <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                      <span>Needs Attention</span>
+                    </div>
+                    <span className="font-bold text-foreground">{stats.expiredCount}</span>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Rail Section 2: Tabbed Workspace Intelligence card */}
+          {['focus', 'upcoming', 'action', 'activity'].some(id => customization.visibleRightRailSections.includes(id)) && (
+            <div className="bg-card border border-border rounded-xl p-4 shadow-xs flex flex-col h-[382px]">
+              {/* Tab bar headers */}
+              <div className="flex border-b border-border/60 pb-1.5 mb-2.5">
+                {[
+                  { id: 'focus', label: 'Focus', count: smartSuggestions.filter(s => s !== "No current priority suggestions were identified from the available workspace records.").length },
+                  { id: 'upcoming', label: 'Next 7 Days', count: next7DaysItems.length },
+                  { id: 'action', label: 'Needs Action', count: needsActionItems.length },
+                  { id: 'activity', label: 'Activity', count: safeActivity.length }
+                ]
+                  .filter(tab => customization.visibleRightRailSections.includes(tab.id))
+                  .map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveRailTab(tab.id as DashboardCustomization['defaultRailTab'])}
+                      className={`flex-1 text-center pb-1 text-[9px] font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer relative ${
+                        activeRailTab === tab.id
+                          ? 'border-indigo-500 text-foreground'
+                          : 'border-transparent text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <span className="flex items-center justify-center gap-1.5">
+                        {tab.label}
+                        {tab.count > 0 && (
+                          <span className={`w-1.5 h-1.5 rounded-full ${tab.id === 'action' || tab.id === 'upcoming' ? 'bg-rose-500' : 'bg-indigo-500'}`} />
+                        )}
+                      </span>
+                    </button>
+                  ))}
+              </div>
+
+              {/* Tab contents */}
+              <div className="flex-1 overflow-y-auto pr-0.5 no-scrollbar">
+                {activeRailTab === 'action' && (
+                  <div className="space-y-2 pb-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                    {needsActionItems.slice(0, 5).map(item => (
+                      <Link
+                        key={item.id}
+                        href={item.link}
+                        className={`p-2.5 bg-card hover:bg-muted/40 border border-border rounded-xl text-left transition-all duration-200 group flex items-start gap-3 cursor-pointer shadow-xs hover:shadow-md hover:border-indigo-500/30 active:scale-[0.98] ${
+                          (typeof window !== 'undefined' && window.location.search.includes(`id=${item.id}`)) ? 'ring-2 ring-indigo-500/50' : ''
+                        }`}
+                      >
+                        {item.isOverdue ? (
+                          <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
+                        ) : (
+                          <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <span className="font-extrabold block text-foreground truncate text-[11px] leading-tight">{item.requirement.title}</span>
+                          <span className="text-[9px] text-muted-foreground block truncate leading-none mt-0.5">{item.requirement.category}</span>
+                          <span className={`text-[9px] font-black block mt-1 ${item.isOverdue ? 'text-rose-500' : 'text-amber-500'}`}>
+                            Due: {item.requirement.next_due_date || 'N/A'}
+                          </span>
+                        </div>
+                      </Link>
+                    ))}
+                    {needsActionItems.length === 0 && (
+                      <p className="text-[10px] text-muted-foreground italic text-center py-20">No pending items due.</p>
+                    )}
+                  </div>
+                )}
+
+                {activeRailTab === 'activity' && (
+                  <div className="space-y-3 relative border-l border-border pl-3.5 ml-1.5 py-1 animate-in fade-in duration-200 text-xs">
+                    {safeActivity.map(log => {
+                      const isAdminOrOwner = user?.role === 'Owner' || user?.role === 'Admin';
+                      return (
+                        <div
+                          key={log.id}
+                          onClick={() => {
+                            if (isAdminOrOwner) {
+                              router.push('/dashboard/reports?tab=history');
+                            } else {
+                              setToast({
+                                type: 'error',
+                                message: 'Access Denied: Standard users cannot view the full audit logs.'
+                              });
+                            }
+                          }}
+                          className={`text-[11px] relative space-y-0.5 cursor-pointer hover:bg-muted/30 p-1.5 rounded-lg transition-all active:scale-95 ${
+                            (typeof window !== 'undefined' && window.location.search.includes(`id=${log.id}`)) ? 'bg-indigo-500/10' : ''
+                          }`}
+                          title={isAdminOrOwner ? "Click to view full Audit Trail logs in Reports." : "Audit event details"}
+                        >
+                          <div className="absolute -left-[18.5px] top-2.5 w-2.5 h-2.5 rounded-full border-2 border-card bg-indigo-500 shadow-xs" />
+                          <span className="font-extrabold block text-foreground truncate text-[10px] leading-tight" title={log.action}>{log.action}</span>
+                          <p className="text-muted-foreground text-[9.5px] leading-relaxed line-clamp-2 mt-0.5">{log.details}</p>
+                        </div>
+                      );
+                    })}
+                    {safeActivity.length === 0 && (
+                      <p className="text-[10px] text-muted-foreground italic text-center py-20">No recent activities.</p>
+                    )}
+                  </div>
+                )}
+
+                {activeRailTab === 'focus' && (
+                  <div className="space-y-2 animate-in fade-in duration-200">
+                    {smartSuggestions.map((suggestion, idx) => {
+                      let targetLink = '';
+                      if (suggestion.includes('Asset Matrix')) {
+                        targetLink = '/dashboard/matrix?status=Expired';
+                      } else if (suggestion.includes('expired framework requirements')) {
+                        targetLink = '/dashboard/requirements?status=RED';
+                      } else if (suggestion.includes('vault documents')) {
+                        targetLink = '/dashboard/vault?status=Unclassified';
+                      } else if (suggestion.includes('gap action tasks')) {
+                        targetLink = '/dashboard/requirements?filter=actions';
+                      }
+
+                      if (targetLink) {
+                        return (
+                          <Link
+                            key={idx}
+                            href={targetLink}
+                            className="flex gap-2.5 p-2.5 bg-indigo-500/5 dark:bg-indigo-500/10 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/20 border border-indigo-500/15 hover:border-indigo-500/30 rounded-xl text-[10px] text-indigo-650 dark:text-indigo-300 font-semibold leading-relaxed transition-all cursor-pointer block text-left active:scale-95"
+                            title="Click to navigate to filter"
+                          >
+                            <div className="flex items-start gap-2.5">
+                              <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0 animate-pulse" />
+                              <span>{suggestion}</span>
+                            </div>
+                          </Link>
+                        );
+                      }
+
+                      return (
+                        <div key={idx} className="flex gap-2.5 p-2.5 bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/15 rounded-xl text-[10px] text-indigo-650 dark:text-indigo-300 font-semibold leading-relaxed">
+                          <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0 animate-pulse" />
+                          <span>{suggestion}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {activeRailTab === 'upcoming' && (
+                  <div className="space-y-2 pb-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                    {next7DaysItems.slice(0, 5).map(item => (
+                      <Link
+                        key={item.id}
+                        href={item.link || '#'}
+                        className={`p-2.5 bg-card hover:bg-muted/40 border border-border rounded-xl text-left transition-all duration-200 group flex items-start gap-3 cursor-pointer shadow-xs hover:shadow-md hover:border-indigo-500/30 active:scale-[0.98] ${
+                          (typeof window !== 'undefined' && window.location.search.includes(`id=${item.id}`)) ? 'ring-2 ring-indigo-500/50' : ''
+                        }`}
+                      >
+                        <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                        <div className="min-w-0 flex-1">
+                          <span className="font-extrabold block text-foreground truncate text-[11px] leading-tight">{item.requirement.title}</span>
+                          <span className="text-[9px] text-muted-foreground block truncate leading-none mt-0.5">{item.requirement.category}</span>
+                          <span className="text-[9px] font-black text-amber-500 block mt-1">
+                            Expiry: {item.requirement.next_due_date || 'N/A'}
+                          </span>
+                        </div>
+                      </Link>
+                    ))}
+                    {next7DaysItems.length === 0 && (
+                      <p className="text-[10px] text-muted-foreground italic text-center py-20">No expiring items found.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </aside>
       </div>
 
-      {/* Lower Details */}
-      <LowerDetails
-        customization={customization}
-        densityStyles={densityStyles}
-        activeRequirements={activeRequirements}
-        actions={actions}
-        unclassifiedDocs={unclassifiedDocs}
-        overdueAssetChecks={overdueAssetChecks}
-        stats={stats}
-        assetCategoryCompliance={assetCategoryCompliance}
-        setIsUploadModalOpen={setIsUploadModalOpen}
-        setActiveQuickActionModal={setActiveQuickActionModal}
-      />
+      {/* 4. Lower Dashboard Panels - Tier 1: Key Performance Dials */}
+      <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 ${densityStyles.gridGap} transition-all duration-300`}>
+        {/* Card 1: Compliance Trend */}
+        {customization.visiblePanels.includes('trend') && (
+          <div className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs flex flex-col justify-between transition-all duration-300`}>
+            <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
+              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Readiness Snapshot</span>
+              <span className="text-[8px] font-bold text-muted-foreground">Historical trend unavailable</span>
+            </div>
+            <div className="relative w-full h-32 mt-2">
+              <svg viewBox="0 0 300 120" className="w-full h-full">
+                <defs>
+                  <linearGradient id="trend-fill-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="rgba(99, 102, 241, 0.25)" />
+                    <stop offset="100%" stopColor="rgba(99, 102, 241, 0)" />
+                  </linearGradient>
+                </defs>
+                {/* Horizontal Grid lines */}
+                <line x1="10" y1="20" x2="290" y2="20" stroke="currentColor" className="text-muted/10" strokeDasharray="4 4" />
+                <line x1="10" y1="50" x2="290" y2="50" stroke="currentColor" className="text-muted/10" strokeDasharray="4 4" />
+                <line x1="10" y1="80" x2="290" y2="80" stroke="currentColor" className="text-muted/10" strokeDasharray="4 4" />
+                <line x1="10" y1="110" x2="290" y2="110" stroke="currentColor" className="text-muted/10" />
+
+                {/* Area path */}
+                {getTrendData().areaD && <path d={getTrendData().areaD} fill="url(#trend-fill-grad)" />}
+
+                {/* Main Line path */}
+                {getTrendData().pathD && <path d={getTrendData().pathD} fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" />}
+
+                {/* Trend points circles */}
+                {getTrendData().points.map((pt, idx) => (
+                  <circle
+                    key={idx}
+                    cx={pt.cx}
+                    cy={pt.cy}
+                    r={idx === getTrendData().points.length - 1 ? 4.5 : 3.5}
+                    fill={idx === getTrendData().points.length - 1 ? "#38bdf8" : "#6366f1"}
+                    stroke={idx === getTrendData().points.length - 1 ? "#ffffff" : "none"}
+                    strokeWidth={idx === getTrendData().points.length - 1 ? 1.5 : 0}
+                    className="cursor-pointer transition-all hover:scale-150"
+                    onMouseEnter={handleTrendMouseEnter(pt)}
+                    onMouseLeave={handleTrendMouseLeave}
+                  />
+                ))}
+
+                {/* Floating label for the current readiness value */}
+                {readinessScore !== null ? (
+                  <>
+                    <rect x="134" cy={110 - (readinessScore / 100) * 90 - 24} width="32" height="15" rx="3" fill="#6366f1" />
+                    <text x="150" y={110 - (readinessScore / 100) * 90 - 14} fill="#ffffff" fontSize="8" fontWeight="bold" textAnchor="middle">
+                      {readinessDisplay}
+                    </text>
+                  </>
+                ) : (
+                  <text x="150" y="66" fill="currentColor" className="text-muted-foreground" fontSize="9" fontWeight="bold" textAnchor="middle">
+                    No assessed requirements
+                  </text>
+                )}
+              </svg>
+            </div>
+            <div className="flex justify-between text-[9px] font-bold text-muted-foreground uppercase px-2.5 mt-2">
+              {getTrendData().labels.map((lbl, idx) => (
+                <span key={idx}>{lbl}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Card 2: Requirement Status Donut Chart */}
+        {customization.visiblePanels.includes('statusDonut') && (
+          <div className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs flex flex-col justify-between transition-all duration-300`}>
+            <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
+              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Requirement Status</span>
+              <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">Active Requirements</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 py-1">
+              <div className="relative w-24 h-24 flex items-center justify-center shrink-0">
+                <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
+                  <circle cx="50" cy="50" r="36" fill="transparent" stroke="currentColor" className="text-muted/10" strokeWidth="11" />
+                  {/* Compliant segment */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="36"
+                    fill="transparent"
+                    stroke="#10b981"
+                    strokeWidth="11"
+                    strokeDasharray="226.2"
+                    strokeDashoffset={226.2 - (226.2 * (stats.compliantCount / (stats.activeRequirements || 1)))}
+                    className="cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={() => router.push('/dashboard/requirements?status=GREEN')}
+                  >
+                    <title>{`Compliant: ${stats.compliantCount} objectives. Click to filter.`}</title>
+                  </circle>
+                  {/* At Risk segment */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="36"
+                    fill="transparent"
+                    stroke="#f59e0b"
+                    strokeWidth="11"
+                    strokeDasharray="226.2"
+                    strokeDashoffset={226.2 - (226.2 * (stats.expiringSoonCount / (stats.activeRequirements || 1)))}
+                    transform={`rotate(${(stats.compliantCount / (stats.activeRequirements || 1)) * 360} 50 50)`}
+                    className="cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={() => router.push('/dashboard/requirements?status=AMBER')}
+                  >
+                    <title>{`At Risk: ${stats.expiringSoonCount} requirements. Click to filter.`}</title>
+                  </circle>
+
+                  {/* Needs Attention segment */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="36"
+                    fill="transparent"
+                    stroke="#ef4444"
+                    strokeWidth="11"
+                    strokeDasharray="226.2"
+                    strokeDashoffset={226.2 - (226.2 * (stats.expiredCount / (stats.activeRequirements || 1)))}
+                    transform={`rotate(${((stats.compliantCount + stats.expiringSoonCount) / (stats.activeRequirements || 1)) * 360} 50 50)`}
+                    className="cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={() => router.push('/dashboard/requirements?status=RED')}
+                  >
+                    <title>{`Needs Attention: ${stats.expiredCount} requirements. Click to filter.`}</title>
+                  </circle>
+
+                  {/* Not Assessed segment */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="36"
+                    fill="transparent"
+                    stroke="#71717a"
+                    strokeWidth="11"
+                    strokeDasharray="226.2"
+                    strokeDashoffset={226.2 - (226.2 * (greyRequirementCount / (stats.activeRequirements || 1)))}
+                    transform={`rotate(${((stats.compliantCount + stats.expiringSoonCount + stats.expiredCount) / (stats.activeRequirements || 1)) * 360} 50 50)`}
+                    className="cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={() => router.push('/dashboard/requirements?status=GREY')}
+                  >
+                    <title>{`Not Assessed: ${greyRequirementCount} requirements. Click to filter.`}</title>
+                  </circle>
+                </svg>
+                <div className="absolute flex flex-col items-center justify-center text-center">
+                  <span className="text-base font-black text-foreground">{stats.activeRequirements}</span>
+                  <span className="text-[7px] font-bold text-muted-foreground uppercase">Total</span>
+                </div>
+              </div>
+
+              <div className="flex-1 space-y-1.5 text-[10px]">
+                <button
+                  onClick={() => router.push('/dashboard/requirements?status=GREEN')}
+                  className="w-full flex items-center justify-between font-bold hover:bg-muted/30 p-1 rounded-md transition-all text-left"
+                >
+                  <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" /> Compliant</span>
+                  <span className="text-foreground">{stats.compliantCount} ({stats.activeRequirements > 0 ? Math.round((stats.compliantCount / stats.activeRequirements) * 100) : 0}%)</span>
+                </button>
+                <button
+                  onClick={() => router.push('/dashboard/requirements?status=AMBER')}
+                  className="w-full flex items-center justify-between font-bold hover:bg-muted/30 p-1 rounded-md transition-all text-left"
+                >
+                  <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" /> At Risk</span>
+                  <span className="text-foreground">{stats.expiringSoonCount} ({stats.activeRequirements > 0 ? Math.round((stats.expiringSoonCount / stats.activeRequirements) * 100) : 0}%)</span>
+                </button>
+                <button
+                  onClick={() => router.push('/dashboard/requirements?status=RED')}
+                  className="w-full flex items-center justify-between font-bold hover:bg-muted/30 p-1 rounded-md transition-all text-left"
+                >
+                  <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" /> Needs Attention</span>
+                  <span className="text-foreground">{stats.expiredCount} ({stats.activeRequirements > 0 ? Math.round((stats.expiredCount / stats.activeRequirements) * 100) : 0}%)</span>
+                </button>
+                <button
+                  onClick={() => router.push('/dashboard/requirements?status=GREY')}
+                  className="w-full flex items-center justify-between font-bold hover:bg-muted/30 p-1 rounded-md transition-all text-left"
+                >
+                  <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-zinc-500 shrink-0" /> Not Assessed</span>
+                  <span className="text-foreground">{greyRequirementCount} ({stats.activeRequirements > 0 ? Math.round((greyRequirementCount / stats.activeRequirements) * 100) : 0}%)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Card 3: Audit Readiness */}
+        {customization.visiblePanels.includes('readinessGauge') && (
+          <div
+            className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs flex flex-col justify-between cursor-pointer hover:border-indigo-500/50 transition-all duration-300 select-none`}
+            onMouseEnter={handleMouseEnter('health')}
+            onMouseLeave={handleMouseLeave}
+            onClick={handleClick('health')}
+            title="Click to view full posture analysis"
+          >
+            <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
+              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Audit Readiness</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+            </div>
+            <div className="flex flex-col items-center py-1.5">
+              <div className="relative w-28 h-20 flex items-center justify-center overflow-hidden">
+                <svg viewBox="0 0 100 60" className="w-full h-full">
+                  <defs>
+                    <linearGradient id="readiness-gauge-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+                      <stop offset="0%" stopColor="#f59e0b" />
+                      <stop offset="100%" stopColor="#10b981" />
+                    </linearGradient>
+                  </defs>
+                  {/* Background Track */}
+                  <path d="M 15 50 A 35 35 0 0 1 85 50" fill="transparent" stroke="currentColor" className="text-muted/15 dark:text-muted/10" strokeWidth="8" strokeLinecap="round" />
+                  {/* Active Arc */}
+                  <path
+                    d="M 15 50 A 35 35 0 0 1 85 50"
+                    fill="transparent"
+                    stroke="url(#readiness-gauge-grad)"
+                    strokeWidth="8"
+                    strokeLinecap="round"
+                    strokeDasharray="110"
+                    strokeDashoffset={110 - (110 * ((readinessScore ?? 0) / 100))}
+                    className="transition-all duration-1000 ease-out"
+                  />
+                </svg>
+                <div className="absolute bottom-1 flex flex-col items-center justify-center text-center">
+                  <span className="text-xl font-black text-foreground">{readinessDisplay}</span>
+                  <span className="text-[7px] font-bold text-muted-foreground uppercase tracking-wider">Readiness</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 w-full mt-2 border-t border-border/40 pt-2 text-[10px] text-center font-bold">
+                <div>
+                  <span className="block text-rose-500">{stats.expiredCount}</span>
+                  <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Needs Attention</span>
+                </div>
+                <div className="border-l border-border/40">
+                  <span className="block text-amber-500">{stats.expiringSoonCount}</span>
+                  <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Due Soon</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Card 4: Training Completion */}
+        {customization.visiblePanels.includes('trainingRing') && (
+          <div
+            className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs flex flex-col justify-between cursor-pointer hover:border-indigo-500/50 transition-all duration-300 select-none`}
+            onMouseEnter={handleMouseEnter('training')}
+            onMouseLeave={handleMouseLeave}
+            onClick={handleClick('training')}
+            title="Click to view teammate certifications status"
+          >
+            <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
+              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Training Completion</span>
+              <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">Current Records</span>
+            </div>
+            <div className="flex flex-col items-center py-1.5">
+              <div className="relative w-20 h-20 flex items-center justify-center">
+                <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
+                  <circle cx="50" cy="50" r="38" fill="transparent" stroke="currentColor" className="text-muted/10" strokeWidth="8" />
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="38"
+                    fill="transparent"
+                    stroke="#10b981"
+                    strokeWidth="8"
+                    strokeLinecap="round"
+                    strokeDasharray="238.8"
+                    strokeDashoffset={238.8 - (238.8 * ((competencySummary?.compliancePercent ?? 0) / 100))}
+                    className="transition-all duration-1000 ease-out"
+                  />
+                </svg>
+                <div className="absolute flex flex-col items-center justify-center text-center">
+                  <span className="text-base font-black text-foreground">{competencySummary?.compliancePercent ?? 0}%</span>
+                  <span className="text-[7px] font-bold text-muted-foreground uppercase">Completed</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 w-full mt-2 border-t border-border/40 pt-2 text-[10px] text-center font-bold">
+                <div>
+                  <span className="block text-emerald-500">{competencySummary?.valid ?? 0}</span>
+                  <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Completed</span>
+                </div>
+                <div className="border-l border-border/40">
+                  <span className="block text-rose-500">{competencySummary?.expired ?? 0}</span>
+                  <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Overdue</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>      {/* Tier 2: Lower Lists Row */}
+      <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 ${densityStyles.gridGap} transition-all duration-300`}>
+        {/* Panel 1: Asset Compliance Categories */}
+        {customization.visiblePanels.includes('assetCategory') && (
+          <div className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs ${densityStyles.panelSpacing} transition-all duration-300`}>
+            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Asset Category Health</span>
+            <div className="space-y-3 py-1 text-xs">
+              {assetCategoryCompliance.map(category => (
+                <Link
+                  key={category.id}
+                  href={`/dashboard/matrix?category=${category.id}`}
+                  className="space-y-1.5 block hover:bg-muted/30 p-2 rounded-xl transition-all cursor-pointer"
+                  title={`Health score: ${category.percent}% | ${category.compliant} of ${category.total} checks compliant. Click to view category in Asset Matrix.`}
+                >
+                  <div className="flex justify-between items-center font-bold">
+                    <span>{category.name}</span>
+                    <span className="text-muted-foreground">{category.compliant} / {category.total} checks</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-full bg-muted h-2 rounded-full overflow-hidden">
+                      <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${category.percent}%` }} />
+                    </div>
+                    <span className="font-extrabold text-[10px] text-muted-foreground w-8 text-right">{category.percent}%</span>
+                  </div>
+                </Link>
+              ))}
+              {assetCategoryCompliance.length === 0 && (
+                <p className="text-[10px] text-muted-foreground italic text-center py-6">No parent asset categories defined.</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Panel 2: Risk Level Areas */}
+        {customization.visiblePanels.includes('riskGaps') && (
+          <div className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs ${densityStyles.panelSpacing} transition-all duration-300`}>
+            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Top Risk Gaps</span>
+            <div className="space-y-3 text-xs">
+              {[
+                { label: 'Critical Risk Items', riskKey: 'Critical', count: frameworkRequirements.filter(r => r.risk_level === 'Critical' && r.status !== 'GREEN').length, color: 'text-rose-600 bg-rose-500/10 border-rose-500/20' },
+                { label: 'High Risk Items', riskKey: 'High', count: frameworkRequirements.filter(r => r.risk_level === 'High' && r.status !== 'GREEN').length, color: 'text-rose-500 bg-rose-500/5 border-rose-500/15' },
+                { label: 'Medium Risk Items', riskKey: 'Medium', count: frameworkRequirements.filter(r => r.risk_level === 'Medium' && r.status !== 'GREEN').length, color: 'text-amber-600 bg-amber-500/10 border-amber-500/20' },
+                { label: 'Low Risk Items', riskKey: 'Low', count: frameworkRequirements.filter(r => r.risk_level === 'Low' && r.status !== 'GREEN').length, color: 'text-zinc-600 bg-zinc-500/10 border-zinc-500/20' }
+              ].map(item => (
+                <Link
+                  key={item.label}
+                  href={`/dashboard/requirements?risk=${item.riskKey}&status=Attention`}
+                  className="flex justify-between items-center p-2.5 bg-muted/20 hover:bg-muted/40 border border-border rounded-xl transition-all cursor-pointer block text-xs font-bold text-foreground"
+                  title={`Click to view pending ${item.riskKey} risk requirements.`}
+                >
+                  <span>{item.label}</span>
+                  <span className={`px-2 py-0.5 text-[10px] font-black rounded-md border ${item.color}`}>
+                    {item.count} pending
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Panel 3: Workspace Alerts */}
+        {customization.visiblePanels.includes('alerts') && (
+          <div className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs ${densityStyles.panelSpacing} transition-all duration-300`}>
+            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Active Alerts</span>
+            <div className="space-y-3 text-xs">
+              {stats.expiredCount > 0 && (
+                <Link
+                  href="/dashboard/requirements?status=RED"
+                  className="flex items-start gap-2.5 p-2 bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/15 hover:border-rose-500/30 rounded-xl transition-all cursor-pointer block"
+                  title="Click to view requirements needing attention."
+                >
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block text-rose-600 dark:text-rose-400">{stats.expiredCount} requirements need attention</span>
+                      <p className="text-[10px] text-muted-foreground">Missing evidence, overdue reviews, or other readiness gaps.</p>
+                    </div>
+                  </div>
+                </Link>
+              )}
+              {overdueAssetChecks.length > 0 && (
+                <Link
+                  href="/dashboard/matrix?status=Expired"
+                  className="flex items-start gap-2.5 p-2 bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/15 hover:border-rose-500/30 rounded-xl transition-all cursor-pointer block"
+                  title="Click to view expired asset checks."
+                >
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block text-rose-600 dark:text-rose-400">{overdueAssetChecks.length} asset checks overdue</span>
+                      <p className="text-[10px] text-muted-foreground">Assigned equipment or vehicle checks require action.</p>
+                    </div>
+                  </div>
+                </Link>
+              )}
+              {unclassifiedDocs.length > 0 && (
+                <Link
+                  href="/dashboard/vault?status=Unclassified"
+                  className="flex items-start gap-2.5 p-2 bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/15 hover:border-amber-500/30 rounded-xl transition-all cursor-pointer block"
+                  title="Click to view unclassified vault files."
+                >
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block text-amber-600 dark:text-amber-400">{unclassifiedDocs.length} unclassified documents</span>
+                      <p className="text-[10px] text-muted-foreground">Newly uploaded evidence files pending classification.</p>
+                    </div>
+                  </div>
+                </Link>
+              )}
+              {stats.expiredCount === 0 && overdueAssetChecks.length === 0 && unclassifiedDocs.length === 0 && (
+                <p className="text-[10px] text-muted-foreground italic text-center py-6">No critical alerts detected in your workspace.</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* 5. Modals and Quick-Upload dialogs */}
       {isUploadModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
@@ -2625,7 +3982,7 @@ export default function DashboardPage() {
                     { id: 'snapshot', label: 'Compliance Snapshot' },
                     { id: 'tasks', label: 'Tasks Feed' },
                     { id: 'activity', label: 'Recent Activity' },
-                    { id: 'focus', label: 'Suggested Focus' },
+                    { id: 'focus', label: 'Focus' },
                     { id: 'expiring', label: 'Expiring Soon' }
                   ].map(sec => {
                     const isVisible = modalCustomization.visibleRightRailSections.includes(sec.id);
