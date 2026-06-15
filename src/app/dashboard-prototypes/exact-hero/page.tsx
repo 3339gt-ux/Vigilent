@@ -55,9 +55,9 @@ export default function ExactHeroPage() {
             <ArrowLeft className="h-4.5 w-4.5" />
           </Link>
           <div>
-            <h1 className="text-lg font-bold tracking-wide">Locked Hero Graphic Replication</h1>
+            <h1 className="text-lg font-bold tracking-wide">Locked Hero Graphic Replication (Reference)</h1>
             <p className="text-xs text-slate-400">
-              Isolated prototype route reproducing the master reference illustrations exactly in React SVG.
+              Isolated static prototype route serving as the visual reference. The live production dashboard (`/dashboard`) is now integrated with a data-wired, dynamic, and theme-supported hero component based on this static reference.
             </p>
           </div>
         </div>
@@ -102,8 +102,8 @@ export default function ExactHeroPage() {
 
       {/* Footer / Telemetry Data Honesty Banner */}
       <footer className={`h-10 border-t px-6 flex items-center justify-between text-[10px] text-slate-500 ${theme === 'dark' ? 'bg-[#020617] border-slate-900' : 'bg-white border-slate-200'}`}>
-        <span>Locked design replication • Image A (Dark) & Image B (Light) Master Reference.</span>
-        <span>No compliance data, charts, or fake cards included in this layout view.</span>
+        <span>Static visual reference • Production hero on `/dashboard` is live and data-backed.</span>
+        <span>No live compliance telemetry is wired in this isolated prototype view.</span>
       </footer>
     </div>
   );

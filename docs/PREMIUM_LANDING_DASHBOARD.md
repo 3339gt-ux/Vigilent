@@ -35,22 +35,37 @@ Displays six core operational indicators, fully data-backed:
 6. **Asset Assurance**: Compliance progress across all active asset checks.
 
 ### Central Compliance Program Overview
-An interactive visual map representing the current readiness posture of the active organisation.
-- **Compliance Core centerpiece**: The abstract rotating spinner is replaced with a data-rich circular layout:
-  - **Center displays**: The overall readiness score percentage.
-  - **Readiness label**: Dynamic semantic status label (Excellent, Good, Fair, Needs Attention, Critical) matches the score tone.
-  - **Status badge**: Small `LIVE` overlay identifying the current readiness calculation.
-  - **Watermark**: The rotating starburst spikes are integrated as a faint watermark (opacity `0.12`) to preserve the brand signature without obscuring the reading score.
-- **Segmented Readiness Ring**: An outer concentric SVG ring represents the calculated requirement breakdown: Compliant (Green), At Risk (Amber), Needs Attention (Red), and Not Assessed (Grey).
-- **Animated Risk Pulses**: Exits from the centerpiece targeting any sub-module with active warning or expired items display warning dots with pulsing animations (`animate-ping`). Under reduced-motion settings, the ping animations are automatically disabled.
-- **State-Responsive Pathways**: Orthogonal data flow lines connect the core to satellite nodes. The pathway strokes dynamically indicate the destination node's health (emerald-500/20 for green, amber-500/20 for warning, rose-500/20 for critical, neutral for others). Data packets flow animation is suspended under reduced motion mode.
-- **Satellite Nodes**: Hover-scaling circular nodes display sub-module icons, live record counts, and warning badges where current data indicates attention is needed.
-- **List View**: Toggles to a clean list/tabular overview of the modules with summary statistics.
-- **Interactions**:
-  - Hovering a satellite node highlights its SVG path, scales the node, and populates the popover detail panel. Popovers persist on hover to allow interacting with internal links.
-  - Clicking a satellite node triggers the slide-out detail drawer populated with attention-required records. The source node stays visually highlighted while its drawer is active.
-  - Clicking the Compliance Core centerpiece displays overall posture diagnostics and dual navigation buttons.
-- **Responsive Stack**: On mobile screens, the map collapses into a clean grid of glassmorphic cards. On desktop, it renders the full interactive network diagram.
+An interactive visual system map representing the current compliance and readiness posture of the active organization, integrated directly from the approved exact hero prototype.
+
+- **Centralized ComplianceCore centerpiece**: Encapsulates a data-rich HUD readout with the real workspace compliance/readiness score, an uppercase status label (Critical, Needs Attention, Fair, Strong, Excellent) derived from the real rating score, and a small live snapshot status indicator. Hovering over the core triggers an outward pulse/glow animation.
+- **Satellite Nodes**: 6 interactive satellite nodes map to the following real modules:
+  - Requirements (routes to `/dashboard/requirements`)
+  - Evidence Vault (routes to `/dashboard/vault`)
+  - Competency Matrix (routes to `/dashboard/competencies`)
+  - Asset Matrix (routes to `/dashboard/matrix`)
+  - Audit Pack Builder (routes to `/dashboard/audit-packs`)
+  - Reports (routes to `/dashboard/reports`)
+- **Data-Driven Indicators**: Each node displays dynamic state information:
+  - An SVG circular progress ring around the node representing completion percentages (e.g. compliant requirements / active requirements).
+  - A small, compact mini data bar below the label representing progress.
+  - A warning badge with numerical indicator showing outstanding expired or attention-needed counts.
+  - Neutral labels (e.g. `available`, `checks`) when progress metrics are not applicable.
+- **Interactivity & Hover Beams**:
+  - Hovering a node brightens the node circle and icon.
+  - The parallel connector trace leading to the core brightens in the node's theme accent color.
+  - A glowing, animated traveling packet travels along the connector trace to the core.
+  - Middle-left and middle-right nodes support the exact same active connector beam behavior as diagonal nodes.
+  - Popover insight tooltips are rendered dynamically upon hovering.
+- **Three-Theme Visual System**:
+  - **Dark**: High-contrast, premium neon aesthetic matching the approved dark mode mock.
+  - **Light**: Crisp, highly readable, and non-washed out styling.
+  - **Midtone / Grey**: Replaces muddy contrasts with a refined slate/graphite background treatment (`#1e293b`), preserving neon path colors and text clarity.
+- **Hero Accent Customization**:
+  - Prepared with structured hero CSS variables mapping primary, secondary, glow, and connector colors.
+  - Integrated local-only customization setting (`Hero Accent`) inside the customization panel with options: Default Blue/Violet, Cyan/Emerald, Blue/Amber, Violet/Rose, Rainbow Spectrum. Persists user preference via `localStorage` with a reset control.
+- **Prototype Reference Route**:
+  - The prototype page at `/dashboard-prototypes/exact-hero` remains fully available as a static, pixel-perfect visual reference.
+
 
 ### Right-Side Live Intelligence Rail
 Provides continuous context-aware insights and shortcuts:

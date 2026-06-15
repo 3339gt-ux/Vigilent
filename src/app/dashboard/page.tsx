@@ -4,6 +4,7 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
 import Link from 'next/link';
+import ComplianceHeroCore from './components/ComplianceHeroCore';
 import { InlineToast, ToastState } from '@/components/AppFeedback';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
@@ -81,11 +82,13 @@ type DashboardCustomization = {
   dataWindow: 'snapshot' | '7days' | '30days' | '90days';
   motionPreference: 'standard' | 'reduced';
   effectIntensity: 'subtle' | 'standard' | 'vibrant';
+  heroAccent?: 'default' | 'cyan-emerald' | 'blue-amber' | 'violet-rose' | 'rainbow';
 };
 
 export default function DashboardPage() {
   const {
     organization,
+    theme,
     user,
     readinessReport,
     stats,
@@ -141,7 +144,8 @@ export default function DashboardPage() {
       visibleRightRailSections: ['snapshot', 'focus', 'upcoming', 'action', 'activity'],
       dataWindow: 'snapshot' as const,
       motionPreference: 'standard' as const,
-      effectIntensity: 'standard' as const
+      effectIntensity: 'standard' as const,
+      heroAccent: 'default' as const
     };
     if (typeof window === 'undefined') return defaultSettings;
     try {
@@ -161,7 +165,8 @@ export default function DashboardPage() {
           visibleRightRailSections: parsed.visibleRightRailSections || defaultSettings.visibleRightRailSections,
           dataWindow: parsed.dataWindow || defaultSettings.dataWindow,
           motionPreference: parsed.motionPreference || defaultSettings.motionPreference,
-          effectIntensity: parsed.effectIntensity || defaultSettings.effectIntensity
+          effectIntensity: parsed.effectIntensity || defaultSettings.effectIntensity,
+          heroAccent: parsed.heroAccent || 'default'
         };
       }
     } catch {}
@@ -171,7 +176,7 @@ export default function DashboardPage() {
   const [viewMode, setViewMode] = useState<ViewMode>(
     customization.heroStyle === 'list' ? 'list' : customization.defaultViewMode
   );
-  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+
   const [activeRailTab, setActiveRailTab] = useState<'focus' | 'upcoming' | 'action' | 'activity'>(
     customization.defaultRailTab
   );
@@ -593,25 +598,6 @@ export default function DashboardPage() {
     return allTasksAndExpiries.filter(item => item.isOverdue || item.requirement.category === 'Action');
   }, [allTasksAndExpiries]);
 
-  // Helper for drawing SVG arc paths
-  const describeArc = useCallback((x: number, y: number, radius: number, startAngle: number, endAngle: number) => {
-    const polarToCartesian = (centerX: number, centerY: number, radiusVal: number, angleInDegrees: number) => {
-      const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180.0;
-      return {
-        x: centerX + radiusVal * Math.cos(angleInRadians),
-        y: centerY + radiusVal * Math.sin(angleInRadians)
-      };
-    };
-
-    const start = polarToCartesian(x, y, radius, endAngle);
-    const end = polarToCartesian(x, y, radius, startAngle);
-    const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
-    return [
-      "M", start.x, start.y,
-      "A", radius, radius, 0, largeArcFlag, 0, end.x, end.y
-    ].join(" ");
-  }, []);
-
   const getReadinessLabel = useCallback((score: number | null) => {
     if (score === null) return 'N/A';
     if (score >= 90) return 'Excellent';
@@ -622,74 +608,6 @@ export default function DashboardPage() {
   }, []);
 
   const readinessLabel = useMemo(() => getReadinessLabel(readinessScore), [readinessScore, getReadinessLabel]);
-  const readinessLabelColorClass = useMemo(() => {
-    if (readinessScore === null) return 'fill-muted-foreground';
-    if (readinessScore >= 90) return 'fill-emerald-500';
-    if (readinessScore >= 75) return 'fill-indigo-500 dark:fill-indigo-400';
-    if (readinessScore >= 50) return 'fill-amber-500';
-    return 'fill-rose-500';
-  }, [readinessScore]);
-
-  const segmentsData = useMemo(() => {
-    const total = stats.compliantCount + stats.expiringSoonCount + stats.expiredCount + greyRequirementCount;
-    if (total === 0) {
-      return [
-        { label: 'Not Assessed', count: 0, pct: 1.0, color: 'stroke-zinc-500', id: 'grey' }
-      ];
-    }
-    return [
-      { label: 'Compliant', count: stats.compliantCount, pct: stats.compliantCount / total, color: 'stroke-emerald-500', id: 'green' },
-      { label: 'At Risk', count: stats.expiringSoonCount, pct: stats.expiringSoonCount / total, color: 'stroke-amber-500', id: 'amber' },
-      { label: 'Needs Attention', count: stats.expiredCount, pct: stats.expiredCount / total, color: 'stroke-rose-500', id: 'red' },
-      { label: 'Not Assessed', count: greyRequirementCount, pct: greyRequirementCount / total, color: 'stroke-zinc-500/80 dark:stroke-zinc-700/80', id: 'grey' }
-    ].filter(s => s.count > 0);
-  }, [stats, greyRequirementCount]);
-
-  const segmentedRingPaths = useMemo(() => {
-    const numSegments = segmentsData.length;
-    if (numSegments === 0) return [];
-
-    const gapDegrees = numSegments === 1 ? 0 : 4;
-    const totalGapDegrees = numSegments * gapDegrees;
-    const availableDegrees = 360 - totalGapDegrees;
-
-    let currentAngle = 0;
-
-    return segmentsData.map((seg) => {
-      const segmentDegrees = seg.pct * availableDegrees;
-      const startAngle = currentAngle;
-      const endAngle = currentAngle + segmentDegrees;
-
-      // Update currentAngle for next iteration, including the gap
-      currentAngle = endAngle + gapDegrees;
-
-      const d = describeArc(400, 200, 52.5, startAngle, endAngle);
-      return {
-        ...seg,
-        d
-      };
-    });
-  }, [segmentsData, describeArc]);
-
-  const getNodeStatusTone = useCallback((id: string): 'rose' | 'amber' | 'emerald' | 'indigo' | 'zinc' => {
-    switch (id) {
-      case 'requirements':
-        return stats.expiredCount > 0 ? 'rose' : 'emerald';
-      case 'competencies':
-        const compGaps = competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').length;
-        return compGaps > 0 ? 'amber' : 'emerald';
-      case 'vault':
-        return unclassifiedDocs.length > 0 ? 'amber' : 'indigo';
-      case 'matrix':
-        return overdueAssetChecks.length > 0 ? 'rose' : 'emerald';
-      case 'audit-packs':
-        return auditPacks.length === 0 ? 'amber' : 'emerald';
-      case 'reports':
-        return 'emerald';
-      default:
-        return 'zinc';
-    }
-  }, [stats, competencyRecords, unclassifiedDocs, overdueAssetChecks, auditPacks]);
 
   // Central Map Satellite Nodes configuration
   const satelliteNodes = useMemo(() => {
@@ -1558,13 +1476,43 @@ export default function DashboardPage() {
     setHoveredTrendPoint(null);
   };
 
-  const getBadgeLink = (nodeId: string, path: string) => {
-    if (nodeId === 'requirements') return `${path}?status=Attention`;
-    if (nodeId === 'competencies') return `/dashboard/competencies?status=Expired`;
-    if (nodeId === 'matrix') return `/dashboard/matrix?status=Expired`;
-    if (nodeId === 'vault') return `/dashboard/vault?status=Unclassified`;
-    return path;
+  const handleNodeMouseEnter = (id: string, element: SVGGElement) => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    const rect = element.getBoundingClientRect();
+    const data = getInsightData(id);
+    if (data) {
+      setHoveredInsight({
+        ...data,
+        x: rect.left + rect.width / 2,
+        y: rect.bottom + 8
+      });
+    }
   };
+
+  const handleNodeMouseLeave = () => {
+    handleMouseLeave();
+  };
+
+  const handleNodeClick = (id: string) => {
+    if (id === 'hub') {
+      handleItemClick('hub', handleClick('hub'));
+      return;
+    }
+    const routeMap: Record<string, string> = {
+      requirements: '/dashboard/requirements',
+      competencies: '/dashboard/competencies',
+      vault: '/dashboard/vault',
+      matrix: '/dashboard/matrix',
+      'audit-packs': '/dashboard/audit-packs',
+      reports: '/dashboard/reports'
+    };
+    const path = routeMap[id];
+    if (path) {
+      router.push(path);
+    }
+  };
+
+
 
   const getPopoverStyle = (insight: typeof hoveredInsight) => {
     if (!insight) return {};
@@ -1655,8 +1603,6 @@ export default function DashboardPage() {
   }, [readinessScore]);
 
   const activeViewMode = customization.heroStyle === 'list' ? 'list' : viewMode;
-  const showPathsAndSatellites = customization.heroStyle === 'map';
-  const detailLevel = customization.heroDetailLevel || 'balanced';
   const isMotionReduced = customization.motionPreference === 'reduced';
 
   return (
@@ -1947,457 +1893,55 @@ export default function DashboardPage() {
             {/* Central content depending on toggle */}
             <div className="p-5">
               {activeViewMode === 'system' ? (
-                /* Upgraded Premium Graphical System Map Layout */
-                <>
-                  <div className="w-full max-w-[800px] aspect-[2/1] mx-auto relative select-none hidden md:block">
-                    {/* Background SVG connections */}
-                    <svg viewBox="0 0 800 400" className="absolute inset-0 w-full h-full pointer-events-none">
-                      <defs>
-
-                        <radialGradient id="hub-glow-gradient" cx="50%" cy="50%" r="50%">
-                          <stop offset="0%" stopColor="rgba(99, 102, 241, 0.25)" />
-                          <stop offset="100%" stopColor="rgba(99, 102, 241, 0)" />
-                        </radialGradient>
-                      </defs>
-
-                      <style>{isMotionReduced ? '' : `
-                        @keyframes flow-animation {
-                          from { stroke-dashoffset: 48; }
-                          to { stroke-dashoffset: 0; }
-                        }
-                        .glowing-flow-line {
-                          stroke-dasharray: 8 40;
-                          animation: flow-animation 3s linear infinite;
-                        }
-                      `}</style>
-
-                      {/* Radial glow behind the center hub */}
-                      <circle cx="400" cy="200" r="120" fill="url(#hub-glow-gradient)" />
-
-                      {/* Connecting lines from Core to satellites */}
-                      {showPathsAndSatellites && satelliteNodes.map(node => {
-                        const isHovered = hoveredNode === node.id;
-                        let pathD = '';
-                        if (node.id === 'requirements') pathD = 'M 400 200 L 400 55';
-                        else if (node.id === 'reports') pathD = 'M 400 200 L 400 345';
-                        else if (node.id === 'competencies') pathD = 'M 400 200 L 280 200 L 280 120 L 200 120';
-                        else if (node.id === 'matrix') pathD = 'M 400 200 L 280 200 L 280 280 L 200 280';
-                        else if (node.id === 'vault') pathD = 'M 400 200 L 520 200 L 520 120 L 600 120';
-                        else if (node.id === 'audit-packs') pathD = 'M 400 200 L 520 200 L 520 280 L 600 280';
-
-                        const tone = getNodeStatusTone(node.id);
-                        const bgStrokeColor =
-                          tone === 'rose' ? 'stroke-rose-500/20' :
-                          tone === 'amber' ? 'stroke-amber-500/20' :
-                          tone === 'emerald' ? 'stroke-emerald-500/20' :
-                          tone === 'indigo' ? 'stroke-indigo-500/20' :
-                          'stroke-zinc-500/10';
-
-                        const flowStrokeColor =
-                          tone === 'rose' ? 'text-rose-500' :
-                          tone === 'amber' ? 'text-amber-500' :
-                          tone === 'emerald' ? 'text-emerald-500' :
-                          tone === 'indigo' ? 'text-indigo-500' :
-                          'text-indigo-500/40';
-
-                        return (
-                          <g key={node.id}>
-                            {/* Background path with thin subtle opacity */}
-                            <path
-                              d={pathD}
-                              fill="none"
-                              className={`transition-all duration-300 stroke-[1.5] ${bgStrokeColor}`}
-                            />
-                            {/* Animated glowing data flow line */}
-                            {!isMotionReduced && (
-                              <path
-                                d={pathD}
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                className={`glowing-flow-line opacity-75 ${flowStrokeColor}`}
-                                style={{ strokeLinecap: 'round' }}
-                              />
-                            )}
-                            {/* Thick glow overlay when node is hovered */}
-                            {isHovered && (
-                              <path
-                                d={pathD}
-                                fill="none"
-                                className={`opacity-60 dark:opacity-40 stroke-[4] animate-pulse drop-shadow-md transition-all ${
-                                  tone === 'rose' ? 'stroke-rose-500 dark:stroke-rose-400' :
-                                  tone === 'amber' ? 'stroke-amber-500 dark:stroke-amber-400' :
-                                  tone === 'emerald' ? 'stroke-emerald-500 dark:stroke-emerald-400' :
-                                  tone === 'indigo' ? 'stroke-indigo-500 dark:stroke-indigo-400' :
-                                  'stroke-indigo-500 dark:stroke-indigo-400'
-                                }`}
-                                style={{ strokeLinecap: 'round' }}
-                              />
-                            )}
-                          </g>
-                        );
-                      })}
-
-                      {/* Concentric rings surrounding the central hub */}
-                      <circle cx="400" cy="200" r="76" className="stroke-indigo-500/20 dark:stroke-indigo-500/12" strokeWidth="1" fill="none" strokeDasharray="6 12" />
-                      <circle cx="400" cy="200" r="54" className="stroke-cyan-500/40 dark:stroke-cyan-500/25" strokeWidth="1.5" fill="none" />
-
-                      {/* Glowing circuit bends dots */}
-                      {showPathsAndSatellites && (
-                        <>
-                          <circle cx="280" cy="200" r="2.5" className="fill-indigo-500/70" />
-                          <circle cx="280" cy="120" r="2.5" className="fill-indigo-500/70" />
-                          <circle cx="280" cy="280" r="2.5" className="fill-indigo-500/70" />
-                          <circle cx="520" cy="200" r="2.5" className="fill-indigo-500/70" />
-                          <circle cx="520" cy="120" r="2.5" className="fill-indigo-500/70" />
-                          <circle cx="520" cy="280" r="2.5" className="fill-indigo-500/70" />
-                        </>
-                      )}
-
-                      {/* Central Glowing Orb Core (fill/glow) */}
-                      <circle
-                        cx="400"
-                        cy="200"
-                        r="46"
-                        className={`fill-card dark:fill-[#070A13] stroke-indigo-500 dark:stroke-indigo-400 ${customization.effectIntensity === 'subtle' ? '' : customization.effectIntensity === 'vibrant' ? 'drop-shadow-[0_0_12px_rgba(99,102,241,0.6)] dark:drop-shadow-[0_0_20px_rgba(99,102,241,1)]' : 'drop-shadow-[0_0_8px_rgba(99,102,241,0.3)] dark:drop-shadow-[0_0_12px_rgba(99,102,241,0.5)]'} cursor-pointer hover:stroke-indigo-400 active:scale-95 transition-all ${
-                          hoveredNode === 'hub' ? 'scale-105 drop-shadow-[0_0_12px_rgba(99,102,241,0.5)] dark:drop-shadow-[0_0_16px_rgba(99,102,241,0.8)]' : ''
-                        } ${
-                          (clickedItemId === 'hub' || activeInsightDrawer?.id === 'hub') ? 'scale-95 stroke-indigo-600 drop-shadow-[0_0_16px_rgba(99,102,241,0.8)]' : ''
-                        }`}
-                        style={{ transformOrigin: '400px 200px' }}
-                        strokeWidth="2.5"
-                        onMouseEnter={(e) => {
-                          if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          const data = getInsightData('hub');
-                          if (data) {
-                            setHoveredInsight({
-                              ...data,
-                              x: rect.left + rect.width / 2,
-                              y: rect.bottom + 8
-                            });
-                          }
-                        }}
-                        onMouseLeave={handleMouseLeave}
-                        onClick={() => handleItemClick('hub', handleClick('hub'))}
-                        onFocus={(e) => {
-                          if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          const data = getInsightData('hub');
-                          if (data) {
-                            setHoveredInsight({
-                              ...data,
-                              x: rect.left + rect.width / 2,
-                              y: rect.bottom + 8
-                            });
-                          }
-                        }}
-                        onBlur={handleMouseLeave}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            handleItemClick('hub', handleClick('hub'));
-                          }
-                        }}
-                        role="button"
-                        tabIndex={0}
-                        aria-label="Inspect workspace readiness"
-                      />
-
-                      {/* Slow spinning starburst emblem inside the core (watermark) */}
-                      <g style={{ transformOrigin: '400px 200px', animation: isMotionReduced ? 'none' : 'spin 120s linear infinite' }} className="opacity-12 pointer-events-none">
-                        {Array.from({ length: 32 }).map((_, i) => {
-                          const angle = i * (360 / 32);
-                          const rad = (angle * Math.PI) / 180;
-                          const r1 = 12; // starts inside the core
-                          const r2 = i % 2 === 0 ? 38 : 28; // alternating long and short spikes
-                          const x1 = 400 + r1 * Math.cos(rad);
-                          const y1 = 200 + r1 * Math.sin(rad);
-                          const x2 = 400 + r2 * Math.cos(rad);
-                          const y2 = 200 + r2 * Math.sin(rad);
-
-                          return (
-                            <line
-                              key={i}
-                              x1={x1}
-                              y1={y1}
-                              x2={x2}
-                              y2={y2}
-                              className={`stroke-indigo-400 dark:stroke-indigo-300 opacity-90 ${
-                                i % 2 === 0 ? 'stroke-[2]' : 'stroke-[1.5]'
-                              }`}
-                              strokeLinecap="round"
-                            />
-                          );
-                        })}
-                      </g>
-
-                      {/* Segmented Compliance Ring */}
-                      {segmentedRingPaths.map((seg) => {
-                        if (segmentsData.length === 1 || seg.pct >= 0.999) {
-                          return (
-                            <circle
-                              key={seg.id}
-                              cx="400"
-                              cy="200"
-                              r="52.5"
-                              fill="none"
-                              className={`${seg.color} transition-all pointer-events-none`}
-                              strokeWidth="3.5"
-                            />
-                          );
-                        }
-                        return (
-                          <path
-                            key={seg.id}
-                            d={seg.d}
-                            fill="none"
-                            className={`${seg.color} transition-all pointer-events-none`}
-                            strokeWidth="3.5"
-                            strokeLinecap="round"
-                          />
-                        );
-                      })}
-
-                      {/* Score Text Overlay inside Core */}
-                      <text
-                        x="400"
-                        y="192"
-                        textAnchor="middle"
-                        className="fill-foreground font-black text-lg select-none pointer-events-none"
-                      >
-                        {readinessDisplay}
-                      </text>
-
-                      {/* Status Label Text Overlay inside Core */}
-                      <text
-                        x="400"
-                        y="206"
-                        textAnchor="middle"
-                        className={`${readinessLabelColorClass} font-black text-[9px] uppercase tracking-wider select-none pointer-events-none`}
-                      >
-                        {readinessLabel}
-                      </text>
-
-                      {/* Live Snapshot Indicator inside Core */}
-                      <g className="select-none opacity-80 pointer-events-none">
-                        <circle cx="384" cy="221" r="2.5" className={`fill-emerald-500 ${isMotionReduced ? '' : 'animate-pulse'}`} />
-                        <text
-                          x="390"
-                          y="224"
-                          textAnchor="start"
-                          className="fill-muted-foreground font-extrabold text-[8px] tracking-widest"
-                        >
-                          LIVE
-                        </text>
-                      </g>
-
-                      {/* Animated warning exit pulses */}
-                      {showPathsAndSatellites && [
-                        { id: 'requirements', cx: 400, cy: 110, active: stats.expiredCount > 0, color: 'fill-rose-500' },
-                        { id: 'competencies', cx: 280, cy: 120, active: competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').length > 0, color: 'fill-amber-500' },
-                        { id: 'vault', cx: 520, cy: 120, active: unclassifiedDocs.length > 0, color: 'fill-amber-500' },
-                        { id: 'matrix', cx: 280, cy: 280, active: overdueAssetChecks.length > 0, color: 'fill-rose-500' }
-                      ].map(p => {
-                        if (!p.active) return null;
-                        return (
-                          <g key={p.id}>
-                            <circle cx={p.cx} cy={p.cy} r="4" className={p.color} />
-                            {!isMotionReduced && (
-                              <circle cx={p.cx} cy={p.cy} r="9" className={`${p.color} opacity-40 animate-ping`} style={{ transformOrigin: `${p.cx}px ${p.cy}px` }} />
-                            )}
-                          </g>
-                        );
-                      })}
-                    </svg>
-
-                    {/* Absolute positioned module nodes with symmetric side-labels */}
-                    {showPathsAndSatellites && satelliteNodes.map(node => {
-                      const isHovered = hoveredNode === node.id;
-                      const isActive = activeInsightDrawer?.id === node.id || clickedItemId === node.id;
-                      let posClass = '';
-                      let isLeftNode = false;
-
-                      if (node.id === 'requirements') posClass = 'left-[50%] top-[13.75%]';
-                      else if (node.id === 'reports') posClass = 'left-[50%] top-[86.25%]';
-                      else if (node.id === 'competencies') { posClass = 'left-[25%] top-[30%]'; isLeftNode = true; }
-                      else if (node.id === 'matrix') { posClass = 'left-[25%] top-[70%]'; isLeftNode = true; }
-                      else if (node.id === 'vault') posClass = 'left-[75%] top-[30%]';
-                      else if (node.id === 'audit-packs') posClass = 'left-[75%] top-[70%]';
-
-                      return (
-                        <div
-                          key={node.id}
-                          className={`absolute ${posClass} -translate-x-6 -translate-y-6 flex items-center justify-center z-20`}
-                        >
-                          <div
-                            id={`program-node-${node.id}`}
-                            onMouseEnter={(e) => {
-                              if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-                              setHoveredNode(node.id);
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              const data = getInsightData(node.id);
-                              if (data) {
-                                setHoveredInsight({
-                                  ...data,
-                                  x: rect.left + rect.width / 2,
-                                  y: rect.bottom + 8
-                                });
-                              }
-                            }}
-                            onMouseLeave={() => {
-                              setHoveredNode(null);
-                              handleMouseLeave();
-                            }}
-                            onFocus={(e) => {
-                              if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-                              setHoveredNode(node.id);
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              const data = getInsightData(node.id);
-                              if (data) {
-                                setHoveredInsight({
-                                  ...data,
-                                  x: rect.left + rect.width / 2,
-                                  y: rect.bottom + 8
-                                });
-                              }
-                            }}
-                            onBlur={() => {
-                              setHoveredNode(null);
-                              handleMouseLeave();
-                            }}
-                            onClick={() => handleItemClick(node.id, handleClick(node.id))}
-                            tabIndex={0}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                handleItemClick(node.id, handleClick(node.id));
-                              }
-                            }}
-                            className={`w-12 h-12 rounded-full bg-card border-2 flex items-center justify-center transition-all duration-300 shadow-xs hover:scale-110 active:scale-95 hover:shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 shrink-0 cursor-pointer ${
-                              isHovered || isActive ? 'border-indigo-500 shadow-md scale-105' : 'border-border text-foreground'
-                            } ${
-                              isActive ? 'border-indigo-600 bg-indigo-500/20 shadow-lg scale-95' : ''
-                            }`}
-                          >
-                            <div className="relative">
-                              <span className={isHovered || isActive ? 'text-indigo-500 dark:text-indigo-400' : 'text-foreground'}>
-                                {node.icon}
-                              </span>
-                              {node.warnings > 0 && (
-                                <span
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    router.push(getBadgeLink(node.id, node.path));
-                                  }}
-                                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 border border-card text-[8px] font-black text-white flex items-center justify-center animate-pulse cursor-pointer z-30 font-sans"
-                                >
-                                  {node.warnings}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Symmetric label positioning */}
-                          {isLeftNode ? (
-                            <div className="absolute right-full mr-3.5 flex flex-col text-right select-none pointer-events-none min-w-[170px] items-end">
-                              <div className="flex items-center gap-1.5 justify-end">
-                                {detailLevel !== 'minimal' && node.badge !== undefined && node.badge > 0 && (
-                                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-black leading-none shrink-0 ${node.badgeColor}`}>
-                                    {node.badge}
-                                  </span>
-                                )}
-                                <span className={`text-[11px] font-black uppercase tracking-tight transition-colors duration-250 ${
-                                  isHovered ? 'text-indigo-500 dark:text-indigo-400' : 'text-foreground'
-                                }`}>
-                                  {node.name}
-                                </span>
-                              </div>
-                              {detailLevel !== 'minimal' && (
-                                <span className="text-[10px] text-muted-foreground font-semibold leading-tight mt-0.5">
-                                  {detailLevel === 'full' ? (
-                                    <span className="space-y-0.5">
-                                      <span className="block text-indigo-500 dark:text-indigo-400 font-bold">{node.description}</span>
-                                      <span className="block text-muted-foreground text-[9px]">
-                                        {node.metric || `${node.count} ${node.id === 'competencies' ? 'staff' : node.id === 'reports' ? 'views' : 'items'}`}
-                                      </span>
-                                    </span>
-                                  ) : isHovered ? (
-                                    <span className="text-indigo-500 dark:text-indigo-400 font-bold transition-all">{node.description}</span>
-                                  ) : (
-                                    node.metric || `${node.count} ${node.id === 'competencies' ? 'staff' : node.id === 'reports' ? 'views' : 'items'}`
-                                  )}
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="absolute left-full ml-3.5 flex flex-col text-left select-none pointer-events-none min-w-[170px] items-start">
-                              <div className="flex items-center gap-1.5 justify-start">
-                                <span className={`text-[11px] font-black uppercase tracking-tight transition-colors duration-250 ${
-                                  isHovered ? 'text-indigo-500 dark:text-indigo-400' : 'text-foreground'
-                                }`}>
-                                  {node.name}
-                                </span>
-                                {detailLevel !== 'minimal' && node.badge !== undefined && node.badge > 0 && (
-                                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-black leading-none shrink-0 ${node.badgeColor}`}>
-                                    {node.badge}
-                                  </span>
-                                )}
-                              </div>
-                              {detailLevel !== 'minimal' && (
-                                <span className="text-[10px] text-muted-foreground font-semibold leading-tight mt-0.5">
-                                  {detailLevel === 'full' ? (
-                                    <span className="space-y-0.5">
-                                      <span className="block text-indigo-500 dark:text-indigo-400 font-bold">{node.description}</span>
-                                      <span className="block text-muted-foreground text-[9px]">
-                                        {node.metric || `${node.count} ${node.id === 'vault' ? 'files' : node.id === 'reports' ? 'views' : 'items'}`}
-                                      </span>
-                                    </span>
-                                  ) : isHovered ? (
-                                    <span className="text-indigo-500 dark:text-indigo-400 font-bold transition-all">{node.description}</span>
-                                  ) : (
-                                    node.metric || `${node.count} ${node.id === 'vault' ? 'files' : node.id === 'reports' ? 'views' : 'items'}`
-                                  )}
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Responsive grid for mobile view */}
-                  <div className="grid grid-cols-2 gap-3 sm:gap-4 md:hidden">
-                    {satelliteNodes.map(node => (
-                      <Link
-                        key={node.id}
-                        href={node.path}
-                        className={`p-3 bg-card border rounded-xl flex items-center gap-3 hover:border-indigo-500/50 transition-colors ${node.color}`}
-                      >
-                        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0">
-                          {node.icon}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-black text-foreground uppercase tracking-tight truncate">
-                              {node.name}
-                            </span>
-                            {node.badge !== undefined && node.badge > 0 && (
-                              <span className={`px-1 rounded text-[8px] font-black shrink-0 ${node.badgeColor}`}>
-                                {node.badge}
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[9px] text-muted-foreground block truncate">
-                            {node.count} {node.id === 'competencies' ? 'staff' : node.id === 'vault' ? 'files' : node.id === 'reports' ? 'views' : 'items'}
-                          </span>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                </>
+                <ComplianceHeroCore
+                  theme={theme}
+                  readinessScore={readinessScore}
+                  readinessLabel={readinessLabel}
+                  isMotionReduced={isMotionReduced}
+                  effectIntensity={customization.effectIntensity || 'standard'}
+                  heroAccent={customization.heroAccent || 'default'}
+                  requirementsData={{
+                    active: stats.activeRequirements,
+                    compliant: stats.compliantCount,
+                    warnings: stats.expiredCount,
+                    percent: stats.activeRequirements > 0 ? Math.round((stats.compliantCount / stats.activeRequirements) * 100) : 0,
+                    metricText: `${stats.compliantCount}/${stats.activeRequirements} compliant`
+                  }}
+                  vaultData={{
+                    total: documents.length,
+                    classified: classifiedDocsCount,
+                    warnings: unclassifiedDocs.length,
+                    percent: documents.length > 0 ? Math.round((classifiedDocsCount / documents.length) * 100) : 0,
+                    metricText: `${classifiedDocsCount}/${documents.length} classified`
+                  }}
+                  competencyData={{
+                    total: people.length,
+                    warnings: competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').length,
+                    percent: competencySummary.compliancePercent,
+                    metricText: `${competencySummary.compliancePercent}% valid`
+                  }}
+                  matrixData={{
+                    total: totalAssetChecks,
+                    compliant: compliantAssetChecks,
+                    warnings: overdueAssetChecks.length,
+                    percent: totalAssetChecks > 0 ? Math.round((compliantAssetChecks / totalAssetChecks) * 100) : 0,
+                    metricText: `${compliantAssetChecks}/${totalAssetChecks} checks`
+                  }}
+                  auditPacksData={{
+                    total: auditPacks.length,
+                    ready: auditPacks.filter(p => p.status === 'Ready').length,
+                    warnings: 0,
+                    percent: auditPacks.length > 0 ? Math.round((auditPacks.filter(p => p.status === 'Ready').length / auditPacks.length) * 100) : 0,
+                    metricText: `${auditPacks.filter(p => p.status === 'Ready').length}/${auditPacks.length} ready`
+                  }}
+                  reportsData={{
+                    total: reportViewCount,
+                    metricText: `${reportViewCount} available`
+                  }}
+                  onNodeMouseEnter={handleNodeMouseEnter}
+                  onNodeMouseLeave={handleNodeMouseLeave}
+                  onNodeClick={handleNodeClick}
+                />
               ) : (
                 /* Tabular List View of Workspace modules */
                 <div className="overflow-x-auto">
@@ -4057,6 +3601,20 @@ export default function DashboardPage() {
                       <option value="reduced">Reduced motion</option>
                     </select>
                   </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Hero Accent</label>
+                    <select
+                      value={modalCustomization.heroAccent || 'default'}
+                      onChange={(e) => setModalCustomization({ ...modalCustomization, heroAccent: e.target.value as DashboardCustomization['heroAccent'] })}
+                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                    >
+                      <option value="default">Default Blue/Violet</option>
+                      <option value="cyan-emerald">Cyan/Emerald</option>
+                      <option value="blue-amber">Blue/Amber</option>
+                      <option value="violet-rose">Violet/Rose</option>
+                      <option value="rainbow">Rainbow Spectrum</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -4117,8 +3675,9 @@ export default function DashboardPage() {
                     visibleRightRailSections: ['snapshot', 'focus', 'upcoming', 'action', 'activity'],
                     dataWindow: 'snapshot' as const,
                     motionPreference: 'standard' as const,
-      effectIntensity: 'standard' as const
-    };
+                    effectIntensity: 'standard' as const,
+                    heroAccent: 'default' as const
+                  };
                   setModalCustomization(defaultVal);
                 }}
                 className="px-4 py-2 border border-border rounded-xl text-xs font-bold text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
