@@ -102,7 +102,7 @@ export default function ExactHeroPage() {
               Locked Hero Graphic Replication (Interactive)
             </h1>
             <p className="text-xs text-slate-400">
-              Interactive prototype route. Toggle "Drag-and-Drop Mode" to reposition nodes in SVG space and view real-time HUD path adjustments.
+              Interactive prototype route. Toggle &ldquo;Drag-and-Drop Mode&rdquo; to reposition nodes in SVG space and view real-time HUD path adjustments.
             </p>
           </div>
         </div>

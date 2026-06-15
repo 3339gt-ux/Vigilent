@@ -18,6 +18,9 @@ interface ComplianceHeroCoreProps {
   effectIntensity: 'subtle' | 'standard' | 'vibrant';
   heroAccent?: 'default' | 'cyan-emerald' | 'blue-amber' | 'violet-rose' | 'rainbow' | 'gold-amber' | 'neon-green' | 'sunset-orange' | 'slate-monochrome';
   heroLayoutPreset?: 'balanced-orbit' | 'wide-command-map' | 'compact-core' | 'operations-focus' | 'presentation-mode';
+  dragEnabled?: boolean;
+  customPositions?: Record<string, { x: number; y: number }>;
+  onCustomPositionsChange?: (positions: Record<string, { x: number; y: number }>) => void;
   
   // Real data mappings
   requirementsData: { active: number; compliant: number; warnings: number; percent: number; metricText: string };
@@ -259,6 +262,9 @@ export default function ComplianceHeroCore({
   effectIntensity,
   heroAccent = 'default',
   heroLayoutPreset = 'balanced-orbit',
+  dragEnabled = false,
+  customPositions,
+  onCustomPositionsChange,
   requirementsData,
   vaultData,
   competencyData,
@@ -271,6 +277,7 @@ export default function ComplianceHeroCore({
 }: ComplianceHeroCoreProps) {
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [isCoreHovered, setIsCoreHovered] = useState(false);
+  const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
 
   // Retrieve active preset layout config mapping to coordinates presets
   const mappedPresetKey = heroLayoutPreset === 'wide-command-map' ? 'wide' :
@@ -278,6 +285,138 @@ export default function ComplianceHeroCore({
                           heroLayoutPreset === 'operations-focus' ? 'hexagon' :
                           heroLayoutPreset === 'presentation-mode' ? 'orbit' : 'orbit';
   const activePreset = PRESETS[mappedPresetKey];
+
+  // Helper to extract node position (customized vs preset default)
+  const getNodePos = (nodeId: string) => {
+    if (customPositions && customPositions[nodeId]) {
+      return customPositions[nodeId];
+    }
+    const presetNode = activePreset[nodeId] || activePreset.requirements;
+    return { x: presetNode.x, y: presetNode.y };
+  };
+
+  // Helper to dynamically calculate straight trace vector paths from core boundary (radius 124) to node center
+  const getPathsForNode = (nodeId: string, currentX: number, currentY: number) => {
+    const presetNode = activePreset[nodeId] || activePreset.requirements;
+    // If it is at the preset default position, use the high-fidelity handcrafted layout path
+    if (currentX === presetNode.x && currentY === presetNode.y) {
+      return {
+        mainPath: presetNode.mainPath,
+        subPaths: presetNode.subPaths || [],
+        junctions: presetNode.junctions || []
+      };
+    }
+
+    const cx = 500;
+    const cy = 300;
+    const dx = currentX - cx;
+    const dy = currentY - cy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist === 0) {
+      return { mainPath: '', subPaths: [], junctions: [] };
+    }
+
+    // Coordinates at core circle boundary (r=124)
+    const bx = cx + (dx / dist) * 124;
+    const by = cy + (dy / dist) * 124;
+
+    const mainPath = `M ${bx.toFixed(1)} ${by.toFixed(1)} L ${currentX.toFixed(1)} ${currentY.toFixed(1)}`;
+
+    // Parallel sub-traces offset perpendicularly by 8px
+    const px = (-dy / dist) * 8;
+    const py = (dx / dist) * 8;
+
+    const subPaths: string[] = [];
+    if (nodeId === 'competencies' || nodeId === 'audit-packs') {
+      subPaths.push(`M ${(bx + px).toFixed(1)} ${(by + py).toFixed(1)} L ${(currentX + px).toFixed(1)} ${(currentY + py).toFixed(1)}`);
+      subPaths.push(`M ${(bx - px).toFixed(1)} ${(by - py).toFixed(1)} L ${(currentX - px).toFixed(1)} ${(currentY - py).toFixed(1)}`);
+    } else {
+      const offsetDir = currentY < cy ? 1 : -1;
+      subPaths.push(`M ${(bx + px * offsetDir).toFixed(1)} ${(by + py * offsetDir).toFixed(1)} L ${(currentX + px * offsetDir).toFixed(1)} ${(currentY + py * offsetDir).toFixed(1)}`);
+    }
+
+    // HUD junction dot along the connector line at 35% distance
+    const ratio = 0.35;
+    const jx = bx + (currentX - bx) * ratio;
+    const jy = by + (currentY - by) * ratio;
+    const junctions = [{ cx: jx, cy: jy }];
+
+    return { mainPath, subPaths, junctions };
+  };
+
+  // Drag-and-drop mouse/pointer handlers
+  const handleMouseDown = (nodeId: string, e: React.MouseEvent) => {
+    if (!dragEnabled) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDraggingNodeId(nodeId);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!dragEnabled || !draggingNodeId) return;
+    const svg = e.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    
+    // Scale screen space to viewBox 1000x600 coordinates
+    const x = Math.round(((e.clientX - rect.left) / rect.width) * 1000);
+    const y = Math.round(((e.clientY - rect.top) / rect.height) * 600);
+    
+    // Clamping to prevent dragging off-screen
+    const clampedX = Math.max(50, Math.min(950, x));
+    const clampedY = Math.max(50, Math.min(550, y));
+
+    // Keep distance from central core to prevent excessive overlapping
+    const cx = 500;
+    const cy = 300;
+    const dx = clampedX - cx;
+    const dy = clampedY - cy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    
+    let finalX = clampedX;
+    let finalY = clampedY;
+    if (dist < 165) {
+      if (dist === 0) {
+        finalX = cx - 165;
+      } else {
+        finalX = Math.round(cx + (dx / dist) * 165);
+        finalY = Math.round(cy + (dy / dist) * 165);
+      }
+    }
+
+    const currentPositions = { ...customPositions } as Record<string, { x: number; y: number }>;
+    // Seed default positions if not present
+    for (const key of Object.keys(activePreset)) {
+      if (!currentPositions[key]) {
+        currentPositions[key] = { x: activePreset[key].x, y: activePreset[key].y };
+      }
+    }
+
+    // Check collision with other nodes (minimum distance 75px)
+    let hasCollision = false;
+    for (const [key, pos] of Object.entries(currentPositions)) {
+      if (key !== draggingNodeId) {
+        const ndx = finalX - pos.x;
+        const ndy = finalY - pos.y;
+        const ndist = Math.sqrt(ndx * ndx + ndy * ndy);
+        if (ndist < 75) {
+          hasCollision = true;
+          break;
+        }
+      }
+    }
+
+    if (!hasCollision) {
+      currentPositions[draggingNodeId] = { x: finalX, y: finalY };
+      if (onCustomPositionsChange) {
+        onCustomPositionsChange(currentPositions);
+      }
+    }
+  };
+
+  const handleMouseUpOrLeave = () => {
+    setDraggingNodeId(null);
+  };
 
   // Configuration for Hero Color Customization Variables
   const getAccentStyles = () => {
@@ -397,10 +536,10 @@ export default function ComplianceHeroCore({
   const nodes = [
     { 
       id: 'requirements', 
-      x: activePreset.requirements.x, 
-      y: activePreset.requirements.y, 
+      x: getNodePos('requirements').x, 
+      y: getNodePos('requirements').y, 
       label: 'Requirements', 
-      side: activePreset.requirements.side, 
+      side: getNodePos('requirements').x < 500 ? 'left' as const : 'right' as const, 
       icon: 'checklist',
       percent: requirementsData.percent,
       metricText: requirementsData.metricText,
@@ -409,10 +548,10 @@ export default function ComplianceHeroCore({
     },
     { 
       id: 'competencies', 
-      x: activePreset.competencies.x, 
-      y: activePreset.competencies.y, 
+      x: getNodePos('competencies').x, 
+      y: getNodePos('competencies').y, 
       label: 'Competency Matrix', 
-      side: activePreset.competencies.side, 
+      side: getNodePos('competencies').x < 500 ? 'left' as const : 'right' as const, 
       icon: 'users',
       percent: competencyData.percent,
       metricText: competencyData.metricText,
@@ -421,10 +560,10 @@ export default function ComplianceHeroCore({
     },
     { 
       id: 'matrix', 
-      x: activePreset.matrix.x, 
-      y: activePreset.matrix.y, 
+      x: getNodePos('matrix').x, 
+      y: getNodePos('matrix').y, 
       label: 'Asset Matrix', 
-      side: activePreset.matrix.side, 
+      side: getNodePos('matrix').x < 500 ? 'left' as const : 'right' as const, 
       icon: 'grid',
       percent: matrixData.percent,
       metricText: matrixData.metricText,
@@ -433,10 +572,10 @@ export default function ComplianceHeroCore({
     },
     { 
       id: 'vault', 
-      x: activePreset.vault.x, 
-      y: activePreset.vault.y, 
+      x: getNodePos('vault').x, 
+      y: getNodePos('vault').y, 
       label: 'Evidence Vault', 
-      side: activePreset.vault.side, 
+      side: getNodePos('vault').x < 500 ? 'left' as const : 'right' as const, 
       icon: 'folder',
       percent: vaultData.percent,
       metricText: vaultData.metricText,
@@ -445,10 +584,10 @@ export default function ComplianceHeroCore({
     },
     { 
       id: 'audit-packs', 
-      x: activePreset['audit-packs'].x, 
-      y: activePreset['audit-packs'].y, 
+      x: getNodePos('audit-packs').x, 
+      y: getNodePos('audit-packs').y, 
       label: 'Audit Pack Builder', 
-      side: activePreset['audit-packs'].side, 
+      side: getNodePos('audit-packs').x < 500 ? 'left' as const : 'right' as const, 
       icon: 'document',
       percent: auditPacksData.percent,
       metricText: auditPacksData.metricText,
@@ -457,10 +596,10 @@ export default function ComplianceHeroCore({
     },
     { 
       id: 'reports', 
-      x: activePreset.reports.x, 
-      y: activePreset.reports.y, 
+      x: getNodePos('reports').x, 
+      y: getNodePos('reports').y, 
       label: 'Reports', 
-      side: activePreset.reports.side, 
+      side: getNodePos('reports').x < 500 ? 'left' as const : 'right' as const, 
       icon: 'chart',
       percent: 100, // neutral snapshot bar
       metricText: reportsData.metricText,
@@ -496,9 +635,12 @@ export default function ComplianceHeroCore({
       
       {/* SVG Container */}
       <svg 
-        className="w-full h-auto aspect-[5/3] overflow-visible" 
+        className={`w-full h-auto aspect-[5/3] overflow-visible ${draggingNodeId ? 'cursor-grabbing' : ''}`}
         viewBox="0 0 1000 600"
         xmlns="http://www.w3.org/2000/svg"
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUpOrLeave}
+        onMouseLeave={handleMouseUpOrLeave}
       >
         <defs>
           {/* Custom theme styling based on intensity settings */}
@@ -602,21 +744,22 @@ export default function ComplianceHeroCore({
            ========================================== */}
         <g id="hero-connector-paths" strokeLinecap="round" strokeLinejoin="round">
           {nodes.map((node) => {
-            const isHovered = hoveredNode === node.id;
+            const isHovered = hoveredNode === node.id || draggingNodeId === node.id;
             const strokeColor = node.side === 'left' ? colors.cyanLine : colors.purpleLine;
             const ringColor = node.side === 'left' ? colors.cyanMuted : colors.purpleMuted;
-            const configItem = activePreset[node.id];
+            
+            const { mainPath, subPaths, junctions } = getPathsForNode(node.id, node.x, node.y);
 
             return (
               <g key={node.id} opacity={hoveredNode === null || isHovered ? 1 : 0.3} style={{ transition: 'opacity 0.3s ease' }}>
                 {/* Secondary/Sub parallel paths */}
-                {configItem.subPaths?.map((pathD, idx) => (
+                {subPaths.map((pathD, idx) => (
                   <path key={idx} d={pathD} fill="none" stroke={colors.lineMuted} strokeWidth="1.2" />
                 ))}
                 
                 {/* Main connector path */}
                 <path 
-                  d={configItem.mainPath} 
+                  d={mainPath} 
                   fill="none" 
                   stroke={isHovered ? strokeColor : ringColor} 
                   strokeWidth={isHovered ? '2.2' : '1.5'} 
@@ -627,7 +770,7 @@ export default function ComplianceHeroCore({
                 {/* Staggered Premium Light Sweep Line */}
                 {effectIntensity !== 'subtle' && (
                   <path
-                    d={configItem.mainPath}
+                    d={mainPath}
                     fill="none"
                     stroke="url(#hero-sweep-grad)"
                     strokeWidth={isHovered ? '3' : '2'}
@@ -640,7 +783,7 @@ export default function ComplianceHeroCore({
                 )}
 
                 {/* Junction nodes */}
-                {configItem.junctions?.map((junction, idx) => (
+                {junctions.map((junction, idx) => (
                   <circle 
                     key={idx}
                     cx={junction.cx} 
@@ -660,9 +803,11 @@ export default function ComplianceHeroCore({
         {!isMotionReduced && (
           <g id="hero-flowing-pulse-dots" className="pointer-events-none">
             {nodes.map((node) => {
-              const isHovered = hoveredNode === node.id;
+              const isHovered = hoveredNode === node.id || draggingNodeId === node.id;
               const strokeColor = node.side === 'left' ? colors.cyanLine : colors.purpleLine;
-              const configItem = activePreset[node.id];
+              const { mainPath } = getPathsForNode(node.id, node.x, node.y);
+              if (!mainPath) return null;
+              
               return (
                 <circle 
                   key={node.id} 
@@ -672,7 +817,7 @@ export default function ComplianceHeroCore({
                   opacity={hoveredNode === null || isHovered ? 1 : 0.1}
                 >
                   <animateMotion 
-                    path={configItem.mainPath} 
+                    path={mainPath} 
                     dur={node.id === 'requirements' ? '3.5s' : node.id === 'vault' ? '3.2s' : node.id === 'competencies' ? '3s' : node.id === 'audit-packs' ? '4s' : node.id === 'matrix' ? '3.8s' : '3.5s'} 
                     repeatCount="indefinite" 
                   />
@@ -912,7 +1057,7 @@ export default function ComplianceHeroCore({
               <g 
                 key={node.id}
                 id={`hero-node-${node.id}`}
-                className="cursor-pointer group outline-none"
+                className={`group outline-none select-none ${dragEnabled ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
                 onMouseEnter={(e) => {
                   setHoveredNode(node.id);
                   onNodeMouseEnter(node.id, e.currentTarget);
@@ -929,7 +1074,11 @@ export default function ComplianceHeroCore({
                   setHoveredNode(null);
                   onNodeMouseLeave();
                 }}
-                onClick={() => onNodeClick(node.id)}
+                onMouseDown={(e) => handleMouseDown(node.id, e)}
+                onClick={() => {
+                  if (dragEnabled) return;
+                  onNodeClick(node.id);
+                }}
                 role="button"
                 tabIndex={0}
                 aria-label={`Inspect ${node.label} module`}
@@ -990,6 +1139,20 @@ export default function ComplianceHeroCore({
                   filter={isHovered ? (node.side === 'left' ? 'url(#hero-glow-cyan)' : 'url(#hero-glow-purple)') : undefined}
                   className="transition-all duration-300"
                 />
+
+                {/* Dotted drag target ring */}
+                {dragEnabled && (
+                  <circle
+                    cx={node.x}
+                    cy={node.y}
+                    r="23"
+                    fill="none"
+                    stroke={strokeColor}
+                    strokeWidth="1"
+                    strokeDasharray="2 3"
+                    opacity="0.85"
+                  />
+                )}
 
                 {/* Node Solid Center Circle */}
                 <circle 

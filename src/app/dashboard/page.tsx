@@ -1980,7 +1980,7 @@ export default function DashboardPage() {
                 {isEditingDashboard ? (
                   <>
                     <span className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 dark:text-indigo-400 rounded-md text-[10px] font-black uppercase tracking-wider animate-pulse">
-                      Layout Sandbox
+                      Editing Hero Layout
                     </span>
                     <button
                       onClick={() => {
@@ -1992,6 +1992,20 @@ export default function DashboardPage() {
                       className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 border border-emerald-600/30 text-white rounded-md text-[10px] font-bold transition-all cursor-pointer shadow-sm"
                     >
                       Save Layout
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (tempCustomization) {
+                          setTempCustomization({
+                            ...tempCustomization,
+                            heroCustomPositions: undefined
+                          });
+                          setToast({ type: 'info', message: 'Positions reset to preset defaults. Save to apply.' });
+                        }
+                      }}
+                      className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-600 dark:text-amber-400 rounded-md text-[10px] font-bold transition-all cursor-pointer"
+                    >
+                      Reset Layout
                     </button>
                     <button
                       onClick={() => {
@@ -2077,56 +2091,71 @@ export default function DashboardPage() {
             {/* Central content depending on toggle */}
             <div className="p-5">
               {activeViewMode === 'system' ? (
-                <ComplianceHeroCore
-                  theme={theme}
-                  readinessScore={readinessScore}
-                  readinessLabel={readinessLabel}
-                  isMotionReduced={isMotionReduced}
-                  effectIntensity={currentCustomization.effectIntensity || 'standard'}
-                  heroAccent={currentCustomization.heroAccent || 'default'}
-                  heroLayoutPreset={currentCustomization.heroLayoutPreset || 'balanced-orbit'}
-                  requirementsData={{
-                    active: stats.activeRequirements,
-                    compliant: stats.compliantCount,
-                    warnings: stats.expiredCount,
-                    percent: stats.activeRequirements > 0 ? Math.round((stats.compliantCount / stats.activeRequirements) * 100) : 0,
-                    metricText: `${stats.compliantCount}/${stats.activeRequirements} compliant`
-                  }}
-                  vaultData={{
-                    total: documents.length,
-                    classified: classifiedDocsCount,
-                    warnings: unclassifiedDocs.length,
-                    percent: documents.length > 0 ? Math.round((classifiedDocsCount / documents.length) * 100) : 0,
-                    metricText: `${classifiedDocsCount}/${documents.length} classified`
-                  }}
-                  competencyData={{
-                    total: people.length,
-                    warnings: competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').length,
-                    percent: competencySummary.compliancePercent,
-                    metricText: `${competencySummary.compliancePercent}% valid`
-                  }}
-                  matrixData={{
-                    total: totalAssetChecks,
-                    compliant: compliantAssetChecks,
-                    warnings: overdueAssetChecks.length,
-                    percent: totalAssetChecks > 0 ? Math.round((compliantAssetChecks / totalAssetChecks) * 100) : 0,
-                    metricText: `${compliantAssetChecks}/${totalAssetChecks} checks`
-                  }}
-                  auditPacksData={{
-                    total: auditPacks.length,
-                    ready: auditPacks.filter(p => p.status === 'Ready').length,
-                    warnings: 0,
-                    percent: auditPacks.length > 0 ? Math.round((auditPacks.filter(p => p.status === 'Ready').length / auditPacks.length) * 100) : 0,
-                    metricText: `${auditPacks.filter(p => p.status === 'Ready').length}/${auditPacks.length} ready`
-                  }}
-                  reportsData={{
-                    total: reportViewCount,
-                    metricText: `${reportViewCount} available`
-                  }}
-                  onNodeMouseEnter={handleNodeMouseEnter}
-                  onNodeMouseLeave={handleNodeMouseLeave}
-                  onNodeClick={handleNodeClick}
-                />
+                <>
+                  {isEditingDashboard && (
+                    <div className="mb-4 p-2.5 bg-indigo-500/5 border border-indigo-500/15 text-indigo-600 dark:text-indigo-400 rounded-lg text-center text-[11px] font-medium flex items-center justify-center gap-2">
+                      <Move className="w-3.5 h-3.5 animate-pulse" />
+                      <span>Drag nodes to reposition. Connectors update automatically.</span>
+                    </div>
+                  )}
+                  <ComplianceHeroCore
+                    theme={theme}
+                    readinessScore={readinessScore}
+                    readinessLabel={readinessLabel}
+                    isMotionReduced={isMotionReduced}
+                    effectIntensity={currentCustomization.effectIntensity || 'standard'}
+                    heroAccent={currentCustomization.heroAccent || 'default'}
+                    heroLayoutPreset={currentCustomization.heroLayoutPreset || 'balanced-orbit'}
+                    dragEnabled={isEditingDashboard}
+                    customPositions={currentCustomization.heroCustomPositions}
+                    onCustomPositionsChange={(positions) => {
+                      if (tempCustomization) {
+                        setTempCustomization({ ...tempCustomization, heroCustomPositions: positions });
+                      }
+                    }}
+                    requirementsData={{
+                      active: stats.activeRequirements,
+                      compliant: stats.compliantCount,
+                      warnings: stats.expiredCount,
+                      percent: stats.activeRequirements > 0 ? Math.round((stats.compliantCount / stats.activeRequirements) * 100) : 0,
+                      metricText: `${stats.compliantCount}/${stats.activeRequirements} compliant`
+                    }}
+                    vaultData={{
+                      total: documents.length,
+                      classified: classifiedDocsCount,
+                      warnings: unclassifiedDocs.length,
+                      percent: documents.length > 0 ? Math.round((classifiedDocsCount / documents.length) * 100) : 0,
+                      metricText: `${classifiedDocsCount}/${documents.length} classified`
+                    }}
+                    competencyData={{
+                      total: people.length,
+                      warnings: competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').length,
+                      percent: competencySummary.compliancePercent,
+                      metricText: `${competencySummary.compliancePercent}% valid`
+                    }}
+                    matrixData={{
+                      total: totalAssetChecks,
+                      compliant: compliantAssetChecks,
+                      warnings: overdueAssetChecks.length,
+                      percent: totalAssetChecks > 0 ? Math.round((compliantAssetChecks / totalAssetChecks) * 100) : 0,
+                      metricText: `${compliantAssetChecks}/${totalAssetChecks} checks`
+                    }}
+                    auditPacksData={{
+                      total: auditPacks.length,
+                      ready: auditPacks.filter(p => p.status === 'Ready').length,
+                      warnings: 0,
+                      percent: auditPacks.length > 0 ? Math.round((auditPacks.filter(p => p.status === 'Ready').length / auditPacks.length) * 100) : 0,
+                      metricText: `${auditPacks.filter(p => p.status === 'Ready').length}/${auditPacks.length} ready`
+                    }}
+                    reportsData={{
+                      total: reportViewCount,
+                      metricText: `${reportViewCount} available`
+                    }}
+                    onNodeMouseEnter={handleNodeMouseEnter}
+                    onNodeMouseLeave={handleNodeMouseLeave}
+                    onNodeClick={handleNodeClick}
+                  />
+                </>
               ) : (
                 /* Tabular List View of Workspace modules */
                 <div className="overflow-x-auto">
@@ -2177,70 +2206,36 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Side-by-side Quick Actions & Upload area */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {/* Quick Actions (spans 2 columns) */}
-            <section className="md:col-span-2 bg-card border border-border rounded-xl p-4 flex flex-col justify-between shadow-xs">
-              <div className="mb-2">
-                <h3 className="text-xs font-black text-foreground uppercase tracking-wider">Program Quick Actions</h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">High-frequency compliance operations and records registration.</p>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2.5 mt-2">
-                {[
-                  { label: 'Upload Evidence', desc: 'Add file to vault', icon: <Upload className="w-3.5 h-3.5" />, onClick: () => setIsUploadModalOpen(true) },
-                  { label: 'Create Goal', desc: 'Add requirement', icon: <ShieldCheck className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('requirement') },
-                  { label: 'Add Competency', desc: 'Skills / training', icon: <Briefcase className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('competency') },
-                  { label: 'Create Action', desc: 'Register gap item', icon: <FileSpreadsheet className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('action') },
-                  { label: 'Build Pack', desc: 'Export audit pack', icon: <FileText className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('audit-pack') }
-                ].map(action => (
-                  <button
-                    key={action.label}
-                    onClick={action.onClick}
-                    className="p-2.5 bg-muted/40 hover:bg-card hover:border-indigo-500/40 hover:shadow-xs border border-border rounded-xl text-left transition-all duration-200 group flex flex-col justify-between min-h-[82px] cursor-pointer"
-                  >
-                    <div className="p-1.5 w-7 h-7 bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-all shrink-0 flex items-center justify-center">
-                      {action.icon}
-                    </div>
-                    <div className="space-y-0.5 mt-2">
-                      <span className="font-extrabold text-foreground text-[10px] block leading-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{action.label}</span>
-                      <p className="text-[8px] text-muted-foreground line-clamp-1 leading-none">{action.desc}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            {/* Quick Upload dropzone (spans 1 column) */}
-            <div className="md:col-span-1 bg-card border border-border rounded-xl p-4 flex flex-col justify-between shadow-xs">
-              <div className="mb-2">
-                <h3 className="text-xs font-black text-foreground uppercase tracking-wider">Discreet Dropzone</h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Quickly upload evidence directly to the vault.</p>
-              </div>
-              <div className="flex-1 flex items-center justify-center mt-2 min-h-[82px]">
-                <EvidenceDropzone
-                  label="Drag file here or click"
-                  helperText=""
-                  buttonLabel="Browse"
-                  compact
-                  multiple
-                  onUpload={async (file, updateStatus) => {
-                    updateStatus('saving record');
-                    const doc = await uploadDocument({
-                      file,
-                      title: file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim() || file.name,
-                      category: 'General',
-                      expiry_date: null,
-                      issue_date: new Date().toISOString().split('T')[0],
-                      metadata: { source: 'dashboard_quick_dropper' }
-                    });
-                    return doc;
-                  }}
-                  onComplete={docs => setUploadSuccess(`Uploaded ${docs.length} document${docs.length === 1 ? '' : 's'} successfully.`)}
-                  findDuplicates={findPossibleDuplicateDocuments}
-                />
-              </div>
+          {/* Program Quick Actions */}
+          <section className="bg-card border border-border rounded-xl p-4 flex flex-col justify-between shadow-xs">
+            <div className="mb-2">
+              <h3 className="text-xs font-black text-foreground uppercase tracking-wider">Program Quick Actions</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5">High-frequency compliance operations and records registration.</p>
             </div>
-          </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mt-2">
+              {[
+                { label: 'Upload Evidence', desc: 'Add file to vault', icon: <Upload className="w-3.5 h-3.5" />, onClick: () => setIsUploadModalOpen(true) },
+                { label: 'Create Goal', desc: 'Add requirement', icon: <ShieldCheck className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('requirement') },
+                { label: 'Add Competency', desc: 'Skills / training', icon: <Briefcase className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('competency') },
+                { label: 'Create Action', desc: 'Register gap item', icon: <FileSpreadsheet className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('action') },
+                { label: 'Build Pack', desc: 'Export audit pack', icon: <FileText className="w-3.5 h-3.5" />, onClick: () => setActiveQuickActionModal('audit-pack') }
+              ].map(action => (
+                <button
+                  key={action.label}
+                  onClick={action.onClick}
+                  className="p-2.5 bg-muted/40 hover:bg-card hover:border-indigo-500/40 hover:shadow-xs border border-border rounded-xl text-left transition-all duration-200 group flex flex-col justify-between min-h-[82px] cursor-pointer"
+                >
+                  <div className="p-1.5 w-7 h-7 bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-all shrink-0 flex items-center justify-center">
+                    {action.icon}
+                  </div>
+                  <div className="space-y-0.5 mt-2">
+                    <span className="font-extrabold text-foreground text-[10px] block leading-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{action.label}</span>
+                    <p className="text-[8px] text-muted-foreground line-clamp-1 leading-none">{action.desc}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
         </div>
 
         {/* Right-side live intelligence rail */}
@@ -2527,6 +2522,72 @@ export default function DashboardPage() {
                     )}
                   </div>
                 )}
+            </div>
+          </div>
+        )}
+
+          {/* Rail Section 3: Expiring Soon */}
+          {customization.visibleRightRailSections.includes('expiring') && (
+            <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-3 flex flex-col max-h-[280px]">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Expiring Soon</span>
+                <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 rounded-md">
+                  {expiringSoonItems.length} items
+                </span>
+              </div>
+              <div className="flex-1 overflow-y-auto pr-0.5 no-scrollbar space-y-2">
+                {expiringSoonItems.slice(0, 4).map(item => (
+                  <Link
+                    key={item.id}
+                    href={item.link || '#'}
+                    className="p-2 bg-card hover:bg-muted/40 border border-border hover:border-indigo-500/30 rounded-xl text-left transition-all duration-200 flex items-start gap-2.5 cursor-pointer"
+                  >
+                    <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <span className="font-extrabold block text-foreground truncate text-[11px] leading-tight">{item.requirement.title}</span>
+                      <span className="text-[9px] text-muted-foreground block truncate leading-none mt-0.5">{item.requirement.category}</span>
+                      <span className="text-[9px] font-black text-amber-500 block mt-1">
+                        Due: {item.requirement.next_due_date || 'N/A'}
+                      </span>
+                    </div>
+                  </Link>
+                ))}
+                {expiringSoonItems.length === 0 && (
+                  <p className="text-[10px] text-muted-foreground italic text-center py-8">No items expiring in next 30 days.</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Rail Section 4: Evidence Upload Console */}
+          {customization.visibleRightRailSections.includes('upload-console') && (
+            <div className="bg-card border border-border rounded-xl p-4 shadow-xs space-y-3">
+              <div>
+                <h3 className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Evidence Upload Console</h3>
+                <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">Quickly drop or browse evidence files to upload privately to the vault.</p>
+              </div>
+              <div className="min-h-[110px] flex items-center justify-center">
+                <EvidenceDropzone
+                  label="Drag file here or click"
+                  helperText="Files are securely uploaded to the private vault"
+                  buttonLabel="Browse Files"
+                  compact
+                  multiple
+                  onUpload={async (file, updateStatus) => {
+                    updateStatus('saving record');
+                    const doc = await uploadDocument({
+                      file,
+                      title: file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim() || file.name,
+                      category: 'General',
+                      expiry_date: null,
+                      issue_date: new Date().toISOString().split('T')[0],
+                      metadata: { source: 'dashboard_quick_dropper' }
+                    });
+                    return doc;
+                  }}
+                  onComplete={docs => setUploadSuccess(`Uploaded ${docs.length} document${docs.length === 1 ? '' : 's'} successfully.`)}
+                  findDuplicates={findPossibleDuplicateDocuments}
+                />
               </div>
             </div>
           )}
