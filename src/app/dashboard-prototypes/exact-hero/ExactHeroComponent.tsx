@@ -8,17 +8,18 @@ interface ExactHeroComponentProps {
 
 export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  const [isCoreHovered, setIsCoreHovered] = useState(false);
 
   // Theme-specific color definitions
   const colors = {
-    bgGlowCyan: theme === 'dark' ? 'rgba(0, 240, 255, 0.12)' : 'rgba(2, 132, 199, 0.06)',
-    bgGlowPurple: theme === 'dark' ? 'rgba(168, 85, 247, 0.12)' : 'rgba(124, 58, 237, 0.06)',
+    bgGlowCyan: theme === 'dark' ? 'rgba(0, 240, 255, 0.12)' : 'rgba(2, 132, 199, 0.08)',
+    bgGlowPurple: theme === 'dark' ? 'rgba(168, 85, 247, 0.12)' : 'rgba(124, 58, 237, 0.08)',
     cyanLine: theme === 'dark' ? '#00f0ff' : '#0284c7',
     purpleLine: theme === 'dark' ? '#a855f7' : '#7c3aed',
-    cyanMuted: theme === 'dark' ? 'rgba(0, 240, 255, 0.3)' : 'rgba(2, 132, 199, 0.25)',
-    purpleMuted: theme === 'dark' ? 'rgba(168, 85, 247, 0.3)' : 'rgba(124, 58, 237, 0.25)',
-    lineMuted: theme === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)',
-    textLabel: theme === 'dark' ? '#94a3b8' : '#475569',
+    cyanMuted: theme === 'dark' ? 'rgba(0, 240, 255, 0.3)' : 'rgba(2, 132, 199, 0.45)',
+    purpleMuted: theme === 'dark' ? 'rgba(168, 85, 247, 0.3)' : 'rgba(124, 58, 237, 0.45)',
+    lineMuted: theme === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.16)',
+    textLabel: theme === 'dark' ? '#94a3b8' : '#334155',
     centerCoreGlow: theme === 'dark' ? 'rgba(0, 240, 255, 0.8)' : 'rgba(2, 132, 199, 0.7)',
   };
 
@@ -104,23 +105,23 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
         xmlns="http://www.w3.org/2000/svg"
       >
         <defs>
-          {/* Neon Glow Filters */}
+          {/* Neon Glow Filters - Reduced stdDeviation in light theme to prevent muddy edges */}
           <filter id="glow-cyan-filter" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="6" result="blur" />
+            <feGaussianBlur stdDeviation={theme === 'dark' ? '6' : '3.5'} result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
           <filter id="glow-purple-filter" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="6" result="blur" />
+            <feGaussianBlur stdDeviation={theme === 'dark' ? '6' : '3.5'} result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
           <filter id="glow-strong-filter" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="10" result="blur" />
+            <feGaussianBlur stdDeviation={theme === 'dark' ? '10' : '5'} result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
@@ -129,11 +130,11 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
 
           {/* Gradients */}
           <radialGradient id="cyan-radial" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#00f0ff" stopOpacity="0.15" />
+            <stop offset="0%" stopColor="#00f0ff" stopOpacity={theme === 'dark' ? '0.15' : '0.10'} />
             <stop offset="100%" stopColor="#00f0ff" stopOpacity="0" />
           </radialGradient>
           <radialGradient id="purple-radial" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#a855f7" stopOpacity="0.15" />
+            <stop offset="0%" stopColor="#a855f7" stopOpacity={theme === 'dark' ? '0.15' : '0.10'} />
             <stop offset="100%" stopColor="#a855f7" stopOpacity="0" />
           </radialGradient>
           <linearGradient id="cyan-purple-grad" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -159,13 +160,15 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
            ========================================== */}
         <g id="connector-paths" strokeLinecap="round" strokeLinejoin="round">
           {/* TOP-LEFT CONNECTOR */}
-          <g id="path-top-left" opacity={hoveredNode === null || hoveredNode === 'checklist' ? 1 : 0.35}>
+          <g id="path-top-left" opacity={hoveredNode === null || hoveredNode === 'checklist' ? 1 : 0.35} style={{ transition: 'opacity 0.3s ease' }}>
             {/* Sub-trace */}
             <path 
               d="M 415 215 L 380 180 L 315 180 L 270 135 L 240 135" 
               fill="none" 
-              stroke={colors.lineMuted} 
+              stroke={hoveredNode === 'checklist' ? colors.cyanLine : colors.lineMuted} 
               strokeWidth="1.2" 
+              opacity={hoveredNode === 'checklist' ? 0.85 : 0.3}
+              className="transition-all duration-300"
             />
             {/* Main Trace */}
             <path 
@@ -177,24 +180,35 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
               className="transition-all duration-300"
             />
             {/* Junction dot */}
-            <circle cx="370" cy="170" r="3" fill={colors.cyanLine} />
+            <circle 
+              cx="370" 
+              cy="170" 
+              r={hoveredNode === 'checklist' ? 4.5 : 3} 
+              fill={colors.cyanLine} 
+              filter={hoveredNode === 'checklist' ? 'url(#glow-cyan-filter)' : undefined}
+              className="transition-all duration-300"
+            />
           </g>
 
           {/* LEFT CONNECTOR */}
-          <g id="path-left" opacity={hoveredNode === null || hoveredNode === 'users' ? 1 : 0.35}>
+          <g id="path-left" opacity={hoveredNode === null || hoveredNode === 'users' ? 1 : 0.35} style={{ transition: 'opacity 0.3s ease' }}>
             {/* Upper sub-trace */}
             <path 
               d="M 375 292 L 340 292 L 330 300 L 260 300 L 250 292 L 160 292" 
               fill="none" 
-              stroke={colors.lineMuted} 
+              stroke={hoveredNode === 'users' ? colors.cyanLine : colors.lineMuted} 
               strokeWidth="1.2" 
+              opacity={hoveredNode === 'users' ? 0.85 : 0.3}
+              className="transition-all duration-300"
             />
             {/* Lower sub-trace */}
             <path 
               d="M 375 308 L 340 308 L 330 300 L 260 300 L 250 308 L 160 308" 
               fill="none" 
-              stroke={colors.lineMuted} 
+              stroke={hoveredNode === 'users' ? colors.cyanLine : colors.lineMuted} 
               strokeWidth="1.2" 
+              opacity={hoveredNode === 'users' ? 0.85 : 0.3}
+              className="transition-all duration-300"
             />
             {/* Main Trace */}
             <path 
@@ -206,17 +220,26 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
               className="transition-all duration-300"
             />
             {/* Junction dot */}
-            <circle cx="350" cy="300" r="3.5" fill={colors.cyanLine} />
+            <circle 
+              cx="350" 
+              cy="300" 
+              r={hoveredNode === 'users' ? 5 : 3.5} 
+              fill={colors.cyanLine} 
+              filter={hoveredNode === 'users' ? 'url(#glow-cyan-filter)' : undefined}
+              className="transition-all duration-300"
+            />
           </g>
 
           {/* BOTTOM-LEFT CONNECTOR */}
-          <g id="path-bottom-left" opacity={hoveredNode === null || hoveredNode === 'grid' ? 1 : 0.35}>
+          <g id="path-bottom-left" opacity={hoveredNode === null || hoveredNode === 'grid' ? 1 : 0.35} style={{ transition: 'opacity 0.3s ease' }}>
             {/* Sub-trace */}
             <path 
               d="M 415 385 L 380 420 L 315 420 L 270 465 L 240 465" 
               fill="none" 
-              stroke={colors.lineMuted} 
+              stroke={hoveredNode === 'grid' ? colors.cyanLine : colors.lineMuted} 
               strokeWidth="1.2" 
+              opacity={hoveredNode === 'grid' ? 0.85 : 0.3}
+              className="transition-all duration-300"
             />
             {/* Main Trace */}
             <path 
@@ -228,17 +251,26 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
               className="transition-all duration-300"
             />
             {/* Junction dot */}
-            <circle cx="370" cy="430" r="3" fill={colors.cyanLine} />
+            <circle 
+              cx="370" 
+              cy="430" 
+              r={hoveredNode === 'grid' ? 4.5 : 3} 
+              fill={colors.cyanLine} 
+              filter={hoveredNode === 'grid' ? 'url(#glow-cyan-filter)' : undefined}
+              className="transition-all duration-300"
+            />
           </g>
 
           {/* TOP-RIGHT CONNECTOR */}
-          <g id="path-top-right" opacity={hoveredNode === null || hoveredNode === 'folder' ? 1 : 0.35}>
+          <g id="path-top-right" opacity={hoveredNode === null || hoveredNode === 'folder' ? 1 : 0.35} style={{ transition: 'opacity 0.3s ease' }}>
             {/* Sub-trace */}
             <path 
               d="M 585 215 L 620 180 L 685 180 L 730 135 L 760 135" 
               fill="none" 
-              stroke={colors.lineMuted} 
+              stroke={hoveredNode === 'folder' ? colors.purpleLine : colors.lineMuted} 
               strokeWidth="1.2" 
+              opacity={hoveredNode === 'folder' ? 0.85 : 0.3}
+              className="transition-all duration-300"
             />
             {/* Main Trace */}
             <path 
@@ -250,24 +282,35 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
               className="transition-all duration-300"
             />
             {/* Junction dot */}
-            <circle cx="630" cy="170" r="3" fill={colors.purpleLine} />
+            <circle 
+              cx="630" 
+              cy="170" 
+              r={hoveredNode === 'folder' ? 4.5 : 3} 
+              fill={colors.purpleLine} 
+              filter={hoveredNode === 'folder' ? 'url(#glow-purple-filter)' : undefined}
+              className="transition-all duration-300"
+            />
           </g>
 
           {/* RIGHT CONNECTOR */}
-          <g id="path-right" opacity={hoveredNode === null || hoveredNode === 'document' ? 1 : 0.35}>
+          <g id="path-right" opacity={hoveredNode === null || hoveredNode === 'document' ? 1 : 0.35} style={{ transition: 'opacity 0.3s ease' }}>
             {/* Upper sub-trace */}
             <path 
               d="M 625 292 L 660 292 L 670 300 L 740 300 L 750 292 L 840 292" 
               fill="none" 
-              stroke={colors.lineMuted} 
+              stroke={hoveredNode === 'document' ? colors.purpleLine : colors.lineMuted} 
               strokeWidth="1.2" 
+              opacity={hoveredNode === 'document' ? 0.85 : 0.3}
+              className="transition-all duration-300"
             />
             {/* Lower sub-trace */}
             <path 
               d="M 625 308 L 660 308 L 670 300 L 740 300 L 750 308 L 840 308" 
               fill="none" 
-              stroke={colors.lineMuted} 
+              stroke={hoveredNode === 'document' ? colors.purpleLine : colors.lineMuted} 
               strokeWidth="1.2" 
+              opacity={hoveredNode === 'document' ? 0.85 : 0.3}
+              className="transition-all duration-300"
             />
             {/* Main Trace */}
             <path 
@@ -279,17 +322,26 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
               className="transition-all duration-300"
             />
             {/* Junction dot */}
-            <circle cx="650" cy="300" r="3.5" fill={colors.purpleLine} />
+            <circle 
+              cx="650" 
+              cy="300" 
+              r={hoveredNode === 'document' ? 5 : 3.5} 
+              fill={colors.purpleLine} 
+              filter={hoveredNode === 'document' ? 'url(#glow-purple-filter)' : undefined}
+              className="transition-all duration-300"
+            />
           </g>
 
           {/* BOTTOM-RIGHT CONNECTOR */}
-          <g id="path-bottom-right" opacity={hoveredNode === null || hoveredNode === 'chart' ? 1 : 0.35}>
+          <g id="path-bottom-right" opacity={hoveredNode === null || hoveredNode === 'chart' ? 1 : 0.35} style={{ transition: 'opacity 0.3s ease' }}>
             {/* Sub-trace */}
             <path 
               d="M 585 385 L 620 420 L 685 420 L 730 465 L 760 465" 
               fill="none" 
-              stroke={colors.lineMuted} 
+              stroke={hoveredNode === 'chart' ? colors.purpleLine : colors.lineMuted} 
               strokeWidth="1.2" 
+              opacity={hoveredNode === 'chart' ? 0.85 : 0.3}
+              className="transition-all duration-300"
             />
             {/* Main Trace */}
             <path 
@@ -301,7 +353,14 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
               className="transition-all duration-300"
             />
             {/* Junction dot */}
-            <circle cx="630" cy="430" r="3" fill={colors.purpleLine} />
+            <circle 
+              cx="630" 
+              cy="430" 
+              r={hoveredNode === 'chart' ? 4.5 : 3} 
+              fill={colors.purpleLine} 
+              filter={hoveredNode === 'chart' ? 'url(#glow-purple-filter)' : undefined}
+              className="transition-all duration-300"
+            />
           </g>
         </g>
 
@@ -310,27 +369,63 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
            ========================================== */}
         <g id="flowing-pulse-dots" className="pointer-events-none">
           {/* Top-Left Flow */}
-          <circle r="3" fill={colors.cyanLine} filter="url(#glow-cyan-filter)">
+          <circle 
+            r="3" 
+            fill={colors.cyanLine} 
+            filter="url(#glow-cyan-filter)"
+            opacity={hoveredNode === null || hoveredNode === 'checklist' ? 1 : 0.15}
+            style={{ transition: 'opacity 0.3s ease' }}
+          >
             <animateMotion path="M 405 205 L 370 170 L 310 170 L 260 120 L 220 120" dur="3s" repeatCount="indefinite" />
           </circle>
           {/* Left Flow */}
-          <circle r="3" fill={colors.cyanLine} filter="url(#glow-cyan-filter)">
+          <circle 
+            r="3" 
+            fill={colors.cyanLine} 
+            filter="url(#glow-cyan-filter)"
+            opacity={hoveredNode === null || hoveredNode === 'users' ? 1 : 0.15}
+            style={{ transition: 'opacity 0.3s ease' }}
+          >
             <animateMotion path="M 380 300 L 130 300" dur="2.5s" repeatCount="indefinite" />
           </circle>
           {/* Bottom-Left Flow */}
-          <circle r="3" fill={colors.cyanLine} filter="url(#glow-cyan-filter)">
+          <circle 
+            r="3" 
+            fill={colors.cyanLine} 
+            filter="url(#glow-cyan-filter)"
+            opacity={hoveredNode === null || hoveredNode === 'grid' ? 1 : 0.15}
+            style={{ transition: 'opacity 0.3s ease' }}
+          >
             <animateMotion path="M 405 395 L 370 430 L 310 430 L 260 480 L 220 480" dur="3.2s" repeatCount="indefinite" />
           </circle>
           {/* Top-Right Flow */}
-          <circle r="3" fill={colors.purpleLine} filter="url(#glow-purple-filter)">
+          <circle 
+            r="3" 
+            fill={colors.purpleLine} 
+            filter="url(#glow-purple-filter)"
+            opacity={hoveredNode === null || hoveredNode === 'folder' ? 1 : 0.15}
+            style={{ transition: 'opacity 0.3s ease' }}
+          >
             <animateMotion path="M 595 205 L 630 170 L 690 170 L 740 120 L 780 120" dur="2.8s" repeatCount="indefinite" />
           </circle>
           {/* Right Flow */}
-          <circle r="3" fill={colors.purpleLine} filter="url(#glow-purple-filter)">
+          <circle 
+            r="3" 
+            fill={colors.purpleLine} 
+            filter="url(#glow-purple-filter)"
+            opacity={hoveredNode === null || hoveredNode === 'document' ? 1 : 0.15}
+            style={{ transition: 'opacity 0.3s ease' }}
+          >
             <animateMotion path="M 620 300 L 870 300" dur="3.5s" repeatCount="indefinite" />
           </circle>
           {/* Bottom-Right Flow */}
-          <circle r="3" fill={colors.purpleLine} filter="url(#glow-purple-filter)">
+          <circle 
+            r="3" 
+            fill={colors.purpleLine} 
+            filter="url(#glow-purple-filter)"
+            opacity={hoveredNode === null || hoveredNode === 'chart' ? 1 : 0.15}
+            style={{ transition: 'opacity 0.3s ease' }}
+          >
             <animateMotion path="M 595 395 L 630 430 L 690 430 L 740 480 L 780 480" dur="3s" repeatCount="indefinite" />
           </circle>
         </g>
@@ -443,8 +538,8 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
             return <line key={i} x1={x} y1="296" x2={x} y2="304" stroke={colors.cyanMuted} strokeWidth="1" />;
           })}
 
-          {/* Radial Ticks (Inner Circle Dial) */}
-          <g id="compass-ticks-inner">
+          {/* Radial Ticks (Inner Circle Dial) - Glow boost on core hover */}
+          <g id="compass-ticks-inner" opacity={isCoreHovered ? 1.0 : 0.6} style={{ transition: 'opacity 0.3s ease' }}>
             {Array.from({ length: 36 }).map((_, i) => {
               const angle = (i * 10 * Math.PI) / 180;
               const innerRadius = 40;
@@ -462,32 +557,84 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
                   y2={y2} 
                   stroke={colors.cyanLine} 
                   strokeWidth="0.8" 
-                  opacity="0.6"
                 />
               );
             })}
           </g>
 
-          {/* Central Bright Dot & Aura */}
-          <g id="center-light-source">
+          {/* Central Bright Dot & Aura & Score Readout */}
+          <g 
+            id="center-light-source"
+            className="cursor-pointer"
+            onMouseEnter={() => setIsCoreHovered(true)}
+            onMouseLeave={() => setIsCoreHovered(false)}
+          >
+            {/* Outward pulse breathing circle (core hover interaction) */}
             <circle 
               cx="500" 
               cy="300" 
-              r="24" 
+              r="62" 
               fill="none" 
               stroke={colors.cyanLine} 
-              strokeWidth="2.5" 
-              filter="url(#glow-cyan-filter)"
+              strokeWidth="1.2" 
+              opacity={isCoreHovered ? 0.65 : 0.15} 
+              className={isCoreHovered ? "proto-animate-pulse" : undefined}
+              style={{ transition: 'all 0.3s ease' }}
             />
-            {/* Pulsing Core */}
+
+            {/* Inner core circle holding HUD readout details */}
             <circle 
               cx="500" 
               cy="300" 
-              r="12" 
-              fill={theme === 'dark' ? '#ffffff' : colors.cyanLine} 
-              filter="url(#glow-strong-filter)"
-              className="proto-animate-pulse"
+              r="37" 
+              fill={theme === 'dark' ? '#0f172a' : '#ffffff'} 
+              stroke={colors.cyanLine} 
+              strokeWidth={isCoreHovered ? '2.2' : '1.5'} 
+              filter={isCoreHovered ? "url(#glow-strong-filter)" : "url(#glow-cyan-filter)"}
+              style={{ transition: 'all 0.3s ease' }}
             />
+
+            {/* Primary overall system score readout */}
+            <text
+              x="500"
+              y="294"
+              textAnchor="middle"
+              fill={theme === 'dark' ? '#ffffff' : '#0f172a'}
+              fontSize="20"
+              fontWeight="bold"
+              style={{ letterSpacing: '-0.5px', userSelect: 'none' }}
+            >
+              94%
+            </text>
+            
+            {/* Secondary Score Label */}
+            <text
+              x="500"
+              y="308"
+              textAnchor="middle"
+              fill={colors.textLabel}
+              fontSize="6"
+              fontWeight="semibold"
+              letterSpacing="0.8"
+              style={{ userSelect: 'none' }}
+            >
+              SYSTEM SCORE
+            </text>
+
+            {/* Tertiary live telemetry indicator */}
+            <text
+              x="500"
+              y="320"
+              textAnchor="middle"
+              fill={theme === 'dark' ? '#00f0ff' : '#0284c7'}
+              fontSize="5"
+              fontWeight="bold"
+              letterSpacing="0.5"
+              opacity={isCoreHovered ? 1.0 : 0.75}
+              style={{ userSelect: 'none' }}
+            >
+              ● SYSTEM LIVE
+            </text>
           </g>
         </g>
 

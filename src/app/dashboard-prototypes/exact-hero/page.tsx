@@ -9,7 +9,7 @@ export default function ExactHeroPage() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   return (
-    <div className={`min-h-screen flex flex-col transition-colors duration-300 ${theme === 'dark' ? 'bg-[#020617] text-slate-100' : 'bg-slate-50/50 text-slate-900'}`}>
+    <div className={`min-h-screen flex flex-col transition-colors duration-300 ${theme === 'dark' ? 'bg-[#020617] text-slate-100' : 'bg-[#f8fafc] text-slate-900'}`}>
       
       {/* Scoped CSS animations for rotation and pulse */}
       <style dangerouslySetInnerHTML={{ __html: `
