@@ -32,7 +32,15 @@ import {
   FolderArchive,
   BarChart3,
   Settings,
-  ArrowRight
+  ArrowRight,
+  Move,
+  Eye,
+  EyeOff,
+  ArrowUp,
+  ArrowDown,
+  RefreshCw,
+  Check,
+  RotateCcw
 } from 'lucide-react';
 
 const scoreTone = (score: number | null) => {
@@ -83,7 +91,30 @@ type DashboardCustomization = {
   motionPreference: 'standard' | 'reduced';
   effectIntensity: 'subtle' | 'standard' | 'vibrant';
   heroAccent?: 'default' | 'cyan-emerald' | 'blue-amber' | 'violet-rose' | 'rainbow' | 'gold-amber' | 'neon-green' | 'sunset-orange' | 'slate-monochrome';
-  heroLayoutPreset?: 'default' | 'hexagon' | 'orbit' | 'wide';
+  heroLayoutPreset?: 'balanced-orbit' | 'wide-command-map' | 'compact-core' | 'operations-focus' | 'presentation-mode';
+  heroCustomPositions?: Record<string, { x: number; y: number }>;
+  rightRailOrder?: string[];
+  lowerPanelsOrder?: string[];
+};
+
+const DEFAULT_CUSTOMIZATION_SETTINGS: DashboardCustomization = {
+  visibleKpis: ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
+  kpiOrder: ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
+  visiblePanels: ['trend', 'statusDonut', 'readinessGauge', 'trainingRing', 'assetCategory', 'riskGaps', 'alerts'],
+  defaultViewMode: 'system',
+  defaultRailTab: 'focus',
+  density: 'comfortable',
+  heroStyle: 'map',
+  heroDetailLevel: 'balanced',
+  visibleRightRailSections: ['snapshot', 'focus', 'upcoming', 'action', 'activity', 'expiring', 'upload-console'],
+  dataWindow: 'snapshot',
+  motionPreference: 'standard',
+  effectIntensity: 'standard',
+  heroAccent: 'default',
+  heroLayoutPreset: 'balanced-orbit',
+  heroCustomPositions: undefined,
+  rightRailOrder: ['snapshot', 'focus-card', 'expiring', 'upload-console'],
+  lowerPanelsOrder: ['quickActions', 'trend', 'statusDonut', 'readinessGauge', 'trainingRing', 'assetCategory', 'riskGaps', 'alerts']
 };
 
 export default function DashboardPage() {
@@ -131,49 +162,35 @@ export default function DashboardPage() {
   const readinessScore = readinessReport.overallScore;
   const readinessDisplay = readinessScore === null ? 'N/A' : `${readinessScore}%`;
 
-  // Customization state
   const [customization, setCustomization] = useState<DashboardCustomization>(() => {
-    const defaultSettings = {
-      visibleKpis: ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
-      kpiOrder: ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
-      visiblePanels: ['trend', 'statusDonut', 'readinessGauge', 'trainingRing', 'assetCategory', 'riskGaps', 'alerts'],
-      defaultViewMode: 'system' as const,
-      defaultRailTab: 'focus' as const,
-      density: 'comfortable' as const,
-      heroStyle: 'map' as const,
-      heroDetailLevel: 'balanced' as const,
-      visibleRightRailSections: ['snapshot', 'focus', 'upcoming', 'action', 'activity'],
-      dataWindow: 'snapshot' as const,
-      motionPreference: 'standard' as const,
-      effectIntensity: 'standard' as const,
-      heroAccent: 'default' as const,
-      heroLayoutPreset: 'default' as const
-    };
-    if (typeof window === 'undefined') return defaultSettings;
+    if (typeof window === 'undefined') return DEFAULT_CUSTOMIZATION_SETTINGS;
     try {
       const key = `vygilence_dashboard_customization_${user?.id || 'anon'}_${organization?.id || 'default'}`;
       const stored = localStorage.getItem(key);
       if (stored) {
         const parsed = JSON.parse(stored);
         return {
-          visibleKpis: parsed.visibleKpis || defaultSettings.visibleKpis,
-          kpiOrder: parsed.kpiOrder || defaultSettings.kpiOrder,
-          visiblePanels: parsed.visiblePanels || defaultSettings.visiblePanels,
-          defaultViewMode: parsed.defaultViewMode || defaultSettings.defaultViewMode,
-          defaultRailTab: parsed.defaultRailTab || defaultSettings.defaultRailTab,
-          density: parsed.density || defaultSettings.density,
-          heroStyle: parsed.heroStyle || defaultSettings.heroStyle,
-          heroDetailLevel: parsed.heroDetailLevel || defaultSettings.heroDetailLevel,
-          visibleRightRailSections: parsed.visibleRightRailSections || defaultSettings.visibleRightRailSections,
-          dataWindow: parsed.dataWindow || defaultSettings.dataWindow,
-          motionPreference: parsed.motionPreference || defaultSettings.motionPreference,
-          effectIntensity: parsed.effectIntensity || defaultSettings.effectIntensity,
+          visibleKpis: parsed.visibleKpis || DEFAULT_CUSTOMIZATION_SETTINGS.visibleKpis,
+          kpiOrder: parsed.kpiOrder || DEFAULT_CUSTOMIZATION_SETTINGS.kpiOrder,
+          visiblePanels: parsed.visiblePanels || DEFAULT_CUSTOMIZATION_SETTINGS.visiblePanels,
+          defaultViewMode: parsed.defaultViewMode || DEFAULT_CUSTOMIZATION_SETTINGS.defaultViewMode,
+          defaultRailTab: parsed.defaultRailTab || DEFAULT_CUSTOMIZATION_SETTINGS.defaultRailTab,
+          density: parsed.density || DEFAULT_CUSTOMIZATION_SETTINGS.density,
+          heroStyle: parsed.heroStyle || DEFAULT_CUSTOMIZATION_SETTINGS.heroStyle,
+          heroDetailLevel: parsed.heroDetailLevel || DEFAULT_CUSTOMIZATION_SETTINGS.heroDetailLevel,
+          visibleRightRailSections: parsed.visibleRightRailSections || DEFAULT_CUSTOMIZATION_SETTINGS.visibleRightRailSections,
+          dataWindow: parsed.dataWindow || DEFAULT_CUSTOMIZATION_SETTINGS.dataWindow,
+          motionPreference: parsed.motionPreference || DEFAULT_CUSTOMIZATION_SETTINGS.motionPreference,
+          effectIntensity: parsed.effectIntensity || DEFAULT_CUSTOMIZATION_SETTINGS.effectIntensity,
           heroAccent: parsed.heroAccent || 'default',
-          heroLayoutPreset: parsed.heroLayoutPreset || 'default'
+          heroLayoutPreset: parsed.heroLayoutPreset || 'balanced-orbit',
+          heroCustomPositions: parsed.heroCustomPositions,
+          rightRailOrder: parsed.rightRailOrder || DEFAULT_CUSTOMIZATION_SETTINGS.rightRailOrder,
+          lowerPanelsOrder: parsed.lowerPanelsOrder || DEFAULT_CUSTOMIZATION_SETTINGS.lowerPanelsOrder
         };
       }
     } catch {}
-    return defaultSettings;
+    return DEFAULT_CUSTOMIZATION_SETTINGS;
   });
 
   const [viewMode, setViewMode] = useState<ViewMode>(
@@ -191,6 +208,117 @@ export default function DashboardPage() {
     setTimeout(() => setClickedItemId(null), 150);
     if (action) action();
   };
+
+  // Edit Dashboard Mode state
+  const [isEditingDashboard, setIsEditingDashboard] = useState(false);
+  const [tempCustomization, setTempCustomization] = useState<DashboardCustomization | null>(null);
+
+  const currentCustomization = useMemo(() => {
+    return isEditingDashboard && tempCustomization ? tempCustomization : customization;
+  }, [isEditingDashboard, tempCustomization, customization]);
+
+  const handleMoveWidget = useCallback((widgetId: string, direction: 'up' | 'down') => {
+    if (!tempCustomization) return;
+    const inRail = tempCustomization.rightRailOrder?.includes(widgetId);
+    const orderArray = inRail 
+      ? [...(tempCustomization.rightRailOrder || [])] 
+      : [...(tempCustomization.lowerPanelsOrder || [])];
+    
+    const index = orderArray.indexOf(widgetId);
+    if (index === -1) return;
+
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= orderArray.length) return;
+
+    const temp = orderArray[index];
+    orderArray[index] = orderArray[targetIndex];
+    orderArray[targetIndex] = temp;
+
+    if (inRail) {
+      setTempCustomization({ ...tempCustomization, rightRailOrder: orderArray });
+    } else {
+      setTempCustomization({ ...tempCustomization, lowerPanelsOrder: orderArray });
+    }
+  }, [tempCustomization]);
+
+  const handleToggleWidgetLocation = useCallback((widgetId: string) => {
+    if (!tempCustomization) return;
+    let rightOrder = [...(tempCustomization.rightRailOrder || [])];
+    let lowerOrder = [...(tempCustomization.lowerPanelsOrder || [])];
+    
+    if (rightOrder.includes(widgetId)) {
+      // Move from rail to lower area
+      rightOrder = rightOrder.filter(id => id !== widgetId);
+      lowerOrder.push(widgetId);
+    } else if (lowerOrder.includes(widgetId)) {
+      // Move from lower area to rail
+      lowerOrder = lowerOrder.filter(id => id !== widgetId);
+      rightOrder.push(widgetId);
+    }
+
+    setTempCustomization({
+      ...tempCustomization,
+      rightRailOrder: rightOrder,
+      lowerPanelsOrder: lowerOrder
+    });
+  }, [tempCustomization]);
+
+  const handleHideWidget = useCallback((widgetId: string) => {
+    if (!tempCustomization) return;
+    
+    if (['snapshot', 'focus-card', 'expiring', 'upload-console'].includes(widgetId)) {
+      if (widgetId === 'focus-card') {
+        const newSections = tempCustomization.visibleRightRailSections.filter(
+          id => !['focus', 'upcoming', 'action', 'activity'].includes(id)
+        );
+        setTempCustomization({ ...tempCustomization, visibleRightRailSections: newSections });
+      } else {
+        const newSections = tempCustomization.visibleRightRailSections.filter(id => id !== widgetId);
+        setTempCustomization({ ...tempCustomization, visibleRightRailSections: newSections });
+      }
+    } else {
+      const newPanels = tempCustomization.visiblePanels.filter(id => id !== widgetId);
+      setTempCustomization({ ...tempCustomization, visiblePanels: newPanels });
+    }
+  }, [tempCustomization]);
+
+  const handleShowWidget = useCallback((widgetId: string) => {
+    if (!tempCustomization) return;
+    if (['snapshot', 'focus-card', 'expiring', 'upload-console'].includes(widgetId)) {
+      if (widgetId === 'focus-card') {
+        const newSections = Array.from(new Set([...tempCustomization.visibleRightRailSections, 'focus', 'upcoming', 'action', 'activity']));
+        setTempCustomization({ ...tempCustomization, visibleRightRailSections: newSections });
+      } else {
+        const newSections = Array.from(new Set([...tempCustomization.visibleRightRailSections, widgetId]));
+        setTempCustomization({ ...tempCustomization, visibleRightRailSections: newSections });
+      }
+    } else {
+      const newPanels = Array.from(new Set([...tempCustomization.visiblePanels, widgetId]));
+      setTempCustomization({ ...tempCustomization, visiblePanels: newPanels });
+    }
+  }, [tempCustomization]);
+
+  const isWidgetVisible = useCallback((widgetId: string) => {
+    const cust = tempCustomization || customization;
+    if (widgetId === 'focus-card') {
+      return ['focus', 'upcoming', 'action', 'activity'].some(id => cust.visibleRightRailSections.includes(id));
+    }
+    if (widgetId === 'upload-console') {
+      return cust.visibleRightRailSections.includes('upload-console');
+    }
+    if (['snapshot', 'expiring'].includes(widgetId)) {
+      return cust.visibleRightRailSections.includes(widgetId);
+    }
+    if (widgetId === 'quickActions') {
+      return cust.visiblePanels.includes('quickActions') ?? true;
+    }
+    return cust.visiblePanels.includes(widgetId);
+  }, [tempCustomization, customization]);
+
+  const isInRightRail = useCallback((widgetId: string) => {
+    const cust = tempCustomization || customization;
+    return cust.rightRailOrder?.includes(widgetId) ?? false;
+  }, [tempCustomization, customization]);
 
   const densityStyles = useMemo(() => {
     return {
@@ -594,6 +722,17 @@ export default function DashboardPage() {
       if (!item.requirement.next_due_date) return false;
       const dueDate = new Date(item.requirement.next_due_date);
       return dueDate <= d && dueDate >= today;
+    });
+  }, [allTasksAndExpiries, today]);
+
+  const expiringSoonItems = useMemo(() => {
+    const d30 = new Date(today);
+    d30.setDate(d30.getDate() + 30);
+    return allTasksAndExpiries.filter(item => {
+      if (item.isOverdue) return false;
+      if (!item.requirement.next_due_date) return false;
+      const dueDate = new Date(item.requirement.next_due_date);
+      return dueDate <= d30 && dueDate >= today;
     });
   }, [allTasksAndExpiries, today]);
 
@@ -1838,16 +1977,58 @@ export default function DashboardPage() {
                 <p className="text-[11px] text-muted-foreground mt-0.5">Interactive program maps and status monitoring of system modules.</p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => {
-                    setModalCustomization(customization);
-                    setIsCustomizationOpen(true);
-                  }}
-                  className="px-2.5 py-1 bg-muted hover:bg-muted/80 border border-border rounded-md text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer text-muted-foreground hover:text-foreground"
-                  title="Customize Dashboard"
-                >
-                  <Settings className="w-3.5 h-3.5" /> Customize
-                </button>
+                {isEditingDashboard ? (
+                  <>
+                    <span className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 dark:text-indigo-400 rounded-md text-[10px] font-black uppercase tracking-wider animate-pulse">
+                      Layout Sandbox
+                    </span>
+                    <button
+                      onClick={() => {
+                        if (tempCustomization) {
+                          handleSaveCustomization(tempCustomization);
+                        }
+                        setIsEditingDashboard(false);
+                      }}
+                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 border border-emerald-600/30 text-white rounded-md text-[10px] font-bold transition-all cursor-pointer shadow-sm"
+                    >
+                      Save Layout
+                    </button>
+                    <button
+                      onClick={() => {
+                        setTempCustomization(null);
+                        setIsEditingDashboard(false);
+                      }}
+                      className="px-2.5 py-1 bg-muted hover:bg-muted/80 border border-border rounded-md text-[10px] font-bold text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => {
+                        setModalCustomization(customization);
+                        setIsCustomizationOpen(true);
+                      }}
+                      className="px-2.5 py-1 bg-muted hover:bg-muted/80 border border-border rounded-md text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer text-muted-foreground hover:text-foreground"
+                      title="Customize Dashboard"
+                    >
+                      <Settings className="w-3.5 h-3.5" /> Customize
+                    </button>
+                    {customization.heroStyle !== 'list' && (
+                      <button
+                        onClick={() => {
+                          setTempCustomization({ ...customization });
+                          setIsEditingDashboard(true);
+                        }}
+                        className="px-2.5 py-1 bg-muted hover:bg-muted/80 border border-border rounded-md text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer text-muted-foreground hover:text-foreground"
+                        title="Interactive layout sandbox"
+                      >
+                        Edit Layout
+                      </button>
+                    )}
+                  </>
+                )}
                 {prevCustomization && (
                   <button
                     onClick={() => {
@@ -1901,9 +2082,9 @@ export default function DashboardPage() {
                   readinessScore={readinessScore}
                   readinessLabel={readinessLabel}
                   isMotionReduced={isMotionReduced}
-                  effectIntensity={customization.effectIntensity || 'standard'}
-                  heroAccent={customization.heroAccent || 'default'}
-                  heroLayoutPreset={customization.heroLayoutPreset || 'default'}
+                  effectIntensity={currentCustomization.effectIntensity || 'standard'}
+                  heroAccent={currentCustomization.heroAccent || 'default'}
+                  heroLayoutPreset={currentCustomization.heroLayoutPreset || 'balanced-orbit'}
                   requirementsData={{
                     active: stats.activeRequirements,
                     compliant: stats.compliantCount,
@@ -3638,14 +3819,15 @@ export default function DashboardPage() {
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Hero Layout Preset</label>
                     <select
-                      value={modalCustomization.heroLayoutPreset || 'default'}
+                      value={modalCustomization.heroLayoutPreset || 'balanced-orbit'}
                       onChange={(e) => setModalCustomization({ ...modalCustomization, heroLayoutPreset: e.target.value as DashboardCustomization['heroLayoutPreset'] })}
                       className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
                     >
-                      <option value="default">Default Circuitry</option>
-                      <option value="hexagon">Symmetric Hexagon</option>
-                      <option value="orbit">Focused Orbit</option>
-                      <option value="wide">Wide Field</option>
+                      <option value="balanced-orbit">Balanced Orbit (Default)</option>
+                      <option value="wide-command-map">Wide Command Map</option>
+                      <option value="compact-core">Compact Core</option>
+                      <option value="operations-focus">Operations Focus</option>
+                      <option value="presentation-mode">Presentation Mode</option>
                     </select>
                   </div>
                 </div>
@@ -3696,23 +3878,7 @@ export default function DashboardPage() {
             <div className="border-t border-border/60 pt-4 mt-6 flex justify-between items-center gap-3">
               <button
                 onClick={() => {
-                  const defaultVal = {
-                    visibleKpis: ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
-                    kpiOrder: ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'],
-                    visiblePanels: ['trend', 'statusDonut', 'readinessGauge', 'trainingRing', 'assetCategory', 'riskGaps', 'alerts'],
-                    defaultViewMode: 'system' as const,
-                    defaultRailTab: 'focus' as const,
-                    density: 'comfortable' as const,
-                    heroStyle: 'map' as const,
-                    heroDetailLevel: 'balanced' as const,
-                    visibleRightRailSections: ['snapshot', 'focus', 'upcoming', 'action', 'activity'],
-                    dataWindow: 'snapshot' as const,
-                    motionPreference: 'standard' as const,
-                    effectIntensity: 'standard' as const,
-                    heroAccent: 'default' as const,
-                    heroLayoutPreset: 'default' as const
-                  };
-                  setModalCustomization(defaultVal);
+                  setModalCustomization(DEFAULT_CUSTOMIZATION_SETTINGS);
                 }}
                 className="px-4 py-2 border border-border rounded-xl text-xs font-bold text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
               >

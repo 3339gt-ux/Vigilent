@@ -17,7 +17,7 @@ interface ComplianceHeroCoreProps {
   isMotionReduced: boolean;
   effectIntensity: 'subtle' | 'standard' | 'vibrant';
   heroAccent?: 'default' | 'cyan-emerald' | 'blue-amber' | 'violet-rose' | 'rainbow' | 'gold-amber' | 'neon-green' | 'sunset-orange' | 'slate-monochrome';
-  heroLayoutPreset?: 'default' | 'hexagon' | 'orbit' | 'wide';
+  heroLayoutPreset?: 'balanced-orbit' | 'wide-command-map' | 'compact-core' | 'operations-focus' | 'presentation-mode';
   
   // Real data mappings
   requirementsData: { active: number; compliant: number; warnings: number; percent: number; metricText: string };
@@ -258,7 +258,7 @@ export default function ComplianceHeroCore({
   isMotionReduced,
   effectIntensity,
   heroAccent = 'default',
-  heroLayoutPreset = 'default',
+  heroLayoutPreset = 'balanced-orbit',
   requirementsData,
   vaultData,
   competencyData,
@@ -272,8 +272,12 @@ export default function ComplianceHeroCore({
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [isCoreHovered, setIsCoreHovered] = useState(false);
 
-  // Retrieve active preset layout config
-  const activePreset = PRESETS[heroLayoutPreset] || PRESETS.default;
+  // Retrieve active preset layout config mapping to coordinates presets
+  const mappedPresetKey = heroLayoutPreset === 'wide-command-map' ? 'wide' :
+                          heroLayoutPreset === 'compact-core' ? 'default' :
+                          heroLayoutPreset === 'operations-focus' ? 'hexagon' :
+                          heroLayoutPreset === 'presentation-mode' ? 'orbit' : 'orbit';
+  const activePreset = PRESETS[mappedPresetKey];
 
   // Configuration for Hero Color Customization Variables
   const getAccentStyles = () => {
