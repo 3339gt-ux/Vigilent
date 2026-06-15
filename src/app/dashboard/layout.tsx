@@ -3,7 +3,7 @@
 import React, { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
+import LumenLogo from '@/components/brand/LumenLogo';
 import { useApp } from '@/context/AppContext';
 import {
   LayoutDashboard,
@@ -266,7 +266,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
         <div className="w-12 h-12 flex items-center justify-center animate-pulse">
-          <Image src="/brand/vygilence-mark.png" alt="Vygilence Logo" width={32} height={32} className="object-contain" />
+          <LumenLogo iconOnly variant="auto" height={28} />
         </div>
         <p className="text-xs text-muted-foreground font-medium animate-pulse">Checking credentials & workspace config...</p>
       </div>
@@ -301,7 +301,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="w-full bg-amber-500/10 dark:bg-amber-950/20 border-b border-amber-500/25 py-2 px-4 flex items-center justify-center gap-2 print:hidden">
         <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
         <span className="text-[11px] md:text-xs text-muted-foreground text-center leading-normal">
-          <strong>Notice:</strong> Vygilence is an evidence repository. It <strong>does not</strong> generate legal advice, build safety templates, or certify regulatory compliance.
+          <strong>Notice:</strong> LUMÉN is an evidence repository. It <strong>does not</strong> generate legal advice, build safety templates, or certify regulatory compliance.
         </span>
       </div>
 
@@ -314,19 +314,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {/* Logo */}
             <div className={`flex ${sidebarCollapsed ? 'flex-col gap-2' : 'items-start justify-between gap-3'}`}>
               <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3 min-w-0'}`}>
-                <div className="w-9 h-9 flex items-center justify-center shrink-0">
-                  <Image
-                    src={theme === 'light' ? '/brand/vygilence-mark-light.png' : '/brand/vygilence-mark.png'}
-                    alt="Vygilence Logo"
-                    width={36}
-                    height={36}
-                    className="object-contain"
-                  />
-                </div>
-                {!sidebarCollapsed && (
-                  <div className="min-w-0">
-                    <span className="font-extrabold tracking-tight text-sm block">Vygilence</span>
-                    <span className="text-[10px] text-muted-foreground block truncate">{organization.name}</span>
+                {sidebarCollapsed ? (
+                  <LumenLogo iconOnly variant={theme} height={32} />
+                ) : (
+                  <div className="flex flex-col gap-0.5">
+                    <LumenLogo variant={theme} height={28} />
+                    <span className="text-[9px] text-muted-foreground block truncate pl-[34px] mt-[-4px] leading-tight">{organization.name}</span>
                   </div>
                 )}
               </div>
@@ -441,16 +434,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           <header className="lg:hidden h-14 bg-card border-b border-border/80 px-4 flex items-center justify-between z-50 print:hidden">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 flex items-center justify-center">
-                <Image
-                  src={theme === 'light' ? '/brand/vygilence-mark-light.png' : '/brand/vygilence-mark.png'}
-                  alt="Vygilence Logo"
-                  width={32}
-                  height={32}
-                  className="object-contain"
-                />
-              </div>
-              <span className="font-extrabold text-xs">{organization.name}</span>
+              <LumenLogo variant={theme} height={28} />
+              <span className="text-[10px] text-muted-foreground border-l border-border pl-2 ml-1 truncate max-w-[120px]">{organization.name}</span>
             </div>
 
             <div className="flex items-center gap-1.5">
@@ -556,7 +541,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="space-y-1">
               <h3 className="text-base font-extrabold text-indigo-950 dark:text-indigo-50">Drop evidence files here</h3>
               <p className="text-xs text-muted-foreground">
-                Release files to start uploading securely to Vygilence
+                Release files to start uploading securely to LUMÉN
               </p>
             </div>
           </div>

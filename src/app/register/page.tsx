@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
+import LumenLogo from '@/components/brand/LumenLogo';
 import { useApp } from '@/context/AppContext';
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 
@@ -71,7 +71,7 @@ export default function RegisterPage() {
         <div className="max-w-md w-full mx-auto space-y-6 py-8">
           <div className="flex flex-col gap-2">
             <div className="w-12 h-12 flex items-center justify-center">
-              <Image src="/brand/vygilence-mark.png" alt="Vygilence Logo" width={48} height={48} className="object-contain" />
+              <LumenLogo variant="auto" height={36} />
             </div>
             <h1 className="text-3xl font-extrabold tracking-tight mt-4" id="register-heading">
               Initialize your workspace
@@ -144,7 +144,7 @@ export default function RegisterPage() {
                   className="mt-1 accent-indigo-600 rounded border-border"
                 />
                 <label htmlFor="register-disclaimer-checkbox" className="text-[11px] leading-relaxed text-muted-foreground">
-                  I acknowledge and agree that Vygilence functions purely as a tracking database. It <strong>does not</strong> generate legal advice, build regulatory safety statements, or claim compliance status on behalf of my business.
+                  I acknowledge and agree that LUMÉN functions purely as a tracking database. It <strong>does not</strong> generate legal advice, build regulatory safety statements, or claim compliance status on behalf of my business.
                 </label>
               </div>
             </div>
@@ -182,8 +182,7 @@ export default function RegisterPage() {
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[80px] pointer-events-none"></div>
 
         <div className="flex items-center gap-2 z-10">
-          <Image src="/brand/vygilence-mark.png" alt="Vygilence Logo" width={24} height={24} className="object-contain" />
-          <span className="font-bold tracking-wider">Vygilence</span>
+          <LumenLogo variant="dark" height={28} />
         </div>
 
         <div className="z-10 space-y-6 max-w-lg">
@@ -202,7 +201,7 @@ export default function RegisterPage() {
         </div>
 
         <div className="z-10 text-[10px] text-zinc-500">
-          Vygilence is currently a prototype and requires production security hardening before live use.
+          LUMÉN is currently a prototype and requires production security hardening before live use.
         </div>
       </div>
     </div>

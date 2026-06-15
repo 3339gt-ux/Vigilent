@@ -1,6 +1,6 @@
 # Premium Interactive Landing Dashboard
 
-This document provides a technical walkthrough of the redesigned premium interactive landing dashboard implemented for Vygilence on `/dashboard`. It describes the design layout, interactive elements, theme system integration, data sources, and accessibility features.
+This document provides a technical walkthrough of the redesigned premium interactive landing dashboard implemented for LUMÉN on `/dashboard`. It describes the design layout, interactive elements, theme system integration, data sources, and accessibility features.
 
 ---
 

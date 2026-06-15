@@ -280,7 +280,7 @@ const profileFromAuthUser = (authUser: User): Profile => ({
   full_name:
     typeof authUser.user_metadata?.full_name === 'string' && authUser.user_metadata.full_name
       ? authUser.user_metadata.full_name
-      : authUser.email || 'Vygilence User',
+      : authUser.email || 'LUMÉN User',
   role: 'Viewer',
   created_at: authUser.created_at || new Date().toISOString(),
   updated_at: new Date().toISOString()

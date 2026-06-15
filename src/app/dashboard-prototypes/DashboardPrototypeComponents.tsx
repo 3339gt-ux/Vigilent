@@ -161,14 +161,14 @@ function LegalTooltip() {
         onMouseEnter={() => setShow(true)}
         onMouseLeave={() => setShow(false)}
         onClick={() => setShow(!show)}
-        aria-label="Vygilence Legal Info"
+        aria-label="LUMÉN Legal Info"
         className="text-zinc-500 hover:text-indigo-400 p-0.5 rounded transition-colors"
       >
         <Info className="h-4 w-4" />
       </button>
       {show && (
         <div className="absolute left-6 top-1/2 -translate-y-1/2 w-64 p-3 rounded-lg border border-border bg-popover text-popover-foreground text-xs shadow-xl z-50 transition-all">
-          <p className="font-semibold mb-1">Vygilence Compliance Platform</p>
+          <p className="font-semibold mb-1">LUMÉN Compliance Platform</p>
           <p className="text-muted-foreground leading-relaxed">
             This platform is an evidence intelligence hub. It organizes audit files, tracks expiries, and builds pack templates. It does not provide legal safety advice, risk assessments, or guarantee regulatory compliance.
           </p>
@@ -194,9 +194,9 @@ export function ConceptExecutiveCommandCentre() {
         <div className="p-5 border-b border-slate-900 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <div className="h-7 w-7 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white shadow-[0_0_15px_rgba(99,102,241,0.5)]">
-              V
+              L
             </div>
-            <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-indigo-200 to-indigo-500 bg-clip-text text-transparent">Vygilence</span>
+            <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-indigo-200 to-indigo-500 bg-clip-text text-transparent">LUMÉN</span>
             <LegalTooltip />
           </div>
         </div>
@@ -658,7 +658,7 @@ export function ConceptExecutiveCommandCentre() {
         {/* Global Bottom Legal Footer */}
         <footer className="h-8 border-t border-slate-900 bg-slate-950 px-6 flex items-center justify-between text-[10px] text-slate-500">
           <span>Disclaimer: Visual telemetry prototype display. All values are static simulation examples.</span>
-          <span>© 2026 Vygilence Assurance Systems.</span>
+          <span>© 2026 LUMÉN Assurance Systems.</span>
         </footer>
       </main>
     </div>
@@ -679,9 +679,9 @@ export function ConceptComplianceControlRoom() {
         <div className="p-5 border-b border-slate-850 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <div className="h-7 w-7 rounded bg-indigo-600 flex items-center justify-center font-bold text-white shadow-md">
-              V
+              L
             </div>
-            <span className="font-bold text-lg tracking-tight text-slate-200">Vygilence</span>
+            <span className="font-bold text-lg tracking-tight text-slate-200">LUMÉN</span>
             <LegalTooltip />
           </div>
         </div>
@@ -774,7 +774,7 @@ export function ConceptComplianceControlRoom() {
                 <div className="absolute right-0 mt-2 w-56 rounded-lg border border-slate-800 bg-slate-900 p-2 shadow-2xl z-30">
                   <div className="p-2 border-b border-slate-850 mb-1 text-xs">
                     <div className="font-semibold text-slate-300">Compliance Manager</div>
-                    <div className="text-slate-500">manager@vygilence-demo.com</div>
+                    <div className="text-slate-500">manager@lumen-demo.com</div>
                   </div>
                   <button type="button" className="w-full text-left px-2 py-1.5 rounded hover:bg-slate-800 text-xs text-slate-400 hover:text-slate-200" onClick={() => setShowProfileMenu(false)}>Profile Settings</button>
                 </div>
@@ -914,7 +914,7 @@ export function ConceptComplianceControlRoom() {
 
         <footer className="h-8 border-t border-slate-850 bg-slate-900 px-6 flex items-center justify-between text-[10px] text-slate-500">
           <span>Control Room Dashboard Prototype • Static Display Only</span>
-          <span>Vygilence Systems</span>
+          <span>LUMÉN Systems</span>
         </footer>
       </main>
     </div>
@@ -935,9 +935,9 @@ export function ConceptEvidenceIntelligenceHub() {
         <div className="p-5 border-b border-slate-150 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <div className="h-7 w-7 rounded bg-indigo-600 flex items-center justify-center font-bold text-white shadow-sm">
-              V
+              L
             </div>
-            <span className="font-bold text-lg tracking-tight text-slate-800">Vygilence</span>
+            <span className="font-bold text-lg tracking-tight text-slate-800">LUMÉN</span>
             <LegalTooltip />
           </div>
         </div>
@@ -1029,7 +1029,7 @@ export function ConceptEvidenceIntelligenceHub() {
                 <div className="absolute right-0 mt-2 w-56 rounded-lg border border-slate-200 bg-white p-2 shadow-2xl z-30">
                   <div className="p-2 border-b border-slate-100 mb-1 text-xs">
                     <div className="font-semibold text-slate-800">Jane Doe</div>
-                    <div className="text-slate-500">auditor@vygilence-demo.com</div>
+                    <div className="text-slate-500">auditor@lumen-demo.com</div>
                   </div>
                   <button type="button" className="w-full text-left px-2 py-1.5 rounded hover:bg-slate-50 text-xs text-slate-600 hover:text-slate-900" onClick={() => setShowProfileMenu(false)}>Profile Settings</button>
                 </div>
@@ -1142,7 +1142,7 @@ export function ConceptEvidenceIntelligenceHub() {
 
         <footer className="h-8 border-t border-slate-200 bg-white px-6 flex items-center justify-between text-[10px] text-slate-400">
           <span>Evidence Intelligence Hub Prototype • Static Display</span>
-          <span>© 2026 Vygilence</span>
+          <span>© 2026 LUMÉN</span>
         </footer>
       </main>
     </div>

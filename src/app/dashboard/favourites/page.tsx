@@ -921,7 +921,7 @@ export default function FavouritesPage() {
                       className="bg-muted border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground font-semibold outline-none cursor-pointer w-full"
                     >
                       <option value="name">Name A-Z</option>
-                      <option value="module">Vygilence Module</option>
+                      <option value="module">LUMÉN Module</option>
                       <option value="status-priority">Status Priority</option>
                       <option value="date-soonest">Due Date (Soonest)</option>
                       <option value="type">Favourite Type</option>
@@ -1030,7 +1030,7 @@ export default function FavouritesPage() {
                   className="bg-muted border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground font-semibold outline-none cursor-pointer"
                 >
                   <option value="name">Name A-Z</option>
-                  <option value="module">Vygilence Module</option>
+                  <option value="module">LUMÉN Module</option>
                   <option value="status-priority">Status Priority</option>
                   <option value="date-soonest">Due Date (Soonest)</option>
                   <option value="type">Favourite Type</option>

@@ -14,10 +14,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Vygilence - Audit Readiness & Evidence Intelligence Platform",
+  title: "LUMÉN - Audit Readiness & Evidence Intelligence Platform",
   description: "Securely store compliance evidence, track certificate expiry dates, monitor training records, build audit packs, and identify gaps for transport and warehousing.",
   keywords: "audit readiness, compliance evidence, fleet tracking, driver cpc, logistics compliance, warehousing audit, O-licence, MOT safety testing",
-  authors: [{ name: "Vygilence" }],
+  authors: [{ name: "LUMÉN" }],
 };
 
 export const viewport = {

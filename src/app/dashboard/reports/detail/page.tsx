@@ -503,8 +503,8 @@ export default function ReportDetailPage() {
       tone: 'primary',
       onConfirm: () => {
         const csvContent = [
-          [`Vygilence Detail Report - ${source}`],
-          [`Workspace: ${organization?.name || 'Vygilence Workspace'}`],
+          [`LUMÉN Detail Report - ${source}`],
+          [`Workspace: ${organization?.name || 'LUMÉN Workspace'}`],
           [`Generated At: ${new Date().toLocaleString()}`],
           [`Filters: Status=${statusFilter}, Category=${categoryFilter}, Owner=${ownerFilter}, Risk=${riskFilter}`],
           [],
@@ -518,7 +518,7 @@ export default function ReportDetailPage() {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.setAttribute('download', `vygilence-${source.toLowerCase()}-detail-${new Date().toISOString().split('T')[0]}.csv`);
+        link.setAttribute('download', `lumen-${source.toLowerCase()}-detail-${new Date().toISOString().split('T')[0]}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -1246,7 +1246,7 @@ export default function ReportDetailPage() {
       {/* Report Trust Note */}
       <div className="text-[10px] text-muted-foreground text-center border-t border-border/60 pt-6 mt-12">
         <span className="font-extrabold text-indigo-650 dark:text-indigo-400 block mb-1">REPORT TRUST NOTE</span>
-        Reports reflect the records currently held in Vygilence and depend on the completeness and accuracy of the underlying data.
+        Reports reflect the records currently held in LUMÉN and depend on the completeness and accuracy of the underlying data.
       </div>
 
       <ConfirmDialog request={confirmRequest} onCancel={() => setConfirmRequest(null)} />

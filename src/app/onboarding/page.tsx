@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
+import LumenLogo from '@/components/brand/LumenLogo';
 import { useApp } from '@/context/AppContext';
 import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
 import { getFriendlyErrorMessage } from '@/lib/supabaseDiagnostics';
@@ -66,7 +66,7 @@ export default function OnboardingPage() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
         <div className="w-12 h-12 flex items-center justify-center animate-pulse">
-          <Image src="/brand/vygilence-mark.png" alt="Vygilence Logo" width={32} height={32} className="object-contain" />
+          <LumenLogo iconOnly variant="auto" height={28} />
         </div>
         <p className="text-xs text-muted-foreground font-medium animate-pulse">Checking workspace status...</p>
       </div>
@@ -88,7 +88,7 @@ export default function OnboardingPage() {
         <div className="max-w-md w-full mx-auto space-y-8">
           <div className="flex flex-col gap-2">
             <div className="w-14 h-14 rounded-2xl bg-zinc-950 dark:bg-muted/30 border border-border flex items-center justify-center shadow-sm">
-              <Image src="/brand/vygilence-mark.png" alt="Vygilence Brand Mark" width={32} height={32} className="object-contain" />
+              <LumenLogo iconOnly variant="auto" height={32} />
             </div>
             <h1 className="text-3xl font-extrabold tracking-tight mt-4">
               Create your organisation
@@ -184,8 +184,7 @@ export default function OnboardingPage() {
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[80px] pointer-events-none"></div>
         <div className="flex items-center gap-2 z-10">
-          <Image src="/brand/vygilence-mark.png" alt="Vygilence Logo" width={24} height={24} className="object-contain" />
-          <span className="font-bold tracking-wider">Vygilence</span>
+          <LumenLogo variant="dark" height={28} />
         </div>
         <div className="z-10 space-y-6 max-w-lg">
           <h2 className="text-4xl font-extrabold leading-tight">
@@ -196,7 +195,7 @@ export default function OnboardingPage() {
           </p>
         </div>
         <div className="z-10 text-[10px] text-zinc-500">
-          Vygilence uses Supabase Auth and organisation membership checks for production workspace access.
+          LUMÉN uses Supabase Auth and organisation membership checks for production workspace access.
         </div>
       </div>
     </div>

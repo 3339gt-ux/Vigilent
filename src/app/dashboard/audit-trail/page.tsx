@@ -438,7 +438,7 @@ export default function AuditTrailPage() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `vygilence-audit-trail-${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute('download', `lumen-audit-trail-${new Date().toISOString().split('T')[0]}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -488,7 +488,7 @@ export default function AuditTrailPage() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `vygilence-audit-trail-${new Date().toISOString().split('T')[0]}.json`);
+      link.setAttribute('download', `lumen-audit-trail-${new Date().toISOString().split('T')[0]}.json`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

@@ -796,7 +796,7 @@ export default function CompetencyMatrixPage() {
       tone: 'primary',
       onConfirm: () => {
         try {
-          exportCsv(`vygilence-people-${scope}-export-${exportDateStamp()}.csv`, peopleExportRows(rows));
+          exportCsv(`lumen-people-${scope}-export-${exportDateStamp()}.csv`, peopleExportRows(rows));
           setToast({ type: 'success', message: 'Teammates list exported successfully.' });
         } catch {
           setToast({ type: 'error', message: 'Failed to export teammates list.' });
@@ -3919,7 +3919,7 @@ export default function CompetencyMatrixPage() {
                         tone: 'primary',
                         onConfirm: () => {
                           try {
-                            exportCsv(`vygilence-competency-records-${selectedPerson.id}-${exportDateStamp()}.csv`, competencyRecordExportRows(filteredPersonRows));
+                            exportCsv(`lumen-competency-records-${selectedPerson.id}-${exportDateStamp()}.csv`, competencyRecordExportRows(filteredPersonRows));
                             setToast({ type: 'success', message: 'Teammate records exported successfully.' });
                           } catch {
                             setToast({ type: 'error', message: 'Failed to export records.' });
