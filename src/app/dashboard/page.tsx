@@ -82,7 +82,8 @@ type DashboardCustomization = {
   dataWindow: 'snapshot' | '7days' | '30days' | '90days';
   motionPreference: 'standard' | 'reduced';
   effectIntensity: 'subtle' | 'standard' | 'vibrant';
-  heroAccent?: 'default' | 'cyan-emerald' | 'blue-amber' | 'violet-rose' | 'rainbow';
+  heroAccent?: 'default' | 'cyan-emerald' | 'blue-amber' | 'violet-rose' | 'rainbow' | 'gold-amber' | 'neon-green' | 'sunset-orange' | 'slate-monochrome';
+  heroLayoutPreset?: 'default' | 'hexagon' | 'orbit' | 'wide';
 };
 
 export default function DashboardPage() {
@@ -145,7 +146,8 @@ export default function DashboardPage() {
       dataWindow: 'snapshot' as const,
       motionPreference: 'standard' as const,
       effectIntensity: 'standard' as const,
-      heroAccent: 'default' as const
+      heroAccent: 'default' as const,
+      heroLayoutPreset: 'default' as const
     };
     if (typeof window === 'undefined') return defaultSettings;
     try {
@@ -166,7 +168,8 @@ export default function DashboardPage() {
           dataWindow: parsed.dataWindow || defaultSettings.dataWindow,
           motionPreference: parsed.motionPreference || defaultSettings.motionPreference,
           effectIntensity: parsed.effectIntensity || defaultSettings.effectIntensity,
-          heroAccent: parsed.heroAccent || 'default'
+          heroAccent: parsed.heroAccent || 'default',
+          heroLayoutPreset: parsed.heroLayoutPreset || 'default'
         };
       }
     } catch {}
@@ -1900,6 +1903,7 @@ export default function DashboardPage() {
                   isMotionReduced={isMotionReduced}
                   effectIntensity={customization.effectIntensity || 'standard'}
                   heroAccent={customization.heroAccent || 'default'}
+                  heroLayoutPreset={customization.heroLayoutPreset || 'default'}
                   requirementsData={{
                     active: stats.activeRequirements,
                     compliant: stats.compliantCount,
@@ -3601,7 +3605,7 @@ export default function DashboardPage() {
                       <option value="reduced">Reduced motion</option>
                     </select>
                   </div>
-                  <div className="space-y-1">
+                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Hero Accent</label>
                     <select
                       value={modalCustomization.heroAccent || 'default'}
@@ -3613,6 +3617,35 @@ export default function DashboardPage() {
                       <option value="blue-amber">Blue/Amber</option>
                       <option value="violet-rose">Violet/Rose</option>
                       <option value="rainbow">Rainbow Spectrum</option>
+                      <option value="gold-amber">Gold/Amber</option>
+                      <option value="neon-green">Neon Green</option>
+                      <option value="sunset-orange">Sunset Orange</option>
+                      <option value="slate-monochrome">Slate Monochrome</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Effects Intensity</label>
+                    <select
+                      value={modalCustomization.effectIntensity || 'standard'}
+                      onChange={(e) => setModalCustomization({ ...modalCustomization, effectIntensity: e.target.value as DashboardCustomization['effectIntensity'] })}
+                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                    >
+                      <option value="subtle">Subtle Glows</option>
+                      <option value="standard">Standard Glows & Sweeps</option>
+                      <option value="vibrant">Vibrant Glows & Sweeps</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Hero Layout Preset</label>
+                    <select
+                      value={modalCustomization.heroLayoutPreset || 'default'}
+                      onChange={(e) => setModalCustomization({ ...modalCustomization, heroLayoutPreset: e.target.value as DashboardCustomization['heroLayoutPreset'] })}
+                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                    >
+                      <option value="default">Default Circuitry</option>
+                      <option value="hexagon">Symmetric Hexagon</option>
+                      <option value="orbit">Focused Orbit</option>
+                      <option value="wide">Wide Field</option>
                     </select>
                   </div>
                 </div>
@@ -3676,7 +3709,8 @@ export default function DashboardPage() {
                     dataWindow: 'snapshot' as const,
                     motionPreference: 'standard' as const,
                     effectIntensity: 'standard' as const,
-                    heroAccent: 'default' as const
+                    heroAccent: 'default' as const,
+                    heroLayoutPreset: 'default' as const
                   };
                   setModalCustomization(defaultVal);
                 }}

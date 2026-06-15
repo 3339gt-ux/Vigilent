@@ -16,7 +16,8 @@ interface ComplianceHeroCoreProps {
   readinessLabel: string;
   isMotionReduced: boolean;
   effectIntensity: 'subtle' | 'standard' | 'vibrant';
-  heroAccent?: 'default' | 'cyan-emerald' | 'blue-amber' | 'violet-rose' | 'rainbow';
+  heroAccent?: 'default' | 'cyan-emerald' | 'blue-amber' | 'violet-rose' | 'rainbow' | 'gold-amber' | 'neon-green' | 'sunset-orange' | 'slate-monochrome';
+  heroLayoutPreset?: 'default' | 'hexagon' | 'orbit' | 'wide';
   
   // Real data mappings
   requirementsData: { active: number; compliant: number; warnings: number; percent: number; metricText: string };
@@ -32,6 +33,224 @@ interface ComplianceHeroCoreProps {
   onNodeClick: (id: string) => void;
 }
 
+interface NodeLayout {
+  x: number;
+  y: number;
+  side: 'left' | 'right';
+  mainPath: string;
+  subPaths?: string[];
+  junctions?: { cx: number; cy: number }[];
+}
+
+const PRESETS: Record<'default' | 'hexagon' | 'orbit' | 'wide', Record<string, NodeLayout>> = {
+  default: {
+    requirements: {
+      x: 220,
+      y: 100,
+      side: 'left',
+      mainPath: "M 405 205 L 370 170 L 310 170 L 260 120 L 220 120",
+      subPaths: ["M 415 215 L 380 180 L 315 180 L 270 135 L 240 135"],
+      junctions: [{ cx: 370, cy: 170 }]
+    },
+    competencies: {
+      x: 110,
+      y: 300,
+      side: 'left',
+      mainPath: "M 380 300 L 130 300",
+      subPaths: [
+        "M 375 292 L 340 292 L 330 300 L 260 300 L 250 292 L 160 292",
+        "M 375 308 L 340 308 L 330 300 L 260 300 L 250 308 L 160 308"
+      ],
+      junctions: [{ cx: 350, cy: 300 }]
+    },
+    matrix: {
+      x: 220,
+      y: 500,
+      side: 'left',
+      mainPath: "M 405 395 L 370 430 L 310 430 L 260 480 L 220 480",
+      subPaths: ["M 415 385 L 380 420 L 315 420 L 270 465 L 240 465"],
+      junctions: [{ cx: 370, cy: 430 }]
+    },
+    vault: {
+      x: 780,
+      y: 100,
+      side: 'right',
+      mainPath: "M 595 205 L 630 170 L 690 170 L 740 120 L 780 120",
+      subPaths: ["M 585 215 L 620 180 L 685 180 L 730 135 L 760 135"],
+      junctions: [{ cx: 630, cy: 170 }]
+    },
+    'audit-packs': {
+      x: 890,
+      y: 300,
+      side: 'right',
+      mainPath: "M 620 300 L 870 300",
+      subPaths: [
+        "M 625 292 L 660 292 L 670 300 L 740 300 L 750 292 L 840 292",
+        "M 625 308 L 660 308 L 670 300 L 740 300 L 750 308 L 840 308"
+      ],
+      junctions: [{ cx: 650, cy: 300 }]
+    },
+    reports: {
+      x: 780,
+      y: 500,
+      side: 'right',
+      mainPath: "M 595 395 L 630 430 L 690 430 L 740 480 L 780 480",
+      subPaths: ["M 585 385 L 620 420 L 685 420 L 730 465 L 760 465"],
+      junctions: [{ cx: 630, cy: 430 }]
+    }
+  },
+  hexagon: {
+    requirements: {
+      x: 350,
+      y: 60,
+      side: 'left',
+      mainPath: "M 450 240 L 350 60",
+      subPaths: ["M 456 248 L 356 68"],
+      junctions: []
+    },
+    competencies: {
+      x: 150,
+      y: 300,
+      side: 'left',
+      mainPath: "M 420 300 L 150 300",
+      subPaths: ["M 420 292 L 150 292", "M 420 308 L 150 308"],
+      junctions: [{ cx: 285, cy: 300 }]
+    },
+    matrix: {
+      x: 350,
+      y: 540,
+      side: 'left',
+      mainPath: "M 450 360 L 350 540",
+      subPaths: ["M 456 352 L 356 532"],
+      junctions: []
+    },
+    vault: {
+      x: 650,
+      y: 60,
+      side: 'right',
+      mainPath: "M 550 240 L 650 60",
+      subPaths: ["M 544 248 L 644 68"],
+      junctions: []
+    },
+    'audit-packs': {
+      x: 850,
+      y: 300,
+      side: 'right',
+      mainPath: "M 580 300 L 850 300",
+      subPaths: ["M 580 292 L 850 292", "M 580 308 L 850 308"],
+      junctions: [{ cx: 715, cy: 300 }]
+    },
+    reports: {
+      x: 650,
+      y: 540,
+      side: 'right',
+      mainPath: "M 550 360 L 650 540",
+      subPaths: ["M 544 352 L 644 532"],
+      junctions: []
+    }
+  },
+  orbit: {
+    requirements: {
+      x: 360,
+      y: 170,
+      side: 'left',
+      mainPath: "M 450 250 L 360 170",
+      subPaths: ["M 456 256 L 366 176"],
+      junctions: []
+    },
+    competencies: {
+      x: 300,
+      y: 300,
+      side: 'left',
+      mainPath: "M 430 300 L 300 300",
+      subPaths: ["M 430 294 L 300 294", "M 430 306 L 300 306"],
+      junctions: []
+    },
+    matrix: {
+      x: 360,
+      y: 430,
+      side: 'left',
+      mainPath: "M 450 350 L 360 430",
+      subPaths: ["M 456 344 L 366 424"],
+      junctions: []
+    },
+    vault: {
+      x: 640,
+      y: 170,
+      side: 'right',
+      mainPath: "M 550 250 L 640 170",
+      subPaths: ["M 544 256 L 634 176"],
+      junctions: []
+    },
+    'audit-packs': {
+      x: 700,
+      y: 300,
+      side: 'right',
+      mainPath: "M 570 300 L 700 300",
+      subPaths: ["M 570 294 L 700 294", "M 570 306 L 700 306"],
+      junctions: []
+    },
+    reports: {
+      x: 640,
+      y: 430,
+      side: 'right',
+      mainPath: "M 550 350 L 640 430",
+      subPaths: ["M 544 344 L 634 424"],
+      junctions: []
+    }
+  },
+  wide: {
+    requirements: {
+      x: 180,
+      y: 80,
+      side: 'left',
+      mainPath: "M 405 205 L 360 160 L 280 160 L 220 100 L 180 100",
+      subPaths: ["M 415 215 L 370 170 L 285 170 L 230 115 L 180 115"],
+      junctions: [{ cx: 360, cy: 160 }, { cx: 220, cy: 100 }]
+    },
+    competencies: {
+      x: 80,
+      y: 300,
+      side: 'left',
+      mainPath: "M 380 300 L 100 300",
+      subPaths: ["M 375 292 L 100 292", "M 375 308 L 100 308"],
+      junctions: [{ cx: 240, cy: 300 }]
+    },
+    matrix: {
+      x: 180,
+      y: 520,
+      side: 'left',
+      mainPath: "M 405 395 L 360 440 L 280 440 L 220 500 L 180 500",
+      subPaths: ["M 415 385 L 370 430 L 285 430 L 230 485 L 180 485"],
+      junctions: [{ cx: 360, cy: 440 }, { cx: 220, cy: 500 }]
+    },
+    vault: {
+      x: 820,
+      y: 80,
+      side: 'right',
+      mainPath: "M 595 205 L 640 160 L 720 160 L 780 100 L 820 100",
+      subPaths: ["M 585 215 L 630 170 L 715 170 L 770 115 L 820 115"],
+      junctions: [{ cx: 640, cy: 160 }, { cx: 780, cy: 100 }]
+    },
+    'audit-packs': {
+      x: 920,
+      y: 300,
+      side: 'right',
+      mainPath: "M 620 300 L 900 300",
+      subPaths: ["M 625 292 L 900 292", "M 625 308 L 900 308"],
+      junctions: [{ cx: 760, cy: 300 }]
+    },
+    reports: {
+      x: 820,
+      y: 520,
+      side: 'right',
+      mainPath: "M 595 395 L 640 440 L 720 440 L 780 500 L 820 500",
+      subPaths: ["M 585 385 L 620 420 L 685 420 L 730 465 L 760 465"],
+      junctions: [{ cx: 640, cy: 440 }, { cx: 780, cy: 500 }]
+    }
+  }
+};
+
 export default function ComplianceHeroCore({
   theme,
   readinessScore,
@@ -39,6 +258,7 @@ export default function ComplianceHeroCore({
   isMotionReduced,
   effectIntensity,
   heroAccent = 'default',
+  heroLayoutPreset = 'default',
   requirementsData,
   vaultData,
   competencyData,
@@ -51,6 +271,9 @@ export default function ComplianceHeroCore({
 }: ComplianceHeroCoreProps) {
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [isCoreHovered, setIsCoreHovered] = useState(false);
+
+  // Retrieve active preset layout config
+  const activePreset = PRESETS[heroLayoutPreset] || PRESETS.default;
 
   // Configuration for Hero Color Customization Variables
   const getAccentStyles = () => {
@@ -95,6 +318,46 @@ export default function ComplianceHeroCore({
           gradStop2: '#f43f5e',
           glow: 'rgba(0, 240, 255, 0.5)',
         };
+      case 'gold-amber':
+        return {
+          primary: '#eab308',
+          secondary: '#d97706',
+          primaryMuted: 'rgba(234, 179, 8, 0.35)',
+          secondaryMuted: 'rgba(217, 119, 6, 0.35)',
+          gradStop1: '#eab308',
+          gradStop2: '#d97706',
+          glow: 'rgba(234, 179, 8, 0.45)',
+        };
+      case 'neon-green':
+        return {
+          primary: '#10b981',
+          secondary: '#84cc16',
+          primaryMuted: 'rgba(16, 185, 129, 0.35)',
+          secondaryMuted: 'rgba(132, 204, 22, 0.35)',
+          gradStop1: '#10b981',
+          gradStop2: '#84cc16',
+          glow: 'rgba(16, 185, 129, 0.45)',
+        };
+      case 'sunset-orange':
+        return {
+          primary: '#f97316',
+          secondary: '#ec4899',
+          primaryMuted: 'rgba(249, 115, 22, 0.35)',
+          secondaryMuted: 'rgba(236, 72, 153, 0.35)',
+          gradStop1: '#f97316',
+          gradStop2: '#ec4899',
+          glow: 'rgba(249, 115, 22, 0.45)',
+        };
+      case 'slate-monochrome':
+        return {
+          primary: '#94a3b8',
+          secondary: '#cbd5e1',
+          primaryMuted: 'rgba(148, 163, 184, 0.25)',
+          secondaryMuted: 'rgba(203, 213, 225, 0.25)',
+          gradStop1: '#94a3b8',
+          gradStop2: '#e2e8f0',
+          glow: 'rgba(148, 163, 184, 0.35)',
+        };
       case 'default':
       default:
         return {
@@ -126,14 +389,14 @@ export default function ComplianceHeroCore({
 
   const surfaceColor = theme === 'dark' ? '#0f172a' : theme === 'midtone' ? '#1e293b' : '#ffffff';
 
-  // 6 nodes structural definitions mapped to real modules
+  // 6 nodes structural definitions mapped to active preset
   const nodes = [
     { 
       id: 'requirements', 
-      x: 220, 
-      y: 100, 
+      x: activePreset.requirements.x, 
+      y: activePreset.requirements.y, 
       label: 'Requirements', 
-      side: 'left', 
+      side: activePreset.requirements.side, 
       icon: 'checklist',
       percent: requirementsData.percent,
       metricText: requirementsData.metricText,
@@ -142,10 +405,10 @@ export default function ComplianceHeroCore({
     },
     { 
       id: 'competencies', 
-      x: 110, 
-      y: 300, 
+      x: activePreset.competencies.x, 
+      y: activePreset.competencies.y, 
       label: 'Competency Matrix', 
-      side: 'left', 
+      side: activePreset.competencies.side, 
       icon: 'users',
       percent: competencyData.percent,
       metricText: competencyData.metricText,
@@ -154,10 +417,10 @@ export default function ComplianceHeroCore({
     },
     { 
       id: 'matrix', 
-      x: 220, 
-      y: 500, 
+      x: activePreset.matrix.x, 
+      y: activePreset.matrix.y, 
       label: 'Asset Matrix', 
-      side: 'left', 
+      side: activePreset.matrix.side, 
       icon: 'grid',
       percent: matrixData.percent,
       metricText: matrixData.metricText,
@@ -166,10 +429,10 @@ export default function ComplianceHeroCore({
     },
     { 
       id: 'vault', 
-      x: 780, 
-      y: 100, 
+      x: activePreset.vault.x, 
+      y: activePreset.vault.y, 
       label: 'Evidence Vault', 
-      side: 'right', 
+      side: activePreset.vault.side, 
       icon: 'folder',
       percent: vaultData.percent,
       metricText: vaultData.metricText,
@@ -178,10 +441,10 @@ export default function ComplianceHeroCore({
     },
     { 
       id: 'audit-packs', 
-      x: 890, 
-      y: 300, 
+      x: activePreset['audit-packs'].x, 
+      y: activePreset['audit-packs'].y, 
       label: 'Audit Pack Builder', 
-      side: 'right', 
+      side: activePreset['audit-packs'].side, 
       icon: 'document',
       percent: auditPacksData.percent,
       metricText: auditPacksData.metricText,
@@ -190,10 +453,10 @@ export default function ComplianceHeroCore({
     },
     { 
       id: 'reports', 
-      x: 780, 
-      y: 500, 
+      x: activePreset.reports.x, 
+      y: activePreset.reports.y, 
       label: 'Reports', 
-      side: 'right', 
+      side: activePreset.reports.side, 
       icon: 'chart',
       percent: 100, // neutral snapshot bar
       metricText: reportsData.metricText,
@@ -236,21 +499,21 @@ export default function ComplianceHeroCore({
         <defs>
           {/* Custom theme styling based on intensity settings */}
           <filter id="hero-glow-cyan" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation={theme === 'light' ? '3' : effectIntensity === 'subtle' ? '4' : effectIntensity === 'vibrant' ? '8' : '6'} result="blur" />
+            <feGaussianBlur stdDeviation={theme === 'light' ? '2.5' : effectIntensity === 'subtle' ? '3' : effectIntensity === 'vibrant' ? '7' : '5'} result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
           <filter id="hero-glow-purple" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation={theme === 'light' ? '3' : effectIntensity === 'subtle' ? '4' : effectIntensity === 'vibrant' ? '8' : '6'} result="blur" />
+            <feGaussianBlur stdDeviation={theme === 'light' ? '2.5' : effectIntensity === 'subtle' ? '3' : effectIntensity === 'vibrant' ? '7' : '5'} result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
           <filter id="hero-glow-strong" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation={theme === 'light' ? '4.5' : effectIntensity === 'subtle' ? '6' : effectIntensity === 'vibrant' ? '12' : '10'} result="blur" />
+            <feGaussianBlur stdDeviation={theme === 'light' ? '3.5' : effectIntensity === 'subtle' ? '5' : effectIntensity === 'vibrant' ? '11' : '9'} result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
@@ -259,18 +522,69 @@ export default function ComplianceHeroCore({
 
           {/* Gradients */}
           <radialGradient id="hero-cyan-radial" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor={config.gradStop1} stopOpacity={theme === 'light' ? '0.08' : '0.14'} />
+            <stop offset="0%" stopColor={config.gradStop1} stopOpacity={theme === 'light' ? '0.08' : effectIntensity === 'subtle' ? '0.08' : effectIntensity === 'vibrant' ? '0.22' : '0.14'} />
             <stop offset="100%" stopColor={config.gradStop1} stopOpacity="0" />
           </radialGradient>
           <radialGradient id="hero-purple-radial" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor={config.gradStop2} stopOpacity={theme === 'light' ? '0.08' : '0.14'} />
+            <stop offset="0%" stopColor={config.gradStop2} stopOpacity={theme === 'light' ? '0.08' : effectIntensity === 'subtle' ? '0.08' : effectIntensity === 'vibrant' ? '0.22' : '0.14'} />
             <stop offset="100%" stopColor={config.gradStop2} stopOpacity="0" />
           </radialGradient>
           <linearGradient id="hero-cyan-purple-grad" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor={config.gradStop1} />
             <stop offset="100%" stopColor={config.gradStop2} />
           </linearGradient>
+
+          {/* Staggered Premium Light Sweep Gradient */}
+          <linearGradient id="hero-sweep-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor={config.primary} stopOpacity="0" />
+            <stop offset="35%" stopColor={config.primary} stopOpacity="0.2" />
+            <stop offset="50%" stopColor="#ffffff" stopOpacity="1" />
+            <stop offset="65%" stopColor={config.secondary} stopOpacity="0.2" />
+            <stop offset="100%" stopColor={config.secondary} stopOpacity="0" />
+          </linearGradient>
         </defs>
+
+        {/* CSS Animations (Dynamic sweeps & spins) */}
+        <style dangerouslySetInnerHTML={{ __html: `
+          @keyframes hero-rotate-cw {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+          @keyframes hero-rotate-ccw {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(-360deg); }
+          }
+          @keyframes hero-pulse-glow {
+            0%, 100% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.08); opacity: 1; }
+          }
+          @keyframes hero-light-sweep {
+            0% { stroke-dashoffset: 250; }
+            100% { stroke-dashoffset: -250; }
+          }
+          .proto-animate-cw {
+            animation: hero-rotate-cw 60s linear infinite;
+            transform-origin: 500px 300px;
+          }
+          .proto-animate-ccw {
+            animation: hero-rotate-ccw 70s linear infinite;
+            transform-origin: 500px 300px;
+          }
+          .proto-animate-pulse {
+            animation: hero-pulse-glow 4s ease-in-out infinite;
+            transform-origin: 500px 300px;
+          }
+          .hero-sweep-line {
+            stroke-dasharray: 50 150;
+            animation: hero-light-sweep 4.5s linear infinite;
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .proto-animate-cw, .proto-animate-ccw, .proto-animate-pulse, .hero-sweep-line {
+              animation: none !important;
+              transform: none !important;
+            }
+          }
+        ` }} />
 
         {/* Ambient backing glows */}
         <g id="hero-bg-glows" className="pointer-events-none">
@@ -283,114 +597,84 @@ export default function ComplianceHeroCore({
             2. CONNECTOR BUS PATHS (Topology)
            ========================================== */}
         <g id="hero-connector-paths" strokeLinecap="round" strokeLinejoin="round">
-          {/* TOP-LEFT CONNECTOR */}
-          <g opacity={hoveredNode === null || hoveredNode === 'requirements' ? 1 : 0.3} style={{ transition: 'opacity 0.3s ease' }}>
-            <path d="M 415 215 L 380 180 L 315 180 L 270 135 L 240 135" fill="none" stroke={colors.lineMuted} strokeWidth="1.2" />
-            <path 
-              d="M 405 205 L 370 170 L 310 170 L 260 120 L 220 120" 
-              fill="none" 
-              stroke={hoveredNode === 'requirements' ? colors.cyanLine : colors.cyanMuted} 
-              strokeWidth={hoveredNode === 'requirements' ? '2.2' : '1.5'} 
-              filter={hoveredNode === 'requirements' ? 'url(#hero-glow-cyan)' : undefined}
-              className="transition-all duration-355"
-            />
-            <circle cx="370" cy="170" r={hoveredNode === 'requirements' ? 4.5 : 3} fill={colors.cyanLine} filter={hoveredNode === 'requirements' ? 'url(#hero-glow-cyan)' : undefined} className="transition-all duration-300" />
-          </g>
+          {nodes.map((node) => {
+            const isHovered = hoveredNode === node.id;
+            const strokeColor = node.side === 'left' ? colors.cyanLine : colors.purpleLine;
+            const ringColor = node.side === 'left' ? colors.cyanMuted : colors.purpleMuted;
+            const configItem = activePreset[node.id];
 
-          {/* LEFT CONNECTOR */}
-          <g opacity={hoveredNode === null || hoveredNode === 'competencies' ? 1 : 0.3} style={{ transition: 'opacity 0.3s ease' }}>
-            <path d="M 375 292 L 340 292 L 330 300 L 260 300 L 250 292 L 160 292" fill="none" stroke={colors.lineMuted} strokeWidth="1.2" />
-            <path d="M 375 308 L 340 308 L 330 300 L 260 300 L 250 308 L 160 308" fill="none" stroke={colors.lineMuted} strokeWidth="1.2" />
-            <path 
-              d="M 380 300 L 130 300" 
-              fill="none" 
-              stroke={hoveredNode === 'competencies' ? colors.cyanLine : colors.cyanMuted} 
-              strokeWidth={hoveredNode === 'competencies' ? '2.2' : '1.5'} 
-              filter={hoveredNode === 'competencies' ? 'url(#hero-glow-cyan)' : undefined}
-              className="transition-all duration-355"
-            />
-            <circle cx="350" cy="300" r={hoveredNode === 'competencies' ? 5 : 3.5} fill={colors.cyanLine} filter={hoveredNode === 'competencies' ? 'url(#hero-glow-cyan)' : undefined} className="transition-all duration-300" />
-          </g>
+            return (
+              <g key={node.id} opacity={hoveredNode === null || isHovered ? 1 : 0.3} style={{ transition: 'opacity 0.3s ease' }}>
+                {/* Secondary/Sub parallel paths */}
+                {configItem.subPaths?.map((pathD, idx) => (
+                  <path key={idx} d={pathD} fill="none" stroke={colors.lineMuted} strokeWidth="1.2" />
+                ))}
+                
+                {/* Main connector path */}
+                <path 
+                  d={configItem.mainPath} 
+                  fill="none" 
+                  stroke={isHovered ? strokeColor : ringColor} 
+                  strokeWidth={isHovered ? '2.2' : '1.5'} 
+                  filter={isHovered ? (node.side === 'left' ? 'url(#hero-glow-cyan)' : 'url(#hero-glow-purple)') : undefined}
+                  className="transition-all duration-355"
+                />
 
-          {/* BOTTOM-LEFT CONNECTOR */}
-          <g opacity={hoveredNode === null || hoveredNode === 'matrix' ? 1 : 0.3} style={{ transition: 'opacity 0.3s ease' }}>
-            <path d="M 415 385 L 380 420 L 315 420 L 270 465 L 240 465" fill="none" stroke={colors.lineMuted} strokeWidth="1.2" />
-            <path 
-              d="M 405 395 L 370 430 L 310 430 L 260 480 L 220 480" 
-              fill="none" 
-              stroke={hoveredNode === 'matrix' ? colors.cyanLine : colors.cyanMuted} 
-              strokeWidth={hoveredNode === 'matrix' ? '2.2' : '1.5'} 
-              filter={hoveredNode === 'matrix' ? 'url(#hero-glow-cyan)' : undefined}
-              className="transition-all duration-355"
-            />
-            <circle cx="370" cy="430" r={hoveredNode === 'matrix' ? 4.5 : 3} fill={colors.cyanLine} filter={hoveredNode === 'matrix' ? 'url(#hero-glow-cyan)' : undefined} className="transition-all duration-300" />
-          </g>
+                {/* Staggered Premium Light Sweep Line */}
+                {effectIntensity !== 'subtle' && (
+                  <path
+                    d={configItem.mainPath}
+                    fill="none"
+                    stroke="url(#hero-sweep-grad)"
+                    strokeWidth={isHovered ? '3' : '2'}
+                    className="hero-sweep-line"
+                    style={{
+                      animationDelay: `${node.id === 'requirements' ? 0 : node.id === 'vault' ? 0.6 : node.id === 'competencies' ? 1.2 : node.id === 'audit-packs' ? 1.8 : node.id === 'matrix' ? 2.4 : 3.0}s`,
+                      opacity: isHovered ? 1.0 : effectIntensity === 'vibrant' ? 0.8 : 0.4
+                    }}
+                  />
+                )}
 
-          {/* TOP-RIGHT CONNECTOR */}
-          <g opacity={hoveredNode === null || hoveredNode === 'vault' ? 1 : 0.3} style={{ transition: 'opacity 0.3s ease' }}>
-            <path d="M 585 215 L 620 180 L 685 180 L 730 135 L 760 135" fill="none" stroke={colors.lineMuted} strokeWidth="1.2" />
-            <path 
-              d="M 595 205 L 630 170 L 690 170 L 740 120 L 780 120" 
-              fill="none" 
-              stroke={hoveredNode === 'vault' ? colors.purpleLine : colors.purpleMuted} 
-              strokeWidth={hoveredNode === 'vault' ? '2.2' : '1.5'} 
-              filter={hoveredNode === 'vault' ? 'url(#hero-glow-purple)' : undefined}
-              className="transition-all duration-355"
-            />
-            <circle cx="630" cy="170" r={hoveredNode === 'vault' ? 4.5 : 3} fill={colors.purpleLine} filter={hoveredNode === 'vault' ? 'url(#hero-glow-purple)' : undefined} className="transition-all duration-300" />
-          </g>
-
-          {/* RIGHT CONNECTOR */}
-          <g opacity={hoveredNode === null || hoveredNode === 'audit-packs' ? 1 : 0.3} style={{ transition: 'opacity 0.3s ease' }}>
-            <path d="M 625 292 L 660 292 L 670 300 L 740 300 L 750 292 L 840 292" fill="none" stroke={colors.lineMuted} strokeWidth="1.2" />
-            <path d="M 625 308 L 660 308 L 670 300 L 740 300 L 750 308 L 840 308" fill="none" stroke={colors.lineMuted} strokeWidth="1.2" />
-            <path 
-              d="M 620 300 L 870 300" 
-              fill="none" 
-              stroke={hoveredNode === 'audit-packs' ? colors.purpleLine : colors.purpleMuted} 
-              strokeWidth={hoveredNode === 'audit-packs' ? '2.2' : '1.5'} 
-              filter={hoveredNode === 'audit-packs' ? 'url(#hero-glow-purple)' : undefined}
-              className="transition-all duration-355"
-            />
-            <circle cx="650" cy="300" r={hoveredNode === 'audit-packs' ? 5 : 3.5} fill={colors.purpleLine} filter={hoveredNode === 'audit-packs' ? 'url(#hero-glow-purple)' : undefined} className="transition-all duration-300" />
-          </g>
-
-          {/* BOTTOM-RIGHT CONNECTOR */}
-          <g opacity={hoveredNode === null || hoveredNode === 'reports' ? 1 : 0.3} style={{ transition: 'opacity 0.3s ease' }}>
-            <path d="M 585 385 L 620 420 L 685 420 L 730 465 L 760 465" fill="none" stroke={colors.lineMuted} strokeWidth="1.2" />
-            <path 
-              d="M 595 395 L 630 430 L 690 430 L 740 480 L 780 480" 
-              fill="none" 
-              stroke={hoveredNode === 'reports' ? colors.purpleLine : colors.purpleMuted} 
-              strokeWidth={hoveredNode === 'reports' ? '2.2' : '1.5'} 
-              filter={hoveredNode === 'reports' ? 'url(#hero-glow-purple)' : undefined}
-              className="transition-all duration-355"
-            />
-            <circle cx="630" cy="430" r={hoveredNode === 'reports' ? 4.5 : 3} fill={colors.purpleLine} filter={hoveredNode === 'reports' ? 'url(#hero-glow-purple)' : undefined} className="transition-all duration-300" />
-          </g>
+                {/* Junction nodes */}
+                {configItem.junctions?.map((junction, idx) => (
+                  <circle 
+                    key={idx}
+                    cx={junction.cx} 
+                    cy={junction.cy} 
+                    r={isHovered ? 4.5 : 3} 
+                    fill={strokeColor} 
+                    filter={isHovered ? (node.side === 'left' ? 'url(#hero-glow-cyan)' : 'url(#hero-glow-purple)') : undefined} 
+                    className="transition-all duration-300" 
+                  />
+                ))}
+              </g>
+            );
+          })}
         </g>
 
         {/* Connector pulse animations - only active when motion is not reduced */}
         {!isMotionReduced && (
           <g id="hero-flowing-pulse-dots" className="pointer-events-none">
-            <circle r="3.5" fill={colors.cyanLine} filter="url(#hero-glow-cyan)" opacity={hoveredNode === null || hoveredNode === 'requirements' ? 1 : 0.1}>
-              <animateMotion path="M 405 205 L 370 170 L 310 170 L 260 120 L 220 120" dur="3.5s" repeatCount="indefinite" />
-            </circle>
-            <circle r="3.5" fill={colors.cyanLine} filter="url(#hero-glow-cyan)" opacity={hoveredNode === null || hoveredNode === 'competencies' ? 1 : 0.1}>
-              <animateMotion path="M 380 300 L 130 300" dur="3s" repeatCount="indefinite" />
-            </circle>
-            <circle r="3.5" fill={colors.cyanLine} filter="url(#hero-glow-cyan)" opacity={hoveredNode === null || hoveredNode === 'matrix' ? 1 : 0.1}>
-              <animateMotion path="M 405 395 L 370 430 L 310 430 L 260 480 L 220 480" dur="3.8s" repeatCount="indefinite" />
-            </circle>
-            <circle r="3.5" fill={colors.purpleLine} filter="url(#hero-glow-purple)" opacity={hoveredNode === null || hoveredNode === 'vault' ? 1 : 0.1}>
-              <animateMotion path="M 595 205 L 630 170 L 690 170 L 740 120 L 780 120" dur="3.2s" repeatCount="indefinite" />
-            </circle>
-            <circle r="3.5" fill={colors.purpleLine} filter="url(#hero-glow-purple)" opacity={hoveredNode === null || hoveredNode === 'audit-packs' ? 1 : 0.1}>
-              <animateMotion path="M 620 300 L 870 300" dur="4s" repeatCount="indefinite" />
-            </circle>
-            <circle r="3.5" fill={colors.purpleLine} filter="url(#hero-glow-purple)" opacity={hoveredNode === null || hoveredNode === 'reports' ? 1 : 0.1}>
-              <animateMotion path="M 595 395 L 630 430 L 690 430 L 740 480 L 780 480" dur="3.5s" repeatCount="indefinite" />
-            </circle>
+            {nodes.map((node) => {
+              const isHovered = hoveredNode === node.id;
+              const strokeColor = node.side === 'left' ? colors.cyanLine : colors.purpleLine;
+              const configItem = activePreset[node.id];
+              return (
+                <circle 
+                  key={node.id} 
+                  r="3.5" 
+                  fill={strokeColor} 
+                  filter={node.side === 'left' ? "url(#hero-glow-cyan)" : "url(#hero-glow-purple)"} 
+                  opacity={hoveredNode === null || isHovered ? 1 : 0.1}
+                >
+                  <animateMotion 
+                    path={configItem.mainPath} 
+                    dur={node.id === 'requirements' ? '3.5s' : node.id === 'vault' ? '3.2s' : node.id === 'competencies' ? '3s' : node.id === 'audit-packs' ? '4s' : node.id === 'matrix' ? '3.8s' : '3.5s'} 
+                    repeatCount="indefinite" 
+                  />
+                </circle>
+              );
+            })}
           </g>
         )}
 
@@ -583,7 +867,7 @@ export default function ComplianceHeroCore({
               READINESS SCORE
             </text>
 
-            {/* Telemetry Status Line (Excellent, Fair, Critical, etc.) */}
+            {/* Telemetry Status Line */}
             <text
               x="500"
               y="320"
@@ -617,7 +901,7 @@ export default function ComplianceHeroCore({
             // Circular Progress Ring Math
             const percent = node.percent || 0;
             const ringRadius = 24;
-            const ringCircumference = 2 * Math.PI * ringRadius; // ~150.8
+            const ringCircumference = 2 * Math.PI * ringRadius;
             const ringDashoffset = ringCircumference - (percent / 100) * ringCircumference;
 
             return (
@@ -659,7 +943,7 @@ export default function ComplianceHeroCore({
                 {/* Outer concentric HUD rings */}
                 <circle cx={node.x} cy={node.y} r="36" fill="none" stroke={ringColor} strokeWidth="0.8" strokeDasharray="4 8" opacity={isHovered ? 1 : 0.6} className="transition-all duration-300" />
                 
-                {/* Concentric Ring 2 (HUD gaps) */}
+                {/* Concentric Ring 2 */}
                 <circle 
                   cx={node.x} 
                   cy={node.y} 
@@ -679,7 +963,7 @@ export default function ComplianceHeroCore({
                 <line x1={node.x - 36} y1={node.y} x2={node.x - 32} y2={node.y} stroke={strokeColor} strokeWidth="1.2" />
                 <line x1={node.x + 32} y1={node.y} x2={node.x + 36} y2={node.y} stroke={strokeColor} strokeWidth="1.2" />
 
-                {/* Real circular progress ring wrapped around the node */}
+                {/* Real circular progress ring */}
                 <circle 
                   cx={node.x} 
                   cy={node.y} 
@@ -715,7 +999,7 @@ export default function ComplianceHeroCore({
                   className="transition-all duration-300"
                 />
 
-                {/* Lucide Inner Icon mapped into 24x24 translate coordinate */}
+                {/* Icon translate */}
                 <g transform={`translate(${node.x - 12}, ${node.y - 12})`}>
                   {renderIcon(node.icon, isHovered ? (theme === 'light' ? strokeColor : '#ffffff') : strokeColor)}
                 </g>
@@ -738,7 +1022,7 @@ export default function ComplianceHeroCore({
                   textAnchor="middle"
                   fill={isHovered ? strokeColor : colors.textLabel}
                   fontSize="10"
-                  fontWeight={isHovered ? 'bold' : 'bold'}
+                  fontWeight="bold"
                   letterSpacing="0.5"
                   className="transition-colors duration-300 opacity-90"
                   style={{ userSelect: 'none' }}

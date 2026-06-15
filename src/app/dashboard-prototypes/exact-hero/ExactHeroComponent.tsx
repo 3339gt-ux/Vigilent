@@ -2,13 +2,74 @@
 
 import React, { useState } from 'react';
 
-interface ExactHeroComponentProps {
-  theme: 'light' | 'dark';
+interface NodeItem {
+  id: string;
+  x: number;
+  y: number;
+  label: string;
+  side: 'left' | 'right';
+  icon: string;
 }
 
-export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
+interface ExactHeroComponentProps {
+  theme: 'light' | 'dark';
+  dragEnabled: boolean;
+  nodePositions: NodeItem[];
+  setNodePositions: React.Dispatch<React.SetStateAction<NodeItem[]>>;
+}
+
+const DEFAULT_POSITIONS: Record<string, { x: number; y: number }> = {
+  checklist: { x: 220, y: 100 },
+  users: { x: 110, y: 300 },
+  grid: { x: 220, y: 500 },
+  folder: { x: 780, y: 100 },
+  document: { x: 890, y: 300 },
+  chart: { x: 780, y: 500 }
+};
+
+const STATIC_PATHS: Record<string, { mainPath: string; subPaths: string[]; junctions: { cx: number; cy: number }[] }> = {
+  checklist: {
+    mainPath: "M 405 205 L 370 170 L 310 170 L 260 120 L 220 120",
+    subPaths: ["M 415 215 L 380 180 L 315 180 L 270 135 L 240 135"],
+    junctions: [{ cx: 370, cy: 170 }]
+  },
+  users: {
+    mainPath: "M 380 300 L 130 300",
+    subPaths: [
+      "M 375 292 L 340 292 L 330 300 L 260 300 L 250 292 L 160 292",
+      "M 375 308 L 340 308 L 330 300 L 260 300 L 250 308 L 160 308"
+    ],
+    junctions: [{ cx: 350, cy: 300 }]
+  },
+  grid: {
+    mainPath: "M 405 395 L 370 430 L 310 430 L 260 480 L 220 480",
+    subPaths: ["M 415 385 L 380 420 L 315 420 L 270 465 L 240 465"],
+    junctions: [{ cx: 370, cy: 430 }]
+  },
+  folder: {
+    mainPath: "M 595 205 L 630 170 L 690 170 L 740 120 L 780 120",
+    subPaths: ["M 585 215 L 620 180 L 685 180 L 730 135 L 760 135"],
+    junctions: [{ cx: 630, cy: 170 }]
+  },
+  document: {
+    mainPath: "M 620 300 L 870 300",
+    subPaths: [
+      "M 625 292 L 660 292 L 670 300 L 740 300 L 750 292 L 840 292",
+      "M 625 308 L 660 308 L 670 300 L 740 300 L 750 308 L 840 308"
+    ],
+    junctions: [{ cx: 650, cy: 300 }]
+  },
+  chart: {
+    mainPath: "M 595 395 L 630 430 L 690 430 L 740 480 L 780 480",
+    subPaths: ["M 585 385 L 620 420 L 685 420 L 730 465 L 760 465"],
+    junctions: [{ cx: 630, cy: 430 }]
+  }
+};
+
+export default function ExactHeroComponent({ theme, dragEnabled, nodePositions, setNodePositions }: ExactHeroComponentProps) {
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [isCoreHovered, setIsCoreHovered] = useState(false);
+  const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
 
   // Theme-specific color definitions
   const colors = {
@@ -23,15 +84,84 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
     centerCoreGlow: theme === 'dark' ? 'rgba(0, 240, 255, 0.8)' : 'rgba(2, 132, 199, 0.7)',
   };
 
-  // Node coordinate configurations
-  const nodes = [
-    { id: 'checklist', x: 220, y: 100, label: 'SMS Checklist', side: 'left', icon: 'checklist' },
-    { id: 'users', x: 110, y: 300, label: 'User Registry', side: 'left', icon: 'users' },
-    { id: 'grid', x: 220, y: 500, label: 'Matrix Grid', side: 'left', icon: 'grid' },
-    { id: 'folder', x: 780, y: 100, label: 'Vault Folder', side: 'right', icon: 'folder' },
-    { id: 'document', x: 890, y: 300, label: 'Document Files', side: 'right', icon: 'document' },
-    { id: 'chart', x: 780, y: 500, label: 'Telemetry Report', side: 'right', icon: 'chart' },
-  ];
+  // Helper to dynamically calculate straight trace vector paths from core boundary (radius 124) to node center
+  const getPathsForNode = (node: NodeItem) => {
+    const defaultPos = DEFAULT_POSITIONS[node.id];
+    // If it is at default position, return the hand-crafted circuitry lines for maximum visual fidelity
+    if (node.x === defaultPos.x && node.y === defaultPos.y) {
+      return STATIC_PATHS[node.id];
+    }
+
+    const cx = 500;
+    const cy = 300;
+    const dx = node.x - cx;
+    const dy = node.y - cy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist === 0) {
+      return { mainPath: '', subPaths: [], junctions: [] };
+    }
+
+    // Coordinates at core circle boundary (r=124)
+    const bx = cx + (dx / dist) * 124;
+    const by = cy + (dy / dist) * 124;
+
+    const mainPath = `M ${bx.toFixed(1)} ${by.toFixed(1)} L ${node.x.toFixed(1)} ${node.y.toFixed(1)}`;
+
+    // Parallel sub-traces offset perpendicularly by 8px
+    const px = (-dy / dist) * 8;
+    const py = (dx / dist) * 8;
+
+    const subPaths: string[] = [];
+    if (node.id === 'users' || node.id === 'document') {
+      subPaths.push(`M ${(bx + px).toFixed(1)} ${(by + py).toFixed(1)} L ${(node.x + px).toFixed(1)} ${(node.y + py).toFixed(1)}`);
+      subPaths.push(`M ${(bx - px).toFixed(1)} ${(by - py).toFixed(1)} L ${(node.x - px).toFixed(1)} ${(node.y - py).toFixed(1)}`);
+    } else {
+      const offsetDir = node.y < cy ? 1 : -1;
+      subPaths.push(`M ${(bx + px * offsetDir).toFixed(1)} ${(by + py * offsetDir).toFixed(1)} L ${(node.x + px * offsetDir).toFixed(1)} ${(node.y + py * offsetDir).toFixed(1)}`);
+    }
+
+    // HUD junction dot along the connector line at 35% distance
+    const ratio = 0.35;
+    const jx = bx + (node.x - bx) * ratio;
+    const jy = by + (node.y - by) * ratio;
+    const junctions = [{ cx: jx, cy: jy }];
+
+    return { mainPath, subPaths, junctions };
+  };
+
+  // Drag-and-drop mouse handlers
+  const handleMouseDown = (nodeId: string, e: React.MouseEvent) => {
+    if (!dragEnabled) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDraggingNodeId(nodeId);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!dragEnabled || !draggingNodeId) return;
+    const svg = e.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    
+    // Scale screen space to viewBox 1000x600 coordinates
+    const x = Math.round(((e.clientX - rect.left) / rect.width) * 1000);
+    const y = Math.round(((e.clientY - rect.top) / rect.height) * 600);
+    
+    const clampedX = Math.max(50, Math.min(950, x));
+    const clampedY = Math.max(50, Math.min(550, y));
+
+    setNodePositions(prev => prev.map(node => {
+      if (node.id === draggingNodeId) {
+        const side = clampedX < 500 ? 'left' : 'right';
+        return { ...node, x: clampedX, y: clampedY, side };
+      }
+      return node;
+    }));
+  };
+
+  const handleMouseUpOrLeave = () => {
+    setDraggingNodeId(null);
+  };
 
   // Render SVG icons in a 24x24 grid
   const renderIcon = (type: string, strokeColor: string) => {
@@ -97,15 +227,19 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
   };
 
   return (
-    <div className="relative w-full max-w-5xl mx-auto flex items-center justify-center p-4">
+    <div className={`relative w-full max-w-5xl mx-auto flex items-center justify-center p-4 ${draggingNodeId ? 'cursor-grabbing' : 'cursor-default'}`}>
       {/* SVG Viewport */}
       <svg 
+        id="exact-hero-svg"
         className="w-full h-auto aspect-[5/3] overflow-visible select-none" 
         viewBox="0 0 1000 600"
         xmlns="http://www.w3.org/2000/svg"
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUpOrLeave}
+        onMouseLeave={handleMouseUpOrLeave}
       >
         <defs>
-          {/* Neon Glow Filters - Reduced stdDeviation in light theme to prevent muddy edges */}
+          {/* Neon Glow Filters */}
           <filter id="glow-cyan-filter" x="-20%" y="-20%" width="140%" height="140%">
             <feGaussianBlur stdDeviation={theme === 'dark' ? '6' : '3.5'} result="blur" />
             <feMerge>
@@ -147,11 +281,8 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
             1. BACKGROUND SOFT GLOWS
            ========================================== */}
         <g id="bg-glows" className="pointer-events-none">
-          {/* Left Side Cyan Ambient Glow */}
           <circle cx="350" cy="300" r="280" fill="url(#cyan-radial)" />
-          {/* Right Side Purple Ambient Glow */}
           <circle cx="650" cy="300" r="280" fill="url(#purple-radial)" />
-          {/* Central Bright Core Glow */}
           <circle cx="500" cy="300" r="80" fill={theme === 'dark' ? 'rgba(0, 240, 255, 0.06)' : 'rgba(2, 132, 199, 0.03)'} />
         </g>
 
@@ -159,275 +290,88 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
             2. CONNECTOR BUS PATHS (Topology)
            ========================================== */}
         <g id="connector-paths" strokeLinecap="round" strokeLinejoin="round">
-          {/* TOP-LEFT CONNECTOR */}
-          <g id="path-top-left" opacity={hoveredNode === null || hoveredNode === 'checklist' ? 1 : 0.35} style={{ transition: 'opacity 0.3s ease' }}>
-            {/* Sub-trace */}
-            <path 
-              d="M 415 215 L 380 180 L 315 180 L 270 135 L 240 135" 
-              fill="none" 
-              stroke={hoveredNode === 'checklist' ? colors.cyanLine : colors.lineMuted} 
-              strokeWidth="1.2" 
-              opacity={hoveredNode === 'checklist' ? 0.85 : 0.3}
-              className="transition-all duration-300"
-            />
-            {/* Main Trace */}
-            <path 
-              d="M 405 205 L 370 170 L 310 170 L 260 120 L 220 120" 
-              fill="none" 
-              stroke={hoveredNode === 'checklist' ? colors.cyanLine : colors.cyanMuted} 
-              strokeWidth={hoveredNode === 'checklist' ? '2.2' : '1.5'} 
-              filter={hoveredNode === 'checklist' ? 'url(#glow-cyan-filter)' : undefined}
-              className="transition-all duration-300"
-            />
-            {/* Junction dot */}
-            <circle 
-              cx="370" 
-              cy="170" 
-              r={hoveredNode === 'checklist' ? 4.5 : 3} 
-              fill={colors.cyanLine} 
-              filter={hoveredNode === 'checklist' ? 'url(#glow-cyan-filter)' : undefined}
-              className="transition-all duration-300"
-            />
-          </g>
+          {nodePositions.map((node) => {
+            const isHovered = hoveredNode === node.id || draggingNodeId === node.id;
+            const strokeColor = node.side === 'left' ? colors.cyanLine : colors.purpleLine;
+            const ringColor = node.side === 'left' ? colors.cyanMuted : colors.purpleMuted;
+            
+            const { mainPath, subPaths, junctions } = getPathsForNode(node);
 
-          {/* LEFT CONNECTOR */}
-          <g id="path-left" opacity={hoveredNode === null || hoveredNode === 'users' ? 1 : 0.35} style={{ transition: 'opacity 0.3s ease' }}>
-            {/* Upper sub-trace */}
-            <path 
-              d="M 375 292 L 340 292 L 330 300 L 260 300 L 250 292 L 160 292" 
-              fill="none" 
-              stroke={hoveredNode === 'users' ? colors.cyanLine : colors.lineMuted} 
-              strokeWidth="1.2" 
-              opacity={hoveredNode === 'users' ? 0.85 : 0.3}
-              className="transition-all duration-300"
-            />
-            {/* Lower sub-trace */}
-            <path 
-              d="M 375 308 L 340 308 L 330 300 L 260 300 L 250 308 L 160 308" 
-              fill="none" 
-              stroke={hoveredNode === 'users' ? colors.cyanLine : colors.lineMuted} 
-              strokeWidth="1.2" 
-              opacity={hoveredNode === 'users' ? 0.85 : 0.3}
-              className="transition-all duration-300"
-            />
-            {/* Main Trace */}
-            <path 
-              d="M 380 300 L 130 300" 
-              fill="none" 
-              stroke={hoveredNode === 'users' ? colors.cyanLine : colors.cyanMuted} 
-              strokeWidth={hoveredNode === 'users' ? '2.2' : '1.5'} 
-              filter={hoveredNode === 'users' ? 'url(#glow-cyan-filter)' : undefined}
-              className="transition-all duration-300"
-            />
-            {/* Junction dot */}
-            <circle 
-              cx="350" 
-              cy="300" 
-              r={hoveredNode === 'users' ? 5 : 3.5} 
-              fill={colors.cyanLine} 
-              filter={hoveredNode === 'users' ? 'url(#glow-cyan-filter)' : undefined}
-              className="transition-all duration-300"
-            />
-          </g>
+            return (
+              <g 
+                key={node.id} 
+                id={`path-${node.id}`} 
+                opacity={hoveredNode === null || isHovered ? 1 : 0.35} 
+                style={{ transition: 'opacity 0.3s ease' }}
+              >
+                {/* Sub-traces */}
+                {subPaths.map((pathD, idx) => (
+                  <path 
+                    key={idx} 
+                    d={pathD} 
+                    fill="none" 
+                    stroke={isHovered ? strokeColor : colors.lineMuted} 
+                    strokeWidth="1.2" 
+                    opacity={isHovered ? 0.85 : 0.3}
+                    className="transition-all duration-300"
+                  />
+                ))}
+                
+                {/* Main Trace */}
+                <path 
+                  d={mainPath} 
+                  fill="none" 
+                  stroke={isHovered ? strokeColor : ringColor} 
+                  strokeWidth={isHovered ? '2.2' : '1.5'} 
+                  filter={isHovered ? (node.side === 'left' ? 'url(#glow-cyan-filter)' : 'url(#glow-purple-filter)') : undefined}
+                  className="transition-all duration-300"
+                />
 
-          {/* BOTTOM-LEFT CONNECTOR */}
-          <g id="path-bottom-left" opacity={hoveredNode === null || hoveredNode === 'grid' ? 1 : 0.35} style={{ transition: 'opacity 0.3s ease' }}>
-            {/* Sub-trace */}
-            <path 
-              d="M 415 385 L 380 420 L 315 420 L 270 465 L 240 465" 
-              fill="none" 
-              stroke={hoveredNode === 'grid' ? colors.cyanLine : colors.lineMuted} 
-              strokeWidth="1.2" 
-              opacity={hoveredNode === 'grid' ? 0.85 : 0.3}
-              className="transition-all duration-300"
-            />
-            {/* Main Trace */}
-            <path 
-              d="M 405 395 L 370 430 L 310 430 L 260 480 L 220 480" 
-              fill="none" 
-              stroke={hoveredNode === 'grid' ? colors.cyanLine : colors.cyanMuted} 
-              strokeWidth={hoveredNode === 'grid' ? '2.2' : '1.5'} 
-              filter={hoveredNode === 'grid' ? 'url(#glow-cyan-filter)' : undefined}
-              className="transition-all duration-300"
-            />
-            {/* Junction dot */}
-            <circle 
-              cx="370" 
-              cy="430" 
-              r={hoveredNode === 'grid' ? 4.5 : 3} 
-              fill={colors.cyanLine} 
-              filter={hoveredNode === 'grid' ? 'url(#glow-cyan-filter)' : undefined}
-              className="transition-all duration-300"
-            />
-          </g>
-
-          {/* TOP-RIGHT CONNECTOR */}
-          <g id="path-top-right" opacity={hoveredNode === null || hoveredNode === 'folder' ? 1 : 0.35} style={{ transition: 'opacity 0.3s ease' }}>
-            {/* Sub-trace */}
-            <path 
-              d="M 585 215 L 620 180 L 685 180 L 730 135 L 760 135" 
-              fill="none" 
-              stroke={hoveredNode === 'folder' ? colors.purpleLine : colors.lineMuted} 
-              strokeWidth="1.2" 
-              opacity={hoveredNode === 'folder' ? 0.85 : 0.3}
-              className="transition-all duration-300"
-            />
-            {/* Main Trace */}
-            <path 
-              d="M 595 205 L 630 170 L 690 170 L 740 120 L 780 120" 
-              fill="none" 
-              stroke={hoveredNode === 'folder' ? colors.purpleLine : colors.purpleMuted} 
-              strokeWidth={hoveredNode === 'folder' ? '2.2' : '1.5'} 
-              filter={hoveredNode === 'folder' ? 'url(#glow-purple-filter)' : undefined}
-              className="transition-all duration-300"
-            />
-            {/* Junction dot */}
-            <circle 
-              cx="630" 
-              cy="170" 
-              r={hoveredNode === 'folder' ? 4.5 : 3} 
-              fill={colors.purpleLine} 
-              filter={hoveredNode === 'folder' ? 'url(#glow-purple-filter)' : undefined}
-              className="transition-all duration-300"
-            />
-          </g>
-
-          {/* RIGHT CONNECTOR */}
-          <g id="path-right" opacity={hoveredNode === null || hoveredNode === 'document' ? 1 : 0.35} style={{ transition: 'opacity 0.3s ease' }}>
-            {/* Upper sub-trace */}
-            <path 
-              d="M 625 292 L 660 292 L 670 300 L 740 300 L 750 292 L 840 292" 
-              fill="none" 
-              stroke={hoveredNode === 'document' ? colors.purpleLine : colors.lineMuted} 
-              strokeWidth="1.2" 
-              opacity={hoveredNode === 'document' ? 0.85 : 0.3}
-              className="transition-all duration-300"
-            />
-            {/* Lower sub-trace */}
-            <path 
-              d="M 625 308 L 660 308 L 670 300 L 740 300 L 750 308 L 840 308" 
-              fill="none" 
-              stroke={hoveredNode === 'document' ? colors.purpleLine : colors.lineMuted} 
-              strokeWidth="1.2" 
-              opacity={hoveredNode === 'document' ? 0.85 : 0.3}
-              className="transition-all duration-300"
-            />
-            {/* Main Trace */}
-            <path 
-              d="M 620 300 L 870 300" 
-              fill="none" 
-              stroke={hoveredNode === 'document' ? colors.purpleLine : colors.purpleMuted} 
-              strokeWidth={hoveredNode === 'document' ? '2.2' : '1.5'} 
-              filter={hoveredNode === 'document' ? 'url(#glow-purple-filter)' : undefined}
-              className="transition-all duration-300"
-            />
-            {/* Junction dot */}
-            <circle 
-              cx="650" 
-              cy="300" 
-              r={hoveredNode === 'document' ? 5 : 3.5} 
-              fill={colors.purpleLine} 
-              filter={hoveredNode === 'document' ? 'url(#glow-purple-filter)' : undefined}
-              className="transition-all duration-300"
-            />
-          </g>
-
-          {/* BOTTOM-RIGHT CONNECTOR */}
-          <g id="path-bottom-right" opacity={hoveredNode === null || hoveredNode === 'chart' ? 1 : 0.35} style={{ transition: 'opacity 0.3s ease' }}>
-            {/* Sub-trace */}
-            <path 
-              d="M 585 385 L 620 420 L 685 420 L 730 465 L 760 465" 
-              fill="none" 
-              stroke={hoveredNode === 'chart' ? colors.purpleLine : colors.lineMuted} 
-              strokeWidth="1.2" 
-              opacity={hoveredNode === 'chart' ? 0.85 : 0.3}
-              className="transition-all duration-300"
-            />
-            {/* Main Trace */}
-            <path 
-              d="M 595 395 L 630 430 L 690 430 L 740 480 L 780 480" 
-              fill="none" 
-              stroke={hoveredNode === 'chart' ? colors.purpleLine : colors.purpleMuted} 
-              strokeWidth={hoveredNode === 'chart' ? '2.2' : '1.5'} 
-              filter={hoveredNode === 'chart' ? 'url(#glow-purple-filter)' : undefined}
-              className="transition-all duration-300"
-            />
-            {/* Junction dot */}
-            <circle 
-              cx="630" 
-              cy="430" 
-              r={hoveredNode === 'chart' ? 4.5 : 3} 
-              fill={colors.purpleLine} 
-              filter={hoveredNode === 'chart' ? 'url(#glow-purple-filter)' : undefined}
-              className="transition-all duration-300"
-            />
-          </g>
+                {/* Junction dots */}
+                {junctions.map((junction, idx) => (
+                  <circle 
+                    key={idx}
+                    cx={junction.cx} 
+                    cy={junction.cy} 
+                    r={isHovered ? 4.5 : 3} 
+                    fill={strokeColor} 
+                    filter={isHovered ? (node.side === 'left' ? 'url(#glow-cyan-filter)' : 'url(#glow-purple-filter)') : undefined}
+                    className="transition-all duration-300"
+                  />
+                ))}
+              </g>
+            );
+          })}
         </g>
 
         {/* ==========================================
             3. CONNECTOR PULSING FLOW DOTS
            ========================================== */}
         <g id="flowing-pulse-dots" className="pointer-events-none">
-          {/* Top-Left Flow */}
-          <circle 
-            r="3" 
-            fill={colors.cyanLine} 
-            filter="url(#glow-cyan-filter)"
-            opacity={hoveredNode === null || hoveredNode === 'checklist' ? 1 : 0.15}
-            style={{ transition: 'opacity 0.3s ease' }}
-          >
-            <animateMotion path="M 405 205 L 370 170 L 310 170 L 260 120 L 220 120" dur="3s" repeatCount="indefinite" />
-          </circle>
-          {/* Left Flow */}
-          <circle 
-            r="3" 
-            fill={colors.cyanLine} 
-            filter="url(#glow-cyan-filter)"
-            opacity={hoveredNode === null || hoveredNode === 'users' ? 1 : 0.15}
-            style={{ transition: 'opacity 0.3s ease' }}
-          >
-            <animateMotion path="M 380 300 L 130 300" dur="2.5s" repeatCount="indefinite" />
-          </circle>
-          {/* Bottom-Left Flow */}
-          <circle 
-            r="3" 
-            fill={colors.cyanLine} 
-            filter="url(#glow-cyan-filter)"
-            opacity={hoveredNode === null || hoveredNode === 'grid' ? 1 : 0.15}
-            style={{ transition: 'opacity 0.3s ease' }}
-          >
-            <animateMotion path="M 405 395 L 370 430 L 310 430 L 260 480 L 220 480" dur="3.2s" repeatCount="indefinite" />
-          </circle>
-          {/* Top-Right Flow */}
-          <circle 
-            r="3" 
-            fill={colors.purpleLine} 
-            filter="url(#glow-purple-filter)"
-            opacity={hoveredNode === null || hoveredNode === 'folder' ? 1 : 0.15}
-            style={{ transition: 'opacity 0.3s ease' }}
-          >
-            <animateMotion path="M 595 205 L 630 170 L 690 170 L 740 120 L 780 120" dur="2.8s" repeatCount="indefinite" />
-          </circle>
-          {/* Right Flow */}
-          <circle 
-            r="3" 
-            fill={colors.purpleLine} 
-            filter="url(#glow-purple-filter)"
-            opacity={hoveredNode === null || hoveredNode === 'document' ? 1 : 0.15}
-            style={{ transition: 'opacity 0.3s ease' }}
-          >
-            <animateMotion path="M 620 300 L 870 300" dur="3.5s" repeatCount="indefinite" />
-          </circle>
-          {/* Bottom-Right Flow */}
-          <circle 
-            r="3" 
-            fill={colors.purpleLine} 
-            filter="url(#glow-purple-filter)"
-            opacity={hoveredNode === null || hoveredNode === 'chart' ? 1 : 0.15}
-            style={{ transition: 'opacity 0.3s ease' }}
-          >
-            <animateMotion path="M 595 395 L 630 430 L 690 430 L 740 480 L 780 480" dur="3s" repeatCount="indefinite" />
-          </circle>
+          {nodePositions.map((node) => {
+            const isHovered = hoveredNode === node.id || draggingNodeId === node.id;
+            const strokeColor = node.side === 'left' ? colors.cyanLine : colors.purpleLine;
+            const { mainPath } = getPathsForNode(node);
+            
+            if (!mainPath) return null;
+
+            return (
+              <circle 
+                key={node.id}
+                r="3" 
+                fill={strokeColor} 
+                filter={node.side === 'left' ? 'url(#glow-cyan-filter)' : 'url(#glow-purple-filter)'}
+                opacity={hoveredNode === null || isHovered ? 1 : 0.15}
+                style={{ transition: 'opacity 0.3s ease' }}
+              >
+                <animateMotion 
+                  path={mainPath} 
+                  dur={node.id === 'checklist' ? '3s' : node.id === 'users' ? '2.5s' : node.id === 'grid' ? '3.2s' : node.id === 'folder' ? '2.8s' : node.id === 'document' ? '3.5s' : '3s'} 
+                  repeatCount="indefinite" 
+                />
+              </circle>
+            );
+          })}
         </g>
 
         {/* ==========================================
@@ -440,31 +384,28 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
           {/* Concentric Circle Guides */}
           <circle cx="500" cy="300" r="140" fill="none" stroke={colors.lineMuted} strokeWidth="1" strokeDasharray="3,6" />
           
-          {/* Large split-arcs (Image A / Image B Core centerpiece highlight) */}
-          {/* Left cyan split arc */}
+          {/* Large split-arcs */}
           <path 
             d="M 500 176 A 124 124 0 0 0 500 424" 
             fill="none" 
             stroke={colors.cyanLine} 
             strokeWidth="3.5" 
             strokeLinecap="round"
-            filter={hoveredNode && nodes.find(n => n.id === hoveredNode)?.side === 'left' ? 'url(#glow-cyan-filter)' : undefined}
+            filter={hoveredNode && nodePositions.find(n => n.id === hoveredNode)?.side === 'left' ? 'url(#glow-cyan-filter)' : undefined}
             className="transition-all duration-300"
           />
-          {/* Right purple split arc */}
           <path 
             d="M 500 424 A 124 124 0 0 0 500 176" 
             fill="none" 
             stroke={colors.purpleLine} 
             strokeWidth="3.5" 
             strokeLinecap="round"
-            filter={hoveredNode && nodes.find(n => n.id === hoveredNode)?.side === 'right' ? 'url(#glow-purple-filter)' : undefined}
+            filter={hoveredNode && nodePositions.find(n => n.id === hoveredNode)?.side === 'right' ? 'url(#glow-purple-filter)' : undefined}
             className="transition-all duration-300"
           />
 
-          {/* HUD index labels & ticks */}
+          {/* HUD index labels & Ticks */}
           <g id="hud-ticks-labels">
-            {/* Ticks circle: Outer ring with rotating segments */}
             <circle 
               cx="500" 
               cy="300" 
@@ -475,7 +416,6 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
               strokeDasharray="40 10 90 20 5 15 150 25" 
               className="proto-animate-cw"
             />
-            {/* Ticks circle: Middle ring with counter-clockwise rotation */}
             <circle 
               cx="500" 
               cy="300" 
@@ -519,10 +459,8 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
           <circle cx="500" cy="300" r="72" fill="none" stroke="url(#cyan-purple-grad)" strokeWidth="1.5" strokeDasharray="180 180" className="proto-animate-cw" />
 
           {/* Central Crosshairs */}
-          {/* Vertical axis line */}
           <line x1="500" y1="180" x2="500" y2="420" stroke={colors.lineMuted} strokeWidth="0.8" />
           <line x1="500" y1="210" x2="500" y2="390" stroke={colors.cyanMuted} strokeWidth="1.2" strokeDasharray="4 4" />
-          {/* Horizontal axis line */}
           <line x1="380" y1="300" x2="620" y2="300" stroke={colors.lineMuted} strokeWidth="0.8" />
           <line x1="410" y1="300" x2="590" y2="300" stroke={colors.cyanMuted} strokeWidth="1.2" strokeDasharray="4 4" />
 
@@ -538,7 +476,7 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
             return <line key={i} x1={x} y1="296" x2={x} y2="304" stroke={colors.cyanMuted} strokeWidth="1" />;
           })}
 
-          {/* Radial Ticks (Inner Circle Dial) - Glow boost on core hover */}
+          {/* Radial Ticks (Inner Circle Dial) */}
           <g id="compass-ticks-inner" opacity={isCoreHovered ? 1.0 : 0.6} style={{ transition: 'opacity 0.3s ease' }}>
             {Array.from({ length: 36 }).map((_, i) => {
               const angle = (i * 10 * Math.PI) / 180;
@@ -569,7 +507,6 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
             onMouseEnter={() => setIsCoreHovered(true)}
             onMouseLeave={() => setIsCoreHovered(false)}
           >
-            {/* Outward pulse breathing circle (core hover interaction) */}
             <circle 
               cx="500" 
               cy="300" 
@@ -581,8 +518,6 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
               className={isCoreHovered ? "proto-animate-pulse" : undefined}
               style={{ transition: 'all 0.3s ease' }}
             />
-
-            {/* Inner core circle holding HUD readout details */}
             <circle 
               cx="500" 
               cy="300" 
@@ -593,8 +528,6 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
               filter={isCoreHovered ? "url(#glow-strong-filter)" : "url(#glow-cyan-filter)"}
               style={{ transition: 'all 0.3s ease' }}
             />
-
-            {/* Primary overall system score readout */}
             <text
               x="500"
               y="294"
@@ -606,8 +539,6 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
             >
               94%
             </text>
-            
-            {/* Secondary Score Label */}
             <text
               x="500"
               y="308"
@@ -620,8 +551,6 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
             >
               SYSTEM SCORE
             </text>
-
-            {/* Tertiary live telemetry indicator */}
             <text
               x="500"
               y="320"
@@ -642,8 +571,8 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
             5. SIX OUTER NODES & HUD FRAMES
            ========================================== */}
         <g id="outer-nodes">
-          {nodes.map((node) => {
-            const isHovered = hoveredNode === node.id;
+          {nodePositions.map((node) => {
+            const isHovered = hoveredNode === node.id || draggingNodeId === node.id;
             const strokeColor = node.side === 'left' ? colors.cyanLine : colors.purpleLine;
             const ringColor = node.side === 'left' ? colors.cyanMuted : colors.purpleMuted;
             
@@ -651,9 +580,10 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
               <g 
                 key={node.id}
                 id={`node-${node.id}`}
-                className="cursor-pointer group"
+                className={`${dragEnabled ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} group`}
                 onMouseEnter={() => setHoveredNode(node.id)}
                 onMouseLeave={() => setHoveredNode(null)}
+                onMouseDown={(e) => handleMouseDown(node.id, e)}
               >
                 {/* Node Ambient Soft Glow */}
                 <circle 
@@ -692,7 +622,7 @@ export default function ExactHeroComponent({ theme }: ExactHeroComponentProps) {
                   className="transition-all duration-300"
                 />
 
-                {/* Outer Tick indicators (top, bottom, left, right ticks) */}
+                {/* Outer Tick indicators */}
                 <line x1={node.x} y1={node.y - 36} x2={node.x} y2={node.y - 32} stroke={strokeColor} strokeWidth="1.5" />
                 <line x1={node.x} y1={node.y + 32} x2={node.x} y2={node.y + 36} stroke={strokeColor} strokeWidth="1.5" />
                 <line x1={node.x - 36} y1={node.y} x2={node.x - 32} y2={node.y} stroke={strokeColor} strokeWidth="1.5" />
