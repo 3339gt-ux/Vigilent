@@ -140,15 +140,15 @@ export default function LumenLogo({
             <text x="148" y="64">U</text>
             <text x="186" y="64">M</text>
             <text x="226" y="64">E</text>
-            <text x="264" y="64">N</text>
+            <text x="259" y="64">N</text>
           </g>
           
           {/* Custom tilted accent bar above the letter E (x=226) */}
           <line 
-            x1="233" 
-            y1="32" 
-            x2="249" 
-            y2="25" 
+            x1="230" 
+            y1="34" 
+            x2="240" 
+            y2="28" 
             stroke={accentBarColor} 
             strokeWidth="4" 
             strokeLinecap="round" 
