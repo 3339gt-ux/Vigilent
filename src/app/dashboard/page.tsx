@@ -481,7 +481,7 @@ const DEFAULT_CUSTOMIZATION_SETTINGS: DashboardCustomization = {
   heroCustomPositions: undefined,
   rightRailOrder: ['snapshot', 'focus-card', 'expiring', 'upload-console'],
   lowerPanelsOrder: ['quickActions', 'trend', 'statusDonut', 'readinessGauge', 'trainingRing', 'assetCategory', 'riskGaps', 'alerts'],
-  
+
   // Readability
   fontSize: 'standard',
   layoutDensity: 'comfortable',
@@ -2335,11 +2335,11 @@ export default function DashboardPage() {
   }, [readinessScore]);
 
   const readabilityStyles = useMemo(() => {
-    const scale = 
+    const scale =
       customization.fontSize === 'sm' ? 0.9 :
       customization.fontSize === 'lg' ? 1.15 :
       customization.fontSize === 'xl' ? 1.25 : 1.0;
-    
+
     const paneSpacingVal =
       customization.paneSpacing === 'tight' ? '12px' :
       customization.paneSpacing === 'wide' ? '36px' : '20px';
@@ -2356,7 +2356,7 @@ export default function DashboardPage() {
     // Accents map
     let primaryColor = '99, 102, 241'; // Indigo-500 default rgb
     let secondaryColor = '168, 85, 247'; // Purple-500 default rgb
-    
+
     if (customization.colourAccent === 'cyan-emerald') {
       primaryColor = '6, 182, 212'; // Cyan-500
       secondaryColor = '16, 185, 129'; // Emerald-500
@@ -2402,7 +2402,7 @@ export default function DashboardPage() {
         .lumen-dashboard {
           font-size: calc(1rem * var(--lumen-scale, 1.0));
         }
-        .lumen-dashboard .bg-card, 
+        .lumen-dashboard .bg-card,
         .lumen-dashboard .bg-muted,
         .lumen-dashboard .border {
           border-radius: var(--lumen-radius, 12px) !important;
@@ -4690,6 +4690,91 @@ export default function DashboardPage() {
                       <option value="compact-core">Compact Core</option>
                       <option value="operations-focus">Operations Focus</option>
                       <option value="presentation-mode">Presentation Mode</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Display & Readability Settings */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Display & Readability</span>
+                <div className="grid grid-cols-2 gap-3 border border-border/60 rounded-xl p-3 bg-muted/10">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Font Size Scale</label>
+                    <select
+                      value={modalCustomization.fontSize || 'standard'}
+                      onChange={(e) => setModalCustomization({ ...modalCustomization, fontSize: e.target.value as 'sm' | 'standard' | 'lg' | 'xl' })}
+                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                    >
+                      <option value="sm">Small (90%)</option>
+                      <option value="standard">Standard (100%)</option>
+                      <option value="lg">Large (115%)</option>
+                      <option value="xl">Extra Large (125%)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Pane Spacing</label>
+                    <select
+                      value={modalCustomization.paneSpacing || 'standard'}
+                      onChange={(e) => setModalCustomization({ ...modalCustomization, paneSpacing: e.target.value as 'tight' | 'standard' | 'wide' })}
+                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                    >
+                      <option value="tight">Tight (12px)</option>
+                      <option value="standard">Standard (20px)</option>
+                      <option value="wide">Wide (36px)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Card Corner Radius</label>
+                    <select
+                      value={modalCustomization.cardRadius || 'standard'}
+                      onChange={(e) => setModalCustomization({ ...modalCustomization, cardRadius: e.target.value as 'sharp' | 'standard' | 'soft' | 'rounded' })}
+                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                    >
+                      <option value="sharp">Sharp (0px)</option>
+                      <option value="standard">Standard (12px)</option>
+                      <option value="soft">Soft (16px)</option>
+                      <option value="rounded">Rounded (24px)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Colour Accent Scheme</label>
+                    <select
+                      value={modalCustomization.colourAccent || 'default'}
+                      onChange={(e) => setModalCustomization({ ...modalCustomization, colourAccent: e.target.value as 'default' | 'cyan-emerald' | 'emerald-pulse' | 'violet-rose' | 'azure-amber' | 'blue-amber' | 'rainbow' | 'gold-amber' | 'neon-green' | 'sunset-orange' | 'slate-monochrome' })}
+                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                    >
+                      <option value="default">Default Indigo/Violet</option>
+                      <option value="cyan-emerald">Cyan/Emerald</option>
+                      <option value="emerald-pulse">Emerald Pulse</option>
+                      <option value="violet-rose">Violet/Rose</option>
+                      <option value="azure-amber">Azure/Amber</option>
+                      <option value="gold-amber">Gold/Amber</option>
+                      <option value="neon-green">Neon Green</option>
+                      <option value="sunset-orange">Sunset Orange</option>
+                      <option value="slate-monochrome">Slate Monochrome</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Contrast Enhancement</label>
+                    <select
+                      value={modalCustomization.contrast || 'standard'}
+                      onChange={(e) => setModalCustomization({ ...modalCustomization, contrast: e.target.value as 'standard' | 'high' })}
+                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                    >
+                      <option value="standard">Standard Contrast</option>
+                      <option value="high">High Contrast Borders</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Interface Motion</label>
+                    <select
+                      value={modalCustomization.motion || 'standard'}
+                      onChange={(e) => setModalCustomization({ ...modalCustomization, motion: e.target.value as 'standard' | 'minimal' })}
+                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                    >
+                      <option value="standard">Standard Transitions</option>
+                      <option value="minimal">Minimal / Disable Motion</option>
                     </select>
                   </div>
                 </div>
