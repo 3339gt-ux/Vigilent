@@ -338,6 +338,8 @@ export default function BulkImportCentrePage() {
   const [fileName, setFileName] = useState('');
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
   const [parseError, setParseError] = useState('');
+  const [dropNotice, setDropNotice] = useState('');
+  const [isCsvDragging, setIsCsvDragging] = useState(false);
 
   const selectedTemplate = importTemplates.find(template => template.id === selectedType) || importTemplates[0];
 
@@ -485,15 +487,15 @@ export default function BulkImportCentrePage() {
     URL.revokeObjectURL(url);
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const parseSelectedFile = async (file: File) => {
     if (!file) return;
     setFileName(file.name);
     setParseError('');
+    setDropNotice('');
     setParseResult(null);
 
     if (!file.name.toLowerCase().endsWith('.csv')) {
-      setParseError('Upload a CSV file generated from one of the templates.');
+      setParseError('Only CSV files are accepted here. Evidence file uploads are disabled on the Bulk Import Centre page.');
       return;
     }
 
@@ -510,6 +512,57 @@ export default function BulkImportCentrePage() {
     }
   };
 
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    await parseSelectedFile(file);
+    event.target.value = '';
+  };
+
+  const handlePageDrag = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes('Files')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setDropNotice('Drop CSV files into the import upload box. Evidence uploads are disabled on this page.');
+  };
+
+  const handlePageDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes('Files')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setIsCsvDragging(false);
+    setDropNotice('Drop CSV files into the import upload box. Evidence uploads are disabled on this page.');
+  };
+
+  const handleCsvDrag = (event: React.DragEvent<HTMLLabelElement>) => {
+    if (!event.dataTransfer.types.includes('Files')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setDropNotice('');
+    setIsCsvDragging(true);
+  };
+
+  const handleCsvDragLeave = (event: React.DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      setIsCsvDragging(false);
+    }
+  };
+
+  const handleCsvDrop = async (event: React.DragEvent<HTMLLabelElement>) => {
+    if (!event.dataTransfer.types.includes('Files')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setIsCsvDragging(false);
+    const file = event.dataTransfer.files?.[0];
+    if (!file) return;
+    if (event.dataTransfer.files.length > 1) {
+      setDropNotice('Only the first CSV file will be parsed. Use one import template at a time.');
+    }
+    await parseSelectedFile(file);
+  };
+
   const statusClass = (action: ProposedAction) => {
     if (action === 'create') return 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-300';
     if (action === 'update') return 'bg-indigo-500/10 border-indigo-500/20 text-indigo-700 dark:text-indigo-300';
@@ -518,7 +571,12 @@ export default function BulkImportCentrePage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div
+      className="space-y-6"
+      onDragEnter={handlePageDrag}
+      onDragOver={handlePageDrag}
+      onDrop={handlePageDrop}
+    >
       <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
         <div>
           <span className="text-[10px] uppercase tracking-widest font-extrabold text-indigo-600 dark:text-indigo-400">Preview-first data onboarding</span>
@@ -644,17 +702,28 @@ export default function BulkImportCentrePage() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">
-            <label className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border bg-muted/30 p-8 text-center cursor-pointer hover:bg-muted/50 transition-colors">
-              <FileSpreadsheet className="w-8 h-8 text-indigo-500" />
+            <label
+              onDragEnter={handleCsvDrag}
+              onDragOver={handleCsvDrag}
+              onDragLeave={handleCsvDragLeave}
+              onDrop={handleCsvDrop}
+              className={`flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-8 text-center cursor-pointer transition-colors ${
+                isCsvDragging
+                  ? 'border-indigo-500 bg-indigo-500/10'
+                  : 'border-border bg-muted/30 hover:bg-muted/50'
+              }`}
+            >
+              <FileSpreadsheet className={`w-8 h-8 ${isCsvDragging ? 'text-indigo-600 dark:text-indigo-300' : 'text-indigo-500'}`} />
               <span className="text-sm font-extrabold">Upload a CSV for validation preview</span>
               <span className="text-xs text-muted-foreground max-w-xl">
-                Nothing is committed. The file is parsed in the browser and checked against the selected template and current workspace records.
+                Drop one CSV file here or choose a template file. Nothing is committed, and evidence uploads are disabled on this page.
               </span>
               <input type="file" accept=".csv,text/csv" className="sr-only" onChange={handleFileUpload} />
               <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card border border-border text-xs font-bold">
                 <UploadCloud className="w-4 h-4" /> Choose CSV
               </span>
             </label>
+            {dropNotice && <p className="text-xs text-amber-700 dark:text-amber-300 mt-2">{dropNotice}</p>}
             {fileName && <p className="text-xs text-muted-foreground mt-2">Selected file: <span className="font-bold text-foreground">{fileName}</span></p>}
             {parseError && <p className="text-xs text-rose-600 dark:text-rose-300 mt-2">{parseError}</p>}
           </div>

@@ -97,6 +97,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [globalUploadQueue, setGlobalUploadQueue] = React.useState<any[]>([]);
   const [bulkDocs, setBulkDocs] = React.useState<any[]>([]);
   const dragCounterRef = React.useRef(0);
+  const isImportRoute = pathname.startsWith('/dashboard/imports');
   const sidebarStorageKey = user && organization
     ? `vygilence_sidebar_state_${user.id}_${organization.id}`
     : null;
@@ -157,6 +158,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [pathname]);
 
   const handleGlobalUpload = async (files: File[]) => {
+    if (isImportRoute) return;
     setGlobalUploading(true);
     const nextQueue = files.map(file => ({
       id: `global-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -201,6 +203,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   React.useEffect(() => {
+    if (isImportRoute) {
+      dragCounterRef.current = 0;
+      setIsGlobalDragging(false);
+      setGlobalUploading(false);
+      setGlobalUploadQueue([]);
+      return;
+    }
+
     const handleDragEnter = (e: DragEvent) => {
       if (e.dataTransfer?.types.includes('Files')) {
         dragCounterRef.current += 1;
@@ -248,7 +258,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       window.removeEventListener('dragover', handleDragOver);
       window.removeEventListener('drop', handleDrop);
     };
-  }, [uploadContext]);
+  }, [isImportRoute, uploadContext]);
 
   // Authentication gate
   useEffect(() => {
