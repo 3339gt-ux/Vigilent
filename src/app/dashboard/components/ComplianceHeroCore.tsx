@@ -21,7 +21,7 @@ interface ComplianceHeroCoreProps {
   dragEnabled?: boolean;
   customPositions?: Record<string, { x: number; y: number }>;
   onCustomPositionsChange?: (positions: Record<string, { x: number; y: number }>) => void;
-  
+
   // Real data mappings
   requirementsData: { active: number; compliant: number; warnings: number; percent: number; metricText: string };
   vaultData: { total: number; classified: number; warnings: number; percent: number; metricText: string };
@@ -34,6 +34,13 @@ interface ComplianceHeroCoreProps {
   onNodeMouseEnter: (id: string, element: SVGGElement) => void;
   onNodeMouseLeave: () => void;
   onNodeClick: (id: string) => void;
+
+  // Customisation options
+  heroVisualMode?: 'standard' | 'detailed' | 'showcase' | 'minimal';
+  heroNodeDisplayLevel?: 'icons-only' | 'icons-labels' | 'icons-labels-metrics' | 'full-detail';
+  heroCentralOrbContent?: 'overall-score' | 'score-status' | 'score-top-gap' | 'score-evidence-health' | 'score-action-count' | 'rotating-snapshot';
+  showMinorNodes?: boolean;
+  visibleHeroNodes?: string[];
 }
 
 interface NodeLayout {
@@ -273,11 +280,48 @@ export default function ComplianceHeroCore({
   reportsData,
   onNodeMouseEnter,
   onNodeMouseLeave,
-  onNodeClick
+  onNodeClick,
+  heroVisualMode = 'standard',
+  heroNodeDisplayLevel = 'icons-labels-metrics',
+  heroCentralOrbContent = 'overall-score',
+  showMinorNodes = true,
+  visibleHeroNodes = ['requirements', 'vault', 'competencies', 'matrix', 'audit-packs', 'reports']
 }: ComplianceHeroCoreProps) {
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [isCoreHovered, setIsCoreHovered] = useState(false);
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
+
+  // Central Orb calculation logic based on heroCentralOrbContent setting
+  const orbContent = React.useMemo(() => {
+    let mainText = readinessScore === null ? 'N/A' : `${readinessScore}%`;
+    let labelText = 'READINESS SCORE';
+    let statusText = `● ${readinessLabel}`;
+    let statusColor = readinessScore === null ? colors.textLabel :
+                      readinessScore >= 90 ? '#10b981' :
+                      readinessScore >= 75 ? colors.cyanLine :
+                      readinessScore >= 50 ? '#f59e0b' : '#ef4444';
+
+    if (heroCentralOrbContent === 'score-status') {
+      labelText = 'SYSTEM STATUS';
+      statusText = `● STATUS: ${readinessLabel.toUpperCase()}`;
+    } else if (heroCentralOrbContent === 'score-top-gap') {
+      labelText = 'PENDING GAPS';
+      const reqOpen = requirementsData.warnings;
+      statusText = reqOpen > 0 ? `● ${reqOpen} REQS ATTN` : '● NO ACTIVE GAPS';
+      statusColor = reqOpen > 0 ? '#ef4444' : '#10b981';
+    } else if (heroCentralOrbContent === 'score-evidence-health') {
+      mainText = `${vaultData.percent}%`;
+      labelText = 'EVIDENCE HEALTH';
+      statusText = `● ${vaultData.classified}/${vaultData.total} TAGGED`;
+      statusColor = vaultData.warnings > 0 ? '#f59e0b' : '#10b981';
+    } else if (heroCentralOrbContent === 'score-action-count') {
+      labelText = 'ACTIVE ACTIONS';
+      statusText = `● ${requirementsData.active} TASKS OPEN`;
+      statusColor = requirementsData.active > 0 ? '#f59e0b' : '#10b981';
+    }
+
+    return { mainText, labelText, statusText, statusColor };
+  }, [heroCentralOrbContent, readinessScore, readinessLabel, requirementsData, vaultData]);
 
   // Retrieve active preset layout config mapping to coordinates presets
   const mappedPresetKey = heroLayoutPreset === 'wide-command-map' ? 'wide' :
@@ -357,11 +401,11 @@ export default function ComplianceHeroCore({
     if (!dragEnabled || !draggingNodeId) return;
     const svg = e.currentTarget;
     const rect = svg.getBoundingClientRect();
-    
+
     // Scale screen space to viewBox 1000x600 coordinates
     const x = Math.round(((e.clientX - rect.left) / rect.width) * 1000);
     const y = Math.round(((e.clientY - rect.top) / rect.height) * 600);
-    
+
     // Clamping to prevent dragging off-screen
     const clampedX = Math.max(50, Math.min(950, x));
     const clampedY = Math.max(50, Math.min(550, y));
@@ -372,7 +416,7 @@ export default function ComplianceHeroCore({
     const dx = clampedX - cx;
     const dy = clampedY - cy;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    
+
     let finalX = clampedX;
     let finalY = clampedY;
     if (dist < 165) {
@@ -534,72 +578,72 @@ export default function ComplianceHeroCore({
 
   // 6 nodes structural definitions mapped to active preset
   const nodes = [
-    { 
-      id: 'requirements', 
-      x: getNodePos('requirements').x, 
-      y: getNodePos('requirements').y, 
-      label: 'Requirements', 
-      side: getNodePos('requirements').x < 500 ? 'left' as const : 'right' as const, 
+    {
+      id: 'requirements',
+      x: getNodePos('requirements').x,
+      y: getNodePos('requirements').y,
+      label: 'Requirements',
+      side: getNodePos('requirements').x < 500 ? 'left' as const : 'right' as const,
       icon: 'checklist',
       percent: requirementsData.percent,
       metricText: requirementsData.metricText,
       warnings: requirementsData.warnings,
       path: '/dashboard/requirements'
     },
-    { 
-      id: 'competencies', 
-      x: getNodePos('competencies').x, 
-      y: getNodePos('competencies').y, 
-      label: 'Competency Matrix', 
-      side: getNodePos('competencies').x < 500 ? 'left' as const : 'right' as const, 
+    {
+      id: 'competencies',
+      x: getNodePos('competencies').x,
+      y: getNodePos('competencies').y,
+      label: 'Competency Matrix',
+      side: getNodePos('competencies').x < 500 ? 'left' as const : 'right' as const,
       icon: 'users',
       percent: competencyData.percent,
       metricText: competencyData.metricText,
       warnings: competencyData.warnings,
       path: '/dashboard/competencies'
     },
-    { 
-      id: 'matrix', 
-      x: getNodePos('matrix').x, 
-      y: getNodePos('matrix').y, 
-      label: 'Asset Matrix', 
-      side: getNodePos('matrix').x < 500 ? 'left' as const : 'right' as const, 
+    {
+      id: 'matrix',
+      x: getNodePos('matrix').x,
+      y: getNodePos('matrix').y,
+      label: 'Asset Matrix',
+      side: getNodePos('matrix').x < 500 ? 'left' as const : 'right' as const,
       icon: 'grid',
       percent: matrixData.percent,
       metricText: matrixData.metricText,
       warnings: matrixData.warnings,
       path: '/dashboard/matrix'
     },
-    { 
-      id: 'vault', 
-      x: getNodePos('vault').x, 
-      y: getNodePos('vault').y, 
-      label: 'Evidence Vault', 
-      side: getNodePos('vault').x < 500 ? 'left' as const : 'right' as const, 
+    {
+      id: 'vault',
+      x: getNodePos('vault').x,
+      y: getNodePos('vault').y,
+      label: 'Evidence Vault',
+      side: getNodePos('vault').x < 500 ? 'left' as const : 'right' as const,
       icon: 'folder',
       percent: vaultData.percent,
       metricText: vaultData.metricText,
       warnings: vaultData.warnings,
       path: '/dashboard/vault'
     },
-    { 
-      id: 'audit-packs', 
-      x: getNodePos('audit-packs').x, 
-      y: getNodePos('audit-packs').y, 
-      label: 'Audit Pack Builder', 
-      side: getNodePos('audit-packs').x < 500 ? 'left' as const : 'right' as const, 
+    {
+      id: 'audit-packs',
+      x: getNodePos('audit-packs').x,
+      y: getNodePos('audit-packs').y,
+      label: 'Audit Pack Builder',
+      side: getNodePos('audit-packs').x < 500 ? 'left' as const : 'right' as const,
       icon: 'document',
       percent: auditPacksData.percent,
       metricText: auditPacksData.metricText,
       warnings: auditPacksData.warnings,
       path: '/dashboard/audit-packs'
     },
-    { 
-      id: 'reports', 
-      x: getNodePos('reports').x, 
-      y: getNodePos('reports').y, 
-      label: 'Reports', 
-      side: getNodePos('reports').x < 500 ? 'left' as const : 'right' as const, 
+    {
+      id: 'reports',
+      x: getNodePos('reports').x,
+      y: getNodePos('reports').y,
+      label: 'Reports',
+      side: getNodePos('reports').x < 500 ? 'left' as const : 'right' as const,
       icon: 'chart',
       percent: 100, // neutral snapshot bar
       metricText: reportsData.metricText,
@@ -607,6 +651,15 @@ export default function ComplianceHeroCore({
       path: '/dashboard/reports'
     },
   ];
+
+  const majorNodesList = React.useMemo(() => {
+    return nodes.filter(n => visibleHeroNodes.includes(n.id));
+  }, [nodes, visibleHeroNodes]);
+
+  const minorNodesList = React.useMemo(() => {
+    if (!showMinorNodes) return [];
+    return nodes.filter(n => !visibleHeroNodes.includes(n.id));
+  }, [nodes, showMinorNodes, visibleHeroNodes]);
 
   // Render SVG icons with matching theme highlights
   const renderIcon = (type: string, strokeColor: string) => {
@@ -632,9 +685,9 @@ export default function ComplianceHeroCore({
 
   return (
     <div className="relative w-full max-w-5xl mx-auto flex items-center justify-center p-2 select-none">
-      
+
       {/* SVG Container */}
-      <svg 
+      <svg
         className={`w-full h-auto aspect-[5/3] overflow-visible ${draggingNodeId ? 'cursor-grabbing' : ''}`}
         viewBox="0 0 1000 600"
         xmlns="http://www.w3.org/2000/svg"
@@ -733,21 +786,23 @@ export default function ComplianceHeroCore({
         ` }} />
 
         {/* Ambient backing glows */}
-        <g id="hero-bg-glows" className="pointer-events-none">
-          <circle cx="350" cy="300" r="280" fill="url(#hero-cyan-radial)" />
-          <circle cx="650" cy="300" r="280" fill="url(#hero-purple-radial)" />
-          <circle cx="500" cy="300" r="80" fill={theme === 'light' ? 'rgba(2, 132, 199, 0.03)' : 'rgba(0, 240, 255, 0.05)'} />
-        </g>
+        {heroVisualMode !== 'minimal' && (
+          <g id="hero-bg-glows" className="pointer-events-none">
+            <circle cx="350" cy="300" r="280" fill="url(#hero-cyan-radial)" />
+            <circle cx="650" cy="300" r="280" fill="url(#hero-purple-radial)" />
+            <circle cx="500" cy="300" r="80" fill={theme === 'light' ? 'rgba(2, 132, 199, 0.03)' : 'rgba(0, 240, 255, 0.05)'} />
+          </g>
+        )}
 
         {/* ==========================================
             2. CONNECTOR BUS PATHS (Topology)
            ========================================== */}
         <g id="hero-connector-paths" strokeLinecap="round" strokeLinejoin="round">
-          {nodes.map((node) => {
+          {majorNodesList.map((node) => {
             const isHovered = hoveredNode === node.id || draggingNodeId === node.id;
             const strokeColor = node.side === 'left' ? colors.cyanLine : colors.purpleLine;
             const ringColor = node.side === 'left' ? colors.cyanMuted : colors.purpleMuted;
-            
+
             const { mainPath, subPaths, junctions } = getPathsForNode(node.id, node.x, node.y);
 
             return (
@@ -756,19 +811,19 @@ export default function ComplianceHeroCore({
                 {subPaths.map((pathD, idx) => (
                   <path key={idx} d={pathD} fill="none" stroke={colors.lineMuted} strokeWidth="1.2" />
                 ))}
-                
+
                 {/* Main connector path */}
-                <path 
-                  d={mainPath} 
-                  fill="none" 
-                  stroke={isHovered ? strokeColor : ringColor} 
-                  strokeWidth={isHovered ? '2.2' : '1.5'} 
+                <path
+                  d={mainPath}
+                  fill="none"
+                  stroke={isHovered ? strokeColor : ringColor}
+                  strokeWidth={isHovered ? '2.2' : '1.5'}
                   filter={isHovered ? (node.side === 'left' ? 'url(#hero-glow-cyan)' : 'url(#hero-glow-purple)') : undefined}
                   className="transition-all duration-355"
                 />
 
                 {/* Staggered Premium Light Sweep Line */}
-                {effectIntensity !== 'subtle' && (
+                {effectIntensity !== 'subtle' && heroVisualMode !== 'minimal' && (
                   <path
                     d={mainPath}
                     fill="none"
@@ -784,16 +839,34 @@ export default function ComplianceHeroCore({
 
                 {/* Junction nodes */}
                 {junctions.map((junction, idx) => (
-                  <circle 
+                  <circle
                     key={idx}
-                    cx={junction.cx} 
-                    cy={junction.cy} 
-                    r={isHovered ? 4.5 : 3} 
-                    fill={strokeColor} 
-                    filter={isHovered ? (node.side === 'left' ? 'url(#hero-glow-cyan)' : 'url(#hero-glow-purple)') : undefined} 
-                    className="transition-all duration-300" 
+                    cx={junction.cx}
+                    cy={junction.cy}
+                    r={isHovered ? 4.5 : 3}
+                    fill={strokeColor}
+                    filter={isHovered ? (node.side === 'left' ? 'url(#hero-glow-cyan)' : 'url(#hero-glow-purple)') : undefined}
+                    className="transition-all duration-300"
                   />
                 ))}
+              </g>
+            );
+          })}
+
+          {/* Minor nodes traces (thin dashed lines) */}
+          {minorNodesList.map((node) => {
+            const strokeColor = node.side === 'left' ? colors.cyanLine : colors.purpleLine;
+            const { mainPath } = getPathsForNode(node.id, node.x, node.y);
+            if (!mainPath) return null;
+            return (
+              <g key={node.id} opacity={hoveredNode === node.id ? 0.9 : 0.35} style={{ transition: 'opacity 0.3s ease' }}>
+                <path
+                  d={mainPath}
+                  fill="none"
+                  stroke={strokeColor}
+                  strokeWidth="0.8"
+                  strokeDasharray="3 3"
+                />
               </g>
             );
           })}
@@ -802,24 +875,24 @@ export default function ComplianceHeroCore({
         {/* Connector pulse animations - only active when motion is not reduced */}
         {!isMotionReduced && (
           <g id="hero-flowing-pulse-dots" className="pointer-events-none">
-            {nodes.map((node) => {
+            {majorNodesList.map((node) => {
               const isHovered = hoveredNode === node.id || draggingNodeId === node.id;
               const strokeColor = node.side === 'left' ? colors.cyanLine : colors.purpleLine;
               const { mainPath } = getPathsForNode(node.id, node.x, node.y);
               if (!mainPath) return null;
-              
+
               return (
-                <circle 
-                  key={node.id} 
-                  r="3.5" 
-                  fill={strokeColor} 
-                  filter={node.side === 'left' ? "url(#hero-glow-cyan)" : "url(#hero-glow-purple)"} 
+                <circle
+                  key={node.id}
+                  r="3.5"
+                  fill={strokeColor}
+                  filter={node.side === 'left' ? "url(#hero-glow-cyan)" : "url(#hero-glow-purple)"}
                   opacity={hoveredNode === null || isHovered ? 1 : 0.1}
                 >
-                  <animateMotion 
-                    path={mainPath} 
-                    dur={node.id === 'requirements' ? '3.5s' : node.id === 'vault' ? '3.2s' : node.id === 'competencies' ? '3s' : node.id === 'audit-packs' ? '4s' : node.id === 'matrix' ? '3.8s' : '3.5s'} 
-                    repeatCount="indefinite" 
+                  <animateMotion
+                    path={mainPath}
+                    dur={node.id === 'requirements' ? '3.5s' : node.id === 'vault' ? '3.2s' : node.id === 'competencies' ? '3s' : node.id === 'audit-packs' ? '4s' : node.id === 'matrix' ? '3.8s' : '3.5s'}
+                    repeatCount="indefinite"
                   />
                 </circle>
               );
@@ -834,125 +907,133 @@ export default function ComplianceHeroCore({
           {/* Outermost thin reference path */}
           <circle cx="500" cy="300" r="160" fill="none" stroke={colors.lineMuted} strokeWidth="0.8" />
           <circle cx="500" cy="300" r="140" fill="none" stroke={colors.lineMuted} strokeWidth="1" strokeDasharray="3,6" />
-          
+
           {/* Cyan and Purple Concentric Split Arcs */}
-          <path 
-            d="M 500 176 A 124 124 0 0 0 500 424" 
-            fill="none" 
-            stroke={colors.cyanLine} 
-            strokeWidth="3.5" 
+          <path
+            d="M 500 176 A 124 124 0 0 0 500 424"
+            fill="none"
+            stroke={colors.cyanLine}
+            strokeWidth="3.5"
             strokeLinecap="round"
             filter={hoveredNode && nodes.find(n => n.id === hoveredNode)?.side === 'left' ? 'url(#hero-glow-cyan)' : undefined}
             className="transition-all duration-300"
           />
-          <path 
-            d="M 500 424 A 124 124 0 0 0 500 176" 
-            fill="none" 
-            stroke={colors.purpleLine} 
-            strokeWidth="3.5" 
+          <path
+            d="M 500 424 A 124 124 0 0 0 500 176"
+            fill="none"
+            stroke={colors.purpleLine}
+            strokeWidth="3.5"
             strokeLinecap="round"
             filter={hoveredNode && nodes.find(n => n.id === hoveredNode)?.side === 'right' ? 'url(#hero-glow-purple)' : undefined}
             className="transition-all duration-300"
           />
 
-          {/* Rotating HUD tracks */}
-          <g opacity="0.8">
-            <circle 
-              cx="500" 
-              cy="300" 
-              r="110" 
-              fill="none" 
-              stroke="url(#hero-cyan-purple-grad)" 
-              strokeWidth="2" 
-              strokeDasharray="40 10 90 20 5 15 150 25" 
-              className={isMotionReduced ? '' : 'proto-animate-cw'}
-            />
-            <circle 
-              cx="500" 
-              cy="300" 
-              r="92" 
-              fill="none" 
-              stroke={colors.cyanLine} 
-              strokeWidth="1.2" 
-              strokeDasharray="80 30 10 10 40 20" 
-              opacity="0.6"
-              className={isMotionReduced ? '' : 'proto-animate-ccw'}
-            />
-          </g>
-
-          {/* Fine Outer Compass Ticks */}
-          <g id="hero-compass-ticks-outer">
-            {Array.from({ length: 72 }).map((_, i) => {
-              const angle = (i * 5 * Math.PI) / 180;
-              const innerRadius = 82;
-              const outerRadius = i % 6 === 0 ? 89 : 85;
-              const x1 = 500 + innerRadius * Math.cos(angle);
-              const y1 = 300 + innerRadius * Math.sin(angle);
-              const x2 = 500 + outerRadius * Math.cos(angle);
-              const y2 = 300 + outerRadius * Math.sin(angle);
-              return (
-                <line 
-                  key={i} 
-                  x1={x1} 
-                  y1={y1} 
-                  x2={x2} 
-                  y2={y2} 
-                  stroke={i % 6 === 0 ? colors.cyanLine : colors.lineMuted} 
-                  strokeWidth={i % 6 === 0 ? '1' : '0.6'}
-                  opacity={i % 6 === 0 ? '0.8' : '0.4'}
+          {/* Rotating HUD tracks, Ticks, and Crosshairs */}
+          {heroVisualMode !== 'minimal' && (
+            <>
+              <g opacity="0.8">
+                <circle
+                  cx="500"
+                  cy="300"
+                  r="110"
+                  fill="none"
+                  stroke="url(#hero-cyan-purple-grad)"
+                  strokeWidth="2"
+                  strokeDasharray="40 10 90 20 5 15 150 25"
+                  className={isMotionReduced ? '' : 'proto-animate-cw'}
                 />
-              );
-            })}
-          </g>
-
-          {/* Concentric tracks */}
-          <circle cx="500" cy="300" r="76" fill="none" stroke={colors.lineMuted} strokeWidth="1" />
-          <circle cx="500" cy="300" r="72" fill="none" stroke="url(#hero-cyan-purple-grad)" strokeWidth="1.5" strokeDasharray="180 180" className={isMotionReduced ? '' : 'proto-animate-cw'} />
-
-          {/* Crosshair telemetry paths */}
-          <line x1="500" y1="180" x2="500" y2="420" stroke={colors.lineMuted} strokeWidth="0.8" />
-          <line x1="500" y1="210" x2="500" y2="390" stroke={colors.cyanMuted} strokeWidth="1.2" strokeDasharray="4 4" />
-          <line x1="380" y1="300" x2="620" y2="300" stroke={colors.lineMuted} strokeWidth="0.8" />
-          <line x1="410" y1="300" x2="590" y2="300" stroke={colors.cyanMuted} strokeWidth="1.2" strokeDasharray="4 4" />
-
-          {/* Axis Ticks */}
-          {Array.from({ length: 9 }).map((_, i) => {
-            const y = 220 + i * 20;
-            if (y === 300) return null;
-            return <line key={i} x1="496" y1={y} x2="504" y2={y} stroke={colors.cyanMuted} strokeWidth="1" />;
-          })}
-          {Array.from({ length: 9 }).map((_, i) => {
-            const x = 420 + i * 20;
-            if (x === 500) return null;
-            return <line key={i} x1={x} y1="296" x2={x} y2="304" stroke={colors.cyanMuted} strokeWidth="1" />;
-          })}
-
-          {/* Inner ticks dial */}
-          <g id="hero-compass-ticks-inner" opacity={isCoreHovered ? 1.0 : 0.6} style={{ transition: 'opacity 0.3s ease' }}>
-            {Array.from({ length: 36 }).map((_, i) => {
-              const angle = (i * 10 * Math.PI) / 180;
-              const innerRadius = 40;
-              const outerRadius = 48;
-              const x1 = 500 + innerRadius * Math.cos(angle);
-              const y1 = 300 + innerRadius * Math.sin(angle);
-              const x2 = 500 + outerRadius * Math.cos(angle);
-              const y2 = 300 + outerRadius * Math.sin(angle);
-              return (
-                <line 
-                  key={i} 
-                  x1={x1} 
-                  y1={y1} 
-                  x2={x2} 
-                  y2={y2} 
-                  stroke={colors.cyanLine} 
-                  strokeWidth="0.8" 
+                <circle
+                  cx="500"
+                  cy="300"
+                  r="92"
+                  fill="none"
+                  stroke={colors.cyanLine}
+                  strokeWidth="1.2"
+                  strokeDasharray="80 30 10 10 40 20"
+                  opacity="0.6"
+                  className={isMotionReduced ? '' : 'proto-animate-ccw'}
                 />
-              );
-            })}
-          </g>
+              </g>
+
+              {/* Fine Outer Compass Ticks */}
+              <g id="hero-compass-ticks-outer">
+                {Array.from({ length: 72 }).map((_, i) => {
+                  const angle = (i * 5 * Math.PI) / 180;
+                  const innerRadius = 82;
+                  const outerRadius = i % 6 === 0 ? 89 : 85;
+                  const x1 = 500 + innerRadius * Math.cos(angle);
+                  const y1 = 300 + innerRadius * Math.sin(angle);
+                  const x2 = 500 + outerRadius * Math.cos(angle);
+                  const y2 = 300 + outerRadius * Math.sin(angle);
+                  return (
+                    <line
+                      key={i}
+                      x1={x1}
+                      y1={y1}
+                      x2={x2}
+                      y2={y2}
+                      stroke={i % 6 === 0 ? colors.cyanLine : colors.lineMuted}
+                      strokeWidth={i % 6 === 0 ? '1' : '0.6'}
+                      opacity={i % 6 === 0 ? '0.8' : '0.4'}
+                    />
+                  );
+                })}
+              </g>
+
+              {/* Concentric tracks */}
+              <circle cx="500" cy="300" r="76" fill="none" stroke={colors.lineMuted} strokeWidth="1" />
+              <circle cx="500" cy="300" r="72" fill="none" stroke="url(#hero-cyan-purple-grad)" strokeWidth="1.5" strokeDasharray="180 180" className={isMotionReduced ? '' : 'proto-animate-cw'} />
+
+              {/* Crosshair telemetry paths */}
+              <line x1="500" y1="180" x2="500" y2="420" stroke={colors.lineMuted} strokeWidth="0.8" />
+              <line x1="500" y1="210" x2="500" y2="390" stroke={colors.cyanMuted} strokeWidth="1.2" strokeDasharray="4 4" />
+              <line x1="380" y1="300" x2="620" y2="300" stroke={colors.lineMuted} strokeWidth="0.8" />
+              <line x1="410" y1="300" x2="590" y2="300" stroke={colors.cyanMuted} strokeWidth="1.2" strokeDasharray="4 4" />
+            </>
+          )}
+
+          {/* Axis Ticks and Inner Ticks Dial */}
+          {heroVisualMode !== 'minimal' && (
+            <>
+              {Array.from({ length: 9 }).map((_, i) => {
+                const y = 220 + i * 20;
+                if (y === 300) return null;
+                return <line key={i} x1="496" y1={y} x2="504" y2={y} stroke={colors.cyanMuted} strokeWidth="1" />;
+              })}
+              {Array.from({ length: 9 }).map((_, i) => {
+                const x = 420 + i * 20;
+                if (x === 500) return null;
+                return <line key={i} x1={x} y1="296" x2={x} y2="304" stroke={colors.cyanMuted} strokeWidth="1" />;
+              })}
+
+              {/* Inner ticks dial */}
+              <g id="hero-compass-ticks-inner" opacity={isCoreHovered ? 1.0 : 0.6} style={{ transition: 'opacity 0.3s ease' }}>
+                {Array.from({ length: 36 }).map((_, i) => {
+                  const angle = (i * 10 * Math.PI) / 180;
+                  const innerRadius = 40;
+                  const outerRadius = 48;
+                  const x1 = 500 + innerRadius * Math.cos(angle);
+                  const y1 = 300 + innerRadius * Math.sin(angle);
+                  const x2 = 500 + outerRadius * Math.cos(angle);
+                  const y2 = 300 + outerRadius * Math.sin(angle);
+                  return (
+                    <line
+                      key={i}
+                      x1={x1}
+                      y1={y1}
+                      x2={x2}
+                      y2={y2}
+                      stroke={colors.cyanLine}
+                      strokeWidth="0.8"
+                    />
+                  );
+                })}
+              </g>
+            </>
+          )}
 
           {/* Inner core circle holding HUD score readout */}
-          <g 
+          <g
             id="hero-center-light-source"
             className="cursor-pointer outline-none"
             onMouseEnter={() => setIsCoreHovered(true)}
@@ -965,26 +1046,26 @@ export default function ComplianceHeroCore({
             aria-label="Inspect overall compliance rating"
           >
             {/* Outward pulse breathing track */}
-            <circle 
-              cx="500" 
-              cy="300" 
-              r="62" 
-              fill="none" 
-              stroke={colors.cyanLine} 
-              strokeWidth="1.2" 
-              opacity={isCoreHovered ? 0.7 : 0.15} 
+            <circle
+              cx="500"
+              cy="300"
+              r="62"
+              fill="none"
+              stroke={colors.cyanLine}
+              strokeWidth="1.2"
+              opacity={isCoreHovered ? 0.7 : 0.15}
               className={isCoreHovered && !isMotionReduced ? "proto-animate-pulse" : undefined}
               style={{ transition: 'all 0.3s ease' }}
             />
 
             {/* Inner Core */}
-            <circle 
-              cx="500" 
-              cy="300" 
-              r="37" 
-              fill={surfaceColor} 
-              stroke={colors.cyanLine} 
-              strokeWidth={isCoreHovered ? '2.2' : '1.5'} 
+            <circle
+              cx="500"
+              cy="300"
+              r="37"
+              fill={surfaceColor}
+              stroke={colors.cyanLine}
+              strokeWidth={isCoreHovered ? '2.2' : '1.5'}
               filter={isCoreHovered ? "url(#hero-glow-strong)" : "url(#hero-glow-cyan)"}
               style={{ transition: 'all 0.3s ease' }}
             />
@@ -999,9 +1080,9 @@ export default function ComplianceHeroCore({
               fontWeight="bold"
               style={{ letterSpacing: '-0.5px', userSelect: 'none' }}
             >
-              {readinessScore === null ? 'N/A' : `${readinessScore}%`}
+              {orbContent.mainText}
             </text>
-            
+
             {/* Score Label */}
             <text
               x="500"
@@ -1013,7 +1094,7 @@ export default function ComplianceHeroCore({
               letterSpacing="0.8"
               style={{ userSelect: 'none' }}
             >
-              READINESS SCORE
+              {orbContent.labelText}
             </text>
 
             {/* Telemetry Status Line */}
@@ -1021,19 +1102,14 @@ export default function ComplianceHeroCore({
               x="500"
               y="320"
               textAnchor="middle"
-              fill={
-                readinessScore === null ? colors.textLabel :
-                readinessScore >= 90 ? '#10b981' :
-                readinessScore >= 75 ? colors.cyanLine :
-                readinessScore >= 50 ? '#f59e0b' : '#ef4444'
-              }
+              fill={orbContent.statusColor}
               fontSize="5"
               fontWeight="black"
               letterSpacing="0.5"
               opacity={isCoreHovered ? 1.0 : 0.85}
               style={{ userSelect: 'none', textTransform: 'uppercase' }}
             >
-              ● {readinessLabel}
+              {orbContent.statusText}
             </text>
           </g>
         </g>
@@ -1042,11 +1118,11 @@ export default function ComplianceHeroCore({
             4. SIX OUTER NODES & COMPACT STATE INDICATORS
            ========================================== */}
         <g id="hero-outer-nodes">
-          {nodes.map((node) => {
+          {majorNodesList.map((node) => {
             const isHovered = hoveredNode === node.id;
             const strokeColor = node.side === 'left' ? colors.cyanLine : colors.purpleLine;
             const ringColor = node.side === 'left' ? colors.cyanMuted : colors.purpleMuted;
-            
+
             // Circular Progress Ring Math
             const percent = node.percent || 0;
             const ringRadius = 24;
@@ -1054,7 +1130,7 @@ export default function ComplianceHeroCore({
             const ringDashoffset = ringCircumference - (percent / 100) * ringCircumference;
 
             return (
-              <g 
+              <g
                 key={node.id}
                 id={`hero-node-${node.id}`}
                 className={`group outline-none select-none ${dragEnabled ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
@@ -1084,27 +1160,27 @@ export default function ComplianceHeroCore({
                 aria-label={`Inspect ${node.label} module`}
               >
                 {/* Node ambient soft glow */}
-                <circle 
-                  cx={node.x} 
-                  cy={node.y} 
-                  r="45" 
-                  fill={node.side === 'left' ? 'url(#hero-cyan-radial)' : 'url(#hero-purple-radial)'} 
+                <circle
+                  cx={node.x}
+                  cy={node.y}
+                  r="45"
+                  fill={node.side === 'left' ? 'url(#hero-cyan-radial)' : 'url(#hero-purple-radial)'}
                   opacity={isHovered ? 1 : 0.4}
                   className="transition-all duration-300"
                 />
 
                 {/* Outer concentric HUD rings */}
                 <circle cx={node.x} cy={node.y} r="36" fill="none" stroke={ringColor} strokeWidth="0.8" strokeDasharray="4 8" opacity={isHovered ? 1 : 0.6} className="transition-all duration-300" />
-                
+
                 {/* Concentric Ring 2 */}
-                <circle 
-                  cx={node.x} 
-                  cy={node.y} 
-                  r="28" 
-                  fill="none" 
-                  stroke={strokeColor} 
-                  strokeWidth="1" 
-                  strokeDasharray={isHovered ? "none" : "15 5 45 5 10 10"} 
+                <circle
+                  cx={node.x}
+                  cy={node.y}
+                  r="28"
+                  fill="none"
+                  stroke={strokeColor}
+                  strokeWidth="1"
+                  strokeDasharray={isHovered ? "none" : "15 5 45 5 10 10"}
                   opacity={isHovered ? 1 : 0.7}
                   filter={isHovered ? (node.side === 'left' ? 'url(#hero-glow-cyan)' : 'url(#hero-glow-purple)') : undefined}
                   className="transition-all duration-300"
@@ -1117,24 +1193,24 @@ export default function ComplianceHeroCore({
                 <line x1={node.x + 32} y1={node.y} x2={node.x + 36} y2={node.y} stroke={strokeColor} strokeWidth="1.2" />
 
                 {/* Real circular progress ring */}
-                <circle 
-                  cx={node.x} 
-                  cy={node.y} 
-                  r={ringRadius} 
-                  fill="none" 
-                  stroke={theme === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'} 
-                  strokeWidth="3.2" 
+                <circle
+                  cx={node.x}
+                  cy={node.y}
+                  r={ringRadius}
+                  fill="none"
+                  stroke={theme === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'}
+                  strokeWidth="3.2"
                 />
-                <circle 
-                  cx={node.x} 
-                  cy={node.y} 
-                  r={ringRadius} 
-                  fill="none" 
-                  stroke={strokeColor} 
-                  strokeWidth="3.2" 
-                  strokeDasharray={ringCircumference} 
-                  strokeDashoffset={ringDashoffset} 
-                  strokeLinecap="round" 
+                <circle
+                  cx={node.x}
+                  cy={node.y}
+                  r={ringRadius}
+                  fill="none"
+                  stroke={strokeColor}
+                  strokeWidth="3.2"
+                  strokeDasharray={ringCircumference}
+                  strokeDashoffset={ringDashoffset}
+                  strokeLinecap="round"
                   transform={`rotate(-90 ${node.x} ${node.y})`}
                   filter={isHovered ? (node.side === 'left' ? 'url(#hero-glow-cyan)' : 'url(#hero-glow-purple)') : undefined}
                   className="transition-all duration-300"
@@ -1155,13 +1231,13 @@ export default function ComplianceHeroCore({
                 )}
 
                 {/* Node Solid Center Circle */}
-                <circle 
-                  cx={node.x} 
-                  cy={node.y} 
-                  r="20" 
-                  fill={surfaceColor} 
-                  stroke={strokeColor} 
-                  strokeWidth={isHovered ? '2' : '1.2'} 
+                <circle
+                  cx={node.x}
+                  cy={node.y}
+                  r="20"
+                  fill={surfaceColor}
+                  stroke={strokeColor}
+                  strokeWidth={isHovered ? '2' : '1.2'}
                   filter={isHovered ? (node.side === 'left' ? 'url(#hero-glow-cyan)' : 'url(#hero-glow-purple)') : undefined}
                   className="transition-all duration-300"
                 />
@@ -1183,40 +1259,120 @@ export default function ComplianceHeroCore({
                 )}
 
                 {/* Node Label Text */}
-                <text
-                  x={node.x}
-                  y={node.y + 44}
-                  textAnchor="middle"
-                  fill={isHovered ? strokeColor : colors.textLabel}
-                  fontSize="10"
-                  fontWeight="bold"
-                  letterSpacing="0.5"
-                  className="transition-colors duration-300 opacity-90"
-                  style={{ userSelect: 'none' }}
-                >
-                  {node.label}
-                </text>
+                {heroNodeDisplayLevel !== 'icons-only' && (
+                  <text
+                    x={node.x}
+                    y={node.y + 44}
+                    textAnchor="middle"
+                    fill={isHovered ? strokeColor : colors.textLabel}
+                    fontSize="10"
+                    fontWeight="bold"
+                    letterSpacing="0.5"
+                    className="transition-colors duration-300 opacity-90"
+                    style={{ userSelect: 'none' }}
+                  >
+                    {node.label}
+                  </text>
+                )}
 
                 {/* Data Metric Text */}
-                <text
-                  x={node.x}
-                  y={node.y + 54}
-                  textAnchor="middle"
-                  fill={colors.textLabel}
-                  fontSize="8"
-                  fontWeight="medium"
-                  opacity={isHovered ? 1.0 : 0.65}
-                  className="transition-opacity duration-300"
-                  style={{ userSelect: 'none' }}
-                >
-                  {node.metricText}
-                </text>
+                {heroNodeDisplayLevel !== 'icons-only' && heroNodeDisplayLevel !== 'icons-labels' && (
+                  <text
+                    x={node.x}
+                    y={node.y + 54}
+                    textAnchor="middle"
+                    fill={colors.textLabel}
+                    fontSize="8"
+                    fontWeight="medium"
+                    opacity={isHovered ? 1.0 : 0.65}
+                    className="transition-opacity duration-300"
+                    style={{ userSelect: 'none' }}
+                  >
+                    {node.metricText}
+                  </text>
+                )}
 
                 {/* Small HUD Data Bar below label */}
-                <g opacity={isHovered ? 1.0 : 0.4} className="transition-opacity duration-300">
-                  <rect x={node.x - 25} y={node.y + 59} width="50" height="2.5" rx="1.25" fill={colors.lineMuted} />
-                  <rect x={node.x - 25} y={node.y + 59} width={50 * (percent / 100)} height="2.5" rx="1.25" fill={strokeColor} />
-                </g>
+                {heroNodeDisplayLevel === 'full-detail' && (
+                  <g opacity={isHovered ? 1.0 : 0.4} className="transition-opacity duration-300">
+                    <rect x={node.x - 25} y={node.y + 59} width="50" height="2.5" rx="1.25" fill={colors.lineMuted} />
+                    <rect x={node.x - 25} y={node.y + 59} width={50 * (percent / 100)} height="2.5" rx="1.25" fill={strokeColor} />
+                  </g>
+                )}
+              </g>
+            );
+          })}
+
+          {/* Minor nodes satellites */}
+          {minorNodesList.map((node) => {
+            const isHovered = hoveredNode === node.id;
+            const strokeColor = node.side === 'left' ? colors.cyanLine : colors.purpleLine;
+            const ringColor = node.side === 'left' ? colors.cyanMuted : colors.purpleMuted;
+            return (
+              <g
+                key={node.id}
+                id={`hero-node-${node.id}`}
+                className="cursor-pointer outline-none select-none"
+                onMouseEnter={(e) => {
+                  setHoveredNode(node.id);
+                  onNodeMouseEnter(node.id, e.currentTarget);
+                }}
+                onMouseLeave={() => {
+                  setHoveredNode(null);
+                  onNodeMouseLeave();
+                }}
+                onClick={() => onNodeClick(node.id)}
+                role="button"
+                tabIndex={0}
+                aria-label={`Inspect ${node.label} module`}
+              >
+                {/* Ambient glow */}
+                <circle
+                  cx={node.x}
+                  cy={node.y}
+                  r="20"
+                  fill={node.side === 'left' ? 'url(#hero-cyan-radial)' : 'url(#hero-purple-radial)'}
+                  opacity={isHovered ? 0.8 : 0.25}
+                  className="transition-all duration-300"
+                />
+
+                {/* Outer ring */}
+                <circle
+                  cx={node.x}
+                  cy={node.y}
+                  r="12"
+                  fill="none"
+                  stroke={isHovered ? strokeColor : ringColor}
+                  strokeWidth="1"
+                  strokeDasharray="2 2"
+                  className="transition-all duration-300"
+                />
+
+                {/* Center dot */}
+                <circle
+                  cx={node.x}
+                  cy={node.y}
+                  r="6"
+                  fill={isHovered ? strokeColor : surfaceColor}
+                  stroke={strokeColor}
+                  strokeWidth="1"
+                  className="transition-all duration-300"
+                />
+
+                {/* Small indicator label on hover */}
+                {isHovered && (
+                  <text
+                    x={node.x}
+                    y={node.y + 20}
+                    textAnchor="middle"
+                    fill={strokeColor}
+                    fontSize="8"
+                    fontWeight="bold"
+                    style={{ userSelect: 'none' }}
+                  >
+                    {node.label}
+                  </text>
+                )}
               </g>
             );
           })}

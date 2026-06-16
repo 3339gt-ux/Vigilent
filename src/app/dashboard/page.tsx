@@ -792,10 +792,10 @@ export default function DashboardPage() {
     }
 
     const inRail = tempCustomization.rightRailOrder?.includes(widgetId);
-    const orderArray = inRail 
-      ? [...(tempCustomization.rightRailOrder || [])] 
+    const orderArray = inRail
+      ? [...(tempCustomization.rightRailOrder || [])]
       : [...(tempCustomization.lowerPanelsOrder || [])];
-    
+
     const index = orderArray.indexOf(widgetId);
     if (index === -1) return;
 
@@ -817,7 +817,7 @@ export default function DashboardPage() {
     if (!tempCustomization) return;
     let rightOrder = [...(tempCustomization.rightRailOrder || [])];
     let lowerOrder = [...(tempCustomization.lowerPanelsOrder || [])];
-    
+
     if (rightOrder.includes(widgetId)) {
       // Move from rail to lower area
       rightOrder = rightOrder.filter(id => id !== widgetId);
@@ -843,7 +843,7 @@ export default function DashboardPage() {
       setTempCustomization({ ...tempCustomization, visibleKpis: newVisible });
       return;
     }
-    
+
     if (['snapshot', 'focus-card', 'expiring', 'upload-console'].includes(widgetId)) {
       if (widgetId === 'focus-card') {
         const newSections = tempCustomization.visibleRightRailSections.filter(
@@ -2161,14 +2161,31 @@ export default function DashboardPage() {
 
   const handleMouseEnter = (id: string) => (e: React.SyntheticEvent<HTMLElement>) => {
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+
+    // Check widget's customized hoverDetailLevel
+    const widgetConfig = currentCustomization.widgetSettings?.[id];
+    const hoverLevel = widgetConfig?.hoverDetailLevel ?? 'full';
+    if (hoverLevel === 'none') return;
+
     const rect = e.currentTarget.getBoundingClientRect();
     const data = getInsightData(id);
     if (data) {
-      setHoveredInsight({
-        ...data,
-        x: rect.left + rect.width / 2,
-        y: rect.bottom + 8
-      });
+      if (hoverLevel === 'summary') {
+        // Strip out records and statusBreakdown
+        setHoveredInsight({
+          ...data,
+          records: undefined,
+          statusBreakdown: undefined,
+          x: rect.left + rect.width / 2,
+          y: rect.bottom + 8
+        });
+      } else {
+        setHoveredInsight({
+          ...data,
+          x: rect.left + rect.width / 2,
+          y: rect.bottom + 8
+        });
+      }
     }
   };
 
@@ -2180,6 +2197,55 @@ export default function DashboardPage() {
   };
 
   const handleClick = (id: string) => () => {
+    const widgetConfig = currentCustomization.widgetSettings?.[id];
+    const clickAction = widgetConfig?.clickBehaviour ?? 'open-drawer';
+
+    const routeMap: Record<string, string> = {
+      health: '/dashboard/reports?tab=executive',
+      requirements: '/dashboard/requirements',
+      competencies: '/dashboard/competencies',
+      vault: '/dashboard/vault',
+      matrix: '/dashboard/matrix',
+      'audit-packs': '/dashboard/audit-packs',
+      reports: '/dashboard/reports',
+      training: '/dashboard/competencies',
+      tasks: '/dashboard/requirements?filter=actions',
+      asset: '/dashboard/matrix',
+      trend: '/dashboard/reports?tab=history',
+      statusDonut: '/dashboard/requirements',
+      readinessGauge: '/dashboard/reports',
+      trainingRing: '/dashboard/competencies',
+      assetCategory: '/dashboard/matrix',
+      riskGaps: '/dashboard/requirements',
+      alerts: '/dashboard/reports'
+    };
+
+    if (clickAction === 'navigate') {
+      const path = routeMap[id];
+      if (path) {
+        router.push(path);
+        return;
+      }
+    } else if (clickAction === 'filtered-view') {
+      const tabMap: Record<string, string> = {
+        requirements: 'action',
+        tasks: 'action',
+        training: 'focus',
+        competencies: 'focus',
+        asset: 'upcoming',
+        evidence: 'activity'
+      };
+      const tab = tabMap[id] || 'focus';
+      setActiveRailTab(tab as any);
+
+      const railEl = document.getElementById('dashboard-right-rail');
+      if (railEl) {
+        railEl.scrollIntoView({ behavior: 'smooth' });
+      }
+      return;
+    }
+
+    // Default 'open-drawer'
     const data = getInsightData(id);
     if (data) {
       setActiveInsightDrawer(data);
@@ -2210,14 +2276,29 @@ export default function DashboardPage() {
 
   const handleNodeMouseEnter = (id: string, element: SVGGElement) => {
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+
+    const widgetConfig = currentCustomization.widgetSettings?.[id];
+    const hoverLevel = widgetConfig?.hoverDetailLevel ?? 'full';
+    if (hoverLevel === 'none') return;
+
     const rect = element.getBoundingClientRect();
     const data = getInsightData(id);
     if (data) {
-      setHoveredInsight({
-        ...data,
-        x: rect.left + rect.width / 2,
-        y: rect.bottom + 8
-      });
+      if (hoverLevel === 'summary') {
+        setHoveredInsight({
+          ...data,
+          records: undefined,
+          statusBreakdown: undefined,
+          x: rect.left + rect.width / 2,
+          y: rect.bottom + 8
+        });
+      } else {
+        setHoveredInsight({
+          ...data,
+          x: rect.left + rect.width / 2,
+          y: rect.bottom + 8
+        });
+      }
     }
   };
 
@@ -2230,17 +2311,28 @@ export default function DashboardPage() {
       handleItemClick('hub', handleClick('hub'));
       return;
     }
-    const routeMap: Record<string, string> = {
-      requirements: '/dashboard/requirements',
-      competencies: '/dashboard/competencies',
-      vault: '/dashboard/vault',
-      matrix: '/dashboard/matrix',
-      'audit-packs': '/dashboard/audit-packs',
-      reports: '/dashboard/reports'
-    };
-    const path = routeMap[id];
-    if (path) {
-      router.push(path);
+
+    const widgetConfig = currentCustomization.widgetSettings?.[id];
+    const clickAction = widgetConfig?.clickBehaviour ?? 'open-drawer';
+
+    if (clickAction === 'open-drawer') {
+      const data = getInsightData(id);
+      if (data) {
+        setActiveInsightDrawer(data);
+      }
+    } else {
+      const routeMap: Record<string, string> = {
+        requirements: '/dashboard/requirements',
+        competencies: '/dashboard/competencies',
+        vault: '/dashboard/vault',
+        matrix: '/dashboard/matrix',
+        'audit-packs': '/dashboard/audit-packs',
+        reports: '/dashboard/reports'
+      };
+      const path = routeMap[id];
+      if (path) {
+        router.push(path);
+      }
     }
   };
 
