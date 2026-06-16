@@ -537,6 +537,59 @@ const WidgetWrapper = ({
   const isKpi = ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'].includes(id);
   const widgetName = DASHBOARD_WIDGET_REGISTRY.find(w => w.id === id)?.title || id;
 
+  const isResetDisabled = id === 'quickActions';
+  const resetDisableReason = isResetDisabled ? "Quick Actions layout is fixed" : "";
+
+  const handleResetPane = () => {
+    if (isResetDisabled) return;
+    setTempCustomization(prev => {
+      if (!prev) return null;
+      const next = { ...prev };
+
+      const defaultVisibleKpis = ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'];
+      const defaultVisiblePanels = ['trend', 'statusDonut', 'readinessGauge', 'trainingRing', 'assetCategory', 'riskGaps', 'alerts'];
+      const defaultVisibleRightRail = ['snapshot', 'focus-card', 'expiring', 'upload-console'];
+
+      const isKpi = defaultVisibleKpis.includes(id);
+      const isRightRail = defaultVisibleRightRail.includes(id);
+      const isLowerPanel = ['quickActions', 'trend', 'statusDonut', 'readinessGauge', 'trainingRing', 'assetCategory', 'riskGaps', 'alerts'].includes(id);
+
+      if (isKpi) {
+        if (!next.visibleKpis.includes(id)) {
+          next.visibleKpis = [...next.visibleKpis, id];
+        }
+        next.kpiOrder = ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'];
+      } else if (isRightRail || isLowerPanel) {
+        next.rightRailOrder = (next.rightRailOrder || ['snapshot', 'focus-card', 'expiring', 'upload-console']).filter(x => x !== id);
+        next.lowerPanelsOrder = (next.lowerPanelsOrder || ['quickActions', 'trend', 'statusDonut', 'readinessGauge', 'trainingRing', 'assetCategory', 'riskGaps', 'alerts']).filter(x => x !== id);
+
+        const defaultInRail = ['snapshot', 'focus-card', 'expiring', 'upload-console'].includes(id);
+        if (defaultInRail) {
+          next.rightRailOrder = ['snapshot', 'focus-card', 'expiring', 'upload-console'];
+          if (!next.visibleRightRailSections.includes(id)) {
+            next.visibleRightRailSections = [...next.visibleRightRailSections, id];
+          }
+        } else {
+          next.lowerPanelsOrder = ['quickActions', 'trend', 'statusDonut', 'readinessGauge', 'trainingRing', 'assetCategory', 'riskGaps', 'alerts'];
+          if (!next.visiblePanels.includes(id)) {
+            next.visiblePanels = [...next.visiblePanels, id];
+          }
+        }
+      }
+
+      next.widgetSettings = {
+        ...next.widgetSettings,
+        [id]: {
+          detailLevel: 'standard',
+          hoverDetailLevel: 'full',
+          clickBehaviour: 'open-drawer'
+        }
+      };
+
+      return next;
+    });
+  };
+
   if (!isEditing) {
     if (!isVisible) return null;
     return <div className="w-full h-full">{children}</div>;
@@ -550,8 +603,28 @@ const WidgetWrapper = ({
 
       <div className="absolute inset-0 bg-indigo-500/5 border-2 border-dashed border-indigo-500/80 rounded-2xl z-10 flex flex-col justify-between p-2 pointer-events-auto">
         <div className="flex justify-between items-start bg-indigo-950/95 border border-indigo-500/30 text-white text-[9px] font-black uppercase tracking-wider px-2 py-1.5 rounded-lg shadow-md w-full">
-          <span className="truncate max-w-[120px]">{widgetName}</span>
+          <span className="truncate max-w-[100px]">{widgetName}</span>
           <div className="flex items-center gap-1 shrink-0 ml-2">
+            {isResetDisabled ? (
+              <span
+                className="px-1.5 py-0.5 bg-zinc-800 text-zinc-500 rounded text-[8px] font-bold cursor-not-allowed uppercase"
+                title={resetDisableReason}
+              >
+                Locked
+              </span>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleResetPane();
+                }}
+                className="px-1.5 py-0.5 bg-rose-500/20 hover:bg-rose-500/35 border border-rose-500/30 text-rose-300 rounded text-[8px] font-bold cursor-pointer transition-colors"
+                title="Reset Pane to default position, visibility and settings"
+              >
+                Reset
+              </button>
+            )}
             {!isVisible ? (
               <button
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); onShow?.(); }}
@@ -2592,6 +2665,7 @@ export default function DashboardPage() {
             if (!isEditingDashboard && !isVisible) return null;
 
             const renderKpiCard = () => {
+              const detailLevel = currentCustomization.widgetSettings?.[kpiId]?.detailLevel || 'standard';
               switch (kpiId) {
                 case 'health':
                   return (
@@ -2605,16 +2679,30 @@ export default function DashboardPage() {
                       role="button"
                       tabIndex={0}
                       aria-label="Inspect Compliance Health"
-                      className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none ${
+                      className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2 select-none ${
                         clickedItemId === 'health' ? 'scale-95 border-indigo-600 bg-indigo-500/10' : ''
                       }`}
                     >
                       <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Compliance Health</span>
                       <div className="flex items-baseline gap-1.5">
                         <span className={`text-2xl font-black ${scoreTone(readinessScore)}`}>{readinessDisplay}</span>
-                        <span className="text-[10px] text-muted-foreground font-bold leading-none">Score</span>
+                        {detailLevel !== 'compact' && (
+                          <span className="text-[10px] text-muted-foreground font-bold leading-none">Score</span>
+                        )}
                       </div>
-                      <span className="text-[10px] text-muted-foreground block font-bold">Current Snapshot</span>
+                      {detailLevel === 'detailed' ? (
+                        <div className="text-[9px] text-muted-foreground font-bold border-t border-border/40 pt-1.5 space-y-1">
+                          <span className="block text-foreground">Current Snapshot</span>
+                          {stats.expiringSoonCount > 0 && (
+                            <span className="block text-amber-500 font-bold">⚠️ {stats.expiringSoonCount} items at risk</span>
+                          )}
+                          {overdueActionsCount > 0 && (
+                            <span className="block text-rose-500 font-bold">🚨 {overdueActionsCount} tasks overdue</span>
+                          )}
+                        </div>
+                      ) : detailLevel === 'standard' ? (
+                        <span className="text-[10px] text-muted-foreground block font-bold">Current Snapshot</span>
+                      ) : null}
                     </div>
                   );
                 case 'requirements':
@@ -2629,21 +2717,30 @@ export default function DashboardPage() {
                       role="button"
                       tabIndex={0}
                       aria-label="Inspect Requirements"
-                      className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none ${
+                      className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2 select-none ${
                         clickedItemId === 'requirements' ? 'scale-95 border-indigo-600 bg-indigo-500/10' : ''
                       }`}
                     >
                       <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Requirements</span>
                       <div className="flex items-baseline gap-1">
                         <span className="text-2xl font-black text-foreground">{stats.compliantCount}</span>
-                        <span className="text-muted-foreground text-xs font-bold">/ {stats.activeRequirements}</span>
+                        {detailLevel !== 'compact' && (
+                          <span className="text-muted-foreground text-xs font-bold">/ {stats.activeRequirements}</span>
+                        )}
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-full bg-muted h-1 rounded-full overflow-hidden">
-                          <div className="bg-emerald-500 h-1 rounded-full" style={{ width: `${reqProgress}%` }} />
+                      {detailLevel !== 'compact' && (
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-full bg-muted h-1 rounded-full overflow-hidden">
+                            <div className="bg-emerald-500 h-1 rounded-full" style={{ width: `${reqProgress}%` }} />
+                          </div>
+                          <span className="text-[9px] font-bold text-muted-foreground">{reqProgress}%</span>
                         </div>
-                        <span className="text-[9px] font-bold text-muted-foreground">{reqProgress}%</span>
-                      </div>
+                      )}
+                      {detailLevel === 'detailed' && (
+                        <div className="text-[9px] text-muted-foreground font-bold border-t border-border/40 pt-1.5">
+                          <span className="block text-foreground">{stats.activeRequirements - stats.compliantCount} outstanding requirements</span>
+                        </div>
+                      )}
                     </div>
                   );
                 case 'evidence':
@@ -2658,21 +2755,30 @@ export default function DashboardPage() {
                       role="button"
                       tabIndex={0}
                       aria-label="Inspect Evidence Coverage"
-                      className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none ${
+                      className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2 select-none ${
                         clickedItemId === 'evidence' ? 'scale-95 border-indigo-600 bg-indigo-500/10' : ''
                       }`}
                     >
                       <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Evidence Coverage</span>
                       <div className="flex items-baseline gap-1">
                         <span className="text-2xl font-black text-foreground">{classifiedDocsCount}</span>
-                        <span className="text-muted-foreground text-xs font-bold">/ {documents.length}</span>
+                        {detailLevel !== 'compact' && (
+                          <span className="text-muted-foreground text-xs font-bold">/ {documents.length}</span>
+                        )}
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-full bg-muted h-1 rounded-full overflow-hidden">
-                          <div className="bg-indigo-500 h-1 rounded-full" style={{ width: `${docProgress}%` }} />
+                      {detailLevel !== 'compact' && (
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-full bg-muted h-1 rounded-full overflow-hidden">
+                            <div className="bg-indigo-500 h-1 rounded-full" style={{ width: `${docProgress}%` }} />
+                          </div>
+                          <span className="text-[9px] font-bold text-muted-foreground">{docProgress}%</span>
                         </div>
-                        <span className="text-[9px] font-bold text-muted-foreground">{docProgress}%</span>
-                      </div>
+                      )}
+                      {detailLevel === 'detailed' && (
+                        <div className="text-[9px] text-muted-foreground font-bold border-t border-border/40 pt-1.5">
+                          <span className="block text-foreground">{documents.length - classifiedDocsCount} unclassified files</span>
+                        </div>
+                      )}
                     </div>
                   );
                 case 'training':
@@ -2687,7 +2793,7 @@ export default function DashboardPage() {
                       role="button"
                       tabIndex={0}
                       aria-label="Inspect Personnel Training"
-                      className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none ${
+                      className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2 select-none ${
                         clickedItemId === 'training' ? 'scale-95 border-indigo-600 bg-indigo-500/10' : ''
                       }`}
                     >
@@ -2695,7 +2801,19 @@ export default function DashboardPage() {
                       <div className="flex items-baseline gap-1.5">
                         <span className="text-2xl font-black text-foreground">{competencySummary.compliancePercent}%</span>
                       </div>
-                      <span className="text-[10px] text-muted-foreground block font-bold truncate">Active certifications</span>
+                      {detailLevel === 'detailed' ? (
+                        <div className="text-[9px] text-muted-foreground font-bold border-t border-border/40 pt-1.5 space-y-1">
+                          <span className="block text-foreground">Active certifications</span>
+                          {competencySummary.expired > 0 && (
+                            <span className="block text-rose-500">🚨 {competencySummary.expired} expired certifications</span>
+                          )}
+                          {competencySummary.expiringSoon > 0 && (
+                            <span className="block text-amber-500">⚠️ {competencySummary.expiringSoon} expiring soon</span>
+                          )}
+                        </div>
+                      ) : detailLevel === 'standard' ? (
+                        <span className="text-[10px] text-muted-foreground block font-bold truncate">Active certifications</span>
+                      ) : null}
                     </div>
                   );
                 case 'tasks':
@@ -2710,20 +2828,27 @@ export default function DashboardPage() {
                       role="button"
                       tabIndex={0}
                       aria-label="Inspect Open Tasks and Gaps"
-                      className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none ${
+                      className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2 select-none ${
                         clickedItemId === 'tasks' ? 'scale-95 border-indigo-600 bg-indigo-500/10' : ''
                       }`}
                     >
                       <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Open Tasks / Gaps</span>
                       <div className="flex items-baseline gap-1">
                         <span className="text-2xl font-black text-foreground">{activeActionsCount}</span>
-                        {overdueActionsCount > 0 && (
+                        {detailLevel !== 'compact' && overdueActionsCount > 0 && (
                           <span className="text-rose-500 text-[10px] font-black uppercase bg-rose-500/10 border border-rose-500/20 px-1 rounded">
                             {overdueActionsCount} Exp
                           </span>
                         )}
                       </div>
-                      <span className="text-[10px] text-muted-foreground block font-bold">Actions pending</span>
+                      {detailLevel === 'detailed' ? (
+                        <div className="text-[9px] text-muted-foreground font-bold border-t border-border/40 pt-1.5">
+                          <span className="block text-foreground">Actions pending</span>
+                          <span className="block text-slate-400 mt-0.5">{overdueActionsCount} overdue tasks</span>
+                        </div>
+                      ) : detailLevel === 'standard' ? (
+                        <span className="text-[10px] text-muted-foreground block font-bold">Actions pending</span>
+                      ) : null}
                     </div>
                   );
                 case 'asset':
@@ -2738,21 +2863,30 @@ export default function DashboardPage() {
                       role="button"
                       tabIndex={0}
                       aria-label="Inspect Asset Assurance"
-                      className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2.5 select-none ${
+                      className={`bg-card border border-border rounded-2xl ${densityStyles.kpiPadding} hover:shadow-md hover:border-indigo-500/50 hover:scale-[1.02] cursor-pointer transition-all space-y-2 select-none ${
                         clickedItemId === 'asset' ? 'scale-95 border-indigo-600 bg-indigo-500/10' : ''
                       }`}
                     >
                       <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Asset Assurance</span>
                       <div className="flex items-baseline gap-1">
                         <span className="text-2xl font-black text-foreground">{compliantAssetChecks}</span>
-                        <span className="text-muted-foreground text-xs font-bold">/ {totalAssetChecks}</span>
+                        {detailLevel !== 'compact' && (
+                          <span className="text-muted-foreground text-xs font-bold">/ {totalAssetChecks}</span>
+                        )}
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-full bg-muted h-1 rounded-full overflow-hidden">
-                          <div className="bg-indigo-500 h-1 rounded-full" style={{ width: `${assetProgress}%` }} />
+                      {detailLevel !== 'compact' && (
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-full bg-muted h-1 rounded-full overflow-hidden">
+                            <div className="bg-indigo-500 h-1 rounded-full" style={{ width: `${assetProgress}%` }} />
+                          </div>
+                          <span className="text-[9px] font-bold text-muted-foreground">{assetProgress}%</span>
                         </div>
-                        <span className="text-[9px] font-bold text-muted-foreground">{assetProgress}%</span>
-                      </div>
+                      )}
+                      {detailLevel === 'detailed' && (
+                        <div className="text-[9px] text-muted-foreground font-bold border-t border-border/40 pt-1.5">
+                          <span className="block text-foreground">{totalAssetChecks - compliantAssetChecks} checks outstanding</span>
+                        </div>
+                      )}
                     </div>
                   );
                 default:
@@ -3413,416 +3547,495 @@ export default function DashboardPage() {
 
       <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 ${densityStyles.gridGap} transition-all duration-300`}>
         {(currentCustomization.lowerPanelsOrder || DEFAULT_CUSTOMIZATION_SETTINGS.lowerPanelsOrder || [])
-          .map(paneId => {
+.map(paneId => {
             const isVisible = isWidgetVisible(paneId);
             if (!isEditingDashboard && !isVisible) return null;
 
             const registryItem = DASHBOARD_WIDGET_REGISTRY.find(w => w.id === paneId);
             const colSpanClass = getColSpan(registryItem?.defaultSize);
-
             const renderPaneContent = () => {
               switch (paneId) {
                 case 'trend':
-                  return (
-                    <div className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs flex flex-col justify-between h-full`}>
-                      <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
-                        <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Readiness Snapshot</span>
-                        <span className="text-[8px] font-bold text-muted-foreground">Historical trend unavailable</span>
-                      </div>
-                      <div className="relative w-full h-32 mt-2">
-                        <svg viewBox="0 0 300 120" className="w-full h-full">
-                          <defs>
-                            <linearGradient id="trend-fill-grad" x1="0%" y1="0%" x2="0%" y2="100%">
-                              <stop offset="0%" stopColor="rgba(99, 102, 241, 0.25)" />
-                              <stop offset="100%" stopColor="rgba(99, 102, 241, 0)" />
-                            </linearGradient>
-                          </defs>
-                          {/* Horizontal Grid lines */}
-                          <line x1="10" y1="20" x2="290" y2="20" stroke="currentColor" className="text-muted/10" strokeDasharray="4 4" />
-                          <line x1="10" y1="50" x2="290" y2="50" stroke="currentColor" className="text-muted/10" strokeDasharray="4 4" />
-                          <line x1="10" y1="80" x2="290" y2="80" stroke="currentColor" className="text-muted/10" strokeDasharray="4 4" />
-                          <line x1="10" y1="110" x2="290" y2="110" stroke="currentColor" className="text-muted/10" />
-
-                          {/* Area path */}
-                          {getTrendData().areaD && <path d={getTrendData().areaD} fill="url(#trend-fill-grad)" />}
-
-                          {/* Main Line path */}
-                          {getTrendData().pathD && <path d={getTrendData().pathD} fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" />}
-
-                          {/* Trend points circles */}
-                          {getTrendData().points.map((pt, idx) => (
-                            <circle
-                              key={idx}
-                              cx={pt.cx}
-                              cy={pt.cy}
-                              r={idx === getTrendData().points.length - 1 ? 4.5 : 3.5}
-                              fill={idx === getTrendData().points.length - 1 ? "#38bdf8" : "#6366f1"}
-                              stroke={idx === getTrendData().points.length - 1 ? "#ffffff" : "none"}
-                              strokeWidth={idx === getTrendData().points.length - 1 ? 1.5 : 0}
-                              className="cursor-pointer transition-all hover:scale-150"
-                              onMouseEnter={handleTrendMouseEnter(pt)}
-                              onMouseLeave={handleTrendMouseLeave}
-                            />
-                          ))}
-
-                          {/* Floating label for the current readiness value */}
-                          {readinessScore !== null ? (
-                            <>
-                              <rect x="134" cy={110 - (readinessScore / 100) * 90 - 24} width="32" height="15" rx="3" fill="#6366f1" />
-                              <text x="150" y={110 - (readinessScore / 100) * 90 - 14} fill="#ffffff" fontSize="8" fontWeight="bold" textAnchor="middle">
-                                {readinessDisplay}
-                              </text>
-                            </>
-                          ) : (
-                            <text x="150" y="66" fill="currentColor" className="text-muted-foreground" fontSize="9" fontWeight="bold" textAnchor="middle">
-                              No assessed requirements
-                            </text>
+                  return (() => {
+                    const detailLevel = currentCustomization.widgetSettings?.['trend']?.detailLevel || 'standard';
+                    return (
+                      <div className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs flex flex-col justify-between h-full`}>
+                        <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
+                          <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Readiness Snapshot</span>
+                          {detailLevel !== 'compact' && (
+                            <span className="text-[8px] font-bold text-muted-foreground">Historical trend unavailable</span>
                           )}
-                        </svg>
+                        </div>
+                        {detailLevel !== 'compact' ? (
+                          <div className="relative w-full h-32 mt-2">
+                            <svg viewBox="0 0 300 120" className="w-full h-full">
+                              <defs>
+                                <linearGradient id="trend-fill-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                                  <stop offset="0%" stopColor="rgba(99, 102, 241, 0.25)" />
+                                  <stop offset="100%" stopColor="rgba(99, 102, 241, 0)" />
+                                </linearGradient>
+                              </defs>
+                              {/* Horizontal Grid lines */}
+                              <line x1="10" y1="20" x2="290" y2="20" stroke="currentColor" className="text-muted/10" strokeDasharray="4 4" />
+                              <line x1="10" y1="50" x2="290" y2="50" stroke="currentColor" className="text-muted/10" strokeDasharray="4 4" />
+                              <line x1="10" y1="80" x2="290" y2="80" stroke="currentColor" className="text-muted/10" strokeDasharray="4 4" />
+                              <line x1="10" y1="110" x2="290" y2="110" stroke="currentColor" className="text-muted/10" />
+
+                              {/* Area path */}
+                              {getTrendData().areaD && <path d={getTrendData().areaD} fill="url(#trend-fill-grad)" />}
+
+                              {/* Main Line path */}
+                              {getTrendData().pathD && <path d={getTrendData().pathD} fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" />}
+
+                              {/* Trend points circles */}
+                              {getTrendData().points.map((pt, idx) => (
+                                <circle
+                                  key={idx}
+                                  cx={pt.cx}
+                                  cy={pt.cy}
+                                  r={idx === getTrendData().points.length - 1 ? 4.5 : 3.5}
+                                  fill={idx === getTrendData().points.length - 1 ? "#38bdf8" : "#6366f1"}
+                                  stroke={idx === getTrendData().points.length - 1 ? "#ffffff" : "none"}
+                                  strokeWidth={idx === getTrendData().points.length - 1 ? 1.5 : 0}
+                                  className="cursor-pointer transition-all hover:scale-150"
+                                  onMouseEnter={handleTrendMouseEnter(pt)}
+                                  onMouseLeave={handleTrendMouseLeave}
+                                />
+                              ))}
+
+                              {/* Floating label for the current readiness value */}
+                              {readinessScore !== null ? (
+                                <>
+                                  <rect x="134" cy={110 - (readinessScore / 100) * 90 - 24} width="32" height="15" rx="3" fill="#6366f1" />
+                                  <text x="150" y={110 - (readinessScore / 100) * 90 - 14} fill="#ffffff" fontSize="8" fontWeight="bold" textAnchor="middle">
+                                    {readinessDisplay}
+                                  </text>
+                                </>
+                              ) : (
+                                <text x="150" y="66" fill="currentColor" className="text-muted-foreground" fontSize="9" fontWeight="bold" textAnchor="middle">
+                                  No assessed requirements
+                                </text>
+                              )}
+                            </svg>
+                          </div>
+                        ) : (
+                          <div className="py-4 text-center">
+                            <span className="text-3xl font-black text-indigo-500 block">{readinessDisplay}</span>
+                            <span className="text-[10px] text-muted-foreground font-bold">Overall Workspace Posture</span>
+                          </div>
+                        )}
+                        {detailLevel !== 'compact' && (
+                          <div className="flex justify-between text-[9px] font-bold text-muted-foreground uppercase px-2.5 mt-2">
+                            {getTrendData().labels.map((lbl, idx) => (
+                              <span key={idx}>{lbl}</span>
+                            ))}
+                          </div>
+                        )}
+                        {detailLevel === 'detailed' && (
+                          <div className="text-[9px] text-muted-foreground border-t border-border/40 pt-2 mt-2 font-bold flex justify-between">
+                            <span>Last updated: Today</span>
+                            <span className="text-emerald-500 font-extrabold">Posture: Stabilised</span>
+                          </div>
+                        )}
                       </div>
-                      <div className="flex justify-between text-[9px] font-bold text-muted-foreground uppercase px-2.5 mt-2">
-                        {getTrendData().labels.map((lbl, idx) => (
-                          <span key={idx}>{lbl}</span>
-                        ))}
-                      </div>
-                    </div>
-                  );
+                    );
+                  })();
                 case 'statusDonut':
-                  return (
-                    <div className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs flex flex-col justify-between h-full`}>
-                      <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
-                        <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Requirement Status</span>
-                        <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">Active Requirements</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3 py-1">
-                        <div className="relative w-24 h-24 flex items-center justify-center shrink-0">
-                          <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
-                            <circle cx="50" cy="50" r="36" fill="transparent" stroke="currentColor" className="text-muted/10" strokeWidth="11" />
-                            {/* Compliant segment */}
-                            <circle
-                              cx="50"
-                              cy="50"
-                              r="36"
-                              fill="transparent"
-                              stroke="#10b981"
-                              strokeWidth="11"
-                              strokeDasharray="226.2"
-                              strokeDashoffset={226.2 - (226.2 * (stats.compliantCount / (stats.activeRequirements || 1)))}
-                              className="cursor-pointer hover:opacity-80 transition-opacity"
+                  return (() => {
+                    const detailLevel = currentCustomization.widgetSettings?.['statusDonut']?.detailLevel || 'standard';
+                    return (
+                      <div className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs flex flex-col justify-between h-full`}>
+                        <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
+                          <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Requirement Status</span>
+                          <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">Active Requirements</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 py-1">
+                          {detailLevel !== 'compact' && (
+                            <div className="relative w-24 h-24 flex items-center justify-center shrink-0">
+                              <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
+                                <circle cx="50" cy="50" r="36" fill="transparent" stroke="currentColor" className="text-muted/10" strokeWidth="11" />
+                                {/* Compliant segment */}
+                                <circle
+                                  cx="50"
+                                  cy="50"
+                                  r="36"
+                                  fill="transparent"
+                                  stroke="#10b981"
+                                  strokeWidth="11"
+                                  strokeDasharray="226.2"
+                                  strokeDashoffset={226.2 - (226.2 * (stats.compliantCount / (stats.activeRequirements || 1)))}
+                                  className="cursor-pointer hover:opacity-80 transition-opacity"
+                                  onClick={() => router.push('/dashboard/requirements?status=GREEN')}
+                                >
+                                  <title>{`Compliant: ${stats.compliantCount} objectives. Click to filter.`}</title>
+                                </circle>
+                                {/* At Risk segment */}
+                                <circle
+                                  cx="50"
+                                  cy="50"
+                                  r="36"
+                                  fill="transparent"
+                                  stroke="#f59e0b"
+                                  strokeWidth="11"
+                                  strokeDasharray="226.2"
+                                  strokeDashoffset={226.2 - (226.2 * (stats.expiringSoonCount / (stats.activeRequirements || 1)))}
+                                  transform={`rotate(${(stats.compliantCount / (stats.activeRequirements || 1)) * 360} 50 50)`}
+                                  className="cursor-pointer hover:opacity-80 transition-opacity"
+                                  onClick={() => router.push('/dashboard/requirements?status=AMBER')}
+                                >
+                                  <title>{`At Risk: ${stats.expiringSoonCount} requirements. Click to filter.`}</title>
+                                </circle>
+
+                                {/* Needs Attention segment */}
+                                <circle
+                                  cx="50"
+                                  cy="50"
+                                  r="36"
+                                  fill="transparent"
+                                  stroke="#ef4444"
+                                  strokeWidth="11"
+                                  strokeDasharray="226.2"
+                                  strokeDashoffset={226.2 - (226.2 * (stats.expiredCount / (stats.activeRequirements || 1)))}
+                                  transform={`rotate(${((stats.compliantCount + stats.expiringSoonCount) / (stats.activeRequirements || 1)) * 360} 50 50)`}
+                                  className="cursor-pointer hover:opacity-80 transition-opacity"
+                                  onClick={() => router.push('/dashboard/requirements?status=RED')}
+                                >
+                                  <title>{`Needs Attention: ${stats.expiredCount} requirements. Click to filter.`}</title>
+                                </circle>
+
+                                {/* Not Assessed segment */}
+                                <circle
+                                  cx="50"
+                                  cy="50"
+                                  r="36"
+                                  fill="transparent"
+                                  stroke="#71717a"
+                                  strokeWidth="11"
+                                  strokeDasharray="226.2"
+                                  strokeDashoffset={226.2 - (226.2 * (greyRequirementCount / (stats.activeRequirements || 1)))}
+                                  transform={`rotate(${((stats.compliantCount + stats.expiringSoonCount + stats.expiredCount) / (stats.activeRequirements || 1)) * 360} 50 50)`}
+                                  className="cursor-pointer hover:opacity-80 transition-opacity"
+                                  onClick={() => router.push('/dashboard/requirements?status=GREY')}
+                                >
+                                  <title>{`Not Assessed: ${greyRequirementCount} requirements. Click to filter.`}</title>
+                                </circle>
+                              </svg>
+                              <div className="absolute flex flex-col items-center justify-center text-center">
+                                <span className="text-base font-black text-foreground">{stats.activeRequirements}</span>
+                                <span className="text-[7px] font-bold text-muted-foreground uppercase">Total</span>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex-1 space-y-1.5 text-[10px]">
+                            <button
                               onClick={() => router.push('/dashboard/requirements?status=GREEN')}
+                              className="w-full flex items-center justify-between font-bold hover:bg-muted/30 p-1 rounded-md transition-all text-left"
                             >
-                              <title>{`Compliant: ${stats.compliantCount} objectives. Click to filter.`}</title>
-                            </circle>
-                            {/* At Risk segment */}
-                            <circle
-                              cx="50"
-                              cy="50"
-                              r="36"
-                              fill="transparent"
-                              stroke="#f59e0b"
-                              strokeWidth="11"
-                              strokeDasharray="226.2"
-                              strokeDashoffset={226.2 - (226.2 * (stats.expiringSoonCount / (stats.activeRequirements || 1)))}
-                              transform={`rotate(${(stats.compliantCount / (stats.activeRequirements || 1)) * 360} 50 50)`}
-                              className="cursor-pointer hover:opacity-80 transition-opacity"
+                              <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" /> Compliant</span>
+                              <span className="text-foreground">{stats.compliantCount} ({stats.activeRequirements > 0 ? Math.round((stats.compliantCount / stats.activeRequirements) * 100) : 0}%)</span>
+                            </button>
+                            <button
                               onClick={() => router.push('/dashboard/requirements?status=AMBER')}
+                              className="w-full flex items-center justify-between font-bold hover:bg-muted/30 p-1 rounded-md transition-all text-left"
                             >
-                              <title>{`At Risk: ${stats.expiringSoonCount} requirements. Click to filter.`}</title>
-                            </circle>
-
-                            {/* Needs Attention segment */}
-                            <circle
-                              cx="50"
-                              cy="50"
-                              r="36"
-                              fill="transparent"
-                              stroke="#ef4444"
-                              strokeWidth="11"
-                              strokeDasharray="226.2"
-                              strokeDashoffset={226.2 - (226.2 * (stats.expiredCount / (stats.activeRequirements || 1)))}
-                              transform={`rotate(${((stats.compliantCount + stats.expiringSoonCount) / (stats.activeRequirements || 1)) * 360} 50 50)`}
-                              className="cursor-pointer hover:opacity-80 transition-opacity"
+                              <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" /> At Risk</span>
+                              <span className="text-foreground">{stats.expiringSoonCount} ({stats.activeRequirements > 0 ? Math.round((stats.expiringSoonCount / stats.activeRequirements) * 100) : 0}%)</span>
+                            </button>
+                            <button
                               onClick={() => router.push('/dashboard/requirements?status=RED')}
+                              className="w-full flex items-center justify-between font-bold hover:bg-muted/30 p-1 rounded-md transition-all text-left"
                             >
-                              <title>{`Needs Attention: ${stats.expiredCount} requirements. Click to filter.`}</title>
-                            </circle>
-
-                            {/* Not Assessed segment */}
-                            <circle
-                              cx="50"
-                              cy="50"
-                              r="36"
-                              fill="transparent"
-                              stroke="#71717a"
-                              strokeWidth="11"
-                              strokeDasharray="226.2"
-                              strokeDashoffset={226.2 - (226.2 * (greyRequirementCount / (stats.activeRequirements || 1)))}
-                              transform={`rotate(${((stats.compliantCount + stats.expiringSoonCount + stats.expiredCount) / (stats.activeRequirements || 1)) * 360} 50 50)`}
-                              className="cursor-pointer hover:opacity-80 transition-opacity"
+                              <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" /> Needs Attention</span>
+                              <span className="text-foreground">{stats.expiredCount} ({stats.activeRequirements > 0 ? Math.round((stats.expiredCount / stats.activeRequirements) * 100) : 0}%)</span>
+                            </button>
+                            <button
                               onClick={() => router.push('/dashboard/requirements?status=GREY')}
+                              className="w-full flex items-center justify-between font-bold hover:bg-muted/30 p-1 rounded-md transition-all text-left"
                             >
-                              <title>{`Not Assessed: ${greyRequirementCount} requirements. Click to filter.`}</title>
-                            </circle>
-                          </svg>
-                          <div className="absolute flex flex-col items-center justify-center text-center">
-                            <span className="text-base font-black text-foreground">{stats.activeRequirements}</span>
-                            <span className="text-[7px] font-bold text-muted-foreground uppercase">Total</span>
+                              <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-zinc-500 shrink-0" /> Not Assessed</span>
+                              <span className="text-foreground">{greyRequirementCount} ({stats.activeRequirements > 0 ? Math.round((greyRequirementCount / stats.activeRequirements) * 100) : 0}%)</span>
+                            </button>
                           </div>
                         </div>
-
-                        <div className="flex-1 space-y-1.5 text-[10px]">
-                          <button
-                            onClick={() => router.push('/dashboard/requirements?status=GREEN')}
-                            className="w-full flex items-center justify-between font-bold hover:bg-muted/30 p-1 rounded-md transition-all text-left"
-                          >
-                            <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" /> Compliant</span>
-                            <span className="text-foreground">{stats.compliantCount} ({stats.activeRequirements > 0 ? Math.round((stats.compliantCount / stats.activeRequirements) * 100) : 0}%)</span>
-                          </button>
-                          <button
-                            onClick={() => router.push('/dashboard/requirements?status=AMBER')}
-                            className="w-full flex items-center justify-between font-bold hover:bg-muted/30 p-1 rounded-md transition-all text-left"
-                          >
-                            <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" /> At Risk</span>
-                            <span className="text-foreground">{stats.expiringSoonCount} ({stats.activeRequirements > 0 ? Math.round((stats.expiringSoonCount / stats.activeRequirements) * 100) : 0}%)</span>
-                          </button>
-                          <button
-                            onClick={() => router.push('/dashboard/requirements?status=RED')}
-                            className="w-full flex items-center justify-between font-bold hover:bg-muted/30 p-1 rounded-md transition-all text-left"
-                          >
-                            <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" /> Needs Attention</span>
-                            <span className="text-foreground">{stats.expiredCount} ({stats.activeRequirements > 0 ? Math.round((stats.expiredCount / stats.activeRequirements) * 100) : 0}%)</span>
-                          </button>
-                          <button
-                            onClick={() => router.push('/dashboard/requirements?status=GREY')}
-                            className="w-full flex items-center justify-between font-bold hover:bg-muted/30 p-1 rounded-md transition-all text-left"
-                          >
-                            <span className="flex items-center gap-1 text-muted-foreground"><span className="w-1.5 h-1.5 rounded-full bg-zinc-500 shrink-0" /> Not Assessed</span>
-                            <span className="text-foreground">{greyRequirementCount} ({stats.activeRequirements > 0 ? Math.round((greyRequirementCount / stats.activeRequirements) * 100) : 0}%)</span>
-                          </button>
-                        </div>
+                        {detailLevel === 'detailed' && (
+                          <div className="text-[9px] border-t border-border/40 pt-2 mt-2 font-bold text-muted-foreground">
+                            {stats.expiredCount > 0 ? (
+                              <span className="text-rose-500">⚠️ Action recommended for {stats.expiredCount} failed requirements.</span>
+                            ) : (
+                              <span className="text-emerald-500">✔ Requirements healthy. No immediate actions needed.</span>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  );
+                    );
+                  })();
                 case 'readinessGauge':
-                  return (
-                    <div
-                      className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs flex flex-col justify-between cursor-pointer hover:border-indigo-500/50 transition-all duration-300 select-none h-full`}
-                      onMouseEnter={handleMouseEnter('health')}
-                      onMouseLeave={handleMouseLeave}
-                      onClick={handleClick('health')}
-                      title="Click to view full posture analysis"
-                    >
-                      <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
-                        <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Audit Readiness</span>
-                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                      </div>
-                      <div className="flex flex-col items-center py-1.5">
-                        <div className="relative w-28 h-20 flex items-center justify-center overflow-hidden">
-                          <svg viewBox="0 0 100 60" className="w-full h-full">
-                            <defs>
-                              <linearGradient id="readiness-gauge-grad" x1="0%" y1="100%" x2="100%" y2="0%">
-                                <stop offset="0%" stopColor="#f59e0b" />
-                                <stop offset="100%" stopColor="#10b981" />
-                              </linearGradient>
-                            </defs>
-                            {/* Background Track */}
-                            <path d="M 15 50 A 35 35 0 0 1 85 50" fill="transparent" stroke="currentColor" className="text-muted/15 dark:text-muted/10" strokeWidth="8" strokeLinecap="round" />
-                            {/* Active Arc */}
-                            <path
-                              d="M 15 50 A 35 35 0 0 1 85 50"
-                              fill="transparent"
-                              stroke="url(#readiness-gauge-grad)"
-                              strokeWidth="8"
-                              strokeLinecap="round"
-                              strokeDasharray="110"
-                              strokeDashoffset={110 - (110 * ((readinessScore ?? 0) / 100))}
-                              className="transition-all duration-1000 ease-out"
-                            />
-                          </svg>
-                          <div className="absolute bottom-1 flex flex-col items-center justify-center text-center">
-                            <span className="text-xl font-black text-foreground">{readinessDisplay}</span>
-                            <span className="text-[7px] font-bold text-muted-foreground uppercase tracking-wider">Readiness</span>
-                          </div>
+                  return (() => {
+                    const detailLevel = currentCustomization.widgetSettings?.['readinessGauge']?.detailLevel || 'standard';
+                    return (
+                      <div
+                        className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs flex flex-col justify-between cursor-pointer hover:border-indigo-500/50 transition-all duration-300 select-none h-full`}
+                        onMouseEnter={handleMouseEnter('health')}
+                        onMouseLeave={handleMouseLeave}
+                        onClick={handleClick('health')}
+                        title="Click to view full posture analysis"
+                      >
+                        <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
+                          <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Audit Readiness</span>
+                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
                         </div>
-                        <div className="grid grid-cols-2 gap-4 w-full mt-2 border-t border-border/40 pt-2 text-[10px] text-center font-bold">
-                          <div>
-                            <span className="block text-rose-500">{stats.expiredCount}</span>
-                            <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Needs Attention</span>
-                          </div>
-                          <div className="border-l border-border/40">
-                            <span className="block text-amber-500">{stats.expiringSoonCount}</span>
-                            <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Due Soon</span>
-                          </div>
+                        <div className="flex flex-col items-center py-1.5">
+                          {detailLevel !== 'compact' ? (
+                            <div className="relative w-28 h-20 flex items-center justify-center overflow-hidden">
+                              <svg viewBox="0 0 100 60" className="w-full h-full">
+                                <defs>
+                                  <linearGradient id="readiness-gauge-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+                                    <stop offset="0%" stopColor="#f59e0b" />
+                                    <stop offset="100%" stopColor="#10b981" />
+                                  </linearGradient>
+                                </defs>
+                                {/* Background Track */}
+                                <path d="M 15 50 A 35 35 0 0 1 85 50" fill="transparent" stroke="currentColor" className="text-muted/15 dark:text-muted/10" strokeWidth="8" strokeLinecap="round" />
+                                {/* Active Arc */}
+                                <path
+                                  d="M 15 50 A 35 35 0 0 1 85 50"
+                                  fill="transparent"
+                                  stroke="url(#readiness-gauge-grad)"
+                                  strokeWidth="8"
+                                  strokeLinecap="round"
+                                  strokeDasharray="110"
+                                  strokeDashoffset={110 - (110 * ((readinessScore ?? 0) / 100))}
+                                  className="transition-all duration-1000 ease-out"
+                                />
+                              </svg>
+                              <div className="absolute bottom-1 flex flex-col items-center justify-center text-center">
+                                <span className="text-xl font-black text-foreground">{readinessDisplay}</span>
+                                <span className="text-[7px] font-bold text-muted-foreground uppercase tracking-wider">Readiness</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="py-2 text-center">
+                              <span className="text-2xl font-black text-foreground">{readinessDisplay}</span>
+                              <span className="text-[8px] text-muted-foreground uppercase font-bold tracking-wider block">Audits posture</span>
+                            </div>
+                          )}
+                          {detailLevel !== 'compact' && (
+                            <div className="grid grid-cols-2 gap-4 w-full mt-2 border-t border-border/40 pt-2 text-[10px] text-center font-bold">
+                              <div>
+                                <span className="block text-rose-500">{stats.expiredCount}</span>
+                                <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Needs Attention</span>
+                              </div>
+                              <div className="border-l border-border/40">
+                                <span className="block text-amber-500">{stats.expiringSoonCount}</span>
+                                <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Due Soon</span>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
-                    </div>
-                  );
+                    );
+                  })();
                 case 'trainingRing':
-                  return (
-                    <div
-                      className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs flex flex-col justify-between cursor-pointer hover:border-indigo-500/50 transition-all duration-300 select-none h-full`}
-                      onMouseEnter={handleMouseEnter('training')}
-                      onMouseLeave={handleMouseLeave}
-                      onClick={handleClick('training')}
-                      title="Click to view teammate certifications status"
-                    >
-                      <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
-                        <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Training Completion</span>
-                        <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">Current Records</span>
-                      </div>
-                      <div className="flex flex-col items-center py-1.5">
-                        <div className="relative w-20 h-20 flex items-center justify-center">
-                          <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
-                            <circle cx="50" cy="50" r="38" fill="transparent" stroke="currentColor" className="text-muted/10" strokeWidth="8" />
-                            <circle
-                              cx="50"
-                              cy="50"
-                              r="38"
-                              fill="transparent"
-                              stroke="#10b981"
-                              strokeWidth="8"
-                              strokeLinecap="round"
-                              strokeDasharray="238.8"
-                              strokeDashoffset={238.8 - (238.8 * ((competencySummary?.compliancePercent ?? 0) / 100))}
-                              className="transition-all duration-1000 ease-out"
-                            />
-                          </svg>
-                          <div className="absolute flex flex-col items-center justify-center text-center">
-                            <span className="text-base font-black text-foreground">{competencySummary?.compliancePercent ?? 0}%</span>
-                            <span className="text-[7px] font-bold text-muted-foreground uppercase">Completed</span>
-                          </div>
+                  return (() => {
+                    const detailLevel = currentCustomization.widgetSettings?.['trainingRing']?.detailLevel || 'standard';
+                    return (
+                      <div
+                        className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs flex flex-col justify-between cursor-pointer hover:border-indigo-500/50 transition-all duration-300 select-none h-full`}
+                        onMouseEnter={handleMouseEnter('training')}
+                        onMouseLeave={handleMouseLeave}
+                        onClick={handleClick('training')}
+                        title="Click to view teammate certifications status"
+                      >
+                        <div className="flex items-center justify-between border-b border-border/50 pb-2 mb-3">
+                          <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Training Completion</span>
+                          <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">Current Records</span>
                         </div>
-                        <div className="grid grid-cols-2 gap-4 w-full mt-2 border-t border-border/40 pt-2 text-[10px] text-center font-bold">
-                          <div>
-                            <span className="block text-emerald-500">{competencySummary?.valid ?? 0}</span>
-                            <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Completed</span>
-                          </div>
-                          <div className="border-l border-border/40">
-                            <span className="block text-rose-500">{competencySummary?.expired ?? 0}</span>
-                            <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Overdue</span>
-                          </div>
+                        <div className="flex flex-col items-center py-1.5">
+                          {detailLevel !== 'compact' ? (
+                            <div className="relative w-20 h-20 flex items-center justify-center">
+                              <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
+                                <circle cx="50" cy="50" r="38" fill="transparent" stroke="currentColor" className="text-muted/10" strokeWidth="8" />
+                                <circle
+                                  cx="50"
+                                  cy="50"
+                                  r="38"
+                                  fill="transparent"
+                                  stroke="#10b981"
+                                  strokeWidth="8"
+                                  strokeLinecap="round"
+                                  strokeDasharray="238.8"
+                                  strokeDashoffset={238.8 - (238.8 * ((competencySummary?.compliancePercent ?? 0) / 100))}
+                                  className="transition-all duration-1000 ease-out"
+                                />
+                              </svg>
+                              <div className="absolute flex flex-col items-center justify-center text-center">
+                                <span className="text-base font-black text-foreground">{competencySummary?.compliancePercent ?? 0}%</span>
+                                <span className="text-[7px] font-bold text-muted-foreground uppercase">Completed</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="py-2 text-center">
+                              <span className="text-2xl font-black text-foreground">{competencySummary?.compliancePercent ?? 0}%</span>
+                              <span className="text-[8px] text-muted-foreground uppercase font-bold tracking-wider block">Training Coverage</span>
+                            </div>
+                          )}
+                          {detailLevel !== 'compact' && (
+                            <div className="grid grid-cols-2 gap-4 w-full mt-2 border-t border-border/40 pt-2 text-[10px] text-center font-bold">
+                              <div>
+                                <span className="block text-emerald-500">{competencySummary?.valid ?? 0}</span>
+                                <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Completed</span>
+                              </div>
+                              <div className="border-l border-border/40">
+                                <span className="block text-rose-500">{competencySummary?.expired ?? 0}</span>
+                                <span className="text-[8px] text-muted-foreground uppercase tracking-wider block">Overdue</span>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
-                    </div>
-                  );
+                    );
+                  })();
                 case 'assetCategory':
-                  return (
-                    <div className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs ${densityStyles.panelSpacing} transition-all duration-300 h-full flex flex-col justify-between`}>
-                      <div>
-                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Asset Category Health</span>
-                        <div className="space-y-3 py-1 text-xs mt-3">
-                          {assetCategoryCompliance.map(category => (
-                            <Link
-                              key={category.id}
-                              href={`/dashboard/matrix?category=${category.id}`}
-                              className="space-y-1.5 block hover:bg-muted/30 p-2 rounded-xl transition-all cursor-pointer"
-                              title={`Health score: ${category.percent}% | ${category.compliant} of ${category.total} checks compliant. Click to view category in Asset Matrix.`}
-                            >
-                              <div className="flex justify-between items-center font-bold">
-                                <span>{category.name}</span>
-                                <span className="text-muted-foreground">{category.compliant} / {category.total} checks</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="w-full bg-muted h-2 rounded-full overflow-hidden">
-                                  <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${category.percent}%` }} />
+                  return (() => {
+                    const detailLevel = currentCustomization.widgetSettings?.['assetCategory']?.detailLevel || 'standard';
+                    const list = detailLevel === 'compact' ? assetCategoryCompliance.slice(0, 2) : assetCategoryCompliance;
+                    return (
+                      <div className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs ${densityStyles.panelSpacing} transition-all duration-300 h-full flex flex-col justify-between`}>
+                        <div>
+                          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Asset Category Health</span>
+                          <div className="space-y-3 py-1 text-xs mt-3">
+                            {list.map(category => (
+                              <Link
+                                key={category.id}
+                                href={`/dashboard/matrix?category=${category.id}`}
+                                className="space-y-1.5 block hover:bg-muted/30 p-2 rounded-xl transition-all cursor-pointer"
+                                title={`Health score: ${category.percent}% | ${category.compliant} of ${category.total} checks compliant. Click to view category in Asset Matrix.`}
+                              >
+                                <div className="flex justify-between items-center font-bold">
+                                  <span>{category.name}</span>
+                                  <span className="text-muted-foreground">{category.compliant} / {category.total} checks</span>
                                 </div>
-                                <span className="font-extrabold text-[10px] text-muted-foreground w-8 text-right">{category.percent}%</span>
-                              </div>
-                            </Link>
-                          ))}
-                          {assetCategoryCompliance.length === 0 && (
-                            <p className="text-[10px] text-muted-foreground italic text-center py-6">No parent asset categories defined.</p>
-                          )}
+                                <div className="flex items-center gap-2">
+                                  <div className="w-full bg-muted h-2 rounded-full overflow-hidden">
+                                    <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${category.percent}%` }} />
+                                  </div>
+                                  <span className="font-extrabold text-[10px] text-muted-foreground w-8 text-right">{category.percent}%</span>
+                                </div>
+                              </Link>
+                            ))}
+                            {list.length === 0 && (
+                              <p className="text-[10px] text-muted-foreground italic text-center py-6">No parent asset categories defined.</p>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
+                    );
+                  })();
                 case 'riskGaps':
-                  return (
-                    <div className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs ${densityStyles.panelSpacing} transition-all duration-300 h-full flex flex-col justify-between`}>
-                      <div>
-                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Top Risk Gaps</span>
-                        <div className="space-y-3 text-xs mt-3">
-                          {[
-                            { label: 'Critical Risk Items', riskKey: 'Critical', count: frameworkRequirements.filter(r => r.risk_level === 'Critical' && r.status !== 'GREEN').length, color: 'text-rose-600 bg-rose-500/10 border-rose-500/20' },
-                            { label: 'High Risk Items', riskKey: 'High', count: frameworkRequirements.filter(r => r.risk_level === 'High' && r.status !== 'GREEN').length, color: 'text-rose-500 bg-rose-500/5 border-rose-500/15' },
-                            { label: 'Medium Risk Items', riskKey: 'Medium', count: frameworkRequirements.filter(r => r.risk_level === 'Medium' && r.status !== 'GREEN').length, color: 'text-amber-600 bg-amber-500/10 border-amber-500/20' },
-                            { label: 'Low Risk Items', riskKey: 'Low', count: frameworkRequirements.filter(r => r.risk_level === 'Low' && r.status !== 'GREEN').length, color: 'text-zinc-600 bg-zinc-500/10 border-zinc-500/20' }
-                          ].map(item => (
-                            <Link
-                              key={item.label}
-                              href={`/dashboard/requirements?risk=${item.riskKey}&status=Attention`}
-                              className="flex justify-between items-center p-2.5 bg-muted/20 hover:bg-muted/40 border border-border rounded-xl transition-all cursor-pointer block text-xs font-bold text-foreground"
-                              title={`Click to view pending ${item.riskKey} risk requirements.`}
-                            >
-                              <span>{item.label}</span>
-                              <span className={`px-2 py-0.5 text-[10px] font-black rounded-md border ${item.color}`}>
-                                {item.count} pending
-                              </span>
-                            </Link>
-                          ))}
+                  return (() => {
+                    const detailLevel = currentCustomization.widgetSettings?.['riskGaps']?.detailLevel || 'standard';
+                    const items = [
+                      { label: 'Critical Risk Items', riskKey: 'Critical', count: frameworkRequirements.filter(r => r.risk_level === 'Critical' && r.status !== 'GREEN').length, color: 'text-rose-600 bg-rose-500/10 border-rose-500/20' },
+                      { label: 'High Risk Items', riskKey: 'High', count: frameworkRequirements.filter(r => r.risk_level === 'High' && r.status !== 'GREEN').length, color: 'text-rose-500 bg-rose-500/5 border-rose-500/15' },
+                      { label: 'Medium Risk Items', riskKey: 'Medium', count: frameworkRequirements.filter(r => r.risk_level === 'Medium' && r.status !== 'GREEN').length, color: 'text-amber-600 bg-amber-500/10 border-amber-500/20' },
+                      { label: 'Low Risk Items', riskKey: 'Low', count: frameworkRequirements.filter(r => r.risk_level === 'Low' && r.status !== 'GREEN').length, color: 'text-zinc-600 bg-zinc-500/10 border-zinc-500/20' }
+                    ];
+                    const visibleItems = detailLevel === 'compact' ? items.filter(i => i.count > 0 || i.riskKey === 'Critical' || i.riskKey === 'High') : items;
+                    return (
+                      <div className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs ${densityStyles.panelSpacing} transition-all duration-300 h-full flex flex-col justify-between`}>
+                        <div>
+                          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Top Risk Gaps</span>
+                          <div className="space-y-3 text-xs mt-3">
+                            {visibleItems.map(item => (
+                              <Link
+                                key={item.label}
+                                href={`/dashboard/requirements?risk=${item.riskKey}&status=Attention`}
+                                className="flex justify-between items-center p-2.5 bg-muted/20 hover:bg-muted/40 border border-border rounded-xl transition-all cursor-pointer block text-xs font-bold text-foreground"
+                                title={`Click to view pending ${item.riskKey} risk requirements.`}
+                              >
+                                <span>{item.label}</span>
+                                <span className={`px-2 py-0.5 text-[10px] font-black rounded-md border ${item.color}`}>
+                                  {item.count} pending
+                                </span>
+                              </Link>
+                            ))}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
+                    );
+                  })();
                 case 'alerts':
-                  return (
-                    <div className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs ${densityStyles.panelSpacing} transition-all duration-300 h-full flex flex-col justify-between`}>
-                      <div>
-                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Active Alerts</span>
-                        <div className="space-y-3 text-xs mt-3">
-                          {stats.expiredCount > 0 && (
-                            <Link
-                              href="/dashboard/requirements?status=RED"
-                              className="flex items-start gap-2.5 p-2 bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/15 hover:border-rose-500/30 rounded-xl transition-all cursor-pointer block"
-                              title="Click to view requirements needing attention."
-                            >
-                              <div className="flex items-start gap-2.5">
-                                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                                <div>
-                                  <span className="font-bold block text-rose-600 dark:text-rose-400">{stats.expiredCount} requirements need attention</span>
-                                  <p className="text-[10px] text-muted-foreground">Missing evidence, overdue reviews, or other readiness gaps.</p>
-                                </div>
-                              </div>
-                            </Link>
-                          )}
-                          {overdueAssetChecks.length > 0 && (
-                            <Link
-                              href="/dashboard/matrix?status=Expired"
-                              className="flex items-start gap-2.5 p-2 bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/15 hover:border-rose-500/30 rounded-xl transition-all cursor-pointer block"
-                              title="Click to view expired asset checks."
-                            >
-                              <div className="flex items-start gap-2.5">
-                                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                                <div>
-                                  <span className="font-bold block text-rose-600 dark:text-rose-400">{overdueAssetChecks.length} asset checks overdue</span>
-                                  <p className="text-[10px] text-muted-foreground">Assigned equipment or vehicle checks require action.</p>
-                                </div>
-                              </div>
-                            </Link>
-                          )}
-                          {unclassifiedDocs.length > 0 && (
-                            <Link
-                              href="/dashboard/vault?status=Unclassified"
-                              className="flex items-start gap-2.5 p-2 bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/15 hover:border-amber-500/30 rounded-xl transition-all cursor-pointer block"
-                              title="Click to view unclassified vault files."
-                            >
-                              <div className="flex items-start gap-2.5">
-                                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                                <div>
-                                  <span className="font-bold block text-amber-600 dark:text-amber-400">{unclassifiedDocs.length} unclassified documents</span>
-                                  <p className="text-[10px] text-muted-foreground">Newly uploaded evidence files pending classification.</p>
-                                </div>
-                              </div>
-                            </Link>
-                          )}
-                          {stats.expiredCount === 0 && overdueAssetChecks.length === 0 && unclassifiedDocs.length === 0 && (
-                            <p className="text-[10px] text-muted-foreground italic text-center py-6">No critical alerts detected in your workspace.</p>
+                  return (() => {
+                    const detailLevel = currentCustomization.widgetSettings?.['alerts']?.detailLevel || 'standard';
+                    const totalAlerts = (stats.expiredCount || 0) + (overdueAssetChecks.length || 0) + (unclassifiedDocs.length || 0);
+                    return (
+                      <div className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs ${densityStyles.panelSpacing} transition-all duration-300 h-full flex flex-col justify-between`}>
+                        <div>
+                          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Active Alerts</span>
+                          {detailLevel === 'compact' ? (
+                            <div className="mt-3 py-2 text-center space-y-1">
+                              <span className={`text-2xl font-black block ${totalAlerts > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
+                                {totalAlerts} Active
+                              </span>
+                              <span className="text-[8px] font-bold text-muted-foreground uppercase tracking-wider block">Gaps & Warnings</span>
+                            </div>
+                          ) : (
+                            <div className="space-y-3 text-xs mt-3">
+                              {stats.expiredCount > 0 && (
+                                <Link
+                                  href="/dashboard/requirements?status=RED"
+                                  className="flex items-start gap-2.5 p-2 bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/15 hover:border-rose-500/30 rounded-xl transition-all cursor-pointer block"
+                                  title="Click to view requirements needing attention."
+                                >
+                                  <div className="flex items-start gap-2.5">
+                                    <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                                    <div>
+                                      <span className="font-bold block text-rose-600 dark:text-rose-400">{stats.expiredCount} requirements need attention</span>
+                                      <p className="text-[10px] text-muted-foreground font-semibold">Missing evidence, overdue reviews, or other readiness gaps.</p>
+                                    </div>
+                                  </div>
+                                </Link>
+                              )}
+                              {overdueAssetChecks.length > 0 && (
+                                <Link
+                                  href="/dashboard/matrix?status=Expired"
+                                  className="flex items-start gap-2.5 p-2 bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/15 hover:border-rose-500/30 rounded-xl transition-all cursor-pointer block"
+                                  title="Click to view expired asset checks."
+                                >
+                                  <div className="flex items-start gap-2.5">
+                                    <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                                    <div>
+                                      <span className="font-bold block text-rose-600 dark:text-rose-400">{overdueAssetChecks.length} asset checks overdue</span>
+                                      <p className="text-[10px] text-muted-foreground font-semibold">Assigned equipment or vehicle checks require action.</p>
+                                    </div>
+                                  </div>
+                                </Link>
+                              )}
+                              {unclassifiedDocs.length > 0 && (
+                                <Link
+                                  href="/dashboard/vault?status=Unclassified"
+                                  className="flex items-start gap-2.5 p-2 bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/15 hover:border-amber-500/30 rounded-xl transition-all cursor-pointer block"
+                                  title="Click to view unclassified vault files."
+                                >
+                                  <div className="flex items-start gap-2.5">
+                                    <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                                    <div>
+                                      <span className="font-bold block text-amber-600 dark:text-amber-400">{unclassifiedDocs.length} unclassified documents</span>
+                                      <p className="text-[10px] text-muted-foreground font-semibold">Newly uploaded evidence files pending classification.</p>
+                                    </div>
+                                  </div>
+                                </Link>
+                              )}
+                              {stats.expiredCount === 0 && overdueAssetChecks.length === 0 && unclassifiedDocs.length === 0 && (
+                                <p className="text-[10px] text-muted-foreground italic text-center py-6">No critical alerts detected in your workspace.</p>
+                              )}
+                            </div>
                           )}
                         </div>
                       </div>
-                    </div>
-                  );
+                    );
+                  })();
                 case 'quickActions':
                   return (
                     <div className={`bg-card border border-border rounded-xl ${densityStyles.cardPadding} shadow-xs ${densityStyles.panelSpacing} h-full flex flex-col justify-between`}>
