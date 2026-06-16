@@ -983,6 +983,10 @@ export default function DashboardPage() {
     return cust.rightRailOrder?.includes(widgetId) ?? false;
   }, [tempCustomization, customization]);
 
+  // Customization modal open/closed state
+  const [isCustomizationOpen, setIsCustomizationOpen] = useState(false);
+
+
   const densityStyles = useMemo(() => {
     return {
       comfortable: {
@@ -1725,9 +1729,6 @@ export default function DashboardPage() {
   // Toast state
   const [toast, setToast] = useState<ToastState>(null);
 
-  // Customization state
-  const [isCustomizationOpen, setIsCustomizationOpen] = useState(false);
-
   const [hoveredInsight, setHoveredInsight] = useState<{
     id: string;
     title: string;
@@ -1779,6 +1780,12 @@ export default function DashboardPage() {
   } | null>(null);
 
   const [modalCustomization, setModalCustomization] = useState(customization);
+
+  // Live-preview: when the Customize modal is open, use modalCustomization for
+  // readability styling so changes are visible behind the modal before Save.
+  const previewCustomization = useMemo(() => {
+    return isCustomizationOpen ? modalCustomization : customization;
+  }, [isCustomizationOpen, modalCustomization, customization]);
   const hoverTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [expandedStatusLabel, setExpandedStatusLabel] = useState<string | null>(null);
@@ -2500,50 +2507,51 @@ export default function DashboardPage() {
   }, [readinessScore]);
 
   const readabilityStyles = useMemo(() => {
+    const src = previewCustomization;
     const scale =
-      customization.fontSize === 'sm' ? 0.9 :
-      customization.fontSize === 'lg' ? 1.15 :
-      customization.fontSize === 'xl' ? 1.25 : 1.0;
+      src.fontSize === 'sm' ? 0.9 :
+      src.fontSize === 'lg' ? 1.15 :
+      src.fontSize === 'xl' ? 1.25 : 1.0;
 
     const paneSpacingVal =
-      customization.paneSpacing === 'tight' ? '12px' :
-      customization.paneSpacing === 'wide' ? '36px' : '20px';
+      src.paneSpacing === 'tight' ? '12px' :
+      src.paneSpacing === 'wide' ? '36px' : '20px';
 
     const gridGapVal =
-      customization.paneSpacing === 'tight' ? '12px' :
-      customization.paneSpacing === 'wide' ? '36px' : '20px';
+      src.paneSpacing === 'tight' ? '12px' :
+      src.paneSpacing === 'wide' ? '36px' : '20px';
 
     const radiusVal =
-      customization.cardRadius === 'sharp' ? '0px' :
-      customization.cardRadius === 'soft' ? '16px' :
-      customization.cardRadius === 'rounded' ? '24px' : '12px';
+      src.cardRadius === 'sharp' ? '0px' :
+      src.cardRadius === 'soft' ? '16px' :
+      src.cardRadius === 'rounded' ? '24px' : '12px';
 
     // Accents map
     let primaryColor = '99, 102, 241'; // Indigo-500 default rgb
     let secondaryColor = '168, 85, 247'; // Purple-500 default rgb
 
-    if (customization.colourAccent === 'cyan-emerald') {
+    if (src.colourAccent === 'cyan-emerald') {
       primaryColor = '6, 182, 212'; // Cyan-500
       secondaryColor = '16, 185, 129'; // Emerald-500
-    } else if (customization.colourAccent === 'emerald-pulse') {
+    } else if (src.colourAccent === 'emerald-pulse') {
       primaryColor = '16, 185, 129';
       secondaryColor = '132, 204, 22';
-    } else if (customization.colourAccent === 'violet-rose') {
+    } else if (src.colourAccent === 'violet-rose') {
       primaryColor = '124, 58, 237';
       secondaryColor = '219, 39, 119';
-    } else if (customization.colourAccent === 'azure-amber') {
+    } else if (src.colourAccent === 'azure-amber') {
       primaryColor = '29, 78, 216';
       secondaryColor = '245, 158, 11';
-    } else if (customization.colourAccent === 'gold-amber') {
+    } else if (src.colourAccent === 'gold-amber') {
       primaryColor = '234, 179, 8';
       secondaryColor = '217, 119, 6';
-    } else if (customization.colourAccent === 'neon-green') {
+    } else if (src.colourAccent === 'neon-green') {
       primaryColor = '16, 185, 129';
       secondaryColor = '132, 204, 22';
-    } else if (customization.colourAccent === 'sunset-orange') {
+    } else if (src.colourAccent === 'sunset-orange') {
       primaryColor = '249, 115, 22';
       secondaryColor = '236, 72, 153';
-    } else if (customization.colourAccent === 'slate-monochrome') {
+    } else if (src.colourAccent === 'slate-monochrome') {
       primaryColor = '148, 163, 184';
       secondaryColor = '71, 85, 105';
     }
@@ -2556,7 +2564,7 @@ export default function DashboardPage() {
       '--lumen-primary-rgb': primaryColor,
       '--lumen-secondary-rgb': secondaryColor,
     } as React.CSSProperties;
-  }, [customization]);
+  }, [previewCustomization]);
 
   const activeViewMode = customization.heroStyle === 'list' ? 'list' : viewMode;
   const isMotionReduced = customization.motionPreference === 'reduced';
@@ -4773,7 +4781,10 @@ export default function DashboardPage() {
                   <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider">Customize Dashboard Layout</h3>
                 </div>
                 <button
-                  onClick={() => setIsCustomizationOpen(false)}
+                  onClick={() => {
+                    setModalCustomization(customization);
+                    setIsCustomizationOpen(false);
+                  }}
                   className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                 >
                   <X className="w-4 h-4" />
@@ -5138,7 +5149,10 @@ export default function DashboardPage() {
               </button>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setIsCustomizationOpen(false)}
+                  onClick={() => {
+                    setModalCustomization(customization);
+                    setIsCustomizationOpen(false);
+                  }}
                   className="px-4 py-2 border border-border rounded-xl text-xs font-bold text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
                 >
                   Cancel
