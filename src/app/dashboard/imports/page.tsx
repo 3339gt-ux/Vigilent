@@ -15,7 +15,21 @@ import {
   Link as LinkIcon,
   ShieldCheck,
   UploadCloud,
-  XCircle
+  XCircle,
+  Layers,
+  Users,
+  Database,
+  Sparkles,
+  ListTodo,
+  FileText,
+  Settings,
+  HelpCircle,
+  CheckSquare,
+  Boxes,
+  ArrowRight,
+  Clock,
+  LayoutGrid,
+  List
 } from 'lucide-react';
 
 type ImportTypeId =
@@ -360,17 +374,142 @@ const exampleReferenceIds = {
   assetCheckTypes: new Set(['check-weekly-forklift', 'check-annual-trailer'])
 };
 
-const importOrder = [
-  ['Requirements', 'Load the obligation/control list before linking evidence or reporting readiness.'],
-  ['People', 'People must exist before person competency records can be matched.'],
-  ['Assets', 'Assets must exist before scheduled checks can be assigned.'],
-  ['Competency Types', 'Competency definitions must exist before person records reference them.'],
-  ['Asset Check Types', 'Reusable check definitions must exist before asset assignments reference them.'],
-  ['Person Competency Records', 'These rows need matching people and competency types.'],
-  ['Asset Check Assignments', 'These rows need matching assets and check types.'],
-  ['Evidence Metadata', 'Metadata can be previewed after base records; files are uploaded separately.'],
-  ['Evidence link imports later', 'Relationship imports need confirmed base records and link targets.'],
-  ['File/ZIP imports later', 'Bulk file upload needs storage, scanning, rollback, and audit controls.']
+type ImportStepStatus = 'ready' | 'dependent' | 'metadata' | 'deferred';
+
+type ImportStep = {
+  stepNumber: number;
+  id: string;
+  title: string;
+  description: string;
+  dependsOn: string;
+  usedBy: string;
+  status: ImportStepStatus;
+  statusText: string;
+  stage: number;
+  iconName: string;
+};
+
+const importSteps: ImportStep[] = [
+  {
+    stepNumber: 1,
+    id: 'requirements',
+    title: 'Requirements',
+    description: 'Master obligations, controls, review dates, owners, and evidence expectations.',
+    dependsOn: 'None',
+    usedBy: 'Evidence links (future), readiness reporting',
+    status: 'ready',
+    statusText: 'Ready now',
+    stage: 1,
+    iconName: 'Requirements'
+  },
+  {
+    stepNumber: 2,
+    id: 'people',
+    title: 'People',
+    description: 'Employees, contractors, and other people who can hold competency records.',
+    dependsOn: 'None',
+    usedBy: 'Person Competency Records',
+    status: 'ready',
+    statusText: 'Ready now',
+    stage: 1,
+    iconName: 'People'
+  },
+  {
+    stepNumber: 3,
+    id: 'assets',
+    title: 'Assets',
+    description: 'Vehicles, equipment, facilities, and other controlled assets.',
+    dependsOn: 'None',
+    usedBy: 'Asset Check Assignments',
+    status: 'ready',
+    statusText: 'Ready now',
+    stage: 1,
+    iconName: 'Assets'
+  },
+  {
+    stepNumber: 4,
+    id: 'competency_types',
+    title: 'Competency Types',
+    description: 'Reusable competency definitions that can later be assigned to people.',
+    dependsOn: 'None',
+    usedBy: 'Person Competency Records',
+    status: 'ready',
+    statusText: 'Ready now',
+    stage: 1,
+    iconName: 'CompetencyTypes'
+  },
+  {
+    stepNumber: 5,
+    id: 'asset_check_types',
+    title: 'Asset Check Types',
+    description: 'Reusable scheduled checks, inspections, services, reviews, or calibrations.',
+    dependsOn: 'None',
+    usedBy: 'Asset Check Assignments',
+    status: 'ready',
+    statusText: 'Ready now',
+    stage: 1,
+    iconName: 'AssetCheckTypes'
+  },
+  {
+    stepNumber: 6,
+    id: 'person_competency_records',
+    title: 'Person Competency Records',
+    description: 'Import completed, expired, missing or active competency records for people.',
+    dependsOn: 'People + Competency Types',
+    usedBy: 'Competency Matrix, Reports, Dashboard',
+    status: 'dependent',
+    statusText: 'Depends on earlier imports',
+    stage: 2,
+    iconName: 'PersonCompetencyRecords'
+  },
+  {
+    stepNumber: 7,
+    id: 'asset_check_assignments',
+    title: 'Asset Check Assignments',
+    description: 'Assign asset check types to specific assets with due dates and overrides.',
+    dependsOn: 'Assets + Asset Check Types',
+    usedBy: 'Asset Matrix, Reports, Dashboard',
+    status: 'dependent',
+    statusText: 'Depends on earlier imports',
+    stage: 2,
+    iconName: 'AssetCheckAssignments'
+  },
+  {
+    stepNumber: 8,
+    id: 'evidence_metadata',
+    title: 'Evidence Metadata',
+    description: 'Metadata and external references for evidence. This does not upload files.',
+    dependsOn: 'None (pre-staged references)',
+    usedBy: 'Evidence Vault, Compliance Hero',
+    status: 'metadata',
+    statusText: 'Metadata only',
+    stage: 2,
+    iconName: 'EvidenceMetadata'
+  },
+  {
+    stepNumber: 9,
+    id: 'evidence_links_later',
+    title: 'Evidence Link Imports',
+    description: 'Relationship imports linking evidence files to requirements, people, or competencies.',
+    dependsOn: 'Base records + Evidence Metadata',
+    usedBy: 'Link Management (Future)',
+    status: 'deferred',
+    statusText: 'Deferred later',
+    stage: 3,
+    iconName: 'EvidenceLinkImports'
+  },
+  {
+    stepNumber: 10,
+    id: 'file_zip_imports_later',
+    title: 'File / ZIP Imports',
+    description: 'Bulk file upload requiring storage, malware scanning, rollback, and audit controls.',
+    dependsOn: 'Evidence Metadata',
+    usedBy: 'Private Storage, Evidence Vault (Future)',
+    status: 'deferred',
+    statusText: 'Deferred later',
+    stage: 3,
+    iconName: 'FileZipImports'
+  }
 ];
 
 const riskLevels = new Set(['low', 'medium', 'high', 'critical']);
@@ -512,6 +651,7 @@ export default function BulkImportCentrePage() {
   const [isCsvDragging, setIsCsvDragging] = useState(false);
   const [validationFilter, setValidationFilter] = useState<ValidationFilter>('all');
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const [viewMode, setViewMode] = useState<'guided' | 'compact'>('guided');
 
   const selectedTemplate = importTemplates.find(template => template.id === selectedType) || importTemplates[0];
 
@@ -896,26 +1036,496 @@ export default function BulkImportCentrePage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-border bg-card p-4">
-        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
+      <div className="rounded-xl border border-border bg-card p-5 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-border/60">
           <div>
-            <h2 className="text-sm font-extrabold">Recommended Import Order</h2>
+            <h2 className="text-base font-extrabold tracking-tight flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-indigo-500" />
+              Recommended Import Order
+            </h2>
             <p className="text-xs text-muted-foreground mt-1 max-w-3xl">
-              Import order matters because relationship rows need stable external IDs from base records. Phase 1.5 still previews only, but the same order should be used when live import is eventually enabled.
+              Import order matters because relationship rows need stable external IDs from base records. Use this premium guided workflow to prepare your data.
             </p>
           </div>
-          <span className="inline-flex px-2.5 py-1 rounded-md border border-amber-500/30 bg-amber-500/10 text-[10px] font-extrabold text-amber-700 dark:text-amber-300">
-            Live commit remains disabled
-          </span>
-        </div>
-        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-          {importOrder.map(([title, body], index) => (
-            <div key={title} className="rounded-lg border border-border bg-muted/25 p-3">
-              <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-300">Step {index + 1}</span>
-              <p className="text-xs font-extrabold text-foreground mt-1">{title}</p>
-              <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{body}</p>
+
+          <div className="flex flex-wrap items-center gap-3 self-start sm:self-center shrink-0">
+            {/* Toggle View Mode */}
+            <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setViewMode('guided')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold transition-all ${
+                  viewMode === 'guided'
+                    ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/10'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                Guided
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('compact')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold transition-all ${
+                  viewMode === 'compact'
+                    ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/10'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <List className="w-3.5 h-3.5" />
+                Compact
+              </button>
             </div>
-          ))}
+
+            <span className="inline-flex px-2.5 py-1 rounded-md border border-amber-500/30 bg-amber-500/10 text-[10px] font-extrabold text-amber-700 dark:text-amber-300">
+              Live commit remains disabled
+            </span>
+          </div>
+        </div>
+
+        {/* GUIDED MODE PANELS (Checklist, Tips, Why Order Matters) */}
+        {viewMode === 'guided' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            {/* Panel 1: Why Order Matters */}
+            <div className="rounded-xl border border-border bg-muted/20 p-4 flex flex-col justify-between gap-4">
+              <div>
+                <h3 className="text-xs uppercase tracking-widest font-black text-indigo-400 dark:text-indigo-300 flex items-center gap-2">
+                  <Info className="w-3.5 h-3.5" /> Why this order matters
+                </h3>
+                <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
+                  Import master records first so later rows can match safely by external ID. This reduces unresolved links, duplicate records and manual clean-up.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  'Use stable external IDs',
+                  'Import base records first',
+                  'Fix validation errors before commit'
+                ].map(text => (
+                  <span key={text} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-indigo-500/20 bg-indigo-500/5 text-[9px] font-extrabold text-indigo-600 dark:text-indigo-300">
+                    {text}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Panel 2: Before uploading checklist */}
+            <div className="rounded-xl border border-border bg-muted/20 p-4">
+              <h3 className="text-xs uppercase tracking-widest font-black text-emerald-400 dark:text-emerald-300 flex items-center gap-2">
+                <CheckSquare className="w-3.5 h-3.5" /> Before you upload
+              </h3>
+              <ul className="mt-2.5 space-y-2 text-[11px] text-muted-foreground">
+                {[
+                  'Confirm the correct import type is selected.',
+                  'Download the matching template.',
+                  'Keep external_id stable.',
+                  'Import linked base records first.',
+                  'Review validation warnings before going live.'
+                ].map(text => (
+                  <li key={text} className="flex items-start gap-2">
+                    <span className="w-3.5 h-3.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    </span>
+                    <span>{text}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Panel 3: Common validation issues */}
+            <div className="rounded-xl border border-border bg-muted/20 p-4">
+              <h3 className="text-xs uppercase tracking-widest font-black text-rose-400 dark:text-rose-300 flex items-center gap-2">
+                <AlertTriangle className="w-3.5 h-3.5" /> Common validation issues
+              </h3>
+              <ul className="mt-2.5 space-y-1.5 text-[11px] text-muted-foreground leading-relaxed">
+                <li>
+                  <strong className="text-foreground">Missing required column:</strong> download the latest template and keep headers exact.
+                </li>
+                <li>
+                  <strong className="text-foreground">Duplicate external_id:</strong> make source IDs unique in the spreadsheet.
+                </li>
+                <li>
+                  <strong className="text-foreground">Unknown person reference:</strong> import People first or correct <code className="px-1 py-0.5 rounded bg-muted font-mono text-[10px]">person_external_id</code>.
+                </li>
+                <li>
+                  <strong className="text-foreground">Unknown asset reference:</strong> import Assets first or correct <code className="px-1 py-0.5 rounded bg-muted font-mono text-[10px]">asset_external_id</code>.
+                </li>
+                <li>
+                  <strong className="text-foreground">Invalid date format:</strong> use <code className="px-1 py-0.5 rounded bg-muted font-mono text-[10px]">YYYY-MM-DD</code>.
+                </li>
+                <li>
+                  <strong className="text-foreground">Evidence metadata:</strong> metadata only, does not upload files.
+                </li>
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* TIMELINE STEPPER LAYOUT */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
+          {/* Stage 1 Column */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-500/10 text-indigo-400 text-xs font-black">
+                1
+              </span>
+              <div>
+                <h3 className="text-xs uppercase tracking-widest font-black text-indigo-400 dark:text-indigo-300">
+                  Stage 1 — Foundation Data
+                </h3>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  "Import the master records first."
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {importSteps
+                .filter(step => step.stage === 1)
+                .map(step => {
+                  const isDeferred = step.status === 'deferred';
+                  const isSelected = selectedType === step.id;
+
+                  // Icon resolution
+                  const IconComponent = () => {
+                    switch (step.iconName) {
+                      case 'Requirements': return <Layers className="w-4 h-4" />;
+                      case 'People': return <Users className="w-4 h-4" />;
+                      case 'Assets': return <Database className="w-4 h-4" />;
+                      case 'CompetencyTypes': return <Sparkles className="w-4 h-4" />;
+                      case 'AssetCheckTypes': return <Settings className="w-4 h-4" />;
+                      default: return <Info className="w-4 h-4" />;
+                    }
+                  };
+
+                  // Status Badge styling
+                  const statusBadgeStyle = (status: string) => {
+                    switch (status) {
+                      case 'ready':
+                        return 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-300';
+                      case 'dependent':
+                        return 'bg-indigo-500/10 border-indigo-500/20 text-indigo-700 dark:text-indigo-300';
+                      case 'metadata':
+                        return 'bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-300';
+                      case 'deferred':
+                        return 'bg-slate-500/10 border-slate-500/20 text-slate-500 dark:text-slate-400';
+                      default:
+                        return 'bg-muted border-border text-muted-foreground';
+                    }
+                  };
+
+                  // Border/Shadow hover styles for premium look
+                  const cardStyle = isDeferred
+                    ? 'border-border/40 bg-muted/10 opacity-55'
+                    : isSelected
+                      ? 'border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/5 ring-1 ring-indigo-500/20'
+                      : 'border-border bg-card hover:bg-muted/40 hover:border-muted-foreground/30 hover:shadow-md hover:shadow-indigo-500/2 transition-all duration-200';
+
+                  const isClickable = !isDeferred && step.id !== 'evidence_links_later' && step.id !== 'file_zip_imports_later';
+
+                  return (
+                    <div
+                      key={step.stepNumber}
+                      onClick={() => {
+                        if (isClickable) {
+                          setSelectedType(step.id as ImportTypeId);
+                          setParseResult(null);
+                          setFileName('');
+                          setParseError('');
+                          setDropNotice('');
+                          setValidationFilter('all');
+                          setExpandedRows(new Set());
+                        }
+                      }}
+                      className={`rounded-xl border p-4 flex flex-col justify-between gap-3 text-left ${cardStyle} ${isClickable ? 'cursor-pointer' : ''}`}
+                    >
+                      <div>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] uppercase font-black text-indigo-500 dark:text-indigo-400 tracking-wider">
+                              Step {step.stepNumber}
+                            </span>
+                            <div className="text-muted-foreground shrink-0">
+                              <IconComponent />
+                            </div>
+                          </div>
+                          <span className={`inline-flex px-2 py-0.5 rounded-full border text-[9px] font-extrabold uppercase ${statusBadgeStyle(step.status)}`}>
+                            {step.statusText}
+                          </span>
+                        </div>
+
+                        <h4 className="text-xs font-extrabold text-foreground mt-2 flex items-center gap-1.5">
+                          {step.title}
+                          {isSelected && (
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                          )}
+                        </h4>
+
+                        {viewMode === 'guided' && (
+                          <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
+                            {step.description}
+                          </p>
+                        )}
+                      </div>
+
+                      {viewMode === 'guided' && (
+                        <div className="pt-2 border-t border-border/40 mt-1 space-y-1 text-[10px]">
+                          <div className="flex items-start gap-1">
+                            <span className="font-extrabold text-foreground shrink-0">Depends on:</span>
+                            <span className="text-muted-foreground">{step.dependsOn}</span>
+                          </div>
+                          <div className="flex items-start gap-1">
+                            <span className="font-extrabold text-foreground shrink-0">Used by:</span>
+                            <span className="text-muted-foreground">{step.usedBy}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+
+          {/* Stage 2 Column */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-500/10 text-indigo-400 text-xs font-black">
+                2
+              </span>
+              <div>
+                <h3 className="text-xs uppercase tracking-widest font-black text-indigo-400 dark:text-indigo-300">
+                  Stage 2 — Dependent Records
+                </h3>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  "Import records that rely on the foundation data."
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {importSteps
+                .filter(step => step.stage === 2)
+                .map(step => {
+                  const isDeferred = step.status === 'deferred';
+                  const isSelected = selectedType === step.id;
+
+                  // Icon resolution
+                  const IconComponent = () => {
+                    switch (step.iconName) {
+                      case 'PersonCompetencyRecords': return <FileText className="w-4 h-4" />;
+                      case 'AssetCheckAssignments': return <ListTodo className="w-4 h-4" />;
+                      case 'EvidenceMetadata': return <LinkIcon className="w-4 h-4" />;
+                      default: return <Info className="w-4 h-4" />;
+                    }
+                  };
+
+                  // Status Badge styling
+                  const statusBadgeStyle = (status: string) => {
+                    switch (status) {
+                      case 'ready':
+                        return 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-300';
+                      case 'dependent':
+                        return 'bg-indigo-500/10 border-indigo-500/20 text-indigo-700 dark:text-indigo-300';
+                      case 'metadata':
+                        return 'bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-300';
+                      case 'deferred':
+                        return 'bg-slate-500/10 border-slate-500/20 text-slate-500 dark:text-slate-400';
+                      default:
+                        return 'bg-muted border-border text-muted-foreground';
+                    }
+                  };
+
+                  // Border/Shadow hover styles for premium look
+                  const cardStyle = isDeferred
+                    ? 'border-border/40 bg-muted/10 opacity-55'
+                    : isSelected
+                      ? 'border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/5 ring-1 ring-indigo-500/20'
+                      : 'border-border bg-card hover:bg-muted/40 hover:border-muted-foreground/30 hover:shadow-md hover:shadow-indigo-500/2 transition-all duration-200';
+
+                  const isClickable = !isDeferred && step.id !== 'evidence_links_later' && step.id !== 'file_zip_imports_later';
+
+                  return (
+                    <div
+                      key={step.stepNumber}
+                      onClick={() => {
+                        if (isClickable) {
+                          setSelectedType(step.id as ImportTypeId);
+                          setParseResult(null);
+                          setFileName('');
+                          setParseError('');
+                          setDropNotice('');
+                          setValidationFilter('all');
+                          setExpandedRows(new Set());
+                        }
+                      }}
+                      className={`rounded-xl border p-4 flex flex-col justify-between gap-3 text-left ${cardStyle} ${isClickable ? 'cursor-pointer' : ''}`}
+                    >
+                      <div>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] uppercase font-black text-indigo-500 dark:text-indigo-400 tracking-wider">
+                              Step {step.stepNumber}
+                            </span>
+                            <div className="text-muted-foreground shrink-0">
+                              <IconComponent />
+                            </div>
+                          </div>
+                          <span className={`inline-flex px-2 py-0.5 rounded-full border text-[9px] font-extrabold uppercase ${statusBadgeStyle(step.status)}`}>
+                            {step.statusText}
+                          </span>
+                        </div>
+
+                        <h4 className="text-xs font-extrabold text-foreground mt-2 flex items-center gap-1.5">
+                          {step.title}
+                          {isSelected && (
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                          )}
+                        </h4>
+
+                        {viewMode === 'guided' && (
+                          <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
+                            {step.description}
+                          </p>
+                        )}
+                      </div>
+
+                      {viewMode === 'guided' && (
+                        <div className="pt-2 border-t border-border/40 mt-1 space-y-1 text-[10px]">
+                          <div className="flex items-start gap-1">
+                            <span className="font-extrabold text-foreground shrink-0">Depends on:</span>
+                            <span className="text-muted-foreground">{step.dependsOn}</span>
+                          </div>
+                          <div className="flex items-start gap-1">
+                            <span className="font-extrabold text-foreground shrink-0">Used by:</span>
+                            <span className="text-muted-foreground">{step.usedBy}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+
+          {/* Stage 3 Column */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-500/10 text-slate-400 text-xs font-black">
+                3
+              </span>
+              <div>
+                <h3 className="text-xs uppercase tracking-widest font-black text-slate-400 dark:text-slate-400">
+                  Stage 3 — Later / Deferred
+                </h3>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  "Requires persisted import batches and files."
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {importSteps
+                .filter(step => step.stage === 3)
+                .map(step => {
+                  const isDeferred = step.status === 'deferred';
+                  const isSelected = selectedType === step.id;
+
+                  // Icon resolution
+                  const IconComponent = () => {
+                    switch (step.iconName) {
+                      case 'EvidenceLinkImports': return <LinkIcon className="w-4 h-4" />;
+                      case 'FileZipImports': return <UploadCloud className="w-4 h-4" />;
+                      default: return <Info className="w-4 h-4" />;
+                    }
+                  };
+
+                  // Status Badge styling
+                  const statusBadgeStyle = (status: string) => {
+                    switch (status) {
+                      case 'ready':
+                        return 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-300';
+                      case 'dependent':
+                        return 'bg-indigo-500/10 border-indigo-500/20 text-indigo-700 dark:text-indigo-300';
+                      case 'metadata':
+                        return 'bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-300';
+                      case 'deferred':
+                        return 'bg-slate-500/10 border-slate-500/20 text-slate-500 dark:text-slate-400';
+                      default:
+                        return 'bg-muted border-border text-muted-foreground';
+                    }
+                  };
+
+                  // Border/Shadow hover styles for premium look
+                  const cardStyle = isDeferred
+                    ? 'border-border/40 bg-muted/10 opacity-55'
+                    : isSelected
+                      ? 'border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/5 ring-1 ring-indigo-500/20'
+                      : 'border-border bg-card hover:bg-muted/40 hover:border-muted-foreground/30 hover:shadow-md hover:shadow-indigo-500/2 transition-all duration-200';
+
+                  const isClickable = !isDeferred && step.id !== 'evidence_links_later' && step.id !== 'file_zip_imports_later';
+
+                  return (
+                    <div
+                      key={step.stepNumber}
+                      onClick={() => {
+                        if (isClickable) {
+                          setSelectedType(step.id as ImportTypeId);
+                          setParseResult(null);
+                          setFileName('');
+                          setParseError('');
+                          setDropNotice('');
+                          setValidationFilter('all');
+                          setExpandedRows(new Set());
+                        }
+                      }}
+                      className={`rounded-xl border p-4 flex flex-col justify-between gap-3 text-left ${cardStyle} ${isClickable ? 'cursor-pointer' : ''}`}
+                    >
+                      <div>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] uppercase font-black text-indigo-500 dark:text-indigo-400 tracking-wider">
+                              Step {step.stepNumber}
+                            </span>
+                            <div className="text-muted-foreground shrink-0">
+                              <IconComponent />
+                            </div>
+                          </div>
+                          <span className={`inline-flex px-2 py-0.5 rounded-full border text-[9px] font-extrabold uppercase ${statusBadgeStyle(step.status)}`}>
+                            {step.statusText}
+                          </span>
+                        </div>
+
+                        <h4 className="text-xs font-extrabold text-foreground mt-2 flex items-center gap-1.5">
+                          {step.title}
+                          {isSelected && (
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                          )}
+                        </h4>
+
+                        {viewMode === 'guided' && (
+                          <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
+                            {step.description}
+                          </p>
+                        )}
+                      </div>
+
+                      {viewMode === 'guided' && (
+                        <div className="pt-2 border-t border-border/40 mt-1 space-y-1 text-[10px]">
+                          <div className="flex items-start gap-1">
+                            <span className="font-extrabold text-foreground shrink-0">Depends on:</span>
+                            <span className="text-muted-foreground">{step.dependsOn}</span>
+                          </div>
+                          <div className="flex items-start gap-1">
+                            <span className="font-extrabold text-foreground shrink-0">Used by:</span>
+                            <span className="text-muted-foreground">{step.usedBy}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1234,9 +1844,9 @@ export default function BulkImportCentrePage() {
             <div className="flex items-start gap-3">
               <Info className="w-5 h-5 text-indigo-500 shrink-0" />
               <div>
-                <h3 className="text-sm font-extrabold">Phase 1 boundary</h3>
+                <h3 className="text-sm font-extrabold">Phase 1.5 Safety Boundary</h3>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                  This centre deliberately stops at analysis. Live commits require the proposed import batch schema, permission checks, row snapshots, duplicate review, and rollback handling. Evidence file or ZIP upload is deferred; this page accepts metadata references only.
+                  Live commit remains disabled. Imports are preview-only until import batch persistence, rollback, audit logging and hosted Supabase verification are complete. Evidence file or ZIP upload is deferred; this page accepts metadata references only.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-bold text-muted-foreground">
                   <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-border bg-muted/40"><LinkIcon className="w-3 h-3" /> Unresolved links are reported</span>

@@ -308,7 +308,15 @@ Use this order for validation and future staged imports:
 9. Evidence link imports later.
 10. File/ZIP imports later.
 
-The order matters because relationship rows need base records to exist first. Person competency records need people and competency types. Asset check assignments need assets and asset check types. Evidence metadata should not be treated as uploaded evidence files.
+The order matters because relationship rows need base records to exist first. Person competency records need people and competency types. Asset check assignments need assets and check types.
+
+In this premium UX refinement, the import order section is redesigned as an interactive, multi-stage guided workflow with the following features:
+- **Toggle View Mode**: Users can switch between "Guided" (detailed explanation, dependencies, tips, checklist) and "Compact" (shorter step cards, minimal text for returning users).
+- **Why this order matters panel**: Contextual advice on why base records must precede relationship records, featuring key advice chips.
+- **Before you upload Checklist**: A mini checklist verifying requirements like template matching, stable external IDs, and validation review.
+- **Common validation issues tips**: Bulleted common errors (missing columns, duplicate IDs, unknown references, date formats) to debug CSVs quickly.
+- **Interactive Steps**: Clicking any active step card instantly updates the active template selection, making theStepper function as an interactive navigation wizard.
+- **Stage-Grouped Columns**: Organized as a left-to-right journey across 3 columns: Stage 1 (Foundation Data), Stage 2 (Dependent Records), and Stage 3 (Later/Deferred) with deferred items visually muted.
 
 ## Validation Preview UX
 
