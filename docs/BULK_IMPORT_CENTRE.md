@@ -1,6 +1,6 @@
-# LUMÉN Bulk Import Centre
+# LUMÃ‰N Bulk Import Centre
 
-The Bulk Import Centre is the safe foundation for importing records from existing customer systems into LUMÉN.
+The Bulk Import Centre is the safe foundation for importing records from existing customer systems into LUMÃ‰N.
 
 Phase 1 is deliberately preview-first. It does not write uploaded spreadsheet rows directly into live requirements, people, asset, competency, evidence, action, report, or audit-pack tables.
 
@@ -32,6 +32,8 @@ The route `/dashboard/imports` supports template download, CSV upload, parsing, 
 | Asset Check Assignments | Preview only |
 | Evidence Metadata | Preview only, metadata only |
 
+Phase 1.5 adds validation UX hardening only. It still does not commit rows to live records.
+
 Relationship/link imports are deferred to a later phase:
 
 - Evidence-to-Requirement Links.
@@ -43,6 +45,27 @@ Relationship/link imports are deferred to a later phase:
 ## Template Fields
 
 Every template includes `external_id`. This is required for safe matching, future rollback, and future source-system synchronisation.
+
+Each supported import type now has two download options:
+
+- Blank template: headers only, intended for customer data preparation.
+- Example template: generic sample rows showing realistic values and linked external IDs.
+
+Example templates are examples only. They do not represent production data, do not claim compliance, and do not upload or link physical evidence files.
+
+### Sample External ID Strategy
+
+The bundled example templates use consistent sample external IDs so users can understand the relationship model:
+
+- People: `person-001`, `person-002`.
+- Competency Types: `comp-forklift`, `comp-driver-cpc`.
+- Person Competency Records reference the example people and competency types.
+- Assets: `asset-forklift-001`, `asset-trailer-001`.
+- Asset Check Types: `check-weekly-forklift`, `check-annual-trailer`.
+- Asset Check Assignments reference the example assets and check types.
+- Evidence Metadata uses metadata-only references such as `evidence-forklift-cert-person-001`.
+
+For real imports, external IDs should come from the customer's source system where possible. If no source ID exists, create a stable deterministic ID before upload and keep it unchanged across future imports.
 
 ### Requirements
 
@@ -245,6 +268,16 @@ Evidence Metadata validation:
 - Metadata-only warning is always shown.
 - No file upload, signed URL, or storage path is created.
 
+### Validation Message Style
+
+Messages should be plain English and action-focused. For example:
+
+- "Person reference was not found. Import the People template first or correct person_external_id."
+- "Check type was not found. Import the Asset Check Types template first or correct check_type_external_id."
+- "Evidence metadata imports do not upload files. Upload physical evidence separately through the private Evidence Vault workflow."
+
+The validation preview separates errors, warnings, duplicates, and unresolved links so users can fix the file before any future commit workflow is considered.
+
 ## Preview-First Model
 
 The UI wizard is:
@@ -259,6 +292,51 @@ The UI wizard is:
 8. Commit after batch, row, snapshots, permissions, and rollback are verified.
 
 Phase 1 stops before commit.
+
+## Recommended Import Order
+
+Use this order for validation and future staged imports:
+
+1. Requirements.
+2. People.
+3. Assets.
+4. Competency Types.
+5. Asset Check Types.
+6. Person Competency Records.
+7. Asset Check Assignments.
+8. Evidence Metadata.
+9. Evidence link imports later.
+10. File/ZIP imports later.
+
+The order matters because relationship rows need base records to exist first. Person competency records need people and competency types. Asset check assignments need assets and asset check types. Evidence metadata should not be treated as uploaded evidence files.
+
+## Validation Preview UX
+
+The preview now includes:
+
+- Summary cards for total rows, valid rows, warnings, errors, duplicates, unresolved links, proposed creates, and updates/skips.
+- Filter tabs for all rows, valid rows, warnings, errors, duplicates, and unresolved links.
+- Row-level counts for errors and warnings.
+- Expandable row details showing original source row, mapped data, validation messages, unresolved links, and duplicate matches.
+- A disabled live commit boundary explaining why commit is unavailable in Phase 1.5.
+
+## Validation Report Export
+
+Users can download a client-side `Validation Report CSV` from the current preview.
+
+The report includes:
+
+- import type;
+- row number;
+- external ID;
+- proposed action;
+- status;
+- errors;
+- warnings;
+- unresolved links;
+- duplicate keys.
+
+The report is generated entirely from the client-side validation result. It does not write to Supabase, create import rows, or create live records.
 
 ## Import Batch Design
 
@@ -282,7 +360,7 @@ Stores each row from the uploaded file with source data, mapped data, row status
 
 ### `external_references`
 
-Stores stable source-system IDs mapped to LUMÉN entity IDs. This is required for future updates, duplicate control, and rollback.
+Stores stable source-system IDs mapped to LUMÃ‰N entity IDs. This is required for future updates, duplicate control, and rollback.
 
 ## Rollback Design
 
@@ -333,6 +411,30 @@ It must not:
 - auto-link evidence to requirements or subjects without confirmation.
 
 Evidence file or ZIP upload is deferred.
+
+In Phase 1.5, Evidence Metadata examples are deliberately metadata-only. They may include `external_file_reference` values from a legacy source, but those values are not storage paths, signed URLs, or uploaded files.
+
+## Phase 1.5 Boundary
+
+Phase 1.5 improves user understanding only:
+
+- Better templates.
+- Example rows.
+- Better validation summaries.
+- Row-level inspection.
+- Validation report export.
+- Import order guidance.
+- Clearer disabled commit state.
+
+It does not enable:
+
+- Live record creation.
+- Live record update.
+- Import batch persistence through the app.
+- Evidence file upload.
+- Evidence link import.
+- Rollback execution.
+- Hosted Supabase migration execution.
 
 ## Supabase Migration Status
 
