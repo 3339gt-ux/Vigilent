@@ -10,7 +10,8 @@ import { BulkUploadConfigurationPanel } from '@/components/BulkUploadConfigurati
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
 import { EVIDENCE_CATEGORY_GROUPS, flattenCategoryGroups } from '@/lib/categoryPresets';
 import { exportCsv, exportDateStamp, ExportRow } from '@/lib/exportData';
-import { Action, EvidenceDocument, Asset } from '@/lib/types';
+import { Action, EvidenceDocument, Asset, RecordImageAttachment } from '@/lib/types';
+import { ImageLightbox } from '@/components/media/ImageLightbox';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import { calculateEvidenceFileHash } from '@/lib/evidenceStorage';
 import {
@@ -357,6 +358,8 @@ export default function EvidenceVault() {
   const [previewPosition, setPreviewPosition] = useState({ top: 96, left: 24 });
   const [largePreviewDoc, setLargePreviewDoc] = useState<EvidenceDocument | null>(null);
   const [largePreviewUrl, setLargePreviewUrl] = useState('');
+  const [lightboxAttachments, setLightboxAttachments] = useState<RecordImageAttachment[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [duplicateWarning, setDuplicateWarning] = useState<{
     file: File;
     fileHash: string;
@@ -670,6 +673,38 @@ export default function EvidenceVault() {
     const url = previewCacheRef.current[doc.id] || '';
     setPreviewUrl(url);
     setLargePreviewUrl(url);
+  };
+
+  const openImageLightbox = (doc: EvidenceDocument) => {
+    const imageDocs = filteredDocs.filter(d => d.mime_type?.startsWith('image/'));
+    const mapped: RecordImageAttachment[] = imageDocs.map(d => ({
+      id: d.id,
+      organisation_id: d.organization_id,
+      entity_type: 'evidence_document',
+      entity_id: d.id,
+      document_id: d.id,
+      storage_bucket: 'evidence-documents',
+      storage_path: d.storage_path || null,
+      file_name: d.file_name,
+      mime_type: d.mime_type || 'image/jpeg',
+      file_size_bytes: d.file_size_bytes,
+      width: null,
+      height: null,
+      image_role: 'gallery',
+      caption: d.title,
+      alt_text: d.title,
+      crop_data: null,
+      sort_order: 0,
+      is_primary: false,
+      uploaded_by: d.uploaded_by || null,
+      created_at: d.created_at,
+      updated_at: d.updated_at,
+      archived_at: d.archived_at || null,
+      archived_by: null
+    }));
+    setLightboxAttachments(mapped);
+    const index = imageDocs.findIndex(d => d.id === doc.id);
+    setLightboxIndex(index !== -1 ? index : 0);
   };
 
   const handleSelectDoc = (doc: EvidenceDocument) => {
@@ -1270,15 +1305,29 @@ export default function EvidenceVault() {
     }
     if (mime.startsWith('image/')) {
       return (
-        <div className={isLarge ? "w-full h-full flex items-center justify-center" : "w-full"}>
+        <div className={isLarge ? "relative w-full h-full flex items-center justify-center group" : "w-full"}>
           <Image
             src={url}
             alt={doc.title}
             width={isLarge ? 1280 : 640}
             height={isLarge ? 720 : 360}
             unoptimized
-            className={`w-full object-contain rounded-xl bg-muted/30 border border-border/40 ${isLarge ? "max-h-[55vh]" : "max-h-40"}`}
+            className={`w-full object-contain rounded-xl bg-muted/30 border border-border/40 transition-all ${isLarge ? "max-h-[55vh] cursor-zoom-in hover:opacity-90" : "max-h-40"}`}
+            onClick={() => {
+              if (isLarge) {
+                openImageLightbox(doc);
+              }
+            }}
           />
+          {isLarge && (
+            <button
+              type="button"
+              onClick={() => openImageLightbox(doc)}
+              className="absolute bottom-4 right-4 bg-black/60 hover:bg-black/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 text-white text-[10px] font-bold tracking-wide flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <Eye className="w-3.5 h-3.5" /> Enlarge Image
+            </button>
+          )}
         </div>
       );
     }
@@ -3317,10 +3366,20 @@ export default function EvidenceVault() {
         onLinkAction={linkDocumentToAction}
         onLinkCompetencyRecord={linkDocumentToCompetencyRecord}
       />
-
       <FavouritesConfirmModal />
       <ConfirmDialog request={confirmRequest} onCancel={() => setConfirmRequest(null)} />
       <InlineToast toast={toast} onDismiss={() => setToast(null)} />
+
+      {lightboxIndex !== null && lightboxAttachments.length > 0 && (
+        <ImageLightbox
+          attachments={lightboxAttachments}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onOpenOriginal={async (att) => {
+            return await getDocumentSignedUrl(att.id);
+          }}
+        />
+      )}
     </div>
   );
 }

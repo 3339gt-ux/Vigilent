@@ -59,7 +59,8 @@ import {
   AssetCheckRecord,
   AssetCheckEvidenceLink,
   AssetRequirementLink,
-  AssetHistoryEvent
+  AssetHistoryEvent,
+  RecordImageAttachment
 } from '@/lib/types';
 export type ThemePreference = 'light' | 'midtone' | 'dark';
 export type VygilenceTheme = 'sentinel' | 'obsidian' | 'emerald-watch' | 'amber-beacon' | 'arc-reactor' | 'iron-ledger' | 'vanguard';
@@ -220,6 +221,23 @@ interface AppContextType {
     event: Omit<AssetHistoryEvent, 'id' | 'organisation_id' | 'created_by' | 'created_at' | 'updated_at' | 'archived_at'>
   ) => Promise<AssetHistoryEvent>;
 
+  // Universal Image Attachments System
+  imageAttachments: RecordImageAttachment[];
+  getImageAttachments: (entityType?: string, entityId?: string) => Promise<RecordImageAttachment[]>;
+  getImageAttachmentSignedUrl: (attachmentId: string) => Promise<string>;
+  uploadImageAttachment: (input: {
+    file: File;
+    entityType: string;
+    entityId: string;
+    imageRole: string;
+    caption?: string;
+    altText?: string;
+    cropData?: any;
+    isPrimary?: boolean;
+  }) => Promise<RecordImageAttachment>;
+  updateImageAttachment: (attachmentId: string, updates: Partial<RecordImageAttachment>) => Promise<RecordImageAttachment>;
+  archiveImageAttachment: (attachmentId: string) => Promise<RecordImageAttachment>;
+
   readinessReport: ReadinessReport;
   competencySummary: CompetencySummary;
   readinessScore: number;
@@ -234,6 +252,7 @@ interface AppContextType {
     archivedRequirements: number;
   };
 }
+
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -262,7 +281,8 @@ const emptyCollections = {
   matrixCells: [] as MatrixCell[],
   auditPacks: [] as AuditPack[],
   auditLogs: [] as AuditLog[],
-  notifications: [] as WorkspaceNotification[]
+  notifications: [] as WorkspaceNotification[],
+  imageAttachments: [] as RecordImageAttachment[]
 };
 
 const emptyReadinessReport = buildReadinessReport({
@@ -332,6 +352,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [auditPacks, setAuditPacks] = useState<AuditPack[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [notifications, setNotifications] = useState<WorkspaceNotification[]>([]);
+  const [imageAttachments, setImageAttachments] = useState<RecordImageAttachment[]>([]);
   
   // Asset state hooks
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -413,6 +434,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setAssetCheckEvidenceLinks([]);
     setAssetRequirementLinks([]);
     setAssetHistoryEvents([]);
+    setImageAttachments([]);
   };
 
   // Load appearance preferences per user and organisation.
@@ -490,7 +512,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cells,
       packs,
       logs,
-      notificationRows
+      notificationRows,
+      imageAttachmentRows
     ] = await Promise.all([
       dbService.getRequirements(),
       dbService.getDocuments(),
@@ -516,7 +539,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dbService.getMatrixCells(),
       dbService.getAuditPacks(),
       dbService.getAuditLogs(),
-      dbService.getWorkspaceNotifications()
+      dbService.getWorkspaceNotifications(),
+      dbService.getImageAttachments()
     ]);
 
     let assetRows: Asset[] = [];
@@ -582,6 +606,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setAuditPacks(packs);
     setAuditLogs(logs);
     setNotifications(notificationRows);
+    setImageAttachments(imageAttachmentRows);
     // Assets
     setAssets(assetRows);
     setAssetCategories(assetCategoryRows);
@@ -667,6 +692,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setAuditPacks(emptyCollections.auditPacks);
       setAuditLogs(emptyCollections.auditLogs);
       setNotifications(emptyCollections.notifications);
+      setImageAttachments(emptyCollections.imageAttachments);
       setAssets([]);
       setAssetCheckTypes([]);
       setAssetCheckAssignments([]);
@@ -1572,6 +1598,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return res;
   };
 
+  const getImageAttachments: AppContextType['getImageAttachments'] = async (entityType, entityId) => {
+    return dbService.getImageAttachments(entityType, entityId);
+  };
+
+  const getImageAttachmentSignedUrl: AppContextType['getImageAttachmentSignedUrl'] = async (attachmentId) => {
+    return dbService.getImageAttachmentSignedUrl(attachmentId);
+  };
+
+  const uploadImageAttachment: AppContextType['uploadImageAttachment'] = async (input) => {
+    const res = await dbService.uploadImageAttachment(input);
+    const updated = await dbService.getImageAttachments();
+    setImageAttachments(updated);
+    return res;
+  };
+
+  const updateImageAttachment: AppContextType['updateImageAttachment'] = async (attachmentId, updates) => {
+    const res = await dbService.updateImageAttachment(attachmentId, updates);
+    const updated = await dbService.getImageAttachments();
+    setImageAttachments(updated);
+    return res;
+  };
+
+  const archiveImageAttachment: AppContextType['archiveImageAttachment'] = async (attachmentId) => {
+    const res = await dbService.archiveImageAttachment(attachmentId);
+    const updated = await dbService.getImageAttachments();
+    setImageAttachments(updated);
+    return res;
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -1698,6 +1753,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         unlinkAssetCheckEvidence,
         uploadAssetEvidence,
         createAssetHistoryEvent,
+
+        imageAttachments,
+        getImageAttachments,
+        getImageAttachmentSignedUrl,
+        uploadImageAttachment,
+        updateImageAttachment,
+        archiveImageAttachment,
 
         readinessReport: readinessReport || emptyReadinessReport,
         competencySummary,

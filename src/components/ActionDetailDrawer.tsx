@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import { useApp } from '@/context/AppContext';
+import { ImageAttachmentManager } from '@/components/media/ImageAttachmentManager';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
 import {
   Action,
@@ -54,6 +56,7 @@ export function ActionDetailDrawer({
   onOpenDocument,
   onFindDuplicates
 }: ActionDetailDrawerProps) {
+  const { organization } = useApp();
   const [updateType, setUpdateType] = useState<ActionUpdateType>('Note');
   const [updateNote, setUpdateNote] = useState('');
   const [selectedDocumentId, setSelectedDocumentId] = useState('');
@@ -264,6 +267,27 @@ export function ActionDetailDrawer({
                 {uploadMessage}
               </div>
             )}
+          </section>
+
+          <section className="border-t border-border/50 pt-5 space-y-3 text-xs">
+            <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Before / After & Supporting Images</h3>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              Attach inspection labels, site photos, defect evidence, or repair outcomes before and after completing this action.
+            </p>
+            <ImageAttachmentManager
+              entityType="action"
+              entityId={action.id}
+              organisationId={organization?.id || action.organisation_id || ''}
+              mode="gallery"
+              allowPrimary={false}
+              allowMultiple={true}
+              imageRoleOptions={[
+                { label: 'Before Photo', value: 'before' },
+                { label: 'After Photo', value: 'after' },
+                { label: 'Supporting Evidence', value: 'supporting' },
+                { label: 'Gallery / Site Photo', value: 'gallery' }
+              ]}
+            />
           </section>
 
           <section className="border-t border-border/50 pt-5 space-y-3 text-xs">

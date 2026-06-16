@@ -448,6 +448,7 @@ What works:
 - Detail/preview panels expose metadata and links.
 - Archive/restore/permanent-delete marking exist.
 - Authenticated open uses signed URLs; no public links are stored in normal flow.
+- Polished image attachments with cropping (1:1, 4:3, 16:9), rotate (90 deg), metadata overlays, and secure full-screen slideshow preview lightbox.
 
 Partly supported:
 

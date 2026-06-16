@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
 import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
+import { ImageAttachmentManager } from '@/components/media/ImageAttachmentManager';
+import { PersonAvatar } from '@/components/media/PersonAvatar';
 import { buildCompetencyMatrix, calculateCompetencyStatus } from '@/lib/competencyEngine';
 import { COMPETENCY_TEMPLATE_PACKS } from '@/lib/competencyTemplates';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
@@ -2311,17 +2313,20 @@ export default function CompetencyMatrixPage() {
                                   openPersonWorkspace(person);
                                 }
                               }}
-                              className="w-full text-left rounded-lg p-1 -m-1 hover:bg-muted cursor-pointer transition-colors"
+                              className="w-full text-left rounded-lg p-1 -m-1 hover:bg-muted cursor-pointer transition-colors flex items-center gap-2"
                             >
-                              <span className={`font-extrabold block text-foreground ${textClass}`}>{person.display_name}</span>
-                              <span className="text-[9px] text-muted-foreground block truncate mt-0.5 max-w-[200px]">
-                                {person.department || 'No dept'} | {person.role || 'No role'}
-                              </span>
-                              {personGapsCount > 0 && (
-                                <span className="inline-block bg-rose-500/10 text-rose-600 dark:text-rose-400 font-extrabold text-[8px] px-1 rounded mt-0.5">
-                                  {personGapsCount} gap{personGapsCount > 1 ? 's' : ''}
+                              <PersonAvatar personId={person.id} displayName={person.display_name} size="sm" />
+                              <div className="min-w-0 flex-1">
+                                <span className={`font-extrabold block text-foreground ${textClass} truncate`}>{person.display_name}</span>
+                                <span className="text-[9px] text-muted-foreground block truncate mt-0.5 max-w-[200px]">
+                                  {person.department || 'No dept'} | {person.role || 'No role'}
                                 </span>
-                              )}
+                                {personGapsCount > 0 && (
+                                  <span className="inline-block bg-rose-500/10 text-rose-600 dark:text-rose-400 font-extrabold text-[8px] px-1 rounded mt-0.5">
+                                    {personGapsCount} gap{personGapsCount > 1 ? 's' : ''}
+                                  </span>
+                                )}
+                              </div>
                             </button>
                           </div>
                         </td>
@@ -3785,6 +3790,24 @@ export default function CompetencyMatrixPage() {
               <aside className="border-r border-border p-5 overflow-y-auto space-y-4 bg-muted/20">
                 <div className="flex items-center justify-between gap-2 border-b border-border/80 pb-2 mb-2">
                   <h3 className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Profile Summary</h3>
+                </div>
+
+                {/* Profile Photo Avatar */}
+                <div className="bg-card border border-border/60 rounded-xl p-4 flex flex-col items-center justify-center space-y-2">
+                  <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest block self-start">Profile Photo</span>
+                  <ImageAttachmentManager
+                    entityType="person"
+                    entityId={selectedPerson.id}
+                    organisationId={organization?.id || ''}
+                    mode="avatar"
+                    preferredAspectRatio="1:1"
+                    placeholderInitials={(() => {
+                      const name = selectedPerson.display_name || `${selectedPerson.first_name} ${selectedPerson.last_name}`;
+                      const parts = name.trim().split(/\s+/);
+                      if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+                      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+                    })()}
+                  />
                 </div>
 
                 {isEditingPerson ? (

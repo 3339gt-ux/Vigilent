@@ -692,6 +692,36 @@ export interface AssetHistoryEvent {
   updated_at: string;
   archived_at: string | null;
 }
-
-
-
+export interface RecordImageAttachment {
+  id: string;
+  organisation_id: string;
+  entity_type: 'person' | 'asset' | 'requirement' | 'competency_record' | 'asset_check_record' | 'action' | 'review' | 'evidence_document' | string;
+  entity_id: string;
+  document_id: string | null;
+  storage_bucket: string | null;
+  storage_path: string | null;
+  file_name: string;
+  mime_type: string;
+  file_size_bytes: number;
+  width: number | null;
+  height: number | null;
+  image_role: 'primary' | 'gallery' | 'before' | 'after' | 'supporting' | 'avatar' | string;
+  caption: string | null;
+  alt_text: string | null;
+  crop_data: {
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    zoom?: number;
+    rotate?: number;
+    aspectRatio?: string;
+  } | null;
+  sort_order: number;
+  is_primary: boolean;
+  uploaded_by: string | null;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+  archived_by: string | null;
+}

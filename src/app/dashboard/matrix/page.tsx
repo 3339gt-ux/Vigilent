@@ -4,6 +4,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
 import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
+import { ImageAttachmentManager } from '@/components/media/ImageAttachmentManager';
+import { AssetThumbnail } from '@/components/media/AssetThumbnail';
 import {
   Asset,
   AssetCheckType,
@@ -96,7 +98,7 @@ export default function AssetMatrix() {
   // Drawers and Modals
   const [activeAsset, setActiveAsset] = useState<Asset | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'checks' | 'evidence' | 'requirements' | 'actions' | 'history'>('overview');
-  
+
   const [activeCell, setActiveCell] = useState<{ asset: Asset; checkType: AssetCheckType; assignment?: AssetCheckAssignment } | null>(null);
   const [showAddAssetModal, setShowAddAssetModal] = useState(false);
   const [showAddCheckTypeModal, setShowAddCheckTypeModal] = useState(false);
@@ -1715,6 +1717,11 @@ export default function AssetMatrix() {
 
                   {!isEditingAsset ? (
                     <div className="space-y-3.5 text-xs">
+                      <AssetThumbnail
+                        assetId={activeAsset.id}
+                        aspectRatio="4:3"
+                        className="w-full shadow-xs mb-3"
+                      />
                       <div>
                         <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Asset ID / Number</span>
                         <span className="font-extrabold text-foreground">{activeAsset.asset_number || '—'}</span>
@@ -2018,7 +2025,7 @@ export default function AssetMatrix() {
                         'N/A': 0
                       } as Record<'Compliant' | 'Expiring Soon' | 'Expired' | 'Missing' | 'N/A', number>
                     );
-                    
+
                     const totalRequired = assignments.filter(a => a.required).length;
                     const overallAssurance = totalRequired > 0 ? Math.round((statusCounts.Compliant / totalRequired) * 100) : 100;
 
@@ -2194,6 +2201,24 @@ export default function AssetMatrix() {
                               );
                             })}
                           </div>
+                        </div>
+
+                        {/* Asset Photo Gallery & Supporting Images */}
+                        <div className="bg-card border border-border rounded-xl p-5 space-y-4 shadow-xs">
+                          <div className="border-b border-border/80 pb-2">
+                            <h4 className="text-xs font-black text-foreground uppercase tracking-wider font-extrabold">Asset Gallery & Photos</h4>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">Upload photos of the asset, equipment plates, defects, or calibrations.</p>
+                          </div>
+
+                          <ImageAttachmentManager
+                            entityType="asset"
+                            entityId={activeAsset.id}
+                            organisationId={organization?.id || ''}
+                            mode="gallery"
+                            allowPrimary={true}
+                            allowMultiple={true}
+                            preferredAspectRatio="4:3"
+                          />
                         </div>
 
                       </div>
@@ -3884,7 +3909,7 @@ export default function AssetMatrix() {
               {/* Left Column: Create Form */}
               <div className="space-y-4">
                 <h4 className="font-extrabold text-xs text-foreground border-b border-border pb-1">Create Category</h4>
-                
+
                 <form onSubmit={handleCreateCategory} className="space-y-3.5">
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
@@ -3932,7 +3957,7 @@ export default function AssetMatrix() {
               {/* Right Column: List & Actions */}
               <div className="space-y-4 flex flex-col h-full overflow-hidden">
                 <h4 className="font-extrabold text-xs text-foreground border-b border-border pb-1 shrink-0">Active Tree</h4>
-                
+
                 <div className="space-y-2.5 overflow-y-auto max-h-[35vh] flex-1 pr-1">
                   {assetCategories.filter(c => c.active && !c.parent_id).length === 0 ? (
                     <p className="text-[10px] text-muted-foreground italic">No taxonomy categories registered.</p>

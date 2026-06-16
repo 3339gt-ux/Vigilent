@@ -48,8 +48,11 @@ import {
   AssetCheckRecord,
   AssetCheckEvidenceLink,
   AssetRequirementLink,
-  AssetHistoryEvent
+  AssetHistoryEvent,
+  RecordImageAttachment
 } from './types';
+import { validateImageFile, getImageDimensions } from './imageStorage';
+
 import { calculateCompetencyStatus } from './competencyEngine';
 
 // Pre-seeded mock data
@@ -1867,7 +1870,7 @@ export const initMockDb = () => {
     localStorage.setItem('vigilen_requirement_competency_types', JSON.stringify(MOCK_REQUIREMENT_COMPETENCY_TYPES));
     localStorage.setItem('vigilen_audit_trail_events', JSON.stringify(MOCK_AUDIT_TRAIL_EVENTS));
     localStorage.setItem('vygilence_workspace_notifications', JSON.stringify(MOCK_WORKSPACE_NOTIFICATIONS));
-    
+
     // Seed new asset system tables
     localStorage.setItem('vigilen_asset_categories', JSON.stringify(MOCK_ASSET_CATEGORIES));
     localStorage.setItem('vigilen_assets', JSON.stringify(MOCK_ASSETS));
@@ -1877,7 +1880,7 @@ export const initMockDb = () => {
     localStorage.setItem('vigilen_asset_check_evidence_links', JSON.stringify(MOCK_ASSET_CHECK_EVIDENCE_LINKS));
     localStorage.setItem('vigilen_asset_requirement_links', JSON.stringify(MOCK_ASSET_REQUIREMENT_LINKS));
     localStorage.setItem('vigilen_asset_history_events', JSON.stringify(MOCK_ASSET_HISTORY_EVENTS));
-    
+
     localStorage.setItem('vigilen_initialized', 'true');
   }
 };
@@ -2062,6 +2065,37 @@ export const checkSavedReportsTableAvailable = async (): Promise<boolean> => {
     return false;
   }
 };
+
+let _isImageAttachmentsTableAvailable: boolean | null = null;
+
+export const checkImageAttachmentsTableAvailable = async (): Promise<boolean> => {
+  if (!shouldUseSupabase()) return false;
+  if (_isImageAttachmentsTableAvailable !== null) return _isImageAttachmentsTableAvailable;
+  try {
+    const { error } = await supabase!
+      .from('record_image_attachments')
+      .select('id')
+      .limit(1);
+    if (error) {
+      if (error.code === 'PGRST205' || error.code === '42P01' || error.message?.includes('record_image_attachments')) {
+        _isImageAttachmentsTableAvailable = false;
+        return false;
+      }
+      console.warn('Image attachments database availability check failed:', {
+        code: error.code,
+        message: error.message
+      });
+      _isImageAttachmentsTableAvailable = false;
+      return false;
+    }
+    _isImageAttachmentsTableAvailable = true;
+    return true;
+  } catch {
+    _isImageAttachmentsTableAvailable = false;
+    return false;
+  }
+};
+
 
 export const getSavedReportsStorageKey = async (): Promise<string> => {
   const SAVED_REPORTS_KEY = 'vygilence_saved_reports';
@@ -4423,10 +4457,10 @@ export const dbService = {
       };
       docs.unshift(newDoc);
       setStorageItem('vigilen_documents', docs);
-      
+
       // Auto register log
       await this.logActivity('Document Uploaded', `Uploaded document "${newDoc.title}" (${newDoc.file_name})`);
-      
+
       // Attempt to map to Matrix cell if we find matching category/keywords
       await this.autoMapCell(newDoc);
 
@@ -4440,7 +4474,7 @@ export const dbService = {
         afterSnapshot: newDoc,
         severity: 'info'
       });
-      
+
       return newDoc;
     }
   },
@@ -6132,6 +6166,321 @@ export const dbService = {
       setStorageItem('vigilen_asset_history_events', events);
       return updated;
     }
+  },
+
+  async checkImageAttachmentsTableAvailable(): Promise<boolean> {
+    return checkImageAttachmentsTableAvailable();
+  },
+
+  async getImageAttachments(entityType?: string, entityId?: string): Promise<RecordImageAttachment[]> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+
+    if (shouldUseSupabase()) {
+      const tableAvailable = await checkImageAttachmentsTableAvailable();
+      if (!tableAvailable) return [];
+
+      let query = supabase!
+        .from('record_image_attachments')
+        .select('*')
+        .eq('organisation_id', orgId)
+        .is('archived_at', null);
+
+      if (entityType) {
+        query = query.eq('entity_type', entityType);
+      }
+      if (entityId) {
+        query = query.eq('entity_id', entityId);
+      }
+
+      const { data, error } = await query.order('sort_order', { ascending: true }).order('created_at', { ascending: true });
+      if (error) throwSupabaseError('record_image_attachments.select', error);
+      return data || [];
+    }
+
+    initMockDb();
+    const attachments = getStorageItem('vigilen_image_attachments', []);
+    return attachments.filter((att: RecordImageAttachment) =>
+      att.organisation_id === orgId &&
+      !att.archived_at &&
+      (!entityType || att.entity_type === entityType) &&
+      (!entityId || att.entity_id === entityId)
+    );
+  },
+
+  async getImageAttachmentSignedUrl(attachmentId: string): Promise<string> {
+    if (shouldUseSupabase()) {
+      const tableAvailable = await checkImageAttachmentsTableAvailable();
+      if (!tableAvailable) throw new Error('Image attachments are not configured on the server.');
+
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data: att, error } = await supabase!
+        .from('record_image_attachments')
+        .select('*')
+        .eq('id', attachmentId)
+        .eq('organisation_id', orgId)
+        .maybeSingle();
+
+      if (error) throwSupabaseError('record_image_attachments.select signed url target', error);
+      if (!att) throw new Error('Image attachment not found.');
+
+      if (att.document_id && !att.storage_path) {
+        return this.getDocumentSignedUrl(att.document_id);
+      }
+
+      if (!att.storage_path) throw new Error('Attachment has no storage path.');
+
+      const { data: urlData, error: storageError } = await supabase!.storage
+        .from(att.storage_bucket || evidenceStorageBucket)
+        .createSignedUrl(att.storage_path, signedUrlTtlSeconds);
+
+      if (storageError) throwSupabaseError('storage.objects.createSignedUrl image attachment', storageError);
+      if (!urlData?.signedUrl) throw new Error('Could not generate signed URL.');
+      return urlData.signedUrl;
+    }
+
+    initMockDb();
+    const attachments = getStorageItem('vigilen_image_attachments', []);
+    const att = attachments.find((a: RecordImageAttachment) => a.id === attachmentId);
+    if (!att) throw new Error('Image attachment not found.');
+
+    if (att.document_id && !att.storage_path) {
+      const doc = getStorageItem('vigilen_documents', MOCK_DOCUMENTS).find((d: EvidenceDocument) => d.id === att.document_id);
+      if (doc?.file_url) return doc.file_url;
+      // return a placeholder
+      return `https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=60`;
+    }
+
+    return att.storage_path || '';
+  },
+
+  async uploadImageAttachment(input: {
+    file: File;
+    entityType: string;
+    entityId: string;
+    imageRole: string;
+    caption?: string;
+    altText?: string;
+    cropData?: any;
+    isPrimary?: boolean;
+  }): Promise<RecordImageAttachment> {
+    validateImageFile(input.file);
+    const { width, height } = await getImageDimensions(input.file);
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+    const attachmentId = crypto.randomUUID();
+    const safeFilename = sanitizeEvidenceFilename(input.file.name);
+
+    const isPrimary = !!input.isPrimary || input.imageRole === 'primary' || input.imageRole === 'avatar';
+
+    if (shouldUseSupabase()) {
+      const tableAvailable = await checkImageAttachmentsTableAvailable();
+      if (!tableAvailable) {
+        throw new Error('Database tables for image attachments are not deployed. Please contact your administrator.');
+      }
+
+      // If this is set to primary, reset other primary images for this entity
+      if (isPrimary) {
+        await supabase!
+          .from('record_image_attachments')
+          .update({ is_primary: false })
+          .eq('organisation_id', orgId)
+          .eq('entity_type', input.entityType)
+          .eq('entity_id', input.entityId);
+      }
+
+      // Storage path matches bucket policy for documents
+      const storagePath = `organisations/${orgId}/documents/${attachmentId}/${safeFilename}`;
+
+      const { error: uploadError } = await supabase!.storage
+        .from(evidenceStorageBucket)
+        .upload(storagePath, input.file, {
+          contentType: input.file.type,
+          upsert: false
+        });
+
+      if (uploadError) throwSupabaseError('storage.objects.upload image attachment', uploadError);
+
+      const payload = {
+        id: attachmentId,
+        organisation_id: orgId,
+        entity_type: input.entityType,
+        entity_id: input.entityId,
+        document_id: null,
+        storage_bucket: evidenceStorageBucket,
+        storage_path: storagePath,
+        file_name: safeFilename,
+        mime_type: input.file.type,
+        file_size_bytes: input.file.size,
+        width,
+        height,
+        image_role: input.imageRole,
+        caption: input.caption || null,
+        alt_text: input.altText || null,
+        crop_data: input.cropData || null,
+        is_primary: isPrimary,
+        uploaded_by: userId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase!
+        .from('record_image_attachments')
+        .insert([payload])
+        .select()
+        .single();
+
+      if (error) {
+        await supabase!.storage.from(evidenceStorageBucket).remove([storagePath]);
+        throwSupabaseError('record_image_attachments.insert', error);
+      }
+
+      await this.logActivity('Image Attached', `Attached image "${safeFilename}" to ${input.entityType}.`);
+
+      await safeLogAuditEvent({
+        actionCategory: 'Evidence',
+        actionType: 'image_attached',
+        entityType: input.entityType,
+        entityId: input.entityId,
+        entityLabel: safeFilename,
+        description: `Attached image "${safeFilename}" to ${input.entityType}`,
+        afterSnapshot: data,
+        severity: 'info'
+      });
+
+      return data;
+    }
+
+    // Demo Mode
+    const fileDataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(input.file);
+    });
+
+    initMockDb();
+    const attachments = getStorageItem('vigilen_image_attachments', []);
+
+    if (isPrimary) {
+      attachments.forEach((a: RecordImageAttachment) => {
+        if (a.entity_type === input.entityType && a.entity_id === input.entityId) {
+          a.is_primary = false;
+        }
+      });
+    }
+
+    const newAttachment: RecordImageAttachment = {
+      id: attachmentId,
+      organisation_id: orgId,
+      entity_type: input.entityType,
+      entity_id: input.entityId,
+      document_id: null,
+      storage_bucket: 'evidence-documents',
+      storage_path: fileDataUrl, // Store base64 data url directly for local previews
+      file_name: safeFilename,
+      mime_type: input.file.type,
+      file_size_bytes: input.file.size,
+      width,
+      height,
+      image_role: input.imageRole,
+      caption: input.caption || null,
+      alt_text: input.altText || null,
+      crop_data: input.cropData || null,
+      sort_order: attachments.length,
+      is_primary: isPrimary,
+      uploaded_by: userId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      archived_at: null,
+      archived_by: null
+    };
+
+    attachments.push(newAttachment);
+
+    try {
+      setStorageItem('vigilen_image_attachments', attachments);
+    } catch {
+      console.warn('LocalStorage quota exceeded. Storing image metadata with a fallback URL instead.');
+      newAttachment.storage_path = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="150" viewBox="0 0 200 150"><rect width="200" height="150" fill="%23e2e8f0"/><text x="100" y="75" font-family="sans-serif" font-size="10" fill="%2364748b" text-anchor="middle" dominant-baseline="middle">Local Image Preview (Quota Exceeded)</text></svg>';
+      const idx = attachments.findIndex((a: RecordImageAttachment) => a.id === newAttachment.id);
+      if (idx !== -1) {
+        attachments[idx] = newAttachment;
+      }
+      setStorageItem('vigilen_image_attachments', attachments);
+    }
+
+    await this.logActivity('Image Attached', `Attached image "${safeFilename}" to ${input.entityType} (local mode).`);
+
+    return newAttachment;
+  },
+
+  async updateImageAttachment(attachmentId: string, updates: Partial<RecordImageAttachment>): Promise<RecordImageAttachment> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+
+    if (shouldUseSupabase()) {
+      const tableAvailable = await checkImageAttachmentsTableAvailable();
+      if (!tableAvailable) throw new Error('Database tables for image attachments are not deployed.');
+
+      const before = await fetchRecordById('record_image_attachments', attachmentId);
+      if (!before) throw new Error('Attachment not found.');
+
+      if (updates.is_primary) {
+        await supabase!
+          .from('record_image_attachments')
+          .update({ is_primary: false })
+          .eq('organisation_id', orgId)
+          .eq('entity_type', before.entity_type)
+          .eq('entity_id', before.entity_id);
+      }
+
+      const cleanUpdates = { ...updates, updated_at: new Date().toISOString() };
+      delete cleanUpdates.id;
+      delete cleanUpdates.organisation_id;
+
+      const { data, error } = await supabase!
+        .from('record_image_attachments')
+        .update(cleanUpdates)
+        .eq('id', attachmentId)
+        .eq('organisation_id', orgId)
+        .select()
+        .single();
+
+      if (error) throwSupabaseError('record_image_attachments.update', error);
+      return data;
+    }
+
+    initMockDb();
+    const attachments = getStorageItem('vigilen_image_attachments', []);
+    const idx = attachments.findIndex((a: RecordImageAttachment) => a.id === attachmentId && a.organisation_id === orgId);
+    if (idx === -1) throw new Error('Image attachment not found.');
+
+    const before = attachments[idx];
+
+    if (updates.is_primary) {
+      attachments.forEach((a: RecordImageAttachment) => {
+        if (a.entity_type === before.entity_type && a.entity_id === before.entity_id) {
+          a.is_primary = false;
+        }
+      });
+    }
+
+    const updated = {
+      ...attachments[idx],
+      ...updates,
+      updated_at: new Date().toISOString()
+    };
+
+    attachments[idx] = updated;
+    setStorageItem('vigilen_image_attachments', attachments);
+    return updated;
+  },
+
+  async archiveImageAttachment(attachmentId: string): Promise<RecordImageAttachment> {
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+    return this.updateImageAttachment(attachmentId, {
+      archived_at: new Date().toISOString(),
+      archived_by: userId
+    });
   },
 
   // Private helper to automatically map a uploaded document to a matrix cell if it fits requirements

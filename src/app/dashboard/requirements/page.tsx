@@ -6,6 +6,7 @@ import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
+import { ImageAttachmentManager } from '@/components/media/ImageAttachmentManager';
 import { REQUIREMENT_CATEGORY_GROUPS, flattenCategoryGroups } from '@/lib/categoryPresets';
 import { exportCsv, exportDateStamp, ExportRow } from '@/lib/exportData';
 import type { Action, ActionStatus, Requirement, RequirementEvidenceCoverage, RequirementLifecycleStatus, RequirementStatus } from '@/lib/types';
@@ -2322,7 +2323,7 @@ export default function RequirementsPage() {
             className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-xs"
           >
             <div className="bg-card border border-border w-full max-w-4xl h-[85vh] rounded-2xl flex flex-col relative shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-              
+
               {/* Header */}
               <div className="flex justify-between items-start border-b border-border/60 p-6 bg-muted/10">
                 <div className="space-y-1 min-w-0">
@@ -2506,6 +2507,28 @@ export default function RequirementsPage() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Supporting Images & Diagrams */}
+                    <div className="bg-card border border-border rounded-xl p-5 space-y-4 shadow-xs">
+                      <div className="border-b border-border/80 pb-2">
+                        <h4 className="text-xs font-black text-foreground uppercase tracking-wider font-extrabold">Supporting Images & Diagrams</h4>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Attach screenshots, notices, site photos, labels, or instruction diagrams related to this requirement.</p>
+                      </div>
+
+                      <ImageAttachmentManager
+                        entityType="requirement"
+                        entityId={selectedRequirement?.id || ''}
+                        organisationId={organization?.id || ''}
+                        mode="gallery"
+                        allowPrimary={false}
+                        allowMultiple={true}
+                        imageRoleOptions={[
+                          { label: 'Supporting Diagram', value: 'supporting' },
+                          { label: 'Notice / Label', value: 'label' },
+                          { label: 'Site Photo', value: 'gallery' }
+                        ]}
+                      />
+                    </div>
                   </div>
                 )}
 
@@ -2649,7 +2672,7 @@ export default function RequirementsPage() {
                           ))}
                         </div>
                       )}
-                      
+
                       <div className="flex gap-2 max-w-md">
                         <select
                           value={linkingDocumentId}
@@ -2693,7 +2716,7 @@ export default function RequirementsPage() {
                           })}
                         </div>
                       )}
-                      
+
                       <div className="flex gap-2 max-w-md">
                         <select
                           value={linkingCompetencyTypeId}
@@ -2844,7 +2867,7 @@ export default function RequirementsPage() {
                   <div className="space-y-6 text-xs">
                     <div className="bg-muted/20 border border-border rounded-xl p-5 space-y-4 max-w-2xl">
                       <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Log a Review</span>
-                      
+
                       <form onSubmit={async (e) => {
                         e.preventDefault();
                         if (!selectedRequirement) return;
