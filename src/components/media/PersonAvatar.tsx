@@ -19,12 +19,14 @@ export function PersonAvatar({ personId, displayName, size = 'sm', className = '
   );
 
   useEffect(() => {
+    let active = true;
     if (!avatar) {
-      setAvatarUrl('');
+      Promise.resolve().then(() => {
+        if (active) setAvatarUrl('');
+      });
       return;
     }
     
-    let active = true;
     const loadUrl = async () => {
       try {
         const url = await getImageAttachmentSignedUrl(avatar.id);

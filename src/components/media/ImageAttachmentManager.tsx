@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Image as ImageIcon, Plus, Trash2, Edit2, Crop, Star, Eye, Upload, Check, AlertCircle, RefreshCw } from 'lucide-react';
-import { RecordImageAttachment } from '@/lib/types';
+import { Image as ImageIcon, Trash2, Edit2, Star, Eye, Upload, AlertCircle, RefreshCw } from 'lucide-react';
 import { ImageCropModal } from './ImageCropModal';
 import { ImageLightbox } from './ImageLightbox';
 import { useApp } from '@/context/AppContext';
@@ -23,7 +22,6 @@ interface ImageAttachmentManagerProps {
 export function ImageAttachmentManager({
   entityType,
   entityId,
-  organisationId,
   mode = 'gallery',
   allowPrimary = true,
   allowMultiple = true,
@@ -44,7 +42,6 @@ export function ImageAttachmentManager({
     getImageAttachmentSignedUrl
   } = useApp();
 
-  const [attachments, setAttachments] = useState<RecordImageAttachment[]>([]);
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   const [dragOver, setDragOver] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -67,23 +64,19 @@ export function ImageAttachmentManager({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Sync state with global context attachments filtered by entity type + ID
-  const entityAttachments = useMemo(() => {
+  // Sync with global context attachments filtered by entity type + ID
+  const attachments = useMemo(() => {
     return imageAttachments.filter(
       (a) => a.entity_type === entityType && a.entity_id === entityId && !a.archived_at
     );
   }, [imageAttachments, entityType, entityId]);
-
-  useEffect(() => {
-    setAttachments(entityAttachments);
-  }, [entityAttachments]);
 
   // Load signed URLs for all non-archived attachments
   useEffect(() => {
     let active = true;
     const loadUrls = async () => {
       const urls: Record<string, string> = {};
-      for (const att of entityAttachments) {
+      for (const att of attachments) {
         try {
           const url = await getImageAttachmentSignedUrl(att.id);
           urls[att.id] = url;
@@ -96,13 +89,13 @@ export function ImageAttachmentManager({
       }
     };
 
-    if (entityAttachments.length > 0) {
+    if (attachments.length > 0) {
       loadUrls();
     }
     return () => {
       active = false;
     };
-  }, [entityAttachments]);
+  }, [attachments, getImageAttachmentSignedUrl]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -182,11 +175,11 @@ export function ImageAttachmentManager({
 
       // Check if avatar role exists, then default role
       const chosenRole = replaceTargetId 
-        ? (entityAttachments.find(a => a.id === replaceTargetId)?.image_role || cropRole)
+        ? (attachments.find(a => a.id === replaceTargetId)?.image_role || cropRole)
         : cropRole;
 
       // Determine if it should be primary
-      const isPrimary = mode === 'avatar' || !allowMultiple || entityAttachments.length === 0;
+      const isPrimary = mode === 'avatar' || !allowMultiple || attachments.length === 0;
 
       await uploadImageAttachment({
         file: croppedFile,

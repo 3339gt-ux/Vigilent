@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ZoomIn, ZoomOut, Maximize2, Download, X, ChevronLeft, ChevronRight, FileText, User, Calendar, Tag, Shield } from 'lucide-react';
 import { RecordImageAttachment } from '@/lib/types';
 
@@ -27,38 +27,46 @@ export function ImageLightbox({
 
   useEffect(() => {
     if (!currentAttachment) return;
-    setIsLoading(true);
-    setError('');
-    setZoom(1);
+    let active = true;
+    Promise.resolve().then(() => {
+      if (active) {
+        setIsLoading(true);
+        setError('');
+        setZoom(1);
+      }
+    });
 
     const loadUrl = async () => {
       try {
         if (onOpenOriginal) {
           const url = await onOpenOriginal(currentAttachment);
-          setSecureUrl(url);
+          if (active) setSecureUrl(url);
         } else {
           // If no custom loader, use path directly (fallback for local mocks or when path is URL)
-          setSecureUrl(currentAttachment.storage_path || '');
+          if (active) setSecureUrl(currentAttachment.storage_path || '');
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Could not fetch secure preview URL.');
+        if (active) setError(err instanceof Error ? err.message : 'Could not fetch secure preview URL.');
       } finally {
-        setIsLoading(false);
+        if (active) setIsLoading(false);
       }
     };
 
     loadUrl();
+    return () => {
+      active = false;
+    };
   }, [currentIndex, currentAttachment, onOpenOriginal]);
 
-  const handlePrev = () => {
+  const handlePrev = useCallback(() => {
     if (attachments.length <= 1) return;
     setCurrentIndex((prev) => (prev === 0 ? attachments.length - 1 : prev - 1));
-  };
+  }, [attachments.length]);
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (attachments.length <= 1) return;
     setCurrentIndex((prev) => (prev === attachments.length - 1 ? 0 : prev + 1));
-  };
+  }, [attachments.length]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -74,7 +82,7 @@ export function ImageLightbox({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, attachments]);
+  }, [onClose, handlePrev, handleNext]);
 
   const formatFileSize = (bytes?: number | null) => {
     if (!bytes) return 'Unknown size';
@@ -207,7 +215,7 @@ export function ImageLightbox({
             </h4>
             {currentAttachment.alt_text && (
               <p className="text-[10px] text-slate-400 mt-1 italic leading-relaxed">
-                Alt: "{currentAttachment.alt_text}"
+                Alt: &quot;{currentAttachment.alt_text}&quot;
               </p>
             )}
           </div>

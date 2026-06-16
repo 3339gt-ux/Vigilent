@@ -23,12 +23,14 @@ export function AssetThumbnail({ assetId, className = '', onClick, aspectRatio =
   );
 
   useEffect(() => {
+    let active = true;
     if (!primaryAttachment) {
-      setImageUrl('');
+      Promise.resolve().then(() => {
+        if (active) setImageUrl('');
+      });
       return;
     }
     
-    let active = true;
     const loadUrl = async () => {
       setLoading(true);
       try {

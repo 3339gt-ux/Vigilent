@@ -1,15 +1,22 @@
 # LUMÉN Universal Image Attachments System
 
+> [!IMPORTANT]
+> **Local Testing Foundation & Remote Migration Requirements**
+> This system is built to fail-safe and run in local/demo mode (with `NEXT_PUBLIC_VIGILEN_APP_MODE=demo`) using `localStorage` metadata and base64/object URLs.
+> For production deployment, the database migration (`supabase/migrations/20260617000000_universal_image_attachments.sql`) must be applied to the remote Supabase database, and the private storage bucket `evidence-documents` must be configured. If these are not configured on the remote database, production uploads will gracefully fail-closed with a clear notification to contact an administrator.
+
 This document describes the design, implementation, and security architecture of the Universal Image Attachments system in LUMÉN.
 
-## Supported Entities
-LUMÉN supports attaching images to the following records across the app:
-* **People / Contractors**: For avatars/profile photos (using 1:1 aspect ratio cropping).
-* **Assets / Equipment**: For asset workspace galleries and primary photos (using 4:3 default aspect ratio cropping).
-* **Requirements**: For supporting screenshots, instruction sheets, and diagrams.
-* **Actions / Defects / Repairs**: For capturing before/after repair state photos and supporting evidence.
-* **Asset Checks / Check Records**: Supporting compliance check inspect photos (integrated via the Asset Matrix check completion workflows).
-* **Evidence Vault**: Secure lightbox integration for previewing image evidence documents directly within the vault.
+## Supported Entities & UI Status
+The database schema (`record_image_attachments`) is designed to support a wide range of entity attachments, but the UI integrations are rolled out incrementally:
+* **People / Contractors**: **Implemented** (Avatars/profile photos with 1:1 ratio cropping).
+* **Assets / Equipment**: **Implemented** (Gallery mode, primary photo select, 4:3 ratio cropping, fullscreen lightbox).
+* **Requirements**: **Implemented** (Gallery mode for supporting screenshots, instruction sheets, and diagrams).
+* **Actions / Defects / Repairs**: **Implemented** (Gallery mode supporting `before`, `after`, `supporting` roles, fullscreen lightbox).
+* **Evidence Vault**: **Implemented** (Secure lightbox integration for previewing image evidence documents directly within the vault).
+* **Asset Checks / Check Records**: **Deferred / Partial** (Database schema supports `'asset_check_record'`, but UI upload integration is deferred).
+* **Competencies / Person Competency Records**: **Deferred / Partial** (Database schema supports `'competency_record'`, but UI upload integration is deferred).
+* **Reviews**: **Deferred / Partial** (Database schema supports `'review'`, but UI upload integration is deferred).
 
 ## Supported Formats & Validation
 * **Supported formats**: `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.avif`.

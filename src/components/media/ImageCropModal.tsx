@@ -30,8 +30,16 @@ export function ImageCropModal({
 
   // Reset offset on image rotation or aspect change
   useEffect(() => {
-    setOffset({ x: 0, y: 0 });
-    setZoom(1);
+    let active = true;
+    Promise.resolve().then(() => {
+      if (active) {
+        setOffset({ x: 0, y: 0 });
+        setZoom(1);
+      }
+    });
+    return () => {
+      active = false;
+    };
   }, [rotation, aspectRatio]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -109,15 +117,8 @@ export function ImageCropModal({
     ctx.rotate((rotation * Math.PI) / 180);
 
     // Render scaled/panned version
-    // Calculate how the container offsets correspond to high res natural image coordinates
-    const displayImgWidth = img.clientWidth * zoom;
-    const displayImgHeight = img.clientHeight * zoom;
-
     const scaleX = imgNaturalWidth / img.clientWidth;
     const scaleY = imgNaturalHeight / img.clientHeight;
-
-    // Compute positions based on offset panned by user
-    const finalScale = (targetWidth / maskWidth) * zoom;
     
     // Draw the image
     ctx.drawImage(
