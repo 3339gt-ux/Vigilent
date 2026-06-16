@@ -6282,10 +6282,11 @@ export const dbService = {
       if (isPrimary) {
         await supabase!
           .from('record_image_attachments')
-          .update({ is_primary: false })
+          .update({ is_primary: false, image_role: 'gallery' })
           .eq('organisation_id', orgId)
           .eq('entity_type', input.entityType)
-          .eq('entity_id', input.entityId);
+          .eq('entity_id', input.entityId)
+          .is('archived_at', null);
       }
 
       // Storage path matches bucket policy for documents
@@ -6365,6 +6366,9 @@ export const dbService = {
       attachments.forEach((a: RecordImageAttachment) => {
         if (a.entity_type === input.entityType && a.entity_id === input.entityId) {
           a.is_primary = false;
+          if (a.image_role === 'primary') {
+            a.image_role = 'gallery';
+          }
         }
       });
     }
@@ -6427,10 +6431,11 @@ export const dbService = {
       if (updates.is_primary) {
         await supabase!
           .from('record_image_attachments')
-          .update({ is_primary: false })
+          .update({ is_primary: false, image_role: 'gallery' })
           .eq('organisation_id', orgId)
           .eq('entity_type', before.entity_type)
-          .eq('entity_id', before.entity_id);
+          .eq('entity_id', before.entity_id)
+          .is('archived_at', null);
       }
 
       const cleanUpdates = { ...updates, updated_at: new Date().toISOString() };
@@ -6460,6 +6465,9 @@ export const dbService = {
       attachments.forEach((a: RecordImageAttachment) => {
         if (a.entity_type === before.entity_type && a.entity_id === before.entity_id) {
           a.is_primary = false;
+          if (a.image_role === 'primary') {
+            a.image_role = 'gallery';
+          }
         }
       });
     }

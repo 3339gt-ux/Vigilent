@@ -13,8 +13,17 @@ interface ImageAttachmentManagerProps {
   mode?: 'gallery' | 'avatar';
   allowPrimary?: boolean;
   allowMultiple?: boolean;
+  primaryOnly?: boolean;
+  excludePrimary?: boolean;
+  defaultImageRole?: string;
+  forcePrimaryOnUpload?: boolean;
   preferredAspectRatio?: '1:1' | '4:3' | '16:9' | 'free';
   imageRoleOptions?: { label: string; value: string }[];
+  title?: string;
+  helperText?: string;
+  emptyTitle?: string;
+  uploadLabel?: string;
+  uploadHelperText?: string;
   className?: string;
   placeholderInitials?: string;
 }
@@ -25,12 +34,21 @@ export function ImageAttachmentManager({
   mode = 'gallery',
   allowPrimary = true,
   allowMultiple = true,
+  primaryOnly = false,
+  excludePrimary = false,
+  defaultImageRole,
+  forcePrimaryOnUpload = false,
   preferredAspectRatio,
   imageRoleOptions = [
     { label: 'Gallery', value: 'gallery' },
     { label: 'Primary', value: 'primary' },
     { label: 'Supporting', value: 'supporting' }
   ],
+  title,
+  helperText,
+  emptyTitle,
+  uploadLabel,
+  uploadHelperText,
   className = '',
   placeholderInitials
 }: ImageAttachmentManagerProps) {
@@ -63,13 +81,21 @@ export function ImageAttachmentManager({
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageRoleKey = imageRoleOptions.map((option) => option.value).join('|');
 
   // Sync with global context attachments filtered by entity type + ID
   const attachments = useMemo(() => {
-    return imageAttachments.filter(
+    const entityAttachments = imageAttachments.filter(
       (a) => a.entity_type === entityType && a.entity_id === entityId && !a.archived_at
     );
-  }, [imageAttachments, entityType, entityId]);
+    if (primaryOnly) return entityAttachments.filter((a) => a.is_primary);
+    const visibleRoles = new Set(imageRoleKey.split('|').filter(Boolean));
+    return entityAttachments.filter((a) => {
+      if (excludePrimary && a.is_primary) return false;
+      if (visibleRoles.size === 0) return true;
+      return visibleRoles.has(a.image_role);
+    });
+  }, [excludePrimary, entityId, entityType, imageAttachments, imageRoleKey, primaryOnly]);
 
   // Load signed URLs for all non-archived attachments
   useEffect(() => {
@@ -144,7 +170,7 @@ export function ImageAttachmentManager({
     reader.onload = () => {
       setCropSrc(reader.result as string);
       setCropFile(file);
-      setCropRole(mode === 'avatar' ? 'avatar' : 'gallery');
+      setCropRole(defaultImageRole || (mode === 'avatar' ? 'avatar' : 'gallery'));
     };
     reader.onerror = () => {
       setError('Could not read file.');
@@ -179,7 +205,7 @@ export function ImageAttachmentManager({
         : cropRole;
 
       // Determine if it should be primary
-      const isPrimary = mode === 'avatar' || !allowMultiple || attachments.length === 0;
+      const isPrimary = forcePrimaryOnUpload || mode === 'avatar' || !allowMultiple || chosenRole === 'primary';
 
       await uploadImageAttachment({
         file: croppedFile,
@@ -204,7 +230,11 @@ export function ImageAttachmentManager({
   const handleSetPrimary = async (attId: string) => {
     setError('');
     try {
-      await updateImageAttachment(attId, { is_primary: true });
+      const currentPrimary = attachments.find((attachment) => attachment.is_primary && attachment.id !== attId);
+      if (currentPrimary) {
+        await updateImageAttachment(currentPrimary.id, { is_primary: false, image_role: 'gallery' });
+      }
+      await updateImageAttachment(attId, { is_primary: true, image_role: 'primary' });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not set primary image.');
     }
@@ -345,6 +375,13 @@ export function ImageAttachmentManager({
 
   return (
     <div className={`space-y-4 ${className}`}>
+      {(title || helperText) && (
+        <div className="border-b border-border/80 pb-2">
+          {title && <h4 className="text-xs font-black text-foreground uppercase tracking-wider font-extrabold">{title}</h4>}
+          {helperText && <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">{helperText}</p>}
+        </div>
+      )}
+
       {error && (
         <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-600 dark:text-rose-400 flex items-start gap-2.5">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -363,7 +400,13 @@ export function ImageAttachmentManager({
                 className="group relative bg-muted/40 border border-border/80 rounded-xl overflow-hidden aspect-square flex flex-col justify-between hover:shadow-md transition-all"
               >
                 {/* Image or loader placeholder */}
-                <div className="flex-1 relative bg-black/5 flex items-center justify-center overflow-hidden">
+                <div
+                  className={`flex-1 relative bg-black/5 flex items-center justify-center overflow-hidden ${hasUrl ? 'cursor-zoom-in' : ''}`}
+                  onClick={() => {
+                    if (hasUrl) setLightboxIndex(idx);
+                  }}
+                  title={hasUrl ? 'View full size' : undefined}
+                >
                   {hasUrl ? (
                     <img 
                       src={signedUrls[att.id]} 
@@ -395,15 +438,19 @@ export function ImageAttachmentManager({
                     <div className="flex gap-1.5">
                       <button
                         type="button"
-                        onClick={() => setLightboxIndex(idx)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setLightboxIndex(idx);
+                        }}
                         className="p-1.5 bg-white/10 hover:bg-white/20 border border-white/10 rounded-lg text-white"
-                        title="View Fullscreen"
+                        title="View full size"
                       >
                         <Eye className="w-3.5 h-3.5" />
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={(event) => {
+                          event.stopPropagation();
                           setEditingDetailsId(att.id);
                           setEditCaption(att.caption || '');
                           setEditAlt(att.alt_text || '');
@@ -416,9 +463,12 @@ export function ImageAttachmentManager({
                       </button>
                       <button
                         type="button"
-                        onClick={() => triggerReplace(att.id)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          triggerReplace(att.id);
+                        }}
                         className="p-1.5 bg-white/10 hover:bg-white/20 border border-white/10 rounded-lg text-white"
-                        title="Replace Image"
+                        title="Replace or crop new image"
                       >
                         <RefreshCw className="w-3.5 h-3.5" />
                       </button>
@@ -428,17 +478,24 @@ export function ImageAttachmentManager({
                       {allowPrimary && !att.is_primary && (
                         <button
                           type="button"
-                          onClick={() => handleSetPrimary(att.id)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleSetPrimary(att.id);
+                          }}
                           className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 rounded text-[9px] font-bold text-white flex items-center gap-1 shadow-sm"
+                          title="Use this image as the main asset photo"
                         >
                           <Star className="w-3 h-3 fill-white" /> Set Primary
                         </button>
                       )}
                       <button
                         type="button"
-                        onClick={() => handleArchive(att.id)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleArchive(att.id);
+                        }}
                         className="p-1.5 bg-rose-600 hover:bg-rose-700 rounded-lg text-white shadow-sm"
-                        title="Archive attachment"
+                        title="Archive this image attachment"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -485,13 +542,17 @@ export function ImageAttachmentManager({
 
           <div>
             <h4 className="text-xs font-bold text-foreground">
-              {(mode as string) === 'avatar' ? 'Upload Avatar Image' : 'Drop support images or click to browse'}
+              {uploadLabel || ((mode as string) === 'avatar' ? 'Upload Avatar Image' : 'Drop support images or click to browse')}
             </h4>
             <p className="text-[10px] text-muted-foreground mt-1 max-w-sm mx-auto leading-relaxed">
-              Supports JPEG, PNG, WebP, GIF up to 10MB. SVG file previewing is rejected for safety.
+              {uploadHelperText || 'Supports JPEG, PNG, WebP, GIF up to 10MB. SVG file previewing is rejected for safety.'}
             </p>
           </div>
         </div>
+      )}
+
+      {attachments.length === 0 && emptyTitle && (
+        <p className="text-[10px] text-muted-foreground text-center -mt-2">{emptyTitle}</p>
       )}
 
       {/* Detail Edit Modal */}

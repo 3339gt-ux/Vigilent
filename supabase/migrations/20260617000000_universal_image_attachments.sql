@@ -57,6 +57,9 @@ create table if not exists public.record_image_attachments (
 create index if not exists record_image_attachments_entity_idx on public.record_image_attachments (organisation_id, entity_type, entity_id);
 create index if not exists record_image_attachments_document_idx on public.record_image_attachments (document_id);
 create index if not exists record_image_attachments_archived_idx on public.record_image_attachments (organisation_id, archived_at);
+create unique index if not exists record_image_attachments_one_primary_active_idx
+    on public.record_image_attachments (organisation_id, entity_type, entity_id)
+    where is_primary = true and archived_at is null;
 
 -- Trigger to update updated_at timestamp
 create or replace function public.set_record_image_attachments_updated_at()

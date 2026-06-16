@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useApp } from '@/context/AppContext';
+import { ImageLightbox } from './ImageLightbox';
 
 interface PersonAvatarProps {
   personId: string;
@@ -13,6 +14,7 @@ interface PersonAvatarProps {
 export function PersonAvatar({ personId, displayName, size = 'sm', className = '' }: PersonAvatarProps) {
   const { imageAttachments, getImageAttachmentSignedUrl } = useApp();
   const [avatarUrl, setAvatarUrl] = useState<string>('');
+  const [viewerOpen, setViewerOpen] = useState(false);
 
   const avatar = imageAttachments.find(
     a => a.entity_type === 'person' && a.entity_id === personId && a.image_role === 'avatar' && !a.archived_at
@@ -55,12 +57,28 @@ export function PersonAvatar({ personId, displayName, size = 'sm', className = '
   };
 
   return (
-    <div className={`rounded-full overflow-hidden flex items-center justify-center shrink-0 bg-muted border border-border select-none ${sizeClasses[size]} ${className}`}>
-      {avatarUrl ? (
-        <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
-      ) : (
-        <span className="font-extrabold text-muted-foreground">{initials}</span>
+    <>
+      <div
+        onClick={() => {
+          if (avatarUrl) setViewerOpen(true);
+        }}
+        title={avatarUrl ? 'View full size profile image' : undefined}
+        className={`rounded-full overflow-hidden flex items-center justify-center shrink-0 bg-muted border border-border select-none ${avatarUrl ? 'cursor-zoom-in hover:ring-2 hover:ring-indigo-500/40' : ''} ${sizeClasses[size]} ${className}`}
+      >
+        {avatarUrl ? (
+          <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+        ) : (
+          <span className="font-extrabold text-muted-foreground">{initials}</span>
+        )}
+      </div>
+      {viewerOpen && avatar && (
+        <ImageLightbox
+          attachments={[avatar]}
+          initialIndex={0}
+          onClose={() => setViewerOpen(false)}
+          onOpenOriginal={(attachment) => getImageAttachmentSignedUrl(attachment.id)}
+        />
       )}
-    </div>
+    </>
   );
 }

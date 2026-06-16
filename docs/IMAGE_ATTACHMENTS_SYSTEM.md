@@ -10,10 +10,10 @@ This document describes the design, implementation, and security architecture of
 ## Supported Entities & UI Status
 The database schema (`record_image_attachments`) is designed to support a wide range of entity attachments, but the UI integrations are rolled out incrementally:
 * **People / Contractors**: **Implemented** (Avatars/profile photos with 1:1 ratio cropping).
-* **Assets / Equipment**: **Implemented** (Gallery mode, primary photo select, 4:3 ratio cropping, fullscreen lightbox).
-* **Requirements**: **Implemented** (Gallery mode for supporting screenshots, instruction sheets, and diagrams).
-* **Actions / Defects / Repairs**: **Implemented** (Gallery mode supporting `before`, `after`, `supporting` roles, fullscreen lightbox).
-* **Evidence Vault**: **Implemented** (Secure lightbox integration for previewing image evidence documents directly within the vault).
+* **Assets / Equipment**: **Implemented for local testing** (separate primary asset photo area, supporting gallery, primary photo select, replacement/crop-on-upload, remove/archive, 4:3 ratio cropping, fullscreen lightbox).
+* **Requirements**: **Implemented for supporting images** (Gallery mode for supporting screenshots, instruction sheets, and diagrams).
+* **Actions / Defects / Repairs**: **Implemented for supporting images** (Gallery mode supporting `before`, `after`, `supporting` roles, fullscreen lightbox).
+* **Evidence Vault**: **Implemented for image evidence preview** (Secure lightbox integration for previewing image evidence documents directly within the vault).
 * **Asset Checks / Check Records**: **Deferred / Partial** (Database schema supports `'asset_check_record'`, but UI upload integration is deferred).
 * **Competencies / Person Competency Records**: **Deferred / Partial** (Database schema supports `'competency_record'`, but UI upload integration is deferred).
 * **Reviews**: **Deferred / Partial** (Database schema supports `'review'`, but UI upload integration is deferred).
@@ -51,6 +51,8 @@ If schema updates are needed, the database schema draft is defined in `supabase/
 * `archived_at` timestamptz (soft-delete indicator)
 * `archived_by` uuid (soft-delete creator)
 
+The migration draft also includes a partial unique index for one active primary image per organisation/entity/entity ID. This safeguard still requires hosted Supabase migration and RLS verification before production use.
+
 ## Storage Model & Security Rules
 All images must follow private Evidence Vault security principles.
 1. **Private Storage Only**: Images are stored in the private `'evidence-documents'` bucket. No public bucket/link exposure is permitted.
@@ -77,3 +79,22 @@ LUMÉN provides an interactive cropping modal via HTML Canvas:
 * **Page-Level Isolation**:
   * Evidence Vault global dropzone is disabled on `/dashboard/imports`.
   * The Bulk Import Centre's CSV-only dropzone is isolated, preventing image uploads from interfering with import queues.
+
+## Asset Image UX
+
+Asset images are intentionally split into two visible areas:
+
+* **Primary asset photo**: Shown in asset details and asset card contexts. This area is used to add, replace, crop-on-upload, remove, or view the main asset image.
+* **Asset gallery**: Used for supporting photos, labels, serial plates, defects, before/after images, inspection context, and general asset photos.
+
+Gallery uploads do not silently replace the primary asset photo. A gallery image must be explicitly selected with **Set as primary** before it becomes the main asset photo.
+
+## Production Boundary
+
+This branch does not run remote migrations and does not make the feature production-ready by itself. Production use still requires:
+
+* applying and verifying the image attachments migration in hosted Supabase;
+* verifying storage policies for the private `evidence-documents` bucket;
+* verifying RLS with multiple organisations and roles;
+* confirming image upload, signed preview, archive/remove, and primary selection in staging;
+* confirming demo/local base64 previews are not confused with production persistence.

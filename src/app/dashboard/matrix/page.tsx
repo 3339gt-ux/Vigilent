@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
 import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
 import { ImageAttachmentManager } from '@/components/media/ImageAttachmentManager';
-import { AssetThumbnail } from '@/components/media/AssetThumbnail';
 import {
   Asset,
   AssetCheckType,
@@ -1717,11 +1716,26 @@ export default function AssetMatrix() {
 
                   {!isEditingAsset ? (
                     <div className="space-y-3.5 text-xs">
-                      <AssetThumbnail
-                        assetId={activeAsset.id}
-                        aspectRatio="4:3"
-                        className="w-full shadow-xs mb-3"
-                      />
+                      <div className="bg-card border border-border rounded-xl p-3 space-y-3 shadow-xs mb-3">
+                        <ImageAttachmentManager
+                          entityType="asset"
+                          entityId={activeAsset.id}
+                          organisationId={organization?.id || ''}
+                          mode="gallery"
+                          allowPrimary={true}
+                          allowMultiple={false}
+                          primaryOnly={true}
+                          defaultImageRole="primary"
+                          forcePrimaryOnUpload={true}
+                          preferredAspectRatio="4:3"
+                          imageRoleOptions={[{ label: 'Primary asset photo', value: 'primary' }]}
+                          title="Primary asset photo"
+                          helperText="Shown in the asset header and asset cards. Click the image to view full size, or use this area to add, replace, crop, or remove the main asset photo."
+                          emptyTitle="Click to add asset photo"
+                          uploadLabel="Click to add asset photo"
+                          uploadHelperText="This upload sets the primary/profile image for this asset. It does not add a supporting gallery photo."
+                        />
+                      </div>
                       <div>
                         <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Asset ID / Number</span>
                         <span className="font-extrabold text-foreground">{activeAsset.asset_number || '—'}</span>
@@ -2203,23 +2217,31 @@ export default function AssetMatrix() {
                           </div>
                         </div>
 
-                        {/* Asset Photo Gallery & Supporting Images */}
-                        <div className="bg-card border border-border rounded-xl p-5 space-y-4 shadow-xs">
-                          <div className="border-b border-border/80 pb-2">
-                            <h4 className="text-xs font-black text-foreground uppercase tracking-wider font-extrabold">Asset Gallery & Photos</h4>
-                            <p className="text-[10px] text-muted-foreground mt-0.5">Upload photos of the asset, equipment plates, defects, or calibrations.</p>
+                          {/* Asset Gallery & Supporting Photos */}
+                          <div className="bg-card border border-border rounded-xl p-5 space-y-4 shadow-xs">
+                            <ImageAttachmentManager
+                              entityType="asset"
+                              entityId={activeAsset.id}
+                              organisationId={organization?.id || ''}
+                              mode="gallery"
+                              allowPrimary={true}
+                              allowMultiple={true}
+                              excludePrimary={true}
+                              defaultImageRole="gallery"
+                              preferredAspectRatio="4:3"
+                              imageRoleOptions={[
+                                { label: 'Gallery', value: 'gallery' },
+                                { label: 'Supporting photo', value: 'supporting' },
+                                { label: 'Before image', value: 'before' },
+                                { label: 'After image', value: 'after' }
+                              ]}
+                              title="Asset gallery"
+                              helperText="Use for supporting photos, labels, defects, serial plates, inspection images, before/after images, or general asset photos. Gallery uploads do not replace the primary photo unless you choose Set as primary."
+                              emptyTitle="No gallery photos yet. Add supporting photos here."
+                              uploadLabel="Add supporting photo"
+                              uploadHelperText="Adds a gallery/supporting image only. Use Set as primary if this should become the main asset photo."
+                            />
                           </div>
-
-                          <ImageAttachmentManager
-                            entityType="asset"
-                            entityId={activeAsset.id}
-                            organisationId={organization?.id || ''}
-                            mode="gallery"
-                            allowPrimary={true}
-                            allowMultiple={true}
-                            preferredAspectRatio="4:3"
-                          />
-                        </div>
 
                       </div>
                     );
