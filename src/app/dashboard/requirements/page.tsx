@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
@@ -18,7 +19,8 @@ import {
   X,
   Filter,
   ChevronDown,
-  Archive
+  Archive,
+  Upload
 } from 'lucide-react';
 import {
   useFilterFavourites,
@@ -1321,6 +1323,12 @@ export default function RequirementsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link
+            href="/dashboard/imports?type=requirements"
+            className="flex items-center gap-2 px-4 py-2.5 bg-card hover:bg-muted text-foreground border border-border text-xs font-semibold rounded-lg"
+          >
+            <Upload className="w-4 h-4" /> Bulk Import Requirements
+          </Link>
           <button
             onClick={() => {
               const pack = REQUIREMENT_TEMPLATE_PACKS.find(item => item.id === selectedPackId) || REQUIREMENT_TEMPLATE_PACKS[0];

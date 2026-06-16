@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
+import Link from 'next/link';
 import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
 import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
 import {
@@ -1071,6 +1072,24 @@ export default function AssetMatrix() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <Link
+            href="/dashboard/imports?type=assets"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-card hover:bg-muted text-foreground border border-border text-xs font-semibold rounded-lg transition-colors"
+          >
+            <Upload className="w-4 h-4" /> Bulk Import Assets
+          </Link>
+          <Link
+            href="/dashboard/imports?type=asset_check_types"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-card hover:bg-muted text-foreground border border-border text-xs font-semibold rounded-lg transition-colors"
+          >
+            <Upload className="w-4 h-4" /> Bulk Import Checks
+          </Link>
+          <Link
+            href="/dashboard/imports?type=asset_check_assignments"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-card hover:bg-muted text-foreground border border-border text-xs font-semibold rounded-lg transition-colors"
+          >
+            <Upload className="w-4 h-4" /> Check Assignments
+          </Link>
           <button
             onClick={() => setShowAddCheckTypeModal(true)}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-muted hover:bg-muted/80 text-foreground border border-border text-xs font-semibold rounded-lg transition-colors cursor-pointer"

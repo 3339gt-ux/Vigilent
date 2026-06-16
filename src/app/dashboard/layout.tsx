@@ -287,6 +287,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'Evidence Vault', href: '/dashboard/vault', icon: FolderLock },
     { name: 'Asset Matrix', href: '/dashboard/matrix', icon: Grid },
     { name: 'Audit Pack Builder', href: '/dashboard/audit-packs', icon: FolderArchive },
+    { name: 'Bulk Import Centre', href: '/dashboard/imports', icon: UploadCloud },
     { name: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
     ...(isOwnerOrAdmin ? [{ name: 'Audit Trail', href: '/dashboard/audit-trail', icon: History }] : []),
     { name: 'Organisation Management', href: '/dashboard/organisation', icon: Building2 },

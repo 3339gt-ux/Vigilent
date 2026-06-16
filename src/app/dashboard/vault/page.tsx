@@ -2,6 +2,7 @@
 
 import React, { useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
 import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
@@ -31,6 +32,7 @@ import {
   ChevronDown,
   Download,
   Archive,
+  FileSpreadsheet,
   HelpCircle
 } from 'lucide-react';
 import {
@@ -1637,13 +1639,21 @@ export default function EvidenceVault() {
             Secure tracking registry for compliance records, testing logs, and certificates.
           </p>
         </div>
-        <button
-          onClick={() => setShowUploadModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-md shadow-indigo-600/15"
-          id="vault-open-upload-modal-btn"
-        >
-          <Upload className="w-4 h-4" /> Upload Document
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/dashboard/imports?type=evidence_metadata"
+            className="flex items-center gap-2 px-4 py-2.5 bg-card hover:bg-muted text-foreground border border-border text-xs font-semibold rounded-lg"
+          >
+            <FileSpreadsheet className="w-4 h-4" /> Bulk Import Metadata
+          </Link>
+          <button
+            onClick={() => setShowUploadModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-md shadow-indigo-600/15"
+            id="vault-open-upload-modal-btn"
+          >
+            <Upload className="w-4 h-4" /> Upload Document
+          </button>
+        </div>
       </div>
 
       <details className="group border border-border rounded-xl bg-card p-3.5 text-xs transition-all [&_summary::-webkit-details-marker]:hidden">

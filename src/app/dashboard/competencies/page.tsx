@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
 import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
@@ -1674,6 +1675,17 @@ export default function CompetencyMatrixPage() {
           <p className="text-sm text-muted-foreground mt-1">
             People, required competencies, evidence records and renewal gaps in one organisation-scoped view.
           </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/dashboard/imports?type=people" className="flex items-center gap-2 px-3.5 py-2 bg-card hover:bg-muted text-foreground border border-border text-xs font-semibold rounded-lg">
+            <Upload className="w-4 h-4" /> Bulk Import People
+          </Link>
+          <Link href="/dashboard/imports?type=competency_types" className="flex items-center gap-2 px-3.5 py-2 bg-card hover:bg-muted text-foreground border border-border text-xs font-semibold rounded-lg">
+            <Upload className="w-4 h-4" /> Competency Types
+          </Link>
+          <Link href="/dashboard/imports?type=person_competency_records" className="flex items-center gap-2 px-3.5 py-2 bg-card hover:bg-muted text-foreground border border-border text-xs font-semibold rounded-lg">
+            <Upload className="w-4 h-4" /> Competency Records
+          </Link>
         </div>
       </div>
 

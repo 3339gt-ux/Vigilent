@@ -1051,6 +1051,8 @@ Monthly:
 
 ## 10. Bulk Import Readiness
 
+The Phase 1 implementation design is documented in `docs/BULK_IMPORT_CENTRE.md`. It keeps CSV upload preview-first, requires stable `external_id` values, separates evidence metadata from evidence files, and defers live commit until import batch, row staging, rollback, and hosted Supabase verification are ready.
+
 ### Import Types
 
 | Import type | Purpose | Required fields | Optional fields | Linked records required | Validation risks | Current app support | Future schema needs |
