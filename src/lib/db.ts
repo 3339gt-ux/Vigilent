@@ -30,6 +30,10 @@ import {
   ActionUpdateType,
   CompetencyRecord,
   CompetencyRecordDocument,
+  CompetencyPersona,
+  CompetencyPersonaItem,
+  PersonCompetencyPersona,
+  PersonCompetencyOverride,
   CompetencyTemplateItem,
   CompetencyType,
   MatrixCell,
@@ -1045,6 +1049,307 @@ const MOCK_REQUIREMENT_COMPETENCY_TYPES: RequirementCompetencyType[] = [
   }
 ];
 
+const MOCK_COMPETENCY_PERSONAS: CompetencyPersona[] = [
+  {
+    id: 'persona-articulated-driver',
+    organisation_id: MOCK_ORG.id,
+    name: 'Articulated Truck Driver',
+    description: 'Template for long-haul and articulated vehicle drivers.',
+    category_tags: ['Transport'],
+    role_tags: ['Driver', 'Articulated Truck Driver'],
+    status: 'active',
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'persona-warehouse-operative',
+    organisation_id: MOCK_ORG.id,
+    name: 'Warehouse Operative',
+    description: 'Template for warehouse handling, induction, and lifting duties.',
+    category_tags: ['Operations'],
+    role_tags: ['Warehouse Operative', 'Agency Operative'],
+    status: 'active',
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'persona-forklift-operator',
+    organisation_id: MOCK_ORG.id,
+    name: 'Forklift Operator',
+    description: 'Template for lift truck operators and yard support staff.',
+    category_tags: ['Operations'],
+    role_tags: ['Forklift Operator'],
+    status: 'active',
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'persona-transport-planner',
+    organisation_id: MOCK_ORG.id,
+    name: 'Transport Planner',
+    description: 'Template for dispatch, planning, and customer-facing transport teams.',
+    category_tags: ['Transport'],
+    role_tags: ['Transport Planner'],
+    status: 'active',
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'persona-maintenance-technician',
+    organisation_id: MOCK_ORG.id,
+    name: 'Maintenance Technician',
+    description: 'Template for engineering and maintenance support roles.',
+    category_tags: ['Facilities'],
+    role_tags: ['Maintenance Contractor', 'Maintenance Technician'],
+    status: 'active',
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  },
+  {
+    id: 'persona-supervisor-manager',
+    organisation_id: MOCK_ORG.id,
+    name: 'Supervisor / Manager',
+    description: 'Template for team leaders, supervisors, and managers.',
+    category_tags: ['Leadership'],
+    role_tags: ['Supervisor', 'Manager'],
+    status: 'active',
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    archived_at: null
+  }
+];
+
+const MOCK_COMPETENCY_PERSONA_ITEMS: CompetencyPersonaItem[] = [
+  {
+    id: 'persona-item-driver-cpc',
+    organisation_id: MOCK_ORG.id,
+    persona_id: 'persona-articulated-driver',
+    competency_type_id: 'comp-type-driver-cpc',
+    requirement_level: 'required',
+    validity_period_months_override: 60,
+    warning_days_override: 30,
+    notes: 'Core licence and professional driving competency.',
+    sort_order: 1,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'persona-item-driver-manual',
+    organisation_id: MOCK_ORG.id,
+    persona_id: 'persona-articulated-driver',
+    competency_type_id: 'comp-type-manual-handling',
+    requirement_level: 'optional',
+    validity_period_months_override: 36,
+    warning_days_override: 30,
+    notes: 'Useful when drivers handle loads directly.',
+    sort_order: 2,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'persona-item-warehouse-manual',
+    organisation_id: MOCK_ORG.id,
+    persona_id: 'persona-warehouse-operative',
+    competency_type_id: 'comp-type-manual-handling',
+    requirement_level: 'required',
+    validity_period_months_override: 36,
+    warning_days_override: 30,
+    notes: null,
+    sort_order: 1,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'persona-item-warehouse-forklift',
+    organisation_id: MOCK_ORG.id,
+    persona_id: 'persona-warehouse-operative',
+    competency_type_id: 'comp-type-forklift',
+    requirement_level: 'optional',
+    validity_period_months_override: 36,
+    warning_days_override: 30,
+    notes: 'Applies where warehouse duties include powered equipment.',
+    sort_order: 2,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'persona-item-forklift-forklift',
+    organisation_id: MOCK_ORG.id,
+    persona_id: 'persona-forklift-operator',
+    competency_type_id: 'comp-type-forklift',
+    requirement_level: 'required',
+    validity_period_months_override: 36,
+    warning_days_override: 30,
+    notes: null,
+    sort_order: 1,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'persona-item-forklift-manual',
+    organisation_id: MOCK_ORG.id,
+    persona_id: 'persona-forklift-operator',
+    competency_type_id: 'comp-type-manual-handling',
+    requirement_level: 'required',
+    validity_period_months_override: 36,
+    warning_days_override: 30,
+    notes: null,
+    sort_order: 2,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'persona-item-planner-service',
+    organisation_id: MOCK_ORG.id,
+    persona_id: 'persona-transport-planner',
+    competency_type_id: 'comp-type-customer-service',
+    requirement_level: 'required',
+    validity_period_months_override: null,
+    warning_days_override: null,
+    notes: null,
+    sort_order: 1,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'persona-item-planner-data',
+    organisation_id: MOCK_ORG.id,
+    persona_id: 'persona-transport-planner',
+    competency_type_id: 'comp-type-data-protection',
+    requirement_level: 'required',
+    validity_period_months_override: 24,
+    warning_days_override: 30,
+    notes: null,
+    sort_order: 2,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'persona-item-maintenance-manual',
+    organisation_id: MOCK_ORG.id,
+    persona_id: 'persona-maintenance-technician',
+    competency_type_id: 'comp-type-manual-handling',
+    requirement_level: 'required',
+    validity_period_months_override: 36,
+    warning_days_override: 30,
+    notes: null,
+    sort_order: 1,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'persona-item-maintenance-data',
+    organisation_id: MOCK_ORG.id,
+    persona_id: 'persona-maintenance-technician',
+    competency_type_id: 'comp-type-data-protection',
+    requirement_level: 'conditional',
+    validity_period_months_override: 24,
+    warning_days_override: 30,
+    notes: 'Needed when maintenance work includes system or data access.',
+    sort_order: 2,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'persona-item-manager-service',
+    organisation_id: MOCK_ORG.id,
+    persona_id: 'persona-supervisor-manager',
+    competency_type_id: 'comp-type-customer-service',
+    requirement_level: 'required',
+    validity_period_months_override: null,
+    warning_days_override: null,
+    notes: null,
+    sort_order: 1,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'persona-item-manager-data',
+    organisation_id: MOCK_ORG.id,
+    persona_id: 'persona-supervisor-manager',
+    competency_type_id: 'comp-type-data-protection',
+    requirement_level: 'required',
+    validity_period_months_override: 24,
+    warning_days_override: 30,
+    notes: null,
+    sort_order: 2,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+];
+
+const MOCK_PERSON_COMPETENCY_PERSONAS: PersonCompetencyPersona[] = [
+  {
+    id: 'persona-assignment-john-forklift',
+    organisation_id: MOCK_ORG.id,
+    person_id: 'person-john-smith',
+    persona_id: 'persona-forklift-operator',
+    status: 'active',
+    notes: 'Primary warehouse machinery role.',
+    assigned_at: new Date().toISOString(),
+    assigned_by: MOCK_PROFILE.id,
+    removed_at: null,
+    removed_by: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'persona-assignment-maria-driver',
+    organisation_id: MOCK_ORG.id,
+    person_id: 'person-maria-byrne',
+    persona_id: 'persona-articulated-driver',
+    status: 'active',
+    notes: 'Primary fleet driving persona.',
+    assigned_at: new Date().toISOString(),
+    assigned_by: MOCK_PROFILE.id,
+    removed_at: null,
+    removed_by: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'persona-assignment-ali-maintenance',
+    organisation_id: MOCK_ORG.id,
+    person_id: 'person-ali-khan',
+    persona_id: 'persona-maintenance-technician',
+    status: 'active',
+    notes: null,
+    assigned_at: new Date().toISOString(),
+    assigned_by: MOCK_PROFILE.id,
+    removed_at: null,
+    removed_by: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+];
+
+const MOCK_PERSON_COMPETENCY_OVERRIDES: PersonCompetencyOverride[] = [
+  {
+    id: 'persona-override-maria-manual',
+    organisation_id: MOCK_ORG.id,
+    person_id: 'person-maria-byrne',
+    persona_id: 'persona-articulated-driver',
+    competency_type_id: 'comp-type-manual-handling',
+    override_type: 'not_applicable',
+    reason: 'Maria does not handle warehouse loading directly.',
+    active: true,
+    created_by: MOCK_PROFILE.id,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+];
+
 const MOCK_ASSETS: Asset[] = [
   {
     id: 'asset-truck-261',
@@ -1869,6 +2174,10 @@ export const initMockDb = () => {
     localStorage.setItem('vigilen_competency_records', JSON.stringify(MOCK_COMPETENCY_RECORDS));
     localStorage.setItem('vigilen_competency_record_documents', JSON.stringify(MOCK_COMPETENCY_RECORD_DOCUMENTS));
     localStorage.setItem('vigilen_requirement_competency_types', JSON.stringify(MOCK_REQUIREMENT_COMPETENCY_TYPES));
+    localStorage.setItem('vigilen_competency_personas', JSON.stringify(MOCK_COMPETENCY_PERSONAS));
+    localStorage.setItem('vigilen_competency_persona_items', JSON.stringify(MOCK_COMPETENCY_PERSONA_ITEMS));
+    localStorage.setItem('vigilen_person_competency_personas', JSON.stringify(MOCK_PERSON_COMPETENCY_PERSONAS));
+    localStorage.setItem('vigilen_person_competency_overrides', JSON.stringify(MOCK_PERSON_COMPETENCY_OVERRIDES));
     localStorage.setItem('vigilen_audit_trail_events', JSON.stringify(MOCK_AUDIT_TRAIL_EVENTS));
     localStorage.setItem('vygilence_workspace_notifications', JSON.stringify(MOCK_WORKSPACE_NOTIFICATIONS));
 
@@ -1892,6 +2201,12 @@ const shouldUseSupabase = () => {
 };
 
 const nowIso = () => new Date().toISOString();
+
+const isMissingSupabaseRelation = (error: { code?: string | null; message?: string | null; details?: string | null } | null | undefined) => {
+  if (!error) return false;
+  const message = `${error.message || ''} ${error.details || ''}`.toLowerCase();
+  return error.code === '42P01' || error.code === 'PGRST205' || message.includes('does not exist') || message.includes('could not find the table');
+};
 
 const categoryStorageKey = (type: 'requirement' | 'evidence') =>
   type === 'requirement' ? 'vigilen_requirement_categories' : 'vigilen_evidence_categories';
@@ -2125,6 +2440,10 @@ const fetchRecordById = async (table: string, id: string): Promise<any> => {
     else if (table === 'people') { key = 'vigilen_people'; mockList = MOCK_PEOPLE; }
     else if (table === 'competency_types') { key = 'vigilen_competency_types'; mockList = MOCK_COMPETENCY_TYPES; }
     else if (table === 'competency_records') { key = 'vigilen_competency_records'; mockList = MOCK_COMPETENCY_RECORDS; }
+    else if (table === 'competency_personas') { key = 'vigilen_competency_personas'; mockList = MOCK_COMPETENCY_PERSONAS; }
+    else if (table === 'competency_persona_items') { key = 'vigilen_competency_persona_items'; mockList = MOCK_COMPETENCY_PERSONA_ITEMS; }
+    else if (table === 'person_competency_personas') { key = 'vigilen_person_competency_personas'; mockList = MOCK_PERSON_COMPETENCY_PERSONAS; }
+    else if (table === 'person_competency_overrides') { key = 'vigilen_person_competency_overrides'; mockList = MOCK_PERSON_COMPETENCY_OVERRIDES; }
     else if (table === 'requirement_evidence_criteria') { key = 'vigilen_requirement_evidence_criteria'; mockList = MOCK_REQUIREMENT_EVIDENCE_CRITERIA; }
     else if (table === 'audit_packs') { key = 'vigilen_audit_packs'; mockList = MOCK_AUDIT_PACKS; }
 
@@ -4155,6 +4474,448 @@ export const dbService = {
 
     initMockDb();
     return getStorageItem('vigilen_competency_record_documents', MOCK_COMPETENCY_RECORD_DOCUMENTS);
+  },
+
+  async getCompetencyPersonas(): Promise<CompetencyPersona[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('competency_personas')
+        .select('*')
+        .eq('organisation_id', orgId)
+        .order('name', { ascending: true });
+      if (error) {
+        if (isMissingSupabaseRelation(error)) return [];
+        throwSupabaseError('competency_personas.select active organisation', error);
+      }
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_competency_personas', MOCK_COMPETENCY_PERSONAS);
+  },
+
+  async upsertCompetencyPersona(
+    input: Partial<CompetencyPersona> & Pick<CompetencyPersona, 'name'>
+  ): Promise<CompetencyPersona> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+    const before = input.id ? await fetchRecordById('competency_personas', input.id) : null;
+    const payload = {
+      ...input,
+      organisation_id: orgId,
+      description: input.description || null,
+      category_tags: input.category_tags || [],
+      role_tags: input.role_tags || [],
+      status: input.status || 'active',
+      created_by: before?.created_by || userId,
+      archived_at: input.status === 'archived' ? (input.archived_at || nowIso()) : null,
+      updated_at: nowIso()
+    };
+
+    let after: CompetencyPersona;
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('competency_personas')
+        .upsert([payload])
+        .select()
+        .single();
+      if (error) {
+        if (isMissingSupabaseRelation(error)) {
+          throw new Error('Competency personas require the pending Supabase migration before they can be saved in production mode.');
+        }
+        throwSupabaseError('competency_personas.upsert active organisation', error);
+      }
+      after = data;
+    } else {
+      const personas = getStorageItem('vigilen_competency_personas', MOCK_COMPETENCY_PERSONAS);
+      const idx = personas.findIndex((persona: CompetencyPersona) =>
+        input.id ? persona.id === input.id : persona.name.toLowerCase() === input.name.toLowerCase()
+      );
+      if (idx !== -1) {
+        after = { ...personas[idx], ...payload };
+        personas[idx] = after;
+      } else {
+        after = {
+          id: `persona-${Math.random().toString(36).slice(2, 11)}`,
+          organisation_id: orgId,
+          name: input.name,
+          description: input.description || null,
+          category_tags: input.category_tags || [],
+          role_tags: input.role_tags || [],
+          status: input.status || 'active',
+          created_by: userId,
+          created_at: nowIso(),
+          updated_at: nowIso(),
+          archived_at: input.status === 'archived' ? nowIso() : null
+        };
+        personas.unshift(after);
+      }
+      setStorageItem('vigilen_competency_personas', personas);
+    }
+
+    await this.logActivity('Competency Persona Saved', `Saved competency persona "${after.name}".`);
+    await safeLogAuditEvent({
+      actionCategory: 'Competency',
+      actionType: before ? 'competency_persona_edited' : 'competency_persona_created',
+      entityType: 'competency_persona',
+      entityId: after.id,
+      entityLabel: after.name,
+      description: before ? `Edited competency persona "${after.name}"` : `Created competency persona "${after.name}"`,
+      beforeSnapshot: before,
+      afterSnapshot: after,
+      changedFields: before ? getChangedFields(before, after) : null,
+      severity: 'info'
+    });
+
+    return after;
+  },
+
+  async getCompetencyPersonaItems(): Promise<CompetencyPersonaItem[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('competency_persona_items')
+        .select('*')
+        .eq('organisation_id', orgId)
+        .order('sort_order', { ascending: true });
+      if (error) {
+        if (isMissingSupabaseRelation(error)) return [];
+        throwSupabaseError('competency_persona_items.select active organisation', error);
+      }
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_competency_persona_items', MOCK_COMPETENCY_PERSONA_ITEMS);
+  },
+
+  async upsertCompetencyPersonaItem(
+    input: Partial<CompetencyPersonaItem> & Pick<CompetencyPersonaItem, 'persona_id' | 'competency_type_id' | 'requirement_level'>
+  ): Promise<CompetencyPersonaItem> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const payload = {
+      ...input,
+      organisation_id: orgId,
+      validity_period_months_override: input.validity_period_months_override ?? null,
+      warning_days_override: input.warning_days_override ?? null,
+      notes: input.notes || null,
+      sort_order: input.sort_order ?? 0,
+      updated_at: nowIso()
+    };
+
+    let after: CompetencyPersonaItem;
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('competency_persona_items')
+        .upsert([payload])
+        .select()
+        .single();
+      if (error) {
+        if (isMissingSupabaseRelation(error)) {
+          throw new Error('Competency persona items require the pending Supabase migration before they can be saved in production mode.');
+        }
+        throwSupabaseError('competency_persona_items.upsert active organisation', error);
+      }
+      after = data;
+    } else {
+      const items = getStorageItem('vigilen_competency_persona_items', MOCK_COMPETENCY_PERSONA_ITEMS);
+      const idx = items.findIndex((item: CompetencyPersonaItem) =>
+        input.id
+          ? item.id === input.id
+          : item.persona_id === input.persona_id && item.competency_type_id === input.competency_type_id
+      );
+      if (idx !== -1) {
+        after = { ...items[idx], ...payload };
+        items[idx] = after;
+      } else {
+        after = {
+          id: `persona-item-${Math.random().toString(36).slice(2, 11)}`,
+          organisation_id: orgId,
+          persona_id: input.persona_id,
+          competency_type_id: input.competency_type_id,
+          requirement_level: input.requirement_level,
+          validity_period_months_override: input.validity_period_months_override ?? null,
+          warning_days_override: input.warning_days_override ?? null,
+          notes: input.notes || null,
+          sort_order: input.sort_order ?? items.filter((item: CompetencyPersonaItem) => item.persona_id === input.persona_id).length,
+          created_at: nowIso(),
+          updated_at: nowIso()
+        };
+        items.push(after);
+      }
+      setStorageItem('vigilen_competency_persona_items', items);
+    }
+
+    return after;
+  },
+
+  async deleteCompetencyPersonaItem(itemId: string): Promise<void> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    if (shouldUseSupabase()) {
+      const { error } = await supabase!
+        .from('competency_persona_items')
+        .delete()
+        .eq('id', itemId)
+        .eq('organisation_id', orgId);
+      if (error) {
+        if (isMissingSupabaseRelation(error)) {
+          throw new Error('Competency persona items require the pending Supabase migration before they can be edited in production mode.');
+        }
+        throwSupabaseError('competency_persona_items.delete active organisation', error);
+      }
+      return;
+    }
+
+    const items = getStorageItem('vigilen_competency_persona_items', MOCK_COMPETENCY_PERSONA_ITEMS);
+    setStorageItem(
+      'vigilen_competency_persona_items',
+      items.filter((item: CompetencyPersonaItem) => item.id !== itemId)
+    );
+  },
+
+  async getPersonCompetencyPersonas(): Promise<PersonCompetencyPersona[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('person_competency_personas')
+        .select('*')
+        .eq('organisation_id', orgId)
+        .order('assigned_at', { ascending: false });
+      if (error) {
+        if (isMissingSupabaseRelation(error)) return [];
+        throwSupabaseError('person_competency_personas.select active organisation', error);
+      }
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_person_competency_personas', MOCK_PERSON_COMPETENCY_PERSONAS);
+  },
+
+  async assignCompetencyPersonaToPerson(
+    personId: string,
+    personaId: string,
+    notes?: string | null
+  ): Promise<PersonCompetencyPersona> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+
+    if (shouldUseSupabase()) {
+      const { data: existing, error: existingError } = await supabase!
+        .from('person_competency_personas')
+        .select('*')
+        .eq('organisation_id', orgId)
+        .eq('person_id', personId)
+        .eq('persona_id', personaId)
+        .maybeSingle();
+      if (existingError && !isMissingSupabaseRelation(existingError)) {
+        throwSupabaseError('person_competency_personas.select before assign', existingError);
+      }
+      if (existing) {
+        const { data, error } = await supabase!
+          .from('person_competency_personas')
+          .update({ status: 'active', notes: notes || null, removed_at: null, removed_by: null, updated_at: nowIso() })
+          .eq('id', existing.id)
+          .select()
+          .single();
+        if (error) throwSupabaseError('person_competency_personas.update assign', error);
+        return data;
+      }
+      const { data, error } = await supabase!
+        .from('person_competency_personas')
+        .insert([{
+          organisation_id: orgId,
+          person_id: personId,
+          persona_id: personaId,
+          status: 'active',
+          notes: notes || null,
+          assigned_at: nowIso(),
+          assigned_by: userId
+        }])
+        .select()
+        .single();
+      if (error) {
+        if (isMissingSupabaseRelation(error)) {
+          throw new Error('Competency persona assignments require the pending Supabase migration before they can be saved in production mode.');
+        }
+        throwSupabaseError('person_competency_personas.insert active organisation', error);
+      }
+      return data;
+    }
+
+    const assignments = getStorageItem('vigilen_person_competency_personas', MOCK_PERSON_COMPETENCY_PERSONAS);
+    const idx = assignments.findIndex(
+      (assignment: PersonCompetencyPersona) => assignment.person_id === personId && assignment.persona_id === personaId
+    );
+    if (idx !== -1) {
+      const updated = {
+        ...assignments[idx],
+        status: 'active',
+        notes: notes || null,
+        removed_at: null,
+        removed_by: null,
+        updated_at: nowIso()
+      };
+      assignments[idx] = updated;
+      setStorageItem('vigilen_person_competency_personas', assignments);
+      return updated;
+    }
+
+    const created: PersonCompetencyPersona = {
+      id: `persona-assignment-${Math.random().toString(36).slice(2, 11)}`,
+      organisation_id: orgId,
+      person_id: personId,
+      persona_id: personaId,
+      status: 'active',
+      notes: notes || null,
+      assigned_at: nowIso(),
+      assigned_by: userId,
+      removed_at: null,
+      removed_by: null,
+      created_at: nowIso(),
+      updated_at: nowIso()
+    };
+    assignments.unshift(created);
+    setStorageItem('vigilen_person_competency_personas', assignments);
+    return created;
+  },
+
+  async removeCompetencyPersonaFromPerson(assignmentId: string, notes?: string | null): Promise<PersonCompetencyPersona> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+
+    if (shouldUseSupabase()) {
+      const { data, error } = await supabase!
+        .from('person_competency_personas')
+        .update({
+          status: 'removed',
+          notes: notes || null,
+          removed_at: nowIso(),
+          removed_by: userId,
+          updated_at: nowIso()
+        })
+        .eq('id', assignmentId)
+        .eq('organisation_id', orgId)
+        .select()
+        .single();
+      if (error) {
+        if (isMissingSupabaseRelation(error)) {
+          throw new Error('Competency persona assignments require the pending Supabase migration before they can be updated in production mode.');
+        }
+        throwSupabaseError('person_competency_personas.update remove', error);
+      }
+      return data;
+    }
+
+    const assignments = getStorageItem('vigilen_person_competency_personas', MOCK_PERSON_COMPETENCY_PERSONAS);
+    const idx = assignments.findIndex((assignment: PersonCompetencyPersona) => assignment.id === assignmentId);
+    if (idx === -1) throw new Error('Persona assignment not found.');
+    const updated = {
+      ...assignments[idx],
+      status: 'removed',
+      notes: notes || assignments[idx].notes || null,
+      removed_at: nowIso(),
+      removed_by: userId,
+      updated_at: nowIso()
+    };
+    assignments[idx] = updated;
+    setStorageItem('vigilen_person_competency_personas', assignments);
+    return updated;
+  },
+
+  async getPersonCompetencyOverrides(): Promise<PersonCompetencyOverride[]> {
+    if (shouldUseSupabase()) {
+      const orgId = await getCurrentSupabaseOrganizationId();
+      const { data, error } = await supabase!
+        .from('person_competency_overrides')
+        .select('*')
+        .eq('organisation_id', orgId)
+        .eq('active', true)
+        .order('created_at', { ascending: false });
+      if (error) {
+        if (isMissingSupabaseRelation(error)) return [];
+        throwSupabaseError('person_competency_overrides.select active organisation', error);
+      }
+      return data || [];
+    }
+
+    initMockDb();
+    return getStorageItem('vigilen_person_competency_overrides', MOCK_PERSON_COMPETENCY_OVERRIDES);
+  },
+
+  async upsertPersonCompetencyOverride(
+    input: Partial<PersonCompetencyOverride> &
+      Pick<PersonCompetencyOverride, 'person_id' | 'competency_type_id' | 'override_type'>
+  ): Promise<PersonCompetencyOverride> {
+    const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
+    const userId = shouldUseSupabase() ? await getCurrentSupabaseUserId() : MOCK_PROFILE.id;
+    const payload = {
+      ...input,
+      organisation_id: orgId,
+      persona_id: input.persona_id || null,
+      reason: input.reason || null,
+      active: input.active ?? true,
+      created_by: input.created_by || userId,
+      updated_at: nowIso()
+    };
+
+    if (shouldUseSupabase()) {
+      const { data: existing, error: existingError } = await supabase!
+        .from('person_competency_overrides')
+        .select('*')
+        .eq('organisation_id', orgId)
+        .eq('person_id', input.person_id)
+        .eq('competency_type_id', input.competency_type_id)
+        .eq('override_type', input.override_type)
+        .eq('persona_id', input.persona_id || null)
+        .maybeSingle();
+      if (existingError && !isMissingSupabaseRelation(existingError)) {
+        throwSupabaseError('person_competency_overrides.select before upsert', existingError);
+      }
+      const query = existing
+        ? supabase!.from('person_competency_overrides').update(payload).eq('id', existing.id)
+        : supabase!.from('person_competency_overrides').insert([{ ...payload, created_at: nowIso() }]);
+      const { data, error } = await query.select().single();
+      if (error) {
+        if (isMissingSupabaseRelation(error)) {
+          throw new Error('Competency persona overrides require the pending Supabase migration before they can be saved in production mode.');
+        }
+        throwSupabaseError('person_competency_overrides.upsert active organisation', error);
+      }
+      return data;
+    }
+
+    const overrides = getStorageItem('vigilen_person_competency_overrides', MOCK_PERSON_COMPETENCY_OVERRIDES);
+    const idx = overrides.findIndex((override: PersonCompetencyOverride) =>
+      override.person_id === input.person_id &&
+      override.competency_type_id === input.competency_type_id &&
+      override.override_type === input.override_type &&
+      (override.persona_id || null) === (input.persona_id || null)
+    );
+    if (idx !== -1) {
+      const updated = { ...overrides[idx], ...payload };
+      overrides[idx] = updated;
+      setStorageItem('vigilen_person_competency_overrides', overrides);
+      return updated;
+    }
+
+    const created: PersonCompetencyOverride = {
+      id: `persona-override-${Math.random().toString(36).slice(2, 11)}`,
+      organisation_id: orgId,
+      person_id: input.person_id,
+      persona_id: input.persona_id || null,
+      competency_type_id: input.competency_type_id,
+      override_type: input.override_type,
+      reason: input.reason || null,
+      active: input.active ?? true,
+      created_by: userId,
+      created_at: nowIso(),
+      updated_at: nowIso()
+    };
+    overrides.unshift(created);
+    setStorageItem('vigilen_person_competency_overrides', overrides);
+    return created;
   },
 
   async linkDocumentToCompetencyRecord(recordId: string, documentId: string): Promise<CompetencyRecordDocument> {

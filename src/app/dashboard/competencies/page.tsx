@@ -8,10 +8,22 @@ import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { ImageAttachmentManager } from '@/components/media/ImageAttachmentManager';
 import { PersonAvatar } from '@/components/media/PersonAvatar';
 import { buildCompetencyMatrix, calculateCompetencyStatus } from '@/lib/competencyEngine';
+import { buildPersonCompetencyExpectations, PERSONA_REQUIREMENT_LEVELS, type PersonaGapStatus } from '@/lib/competencyPersonas';
 import { COMPETENCY_TEMPLATE_PACKS } from '@/lib/competencyTemplates';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import { exportCsv, exportDateStamp, ExportRow } from '@/lib/exportData';
-import type { Action, CompetencyCategory, CompetencyRecord, CompetencyStatus, CompetencyType, Person, PersonType, RequirementRiskLevel } from '@/lib/types';
+import type {
+  Action,
+  CompetencyCategory,
+  CompetencyPersona,
+  CompetencyPersonaRequirementLevel,
+  CompetencyRecord,
+  CompetencyStatus,
+  CompetencyType,
+  Person,
+  PersonType,
+  RequirementRiskLevel
+} from '@/lib/types';
 import {
   getPersonOperationalStatus,
   isPersonOperationallyActive,
@@ -22,7 +34,7 @@ import {
   PersonOperationalStatus,
   PersonStatusFilter
 } from '@/lib/personStatus';
-import { Link as LinkIcon, Plus, Search, Upload, UserCheck, X, ArrowLeft, Calendar, Paperclip, AlertCircle, Download } from 'lucide-react';
+import { Link as LinkIcon, Plus, Search, Upload, UserCheck, X, ArrowLeft, Calendar, Paperclip, AlertCircle, Download, Layers3, Copy, ArchiveRestore, Archive, ShieldCheck } from 'lucide-react';
 import { isDemoMode } from '@/lib/env';
 import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
@@ -67,6 +79,24 @@ const statusClass = (status: CompetencyStatus) => {
   return 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20';
 };
 
+const personaGapLabel = (gapStatus: PersonaGapStatus) => {
+  if (gapStatus === 'missing_required') return 'Missing required';
+  if (gapStatus === 'optional_missing') return 'Optional not provided';
+  if (gapStatus === 'conditional_missing') return 'Conditional gap';
+  if (gapStatus === 'due_soon') return 'Due soon';
+  if (gapStatus === 'expired') return 'Expired';
+  if (gapStatus === 'suppressed') return 'Suppressed';
+  if (gapStatus === 'manual_only') return 'Manual only';
+  return 'Valid';
+};
+
+const personaGapClass = (gapStatus: PersonaGapStatus) => {
+  if (gapStatus === 'valid') return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
+  if (gapStatus === 'due_soon') return 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20';
+  if (gapStatus === 'suppressed' || gapStatus === 'optional_missing') return 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-300 border-zinc-500/20';
+  return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
+};
+
 type ActiveCell = {
   person: Person;
   competencyType: CompetencyType;
@@ -81,6 +111,10 @@ export default function CompetencyMatrixPage() {
     competencyTypes,
     competencyRecords,
     competencyRecordDocuments,
+    competencyPersonas,
+    competencyPersonaItems,
+    personCompetencyPersonas,
+    personCompetencyOverrides,
     documents,
     actionObjectLinks,
     actions,
@@ -90,6 +124,12 @@ export default function CompetencyMatrixPage() {
     competencySummary,
     upsertPerson,
     upsertCompetencyType,
+    upsertCompetencyPersona,
+    upsertCompetencyPersonaItem,
+    deleteCompetencyPersonaItem,
+    assignCompetencyPersonaToPerson,
+    removeCompetencyPersonaFromPerson,
+    upsertPersonCompetencyOverride,
     importCompetencyTemplateItems,
     upsertCompetencyRecord,
     linkDocumentToCompetencyRecord,
@@ -119,9 +159,11 @@ export default function CompetencyMatrixPage() {
   const [roleFilter, setRoleFilter] = useState('All');
   const [personTypeFilter, setPersonTypeFilter] = useState('All');
   const [personOperationalStatusFilter, setPersonOperationalStatusFilter] = useState<PersonStatusFilter>('Current');
+  const [personaFilter, setPersonaFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [showOnlyMissingExpired, setShowOnlyMissingExpired] = useState(false);
   const [showOnlyExpiringSoon, setShowOnlyExpiringSoon] = useState(false);
+  const [showOnlyMissingRequiredPersona, setShowOnlyMissingRequiredPersona] = useState(false);
   const [showOnlyFavourites, setShowOnlyFavourites] = useState(false);
   const [showOnlyPeopleWithGaps, setShowOnlyPeopleWithGaps] = useState(false);
   const [sortBy, setSortBy] = useState('name');
@@ -138,14 +180,16 @@ export default function CompetencyMatrixPage() {
       roleFilter !== 'All',
       personTypeFilter !== 'All',
       personOperationalStatusFilter !== 'Current',
+      personaFilter !== 'All',
       typeFilter !== 'All',
       statusFilter !== 'All',
       showOnlyMissingExpired,
       showOnlyExpiringSoon,
+      showOnlyMissingRequiredPersona,
       showOnlyFavourites,
       showOnlyPeopleWithGaps
     ].filter(Boolean).length;
-  }, [departmentFilter, roleFilter, personTypeFilter, personOperationalStatusFilter, typeFilter, statusFilter, showOnlyMissingExpired, showOnlyExpiringSoon, showOnlyFavourites, showOnlyPeopleWithGaps]);
+  }, [departmentFilter, roleFilter, personTypeFilter, personOperationalStatusFilter, personaFilter, typeFilter, statusFilter, showOnlyMissingExpired, showOnlyExpiringSoon, showOnlyMissingRequiredPersona, showOnlyFavourites, showOnlyPeopleWithGaps]);
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [workspaceSearch, setWorkspaceSearch] = useState('');
@@ -236,7 +280,7 @@ export default function CompetencyMatrixPage() {
   } = useSavedViews(user?.id || 'guest', 'matrix', defaultViews, organization?.id);
   const { globalDensity, setGlobalDensity } = useGlobalDensityPreference(user?.id || 'guest', organization?.id);
 
-  const [activeTab, setActiveTab] = useState<'matrix' | 'registry'>('matrix');
+  const [activeTab, setActiveTab] = useState<'matrix' | 'registry' | 'personas'>('matrix');
   const [selectedCompetencyId, setSelectedCompetencyId] = useState<string | null>(null);
   const [competencyWorkspaceTab, setCompetencyWorkspaceTab] = useState<'overview' | 'settings' | 'people' | 'evidence' | 'requirements' | 'actions' | 'history'>('overview');
   const [competencyPeopleSearch, setCompetencyPeopleSearch] = useState('');
@@ -244,8 +288,31 @@ export default function CompetencyMatrixPage() {
   const [competencyPeopleRecordStatusFilter, setCompetencyPeopleRecordStatusFilter] = useState<'All' | CompetencyStatus>('All');
   const [competencyPeopleSort, setCompetencyPeopleSort] = useState<'name' | 'person_status' | 'record_status' | 'expiry'>('name');
   const [isCreatingCompetency, setIsCreatingCompetency] = useState(false);
+  const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(null);
+  const [isCreatingPersona, setIsCreatingPersona] = useState(false);
+  const [personaSearch, setPersonaSearch] = useState('');
+  const [personaStatusFilter, setPersonaStatusFilter] = useState<'All' | 'active' | 'archived'>('active');
+  const [bulkApplyRoleFilter, setBulkApplyRoleFilter] = useState('All');
+  const [bulkApplyDepartmentFilter, setBulkApplyDepartmentFilter] = useState('All');
+  const [selectedPersonPersonaId, setSelectedPersonPersonaId] = useState('');
+  const [selectedExtraCompetencyTypeId, setSelectedExtraCompetencyTypeId] = useState('');
+  const [personaAssignmentNotes, setPersonaAssignmentNotes] = useState('');
+  const [personaForm, setPersonaForm] = useState({
+    name: '',
+    description: '',
+    category_tags: '',
+    role_tags: '',
+    status: 'active' as 'active' | 'archived'
+  });
+  const [personaItemForm, setPersonaItemForm] = useState({
+    competency_type_id: '',
+    requirement_level: 'required' as CompetencyPersonaRequirementLevel,
+    notes: '',
+    validity_period_months_override: '',
+    warning_days_override: ''
+  });
   const [showArchivedCompetencies, setShowArchivedCompetencies] = useState(false);
-  useBodyScrollLock(Boolean(activeCell || selectedPerson || selectedCompetencyId || isCreatingCompetency));
+  useBodyScrollLock(Boolean(activeCell || selectedPerson || selectedCompetencyId || selectedPersonaId || isCreatingCompetency || isCreatingPersona));
 
   // Registry Filters Setup
   const [registrySearch, setRegistrySearch] = useState('');
@@ -313,6 +380,32 @@ export default function CompetencyMatrixPage() {
   const departments = useMemo(() => ['All', ...Array.from(new Set(activePeople.map(person => person.department).filter(Boolean) as string[]))], [activePeople]);
   const roles = useMemo(() => ['All', ...Array.from(new Set(activePeople.map(person => person.role).filter(Boolean) as string[]))], [activePeople]);
   const selectedPack = COMPETENCY_TEMPLATE_PACKS.find(pack => pack.id === selectedPackId) || COMPETENCY_TEMPLATE_PACKS[0];
+  const selectedPersona = useMemo(
+    () => competencyPersonas.find(persona => persona.id === selectedPersonaId) || null,
+    [competencyPersonas, selectedPersonaId]
+  );
+  const personExpectationMap = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof buildPersonCompetencyExpectations>>();
+    people.forEach(person => {
+      map.set(
+        person.id,
+        buildPersonCompetencyExpectations(
+          person,
+          competencyTypes,
+          competencyRecords,
+          competencyPersonas,
+          competencyPersonaItems,
+          personCompetencyPersonas,
+          personCompetencyOverrides
+        )
+      );
+    });
+    return map;
+  }, [people, competencyTypes, competencyRecords, competencyPersonas, competencyPersonaItems, personCompetencyPersonas, personCompetencyOverrides]);
+  const personaOptions = useMemo(
+    () => competencyPersonas.filter(persona => persona.status === 'active'),
+    [competencyPersonas]
+  );
 
   // Registry Stats Memoization
   const registryStats = useMemo(() => {
@@ -355,6 +448,30 @@ export default function CompetencyMatrixPage() {
 
     return statsMap;
   }, [people, competencyTypes, competencyRecords]);
+
+  const filteredPersonas = useMemo(() => {
+    return competencyPersonas.filter(persona => {
+      const matchesSearch =
+        !personaSearch ||
+        persona.name.toLowerCase().includes(personaSearch.toLowerCase()) ||
+        (persona.description || '').toLowerCase().includes(personaSearch.toLowerCase());
+      const matchesStatus =
+        personaStatusFilter === 'All' ||
+        (personaStatusFilter === 'active' && persona.status === 'active') ||
+        (personaStatusFilter === 'archived' && persona.status === 'archived');
+      return matchesSearch && matchesStatus;
+    });
+  }, [competencyPersonas, personaSearch, personaStatusFilter]);
+
+  const selectedPersonaItems = useMemo(
+    () => (selectedPersona ? competencyPersonaItems.filter(item => item.persona_id === selectedPersona.id).sort((a, b) => a.sort_order - b.sort_order) : []),
+    [competencyPersonaItems, selectedPersona]
+  );
+
+  const selectedPersonaAssignments = useMemo(
+    () => (selectedPersona ? personCompetencyPersonas.filter(assignment => assignment.persona_id === selectedPersona.id && assignment.status === 'active') : []),
+    [personCompetencyPersonas, selectedPersona]
+  );
 
   // Registry evidence counts mapping
   const registryEvidenceCountMap = useMemo(() => {
@@ -508,6 +625,10 @@ export default function CompetencyMatrixPage() {
     }
   }, [selectedCompetency]);
 
+  useEffect(() => {
+    syncPersonaForm(selectedPersona);
+  }, [selectedPersona]);
+
   // Competency History memo
   const competencyHistory = useMemo(() => {
     if (!selectedCompetencyId) return [];
@@ -520,34 +641,45 @@ export default function CompetencyMatrixPage() {
   }, [auditLogs, selectedCompetencyId, competencyTypes]);
 
   // Url params syncing helpers
-  const updateUrlParams = (tab: 'matrix' | 'registry', compId: string | null) => {
+  const updateUrlParams = (tab: 'matrix' | 'registry' | 'personas', compId: string | null, personaId?: string | null) => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       params.set('tab', tab);
       params.delete('id');
       params.delete('competencyId');
       params.delete('competency');
+      params.delete('persona');
       if (compId) {
         params.set('competency', compId);
+      }
+      if (personaId) {
+        params.set('persona', personaId);
       }
       const newUrl = `${window.location.pathname}?${params.toString()}`;
       window.history.pushState(null, '', newUrl);
     }
   };
 
-  const handleTabChange = (tab: 'matrix' | 'registry') => {
+  const handleTabChange = (tab: 'matrix' | 'registry' | 'personas') => {
     setActiveTab(tab);
     if (tab === 'matrix') {
       setSelectedCompetencyId(null);
-      updateUrlParams(tab, null);
+      setSelectedPersonaId(null);
+      updateUrlParams(tab, null, null);
       return;
     }
-    updateUrlParams(tab, selectedCompetencyId);
+    if (tab === 'registry') {
+      setSelectedPersonaId(null);
+      updateUrlParams(tab, selectedCompetencyId, null);
+      return;
+    }
+    setSelectedCompetencyId(null);
+    updateUrlParams(tab, null, selectedPersonaId);
   };
 
   const handleSelectCompetency = (id: string | null) => {
     setSelectedCompetencyId(id);
-    updateUrlParams(activeTab, id);
+    updateUrlParams(activeTab, id, selectedPersonaId);
     if (id) {
       setCompetencyWorkspaceTab('overview');
       setCompetencyPeopleSearch('');
@@ -557,6 +689,11 @@ export default function CompetencyMatrixPage() {
     }
   };
 
+  const handleSelectPersona = (id: string | null) => {
+    setSelectedPersonaId(id);
+    updateUrlParams(activeTab, selectedCompetencyId, id);
+  };
+
   // Registry deep links are handled separately from person/cell links below.
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -564,11 +701,22 @@ export default function CompetencyMatrixPage() {
       const tabParam = params.get('tab');
       const personParam = params.get('person');
       const competencyParam = params.get('competency') || params.get('competencyId');
+      const personaParam = params.get('persona');
       
       if (tabParam === 'registry') {
         setActiveTab('registry');
+      } else if (tabParam === 'personas') {
+        setActiveTab('personas');
       } else if (tabParam === 'matrix') {
         setActiveTab('matrix');
+      }
+
+      if (personaParam) {
+        const exists = competencyPersonas.some(persona => persona.id === personaParam);
+        if (exists) {
+          setSelectedPersonaId(personaParam);
+          setActiveTab('personas');
+        }
       }
 
       if (!personParam && competencyParam) {
@@ -579,7 +727,7 @@ export default function CompetencyMatrixPage() {
         }
       }
     }
-  }, [competencyTypes]);
+  }, [competencyPersonas, competencyTypes]);
 
   // Create Competency handler
   const handleCreateCompetency = async (e: React.FormEvent) => {
@@ -641,6 +789,219 @@ export default function CompetencyMatrixPage() {
       setToast({ type: 'success', message: `Duplicated competency "${type.title}" to "${newType.title}".` });
     } catch (e) {
       setToast({ type: 'error', message: `Failed to duplicate competency: ${e instanceof Error ? e.message : 'Unknown error'}` });
+    }
+  };
+
+  const syncPersonaForm = (persona: CompetencyPersona | null) => {
+    setPersonaForm({
+      name: persona?.name || '',
+      description: persona?.description || '',
+      category_tags: persona?.category_tags.join(', ') || '',
+      role_tags: persona?.role_tags.join(', ') || '',
+      status: persona?.status || 'active'
+    });
+    setPersonaItemForm({
+      competency_type_id: '',
+      requirement_level: 'required',
+      notes: '',
+      validity_period_months_override: '',
+      warning_days_override: ''
+    });
+  };
+
+  const handleSavePersona = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!canManage) return;
+    try {
+      const saved = await upsertCompetencyPersona({
+        id: selectedPersona?.id,
+        name: personaForm.name.trim(),
+        description: personaForm.description.trim() || null,
+        category_tags: personaForm.category_tags.split(',').map(item => item.trim()).filter(Boolean),
+        role_tags: personaForm.role_tags.split(',').map(item => item.trim()).filter(Boolean),
+        status: personaForm.status
+      });
+      handleSelectPersona(saved.id);
+      setIsCreatingPersona(false);
+      setToast({ type: 'success', message: `Saved persona "${saved.name}".` });
+    } catch (error) {
+      setToast({ type: 'error', message: error instanceof Error ? error.message : 'Persona save failed.' });
+    }
+  };
+
+  const handleAddPersonaItem = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedPersona || !personaItemForm.competency_type_id || !canManage) return;
+    try {
+      const existingItems = competencyPersonaItems.filter(item => item.persona_id === selectedPersona.id);
+      await upsertCompetencyPersonaItem({
+        persona_id: selectedPersona.id,
+        competency_type_id: personaItemForm.competency_type_id,
+        requirement_level: personaItemForm.requirement_level,
+        notes: personaItemForm.notes.trim() || null,
+        validity_period_months_override: personaItemForm.validity_period_months_override ? Number(personaItemForm.validity_period_months_override) : null,
+        warning_days_override: personaItemForm.warning_days_override ? Number(personaItemForm.warning_days_override) : null,
+        sort_order: existingItems.length
+      });
+      setPersonaItemForm({
+        competency_type_id: '',
+        requirement_level: 'required',
+        notes: '',
+        validity_period_months_override: '',
+        warning_days_override: ''
+      });
+      setToast({ type: 'success', message: 'Persona competency added.' });
+    } catch (error) {
+      setToast({ type: 'error', message: error instanceof Error ? error.message : 'Failed to add persona competency.' });
+    }
+  };
+
+  const handleDuplicatePersona = async (persona: CompetencyPersona) => {
+    if (!canManage) return;
+    try {
+      const duplicate = await upsertCompetencyPersona({
+        name: `${persona.name} (Copy)`,
+        description: persona.description,
+        category_tags: persona.category_tags,
+        role_tags: persona.role_tags,
+        status: 'active'
+      });
+      const sourceItems = competencyPersonaItems
+        .filter(item => item.persona_id === persona.id)
+        .sort((a, b) => a.sort_order - b.sort_order);
+      for (const item of sourceItems) {
+        await upsertCompetencyPersonaItem({
+          persona_id: duplicate.id,
+          competency_type_id: item.competency_type_id,
+          requirement_level: item.requirement_level,
+          notes: item.notes,
+          validity_period_months_override: item.validity_period_months_override ?? null,
+          warning_days_override: item.warning_days_override ?? null,
+          sort_order: item.sort_order
+        });
+      }
+      handleSelectPersona(duplicate.id);
+      setToast({ type: 'success', message: `Duplicated persona "${persona.name}".` });
+    } catch (error) {
+      setToast({ type: 'error', message: error instanceof Error ? error.message : 'Failed to duplicate persona.' });
+    }
+  };
+
+  const handleAssignPersonaToPerson = async () => {
+    if (!selectedPerson || !selectedPersonPersonaId) return;
+    try {
+      await assignCompetencyPersonaToPerson(selectedPerson.id, selectedPersonPersonaId, personaAssignmentNotes || null);
+      const personaName = competencyPersonas.find(persona => persona.id === selectedPersonPersonaId)?.name || 'persona';
+      setSelectedPersonPersonaId('');
+      setPersonaAssignmentNotes('');
+      setToast({ type: 'success', message: `Assigned ${personaName} to ${selectedPerson.display_name}.` });
+    } catch (error) {
+      setToast({ type: 'error', message: error instanceof Error ? error.message : 'Failed to assign persona.' });
+    }
+  };
+
+  const handleRemovePersonaFromPerson = async (assignmentId: string, personaName: string) => {
+    if (!selectedPerson) return;
+    const notes = window.prompt(`Optional note for removing "${personaName}" from ${selectedPerson.display_name}:`, '');
+    if (notes === null) return;
+    try {
+      await removeCompetencyPersonaFromPerson(assignmentId, notes || null);
+      setToast({ type: 'success', message: `Removed ${personaName} from ${selectedPerson.display_name}.` });
+    } catch (error) {
+      setToast({ type: 'error', message: error instanceof Error ? error.message : 'Failed to remove persona.' });
+    }
+  };
+
+  const handleAddIndividualCompetency = async () => {
+    if (!selectedPerson || !selectedExtraCompetencyTypeId) return;
+    try {
+      const saved = await upsertCompetencyRecord({
+        person_id: selectedPerson.id,
+        competency_type_id: selectedExtraCompetencyTypeId,
+        status: 'Missing'
+      });
+      const type = competencyTypes.find(entry => entry.id === selectedExtraCompetencyTypeId);
+      const typeName = competencyTypes.find(type => type.id === selectedExtraCompetencyTypeId)?.title || 'competency';
+      setSelectedExtraCompetencyTypeId('');
+      if (type) {
+        setActiveCell({ person: selectedPerson, competencyType: type, record: saved });
+        setRecordForm({
+          completed_date: saved.completed_date || '',
+          expiry_date: saved.expiry_date || '',
+          trainer: saved.trainer || '',
+          provider: saved.provider || '',
+          certificate_number: saved.certificate_number || '',
+          status: saved.status,
+          notes: saved.notes || ''
+        });
+      }
+      setToast({ type: 'success', message: `Added ${typeName} to ${selectedPerson.display_name}.` });
+    } catch (error) {
+      setToast({ type: 'error', message: error instanceof Error ? error.message : 'Failed to add competency.' });
+    }
+  };
+
+  const handleBulkApplyPersona = async () => {
+    if (!selectedPersona || bulkApplyPreviewPeople.length === 0) return;
+    setConfirmRequest({
+      title: 'Bulk apply persona?',
+      description: `Assign "${selectedPersona.name}" to ${bulkApplyPreviewPeople.length} people matching the current role/department filters? Existing competency records will be preserved.`,
+      confirmLabel: 'Apply Persona',
+      tone: 'primary',
+      onConfirm: async () => {
+        try {
+          for (const person of bulkApplyPreviewPeople) {
+            await assignCompetencyPersonaToPerson(person.id, selectedPersona.id, 'Bulk applied from persona workspace.');
+          }
+          setToast({ type: 'success', message: `Applied ${selectedPersona.name} to ${bulkApplyPreviewPeople.length} people.` });
+        } catch (error) {
+          setToast({ type: 'error', message: error instanceof Error ? error.message : 'Bulk apply failed.' });
+        }
+      }
+    });
+  };
+
+  const handleSuppressExpectedCompetency = async (competencyTypeId: string, personaId?: string | null) => {
+    if (!selectedPerson) return;
+    const reason = window.prompt('Why is this persona competency being suppressed for this person?', '');
+    if (reason === null) return;
+    setConfirmRequest({
+      title: 'Suppress persona competency?',
+      description: 'This keeps existing competency records and evidence, but removes the persona expectation for this person until you restore it.',
+      confirmLabel: 'Suppress',
+      tone: 'warning',
+      onConfirm: async () => {
+        try {
+          await upsertPersonCompetencyOverride({
+            person_id: selectedPerson.id,
+            competency_type_id: competencyTypeId,
+            persona_id: personaId || null,
+            override_type: 'suppressed',
+            reason: reason.trim() || 'Suppressed from the person workspace.',
+            active: true
+          });
+          setToast({ type: 'success', message: 'Persona competency suppressed for this person.' });
+        } catch (error) {
+          setToast({ type: 'error', message: error instanceof Error ? error.message : 'Suppression failed.' });
+        }
+      }
+    });
+  };
+
+  const handleRestoreSuppressedCompetency = async (competencyTypeId: string, personaId?: string | null) => {
+    if (!selectedPerson) return;
+    try {
+      await upsertPersonCompetencyOverride({
+        person_id: selectedPerson.id,
+        competency_type_id: competencyTypeId,
+        persona_id: personaId || null,
+        override_type: 'suppressed',
+        active: false,
+        reason: 'Persona expectation restored.'
+      });
+      setToast({ type: 'success', message: 'Persona expectation restored for this person.' });
+    } catch (error) {
+      setToast({ type: 'error', message: error instanceof Error ? error.message : 'Failed to restore persona expectation.' });
     }
   };
 
@@ -720,6 +1081,10 @@ export default function CompetencyMatrixPage() {
       const matchesDept = departmentFilter === 'All' || person.department === departmentFilter;
       const matchesRole = roleFilter === 'All' || person.role === roleFilter;
       const matchesType = personTypeFilter === 'All' || person.person_type === personTypeFilter;
+      const expectations = personExpectationMap.get(person.id) || [];
+      const matchesPersona = personaFilter === 'All' || expectations.some(expectation =>
+        expectation.personas.some(persona => persona.id === personaFilter)
+      );
 
       // Matrix cells for this person
       const personCells = matrixCellsByPerson.get(person.id) || [];
@@ -746,10 +1111,12 @@ export default function CompetencyMatrixPage() {
 
       // Show only people with gaps
       const matchesGaps = !showOnlyPeopleWithGaps || hasMissingExpired;
+      const hasPersonaRequiredGap = expectations.some(expectation => expectation.gapStatus === 'missing_required');
+      const matchesPersonaGap = !showOnlyMissingRequiredPersona || hasPersonaRequiredGap;
 
-      return matchesSearch && matchesDept && matchesRole && matchesType && matchesStatus && matchesMissingExpired && matchesExpiringSoon && matchesGaps;
+      return matchesSearch && matchesDept && matchesRole && matchesType && matchesPersona && matchesStatus && matchesMissingExpired && matchesExpiringSoon && matchesPersonaGap && matchesGaps;
     });
-  }, [activePeople, search, departmentFilter, roleFilter, personTypeFilter, statusFilter, showOnlyMissingExpired, showOnlyExpiringSoon, showOnlyPeopleWithGaps, matrixCellsByPerson]);
+  }, [activePeople, search, departmentFilter, roleFilter, personTypeFilter, personaFilter, statusFilter, showOnlyMissingExpired, showOnlyExpiringSoon, showOnlyMissingRequiredPersona, showOnlyPeopleWithGaps, matrixCellsByPerson, personExpectationMap]);
 
   // Sorting People
   const sortedPeople = useMemo(() => {
@@ -785,7 +1152,7 @@ export default function CompetencyMatrixPage() {
     user?.id || 'guest',
     organization?.id,
     'competency-people',
-    [search, departmentFilter, roleFilter, personTypeFilter, personOperationalStatusFilter, statusFilter, showOnlyMissingExpired, showOnlyExpiringSoon, showOnlyPeopleWithGaps, sortBy]
+    [search, departmentFilter, roleFilter, personTypeFilter, personOperationalStatusFilter, personaFilter, statusFilter, showOnlyMissingExpired, showOnlyExpiringSoon, showOnlyMissingRequiredPersona, showOnlyPeopleWithGaps, sortBy]
   );
   const peopleSelection = useBulkSelection(peoplePagination.paginatedItems);
   const selectedBulkPeople = sortedPeople.filter(person => peopleSelection.selectedIds.has(person.id));
@@ -863,10 +1230,12 @@ export default function CompetencyMatrixPage() {
     setRoleFilter('All');
     setPersonTypeFilter('All');
     setPersonOperationalStatusFilter('Current');
+    setPersonaFilter('All');
     setTypeFilter('All');
     setStatusFilter('All');
     setShowOnlyMissingExpired(false);
     setShowOnlyExpiringSoon(false);
+    setShowOnlyMissingRequiredPersona(false);
     setShowOnlyFavourites(false);
     setShowOnlyPeopleWithGaps(false);
     setActiveViewId(null);
@@ -883,10 +1252,12 @@ export default function CompetencyMatrixPage() {
       setRoleFilter(f.roleFilter || 'All');
       setPersonTypeFilter(f.personTypeFilter || 'All');
       setPersonOperationalStatusFilter((f.personOperationalStatusFilter as PersonStatusFilter) || 'Current');
+      setPersonaFilter(f.personaFilter || 'All');
       setTypeFilter(f.typeFilter || 'All');
       setStatusFilter(f.statusFilter || 'All');
       setShowOnlyMissingExpired(!!f.showOnlyMissingExpired);
       setShowOnlyExpiringSoon(!!f.showOnlyExpiringSoon);
+      setShowOnlyMissingRequiredPersona(!!f.showOnlyMissingRequiredPersona);
       setShowOnlyFavourites(!!f.showOnlyFavourites);
       setShowOnlyPeopleWithGaps(!!f.showOnlyPeopleWithGaps);
       if (f.sortBy) {
@@ -903,10 +1274,12 @@ export default function CompetencyMatrixPage() {
       roleFilter,
       personTypeFilter,
       personOperationalStatusFilter,
+      personaFilter,
       typeFilter,
       statusFilter,
       showOnlyMissingExpired,
       showOnlyExpiringSoon,
+      showOnlyMissingRequiredPersona,
       showOnlyFavourites,
       showOnlyPeopleWithGaps,
       sortBy
@@ -925,15 +1298,17 @@ export default function CompetencyMatrixPage() {
     const roleMatch = (f.roleFilter || 'All') === roleFilter;
     const pTypeMatch = (f.personTypeFilter || 'All') === personTypeFilter;
     const personStatusMatch = ((f.personOperationalStatusFilter as PersonStatusFilter) || 'Current') === personOperationalStatusFilter;
+    const personaMatch = (f.personaFilter || 'All') === personaFilter;
     const catMatch = (f.typeFilter || 'All') === typeFilter;
     const statusMatch = (f.statusFilter || 'All') === statusFilter;
     const missExpMatch = (!!f.showOnlyMissingExpired) === showOnlyMissingExpired;
     const expSoonMatch = (!!f.showOnlyExpiringSoon) === showOnlyExpiringSoon;
+    const missingRequiredPersonaMatch = (!!f.showOnlyMissingRequiredPersona) === showOnlyMissingRequiredPersona;
     const favMatch = (!!f.showOnlyFavourites) === showOnlyFavourites;
     const gapsMatch = (!!f.showOnlyPeopleWithGaps) === showOnlyPeopleWithGaps;
     const sortMatch = (!f.sortBy) || f.sortBy === sortBy;
 
-    return !(searchMatch && deptMatch && roleMatch && pTypeMatch && personStatusMatch && catMatch && statusMatch && missExpMatch && expSoonMatch && favMatch && gapsMatch && sortMatch);
+    return !(searchMatch && deptMatch && roleMatch && pTypeMatch && personStatusMatch && personaMatch && catMatch && statusMatch && missExpMatch && expSoonMatch && missingRequiredPersonaMatch && favMatch && gapsMatch && sortMatch);
   }, [
     activeViewId,
     allViews,
@@ -942,10 +1317,12 @@ export default function CompetencyMatrixPage() {
     roleFilter,
     personTypeFilter,
     personOperationalStatusFilter,
+    personaFilter,
     typeFilter,
     statusFilter,
     showOnlyMissingExpired,
     showOnlyExpiringSoon,
+    showOnlyMissingRequiredPersona,
     showOnlyFavourites,
     showOnlyPeopleWithGaps,
     sortBy
@@ -961,10 +1338,12 @@ export default function CompetencyMatrixPage() {
       roleFilter,
       personTypeFilter,
       personOperationalStatusFilter,
+      personaFilter,
       typeFilter,
       statusFilter,
       showOnlyMissingExpired,
       showOnlyExpiringSoon,
+      showOnlyMissingRequiredPersona,
       showOnlyFavourites,
       showOnlyPeopleWithGaps,
       sortBy,
@@ -981,10 +1360,12 @@ export default function CompetencyMatrixPage() {
       if (typeof stored.personOperationalStatusFilter === 'string' && PERSON_STATUS_FILTER_OPTIONS.includes(stored.personOperationalStatusFilter as PersonStatusFilter)) {
         setPersonOperationalStatusFilter(stored.personOperationalStatusFilter as PersonStatusFilter);
       }
+      if (typeof stored.personaFilter === 'string') setPersonaFilter(stored.personaFilter);
       if (typeof stored.typeFilter === 'string') setTypeFilter(stored.typeFilter);
       if (typeof stored.statusFilter === 'string') setStatusFilter(stored.statusFilter);
       if (typeof stored.showOnlyMissingExpired === 'boolean') setShowOnlyMissingExpired(stored.showOnlyMissingExpired);
       if (typeof stored.showOnlyExpiringSoon === 'boolean') setShowOnlyExpiringSoon(stored.showOnlyExpiringSoon);
+      if (typeof stored.showOnlyMissingRequiredPersona === 'boolean') setShowOnlyMissingRequiredPersona(stored.showOnlyMissingRequiredPersona);
       if (typeof stored.showOnlyFavourites === 'boolean') setShowOnlyFavourites(stored.showOnlyFavourites);
       if (typeof stored.showOnlyPeopleWithGaps === 'boolean') setShowOnlyPeopleWithGaps(stored.showOnlyPeopleWithGaps);
       if (typeof stored.sortBy === 'string') setSortBy(stored.sortBy);
@@ -999,10 +1380,12 @@ export default function CompetencyMatrixPage() {
       roleFilter,
       personTypeFilter,
       personOperationalStatusFilter,
+      personaFilter,
       typeFilter,
       statusFilter,
       showOnlyMissingExpired,
       showOnlyExpiringSoon,
+      showOnlyMissingRequiredPersona,
       showOnlyFavourites,
       showOnlyPeopleWithGaps,
       sortBy,
@@ -1117,6 +1500,15 @@ export default function CompetencyMatrixPage() {
         onClear: () => setPersonOperationalStatusFilter('Current')
       });
     }
+    if (personaFilter !== 'All') {
+      const personaLabel = competencyPersonas.find(persona => persona.id === personaFilter)?.name || 'Persona';
+      chips.push({
+        key: 'persona',
+        label: 'Persona',
+        valueLabel: personaLabel,
+        onClear: () => setPersonaFilter('All')
+      });
+    }
     if (typeFilter !== 'All') {
       chips.push({
         key: 'category',
@@ -1149,6 +1541,14 @@ export default function CompetencyMatrixPage() {
         onClear: () => setShowOnlyExpiringSoon(false)
       });
     }
+    if (showOnlyMissingRequiredPersona) {
+      chips.push({
+        key: 'personaRequiredGap',
+        label: 'Show Only',
+        valueLabel: 'Missing required persona',
+        onClear: () => setShowOnlyMissingRequiredPersona(false)
+      });
+    }
     if (showOnlyFavourites) {
       chips.push({
         key: 'favourites',
@@ -1172,12 +1572,15 @@ export default function CompetencyMatrixPage() {
     roleFilter,
     personTypeFilter,
     personOperationalStatusFilter,
+    personaFilter,
     typeFilter,
     statusFilter,
     showOnlyMissingExpired,
     showOnlyExpiringSoon,
+    showOnlyMissingRequiredPersona,
     showOnlyFavourites,
-    showOnlyPeopleWithGaps
+    showOnlyPeopleWithGaps,
+    competencyPersonas
   ]);
 
   const columnOptions = useMemo(() => {
@@ -1517,6 +1920,7 @@ export default function CompetencyMatrixPage() {
     return selectedPerson
       ? activeTypes.map(type => {
           const cell = matrixCellMap.get(`${selectedPerson.id}:${type.id}`);
+          const expectation = (personExpectationMap.get(selectedPerson.id) || []).find(item => item.competencyType.id === type.id) || null;
           const evidenceCount = cell?.record
             ? competencyRecordDocuments.filter(link => link.competency_record_id === cell.record?.id).length
             : 0;
@@ -1530,10 +1934,10 @@ export default function CompetencyMatrixPage() {
                 (cell?.record && link.object_type === 'competency_record' && link.object_id === cell.record.id))
             )
           ).length;
-          return { type, cell, evidenceCount, openActionCount };
+          return { type, cell, expectation, evidenceCount, openActionCount };
         })
       : [];
-  }, [selectedPerson, activeTypes, matrixCellMap, competencyRecordDocuments, actions, actionObjectLinks]);
+  }, [selectedPerson, activeTypes, matrixCellMap, competencyRecordDocuments, actions, actionObjectLinks, personExpectationMap]);
 
   const selectedPersonActions = useMemo(() => {
     return selectedPerson
@@ -1543,13 +1947,67 @@ export default function CompetencyMatrixPage() {
       : [];
   }, [selectedPerson, actions, actionObjectLinks]);
 
+  const selectedPersonExpectations = useMemo(() => {
+    return selectedPerson ? personExpectationMap.get(selectedPerson.id) || [] : [];
+  }, [selectedPerson, personExpectationMap]);
+
+  const selectedPersonPersonaAssignments = useMemo(() => {
+    return selectedPerson
+      ? personCompetencyPersonas.filter(assignment => assignment.person_id === selectedPerson.id && assignment.status === 'active')
+      : [];
+  }, [selectedPerson, personCompetencyPersonas]);
+
+  const selectedPersonAssignedPersonas = useMemo(() => {
+    return selectedPersonPersonaAssignments
+      .map(assignment => competencyPersonas.find(persona => persona.id === assignment.persona_id))
+      .filter((persona): persona is CompetencyPersona => Boolean(persona));
+  }, [selectedPersonPersonaAssignments, competencyPersonas]);
+
+  const selectedPersonExpectationSummary = useMemo(() => {
+    return selectedPersonExpectations.reduce<Record<PersonaGapStatus, number>>((acc, item) => {
+      acc[item.gapStatus] = (acc[item.gapStatus] || 0) + 1;
+      return acc;
+    }, {
+      valid: 0,
+      due_soon: 0,
+      expired: 0,
+      missing_required: 0,
+      optional_missing: 0,
+      conditional_missing: 0,
+      suppressed: 0,
+      manual_only: 0
+    });
+  }, [selectedPersonExpectations]);
+
+  const bulkApplyPreviewPeople = useMemo(() => {
+    if (!selectedPersona) return [];
+    return activePeople.filter(person => {
+      const matchesRole = bulkApplyRoleFilter === 'All' || person.role === bulkApplyRoleFilter;
+      const matchesDepartment = bulkApplyDepartmentFilter === 'All' || person.department === bulkApplyDepartmentFilter;
+      const alreadyAssigned = personCompetencyPersonas.some(
+        assignment => assignment.person_id === person.id && assignment.persona_id === selectedPersona.id && assignment.status === 'active'
+      );
+      return matchesRole && matchesDepartment && !alreadyAssigned;
+    });
+  }, [selectedPersona, activePeople, bulkApplyRoleFilter, bulkApplyDepartmentFilter, personCompetencyPersonas]);
+
+  const availableExtraCompetencyTypes = useMemo(() => {
+    if (!selectedPerson) return activeTypes;
+    const takenIds = new Set(
+      selectedPersonRows
+        .filter(row => Boolean(row.expectation) || Boolean(row.cell?.record))
+        .map(row => row.type.id)
+    );
+    return activeTypes.filter(type => !takenIds.has(type.id));
+  }, [selectedPerson, activeTypes, selectedPersonRows]);
+
   const filteredPersonRows = useMemo(() => {
     return selectedPersonRows.filter(row => {
       const matchesSearch = workspaceSearch.trim() === '' ||
         row.type.title.toLowerCase().includes(workspaceSearch.toLowerCase()) ||
         row.type.category.toLowerCase().includes(workspaceSearch.toLowerCase());
 
-      const status = row.cell?.status || 'Missing';
+      const status = row.expectation?.status || row.cell?.status || 'Missing';
       const matchesStatus = workspaceStatusFilter === 'All' || status === workspaceStatusFilter;
 
       return matchesSearch && matchesStatus;
@@ -1574,7 +2032,7 @@ export default function CompetencyMatrixPage() {
 
   const selectedPersonStatusBreakdown = useMemo(() => {
     return selectedPersonRows.reduce<Record<CompetencyStatus, number>>((acc, row) => {
-      const status = row.cell?.status || 'Missing';
+      const status = row.expectation?.status || row.cell?.status || 'Missing';
       acc[status] = (acc[status] || 0) + 1;
       return acc;
     }, {
@@ -1785,6 +2243,16 @@ export default function CompetencyMatrixPage() {
         >
           Competency Registry
         </button>
+        <button
+          onClick={() => handleTabChange('personas')}
+          className={`px-4 py-2 font-bold text-xs rounded-lg transition-all cursor-pointer ${
+            activeTab === 'personas'
+              ? 'bg-indigo-650 text-white shadow-sm'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+          }`}
+        >
+          Personas & Templates
+        </button>
       </div>
 
       {activeTab === 'matrix' && (
@@ -1900,6 +2368,17 @@ export default function CompetencyMatrixPage() {
                         </select>
                       </div>
                       <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Persona</label>
+                        <select
+                          value={personaFilter}
+                          onChange={event => setPersonaFilter(event.target.value)}
+                          className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                        >
+                          <option value="All">All Personas</option>
+                          {personaOptions.map(persona => <option key={persona.id} value={persona.id}>{persona.name}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
                         <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Sort By</label>
                         <select
                           value={sortBy}
@@ -1933,6 +2412,15 @@ export default function CompetencyMatrixPage() {
                           className="accent-indigo-650 w-3.5 h-3.5"
                         />
                         <span>Expiring soon only</span>
+                      </label>
+                      <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={showOnlyMissingRequiredPersona}
+                          onChange={e => setShowOnlyMissingRequiredPersona(e.target.checked)}
+                          className="accent-indigo-650 w-3.5 h-3.5"
+                        />
+                        <span>Missing required persona only</span>
                       </label>
                       <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
                         <input
@@ -2105,6 +2593,17 @@ export default function CompetencyMatrixPage() {
                         </select>
                       </div>
                       <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Persona</label>
+                        <select
+                          value={personaFilter}
+                          onChange={event => setPersonaFilter(event.target.value)}
+                          className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                        >
+                          <option value="All">All Personas</option>
+                          {personaOptions.map(persona => <option key={persona.id} value={persona.id}>{persona.name}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
                         <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Sort By</label>
                         <select
                           value={sortBy}
@@ -2139,6 +2638,15 @@ export default function CompetencyMatrixPage() {
                           className="accent-indigo-650 w-3.5 h-3.5"
                         />
                         <span>Expiring soon only</span>
+                      </label>
+                      <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={showOnlyMissingRequiredPersona}
+                          onChange={e => setShowOnlyMissingRequiredPersona(e.target.checked)}
+                          className="accent-indigo-650 w-3.5 h-3.5"
+                        />
+                        <span>Missing required persona only</span>
                       </label>
                       <label className="flex items-center gap-2 font-semibold text-foreground cursor-pointer">
                         <input
@@ -2960,6 +3468,342 @@ export default function CompetencyMatrixPage() {
             onPageChange={registryPagination.setCurrentPage}
             itemLabel="competencies"
           />
+        </div>
+      )}
+
+      {activeTab === 'personas' && (
+        <div className="grid grid-cols-1 xl:grid-cols-[340px_1fr] gap-6 animate-in fade-in duration-200">
+          <aside className="space-y-4">
+            <div className="bg-card border border-border rounded-xl p-4 space-y-3 shadow-xs">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-extrabold">Competency Personas</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">Reusable expectation templates for people with similar duties.</p>
+                </div>
+                {canManage && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedPersonaId(null);
+                      syncPersonaForm(null);
+                      setIsCreatingPersona(true);
+                    }}
+                    className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" /> Create Persona
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="relative">
+                  <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    value={personaSearch}
+                    onChange={event => setPersonaSearch(event.target.value)}
+                    placeholder="Search personas..."
+                    className="w-full pl-9 pr-3 py-2 bg-muted border border-border rounded-lg text-xs outline-none text-foreground placeholder-muted-foreground"
+                  />
+                </div>
+                <select
+                  value={personaStatusFilter}
+                  onChange={event => setPersonaStatusFilter(event.target.value as 'All' | 'active' | 'archived')}
+                  className="bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                >
+                  <option value="active">Active Only</option>
+                  <option value="archived">Archived Only</option>
+                  <option value="All">All Statuses</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {filteredPersonas.map(persona => {
+                const itemCount = competencyPersonaItems.filter(item => item.persona_id === persona.id).length;
+                const assignmentCount = personCompetencyPersonas.filter(assignment => assignment.persona_id === persona.id && assignment.status === 'active').length;
+                const isSelected = selectedPersonaId === persona.id;
+                return (
+                  <button
+                    key={persona.id}
+                    type="button"
+                    onClick={() => {
+                      handleSelectPersona(persona.id);
+                      setIsCreatingPersona(false);
+                    }}
+                    className={`w-full text-left p-4 rounded-xl border transition-colors ${
+                      isSelected
+                        ? 'border-indigo-500 bg-indigo-500/10'
+                        : 'border-border bg-card hover:bg-muted/20'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-extrabold text-sm text-foreground">{persona.name}</span>
+                          <span className={`px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase ${persona.status === 'active' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' : 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20'}`}>
+                            {persona.status}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{persona.description || 'No description provided.'}</p>
+                      </div>
+                      <Layers3 className="w-4 h-4 text-muted-foreground shrink-0" />
+                    </div>
+                    <div className="flex flex-wrap gap-2 mt-3 text-[10px] text-muted-foreground">
+                      <span className="px-2 py-0.5 rounded-full border border-border bg-muted">{itemCount} competencies</span>
+                      <span className="px-2 py-0.5 rounded-full border border-border bg-muted">{assignmentCount} people</span>
+                    </div>
+                  </button>
+                );
+              })}
+              {filteredPersonas.length === 0 && (
+                <div className="p-6 border border-dashed border-border rounded-xl bg-card text-center text-xs text-muted-foreground">
+                  No personas match the current filters.
+                </div>
+              )}
+            </div>
+          </aside>
+
+          <main className="space-y-4">
+            {(isCreatingPersona || selectedPersona) ? (
+              <>
+                <form onSubmit={handleSavePersona} className="bg-card border border-border rounded-xl p-5 space-y-4 shadow-xs">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-extrabold">{selectedPersona ? 'Edit Persona' : 'Create Persona'}</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">Use personas to define the competencies a type of person normally needs.</p>
+                    </div>
+                    {selectedPersona && canManage && (
+                      <div className="flex items-center gap-2">
+                        <button type="button" onClick={() => handleDuplicatePersona(selectedPersona)} className="px-3 py-2 bg-muted hover:bg-muted/80 border border-border rounded-lg text-xs font-bold flex items-center gap-1.5">
+                          <Copy className="w-4 h-4" /> Duplicate
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => upsertCompetencyPersona({ ...selectedPersona, status: selectedPersona.status === 'active' ? 'archived' : 'active', name: selectedPersona.name })}
+                          className="px-3 py-2 bg-muted hover:bg-muted/80 border border-border rounded-lg text-xs font-bold flex items-center gap-1.5"
+                        >
+                          {selectedPersona.status === 'active' ? <Archive className="w-4 h-4" /> : <ArchiveRestore className="w-4 h-4" />}
+                          {selectedPersona.status === 'active' ? 'Archive' : 'Restore'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <label className="space-y-1 block">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Persona Name</span>
+                      <input
+                        required
+                        value={personaForm.name}
+                        onChange={event => setPersonaForm({ ...personaForm, name: event.target.value })}
+                        className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-xs outline-none text-foreground"
+                      />
+                    </label>
+                    <label className="space-y-1 block">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Status</span>
+                      <select
+                        value={personaForm.status}
+                        onChange={event => setPersonaForm({ ...personaForm, status: event.target.value as 'active' | 'archived' })}
+                        className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-xs font-semibold text-foreground outline-none cursor-pointer"
+                      >
+                        <option value="active">Active</option>
+                        <option value="archived">Archived</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label className="space-y-1 block">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Description</span>
+                    <textarea
+                      rows={2}
+                      value={personaForm.description}
+                      onChange={event => setPersonaForm({ ...personaForm, description: event.target.value })}
+                      className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-xs outline-none resize-none text-foreground"
+                    />
+                  </label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <label className="space-y-1 block">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Category Tags</span>
+                      <input
+                        value={personaForm.category_tags}
+                        onChange={event => setPersonaForm({ ...personaForm, category_tags: event.target.value })}
+                        placeholder="Transport, Operations, Leadership"
+                        className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-xs outline-none text-foreground"
+                      />
+                    </label>
+                    <label className="space-y-1 block">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Role Tags</span>
+                      <input
+                        value={personaForm.role_tags}
+                        onChange={event => setPersonaForm({ ...personaForm, role_tags: event.target.value })}
+                        placeholder="Driver, Warehouse Operative"
+                        className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-xs outline-none text-foreground"
+                      />
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button type="submit" disabled={!canManage} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg">
+                      Save Persona
+                    </button>
+                    <button type="button" onClick={() => { setIsCreatingPersona(false); handleSelectPersona(null); }} className="px-4 py-2 bg-muted hover:bg-muted/80 border border-border text-xs font-bold rounded-lg">
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+
+                {selectedPersona && (
+                  <>
+                    <div className="bg-card border border-border rounded-xl p-5 space-y-4 shadow-xs">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-extrabold">Persona Competencies</h3>
+                          <p className="text-xs text-muted-foreground mt-0.5">Required, optional, and conditional expectations for this persona.</p>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full border border-border bg-muted text-[10px] font-bold text-muted-foreground">
+                          {selectedPersonaItems.length} items
+                        </span>
+                      </div>
+                      <form onSubmit={handleAddPersonaItem} className="grid grid-cols-1 md:grid-cols-[1.4fr_0.9fr_1fr_1fr_auto] gap-3 items-end">
+                        <label className="space-y-1 block">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Competency Type</span>
+                          <select
+                            required
+                            value={personaItemForm.competency_type_id}
+                            onChange={event => setPersonaItemForm({ ...personaItemForm, competency_type_id: event.target.value })}
+                            className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-xs font-semibold text-foreground outline-none cursor-pointer"
+                          >
+                            <option value="">Select competency...</option>
+                            {activeTypes.map(type => <option key={type.id} value={type.id}>{type.title}</option>)}
+                          </select>
+                        </label>
+                        <label className="space-y-1 block">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Level</span>
+                          <select
+                            value={personaItemForm.requirement_level}
+                            onChange={event => setPersonaItemForm({ ...personaItemForm, requirement_level: event.target.value as CompetencyPersonaRequirementLevel })}
+                            className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-xs font-semibold text-foreground outline-none cursor-pointer"
+                          >
+                            {PERSONA_REQUIREMENT_LEVELS.map(level => <option key={level} value={level}>{level}</option>)}
+                          </select>
+                        </label>
+                        <label className="space-y-1 block">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Renewal Override</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={personaItemForm.validity_period_months_override}
+                            onChange={event => setPersonaItemForm({ ...personaItemForm, validity_period_months_override: event.target.value })}
+                            className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-xs outline-none text-foreground"
+                          />
+                        </label>
+                        <label className="space-y-1 block">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Warning Days</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={personaItemForm.warning_days_override}
+                            onChange={event => setPersonaItemForm({ ...personaItemForm, warning_days_override: event.target.value })}
+                            className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-xs outline-none text-foreground"
+                          />
+                        </label>
+                        <button type="submit" disabled={!canManage} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg">
+                          Add Item
+                        </button>
+                      </form>
+
+                      <div className="space-y-2">
+                        {selectedPersonaItems.map(item => {
+                          const type = competencyTypes.find(entry => entry.id === item.competency_type_id);
+                          return (
+                            <div key={item.id} className="p-3 rounded-xl border border-border bg-muted/20 flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-bold text-foreground">{type?.title || 'Unknown competency'}</span>
+                                  <span className={`px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase ${item.requirement_level === 'required' ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20' : item.requirement_level === 'conditional' ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20' : 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-300 border-zinc-500/20'}`}>
+                                    {item.requirement_level}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Renewal {item.validity_period_months_override ? `${item.validity_period_months_override} months` : 'inherits competency'} | Warning {item.warning_days_override ? `${item.warning_days_override} days` : 'inherits competency'}
+                                </p>
+                                {item.notes && <p className="text-xs text-muted-foreground mt-1">{item.notes}</p>}
+                              </div>
+                              {canManage && (
+                                <button type="button" onClick={() => deleteCompetencyPersonaItem(item.id)} className="px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg text-xs font-bold">
+                                  Remove
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {selectedPersonaItems.length === 0 && (
+                          <div className="p-6 border border-dashed border-border rounded-xl bg-muted/10 text-center text-xs text-muted-foreground">
+                            No competencies have been added to this persona yet.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-card border border-border rounded-xl p-5 space-y-4 shadow-xs">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-extrabold">Where This Persona Is Used</h3>
+                          <p className="text-xs text-muted-foreground mt-0.5">Preview assignments and bulk apply by role or department.</p>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full border border-border bg-muted text-[10px] font-bold text-muted-foreground">
+                          {selectedPersonaAssignments.length} active assignments
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3">
+                        <select
+                          value={bulkApplyRoleFilter}
+                          onChange={event => setBulkApplyRoleFilter(event.target.value)}
+                          className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-xs font-semibold text-foreground outline-none cursor-pointer"
+                        >
+                          <option value="All">All roles</option>
+                          {roles.filter(role => role !== 'All').map(role => <option key={role} value={role}>{role}</option>)}
+                        </select>
+                        <select
+                          value={bulkApplyDepartmentFilter}
+                          onChange={event => setBulkApplyDepartmentFilter(event.target.value)}
+                          className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-xs font-semibold text-foreground outline-none cursor-pointer"
+                        >
+                          <option value="All">All departments</option>
+                          {departments.filter(department => department !== 'All').map(department => <option key={department} value={department}>{department}</option>)}
+                        </select>
+                        <button type="button" disabled={bulkApplyPreviewPeople.length === 0} onClick={handleBulkApplyPersona} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg">
+                          Bulk Apply
+                        </button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Preview: {bulkApplyPreviewPeople.length} people match the current role/department filters and are not already assigned this persona.
+                      </p>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {selectedPersonaAssignments.slice(0, 8).map(assignment => {
+                          const person = people.find(entry => entry.id === assignment.person_id);
+                          if (!person) return null;
+                          return (
+                            <div key={assignment.id} className="p-3 rounded-xl border border-border bg-muted/20 flex items-center justify-between gap-3">
+                              <div>
+                                <button type="button" onClick={() => openPersonWorkspace(person)} className="font-bold text-foreground hover:text-indigo-650 hover:underline text-left">
+                                  {person.display_name}
+                                </button>
+                                <p className="text-xs text-muted-foreground mt-1">{person.role || person.person_type} | {person.department || 'No department'}</p>
+                              </div>
+                              <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </>
+            ) : (
+              <div className="bg-card border border-dashed border-border rounded-xl p-10 text-center text-sm text-muted-foreground">
+                Select a persona to manage its competencies, assignments, and bulk apply workflow.
+              </div>
+            )}
+          </main>
         </div>
       )}
 
@@ -4105,6 +4949,178 @@ export default function CompetencyMatrixPage() {
                 </div>
 
                 <div className="space-y-3 border-t border-border pt-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Assigned Personas</h3>
+                    <span className="text-[10px] font-bold text-muted-foreground">
+                      {selectedPersonAssignedPersonas.length} active
+                    </span>
+                  </div>
+
+                  {canManage && (
+                    <div className="space-y-2 p-3 rounded-xl border border-border bg-card">
+                      <select
+                        value={selectedPersonPersonaId}
+                        onChange={event => setSelectedPersonPersonaId(event.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-muted border border-border rounded-lg text-xs font-semibold text-foreground outline-none cursor-pointer"
+                      >
+                        <option value="">Assign a persona...</option>
+                        {competencyPersonas
+                          .filter(persona => persona.status === 'active')
+                          .filter(persona => !selectedPersonPersonaAssignments.some(assignment => assignment.persona_id === persona.id))
+                          .map(persona => <option key={persona.id} value={persona.id}>{persona.name}</option>)}
+                      </select>
+                      <input
+                        value={personaAssignmentNotes}
+                        onChange={event => setPersonaAssignmentNotes(event.target.value)}
+                        placeholder="Optional assignment note"
+                        className="w-full px-2.5 py-1.5 bg-muted border border-border rounded-lg text-xs outline-none text-foreground"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAssignPersonaToPerson}
+                        disabled={!selectedPersonPersonaId}
+                        className="w-full px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold"
+                      >
+                        Assign Persona
+                      </button>
+                    </div>
+                  )}
+
+                  {selectedPersonPersonaAssignments.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">No personas assigned to this person yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {selectedPersonPersonaAssignments.map(assignment => {
+                        const persona = competencyPersonas.find(entry => entry.id === assignment.persona_id);
+                        if (!persona) return null;
+                        return (
+                          <div key={assignment.id} className="p-3 bg-card border border-border rounded-xl space-y-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <span className="font-bold text-foreground block">{persona.name}</span>
+                                <span className="text-[10px] text-muted-foreground block mt-0.5">
+                                  {persona.role_tags.length > 0 ? persona.role_tags.join(', ') : 'No role tags'}
+                                </span>
+                              </div>
+                              {canManage && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemovePersonaFromPerson(assignment.id, persona.name)}
+                                  className="px-2 py-1 bg-muted hover:bg-muted/80 border border-border rounded-lg text-[10px] font-bold shrink-0"
+                                >
+                                  Remove
+                                </button>
+                              )}
+                            </div>
+                            {assignment.notes && (
+                              <p className="text-[10px] text-muted-foreground leading-normal">{assignment.notes}</p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-3 border-t border-border pt-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Expectation Summary</h3>
+                    <span className="text-[10px] font-bold text-muted-foreground">
+                      {selectedPersonExpectations.length} tracked
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      ['Missing required', selectedPersonExpectationSummary.missing_required, 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'],
+                      ['Expired', selectedPersonExpectationSummary.expired, 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'],
+                      ['Due soon', selectedPersonExpectationSummary.due_soon, 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20'],
+                      ['Suppressed', selectedPersonExpectationSummary.suppressed, 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-300 border-zinc-500/20']
+                    ].map(([label, value, tone]) => (
+                      <div key={label} className={`rounded-lg border p-2 ${tone}`}>
+                        <span className="text-[9px] font-bold uppercase block">{label}</span>
+                        <span className="text-lg font-extrabold">{value}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    {selectedPersonExpectations
+                      .filter(expectation => expectation.isExpected || expectation.source === 'manual')
+                      .slice(0, 10)
+                      .map(expectation => (
+                        <div key={expectation.competencyType.id} className="p-3 bg-card border border-border rounded-xl space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <span className="font-bold text-foreground block">{expectation.competencyType.title}</span>
+                              <div className="flex flex-wrap gap-1.5 mt-1">
+                                {expectation.requirementLevel && (
+                                  <span className="px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase bg-muted text-muted-foreground border-border">
+                                    {expectation.requirementLevel}
+                                  </span>
+                                )}
+                                <span className={`px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase ${personaGapClass(expectation.gapStatus)}`}>
+                                  {personaGapLabel(expectation.gapStatus)}
+                                </span>
+                              </div>
+                            </div>
+                            {expectation.isExpected && canManage && (
+                              expectation.isSuppressed ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRestoreSuppressedCompetency(expectation.competencyType.id, expectation.personaItems[0]?.persona_id || null)}
+                                  className="px-2 py-1 bg-muted hover:bg-muted/80 border border-border rounded-lg text-[10px] font-bold shrink-0"
+                                >
+                                  Restore
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSuppressExpectedCompetency(expectation.competencyType.id, expectation.personaItems[0]?.persona_id || null)}
+                                  className="px-2 py-1 bg-muted hover:bg-muted/80 border border-border rounded-lg text-[10px] font-bold shrink-0"
+                                >
+                                  Suppress
+                                </button>
+                              )
+                            )}
+                          </div>
+                          <p className="text-[10px] text-muted-foreground leading-normal">{expectation.explanation}</p>
+                        </div>
+                      ))}
+                    {selectedPersonExpectations.length === 0 && (
+                      <p className="text-xs text-muted-foreground italic">No persona expectations or manual competency records yet.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3 border-t border-border pt-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Add Individual Competency</h3>
+                    <span className="text-[10px] text-muted-foreground">Manual override</span>
+                  </div>
+                  <div className="space-y-2 p-3 rounded-xl border border-border bg-card">
+                    <select
+                      value={selectedExtraCompetencyTypeId}
+                      onChange={event => setSelectedExtraCompetencyTypeId(event.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-muted border border-border rounded-lg text-xs font-semibold text-foreground outline-none cursor-pointer"
+                    >
+                      <option value="">Select competency...</option>
+                      {availableExtraCompetencyTypes.map(type => <option key={type.id} value={type.id}>{type.title}</option>)}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleAddIndividualCompetency}
+                      disabled={!selectedExtraCompetencyTypeId}
+                      className="w-full px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold"
+                    >
+                      Add Manual Competency
+                    </button>
+                    <p className="text-[10px] text-muted-foreground leading-normal">
+                      This creates a manual competency record for this person without changing any persona history.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-3 border-t border-border pt-4">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Linked Actions</h3>
                   {selectedPersonActions.length === 0 ? (
                     <p className="text-xs text-muted-foreground italic">No actions directly linked to this person.</p>
@@ -4222,9 +5238,10 @@ export default function CompetencyMatrixPage() {
                         <span className="h-[1px] flex-1 bg-border/60" />
                       </div>
                       <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
-                        {group.rows.map(({ type, cell, evidenceCount, openActionCount }) => {
+                        {group.rows.map(({ type, cell, expectation, evidenceCount, openActionCount }) => {
                           const isActive = activeCell && activeCell.person.id === selectedPerson.id && activeCell.competencyType.id === type.id;
                           const isBulkSelected = workspaceSelection.isSelected(type.id);
+                          const effectiveStatus = expectation?.status || cell?.status || 'Missing';
                           return (
                             <div
                               key={type.id}
@@ -4268,6 +5285,23 @@ export default function CompetencyMatrixPage() {
                                     </span>
                                   )}
                                 </div>
+                                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                  {expectation?.requirementLevel && (
+                                    <span className="px-1.5 py-0.5 rounded-full border border-border bg-muted text-[9px] font-bold uppercase text-muted-foreground">
+                                      {expectation.requirementLevel}
+                                    </span>
+                                  )}
+                                  {expectation && (
+                                    <span className={`px-1.5 py-0.5 rounded-full border text-[9px] font-bold uppercase ${personaGapClass(expectation.gapStatus)}`}>
+                                      {personaGapLabel(expectation.gapStatus)}
+                                    </span>
+                                  )}
+                                  {expectation && (
+                                    <span className="px-1.5 py-0.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 text-[9px] font-bold uppercase text-indigo-700 dark:text-indigo-300">
+                                      {expectation.source === 'persona+manual' ? 'Persona + record' : expectation.source === 'persona' ? 'Persona expected' : 'Manual'}
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="flex items-center gap-3 mt-1.5 text-[10px] text-muted-foreground">
                                   {cell?.record?.expiry_date ? (
                                     <span className="flex items-center gap-1">
@@ -4288,9 +5322,14 @@ export default function CompetencyMatrixPage() {
                                     </span>
                                   )}
                                 </div>
+                                {expectation?.explanation && (
+                                  <p className="text-[10px] text-muted-foreground mt-2 leading-normal line-clamp-2">
+                                    {expectation.explanation}
+                                  </p>
+                                )}
                               </button>
-                              <span className={`px-2 py-0.5 rounded-full border text-[9px] font-bold shrink-0 ${statusClass(cell?.status || 'Missing')}`}>
-                                {cell?.status || 'Missing'}
+                              <span className={`px-2 py-0.5 rounded-full border text-[9px] font-bold shrink-0 ${statusClass(effectiveStatus)}`}>
+                                {effectiveStatus}
                               </span>
                             </div>
                           );
@@ -4360,6 +5399,28 @@ export default function CompetencyMatrixPage() {
                   </form>
 
                   {formMessage && <p className="text-[10px] text-muted-foreground border border-border bg-muted/20 rounded-lg p-2 leading-normal shrink-0">{formMessage}</p>}
+
+                  {(() => {
+                    const currentExpectation = selectedPersonExpectations.find(
+                      expectation => expectation.competencyType.id === activeCell.competencyType.id
+                    );
+                    if (!currentExpectation) return null;
+                    return (
+                      <div className="rounded-xl border border-border bg-muted/20 p-3 space-y-2 shrink-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {currentExpectation.requirementLevel && (
+                            <span className="px-2 py-0.5 rounded-full border border-border bg-card text-[9px] font-bold uppercase text-muted-foreground">
+                              {currentExpectation.requirementLevel}
+                            </span>
+                          )}
+                          <span className={`px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase ${personaGapClass(currentExpectation.gapStatus)}`}>
+                            {personaGapLabel(currentExpectation.gapStatus)}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground leading-normal">{currentExpectation.explanation}</p>
+                      </div>
+                    );
+                  })()}
 
                   {/* Evidence Section */}
                   <div className="border-t border-border pt-3.5 space-y-2.5 text-xs flex-1 min-h-0 flex flex-col">

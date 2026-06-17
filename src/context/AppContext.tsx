@@ -46,6 +46,10 @@ import {
   ActionStatus,
   CompetencyRecord,
   CompetencyRecordDocument,
+  CompetencyPersona,
+  CompetencyPersonaItem,
+  PersonCompetencyPersona,
+  PersonCompetencyOverride,
   CompetencyTemplateItem,
   CompetencyType,
   ManagedCategory,
@@ -114,6 +118,10 @@ interface AppContextType {
   competencyTypes: CompetencyType[];
   competencyRecords: CompetencyRecord[];
   competencyRecordDocuments: CompetencyRecordDocument[];
+  competencyPersonas: CompetencyPersona[];
+  competencyPersonaItems: CompetencyPersonaItem[];
+  personCompetencyPersonas: PersonCompetencyPersona[];
+  personCompetencyOverrides: PersonCompetencyOverride[];
   requirementCompetencyTypes: RequirementCompetencyType[];
   requirementCategories: ManagedCategory[];
   evidenceCategories: ManagedCategory[];
@@ -173,6 +181,16 @@ interface AppContextType {
   uploadActionAttachment: (actionId: string, file: File) => Promise<EvidenceDocument>;
   upsertPerson: (input: Partial<Person> & Pick<Person, 'first_name' | 'last_name' | 'person_type'>) => Promise<Person>;
   upsertCompetencyType: (input: Partial<CompetencyType> & Pick<CompetencyType, 'title' | 'category'>) => Promise<CompetencyType>;
+  upsertCompetencyPersona: (input: Partial<CompetencyPersona> & Pick<CompetencyPersona, 'name'>) => Promise<CompetencyPersona>;
+  upsertCompetencyPersonaItem: (
+    input: Partial<CompetencyPersonaItem> & Pick<CompetencyPersonaItem, 'persona_id' | 'competency_type_id' | 'requirement_level'>
+  ) => Promise<CompetencyPersonaItem>;
+  deleteCompetencyPersonaItem: (itemId: string) => Promise<void>;
+  assignCompetencyPersonaToPerson: (personId: string, personaId: string, notes?: string | null) => Promise<PersonCompetencyPersona>;
+  removeCompetencyPersonaFromPerson: (assignmentId: string, notes?: string | null) => Promise<PersonCompetencyPersona>;
+  upsertPersonCompetencyOverride: (
+    input: Partial<PersonCompetencyOverride> & Pick<PersonCompetencyOverride, 'person_id' | 'competency_type_id' | 'override_type'>
+  ) => Promise<PersonCompetencyOverride>;
   importCompetencyTemplateItems: (items: CompetencyTemplateItem[]) => Promise<CompetencyType[]>;
   upsertCompetencyRecord: (input: Partial<CompetencyRecord> & Pick<CompetencyRecord, 'person_id' | 'competency_type_id'>) => Promise<CompetencyRecord>;
   linkDocumentToCompetencyRecord: (recordId: string, documentId: string) => Promise<void>;
@@ -275,6 +293,10 @@ const emptyCollections = {
   competencyTypes: [] as CompetencyType[],
   competencyRecords: [] as CompetencyRecord[],
   competencyRecordDocuments: [] as CompetencyRecordDocument[],
+  competencyPersonas: [] as CompetencyPersona[],
+  competencyPersonaItems: [] as CompetencyPersonaItem[],
+  personCompetencyPersonas: [] as PersonCompetencyPersona[],
+  personCompetencyOverrides: [] as PersonCompetencyOverride[],
   requirementCompetencyTypes: [] as RequirementCompetencyType[],
   requirementCategories: [] as ManagedCategory[],
   evidenceCategories: [] as ManagedCategory[],
@@ -345,6 +367,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [competencyTypes, setCompetencyTypes] = useState<CompetencyType[]>([]);
   const [competencyRecords, setCompetencyRecords] = useState<CompetencyRecord[]>([]);
   const [competencyRecordDocuments, setCompetencyRecordDocuments] = useState<CompetencyRecordDocument[]>([]);
+  const [competencyPersonas, setCompetencyPersonas] = useState<CompetencyPersona[]>([]);
+  const [competencyPersonaItems, setCompetencyPersonaItems] = useState<CompetencyPersonaItem[]>([]);
+  const [personCompetencyPersonas, setPersonCompetencyPersonas] = useState<PersonCompetencyPersona[]>([]);
+  const [personCompetencyOverrides, setPersonCompetencyOverrides] = useState<PersonCompetencyOverride[]>([]);
   const [requirementCompetencyTypes, setRequirementCompetencyTypes] = useState<RequirementCompetencyType[]>([]);
   const [requirementCategories, setRequirementCategories] = useState<ManagedCategory[]>([]);
   const [evidenceCategories, setEvidenceCategories] = useState<ManagedCategory[]>([]);
@@ -419,6 +445,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setCompetencyTypes([]);
     setCompetencyRecords([]);
     setCompetencyRecordDocuments([]);
+    setCompetencyPersonas([]);
+    setCompetencyPersonaItems([]);
+    setPersonCompetencyPersonas([]);
+    setPersonCompetencyOverrides([]);
     setRequirementCompetencyTypes([]);
     setRequirementCategories([]);
     setEvidenceCategories([]);
@@ -543,6 +573,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dbService.getImageAttachments()
     ]);
 
+    let competencyPersonaRows: CompetencyPersona[] = [];
+    let competencyPersonaItemRows: CompetencyPersonaItem[] = [];
+    let personCompetencyPersonaRows: PersonCompetencyPersona[] = [];
+    let personCompetencyOverrideRows: PersonCompetencyOverride[] = [];
+    try {
+      [
+        competencyPersonaRows,
+        competencyPersonaItemRows,
+        personCompetencyPersonaRows,
+        personCompetencyOverrideRows
+      ] = await Promise.all([
+        dbService.getCompetencyPersonas(),
+        dbService.getCompetencyPersonaItems(),
+        dbService.getPersonCompetencyPersonas(),
+        dbService.getPersonCompetencyOverrides()
+      ]);
+    } catch (error) {
+      console.error('Competency persona data is unavailable. Core competency records will continue loading.', error);
+    }
+
     let assetRows: Asset[] = [];
     let assetCategoryRows: AssetCategory[] = [];
     let checkTypeRows: AssetCheckType[] = [];
@@ -599,6 +649,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setCompetencyTypes(competencyTypeRows);
     setCompetencyRecords(competencyRecordRows);
     setCompetencyRecordDocuments(competencyRecordDocumentRows);
+    setCompetencyPersonas(competencyPersonaRows);
+    setCompetencyPersonaItems(competencyPersonaItemRows);
+    setPersonCompetencyPersonas(personCompetencyPersonaRows);
+    setPersonCompetencyOverrides(personCompetencyOverrideRows);
     setRequirementCompetencyTypes(requirementCompetencyTypeRows);
     setRequirementCategories(requirementCategoryRows);
     setEvidenceCategories(evidenceCategoryRows);
@@ -685,6 +739,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setCompetencyTypes(emptyCollections.competencyTypes);
       setCompetencyRecords(emptyCollections.competencyRecords);
       setCompetencyRecordDocuments(emptyCollections.competencyRecordDocuments);
+      setCompetencyPersonas(emptyCollections.competencyPersonas);
+      setCompetencyPersonaItems(emptyCollections.competencyPersonaItems);
+      setPersonCompetencyPersonas(emptyCollections.personCompetencyPersonas);
+      setPersonCompetencyOverrides(emptyCollections.personCompetencyOverrides);
       setRequirementCompetencyTypes(emptyCollections.requirementCompetencyTypes);
       setRequirementCategories(emptyCollections.requirementCategories);
       setEvidenceCategories(emptyCollections.evidenceCategories);
@@ -1333,6 +1391,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return competencyType;
   };
 
+  const upsertCompetencyPersona: AppContextType['upsertCompetencyPersona'] = async (input) => {
+    const persona = await dbService.upsertCompetencyPersona(input);
+    await loadWorkspaceCollections();
+    return persona;
+  };
+
+  const upsertCompetencyPersonaItem: AppContextType['upsertCompetencyPersonaItem'] = async (input) => {
+    const item = await dbService.upsertCompetencyPersonaItem(input);
+    await loadWorkspaceCollections();
+    return item;
+  };
+
+  const deleteCompetencyPersonaItem: AppContextType['deleteCompetencyPersonaItem'] = async (itemId) => {
+    await dbService.deleteCompetencyPersonaItem(itemId);
+    await loadWorkspaceCollections();
+  };
+
+  const assignCompetencyPersonaToPerson: AppContextType['assignCompetencyPersonaToPerson'] = async (personId, personaId, notes) => {
+    const assignment = await dbService.assignCompetencyPersonaToPerson(personId, personaId, notes);
+    await loadWorkspaceCollections();
+    return assignment;
+  };
+
+  const removeCompetencyPersonaFromPerson: AppContextType['removeCompetencyPersonaFromPerson'] = async (assignmentId, notes) => {
+    const assignment = await dbService.removeCompetencyPersonaFromPerson(assignmentId, notes);
+    await loadWorkspaceCollections();
+    return assignment;
+  };
+
+  const upsertPersonCompetencyOverride: AppContextType['upsertPersonCompetencyOverride'] = async (input) => {
+    const override = await dbService.upsertPersonCompetencyOverride(input);
+    await loadWorkspaceCollections();
+    return override;
+  };
+
   const importCompetencyTemplateItems: AppContextType['importCompetencyTemplateItems'] = async (items) => {
     const existingKeys = new Set(
       competencyTypes.map(type => `${type.title.trim().toLowerCase()}::${type.category.trim().toLowerCase()}`)
@@ -1674,6 +1767,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         competencyTypes,
         competencyRecords,
         competencyRecordDocuments,
+        competencyPersonas,
+        competencyPersonaItems,
+        personCompetencyPersonas,
+        personCompetencyOverrides,
         requirementCompetencyTypes,
         requirementCategories,
         evidenceCategories,
@@ -1714,6 +1811,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         uploadActionAttachment,
         upsertPerson,
         upsertCompetencyType,
+        upsertCompetencyPersona,
+        upsertCompetencyPersonaItem,
+        deleteCompetencyPersonaItem,
+        assignCompetencyPersonaToPerson,
+        removeCompetencyPersonaFromPerson,
+        upsertPersonCompetencyOverride,
         importCompetencyTemplateItems,
         upsertCompetencyRecord,
         linkDocumentToCompetencyRecord,

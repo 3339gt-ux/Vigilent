@@ -104,6 +104,10 @@ export type CompetencyCategory =
   | 'Industry Certification'
   | 'Other';
 export type CompetencyStatus = 'Valid' | 'Expiring Soon' | 'Expired' | 'Missing' | 'Not Required';
+export type CompetencyPersonaRequirementLevel = 'required' | 'optional' | 'conditional';
+export type CompetencyPersonaStatus = 'active' | 'archived';
+export type PersonCompetencyPersonaStatus = 'active' | 'removed';
+export type PersonCompetencyOverrideType = 'suppressed' | 'not_applicable';
 export type ActionUpdateType =
   | 'Note'
   | 'Progress Update'
@@ -399,6 +403,63 @@ export interface RequirementCompetencyType {
   competency_type_id: string;
   linked_by: string | null;
   linked_at: string;
+}
+
+export interface CompetencyPersona {
+  id: string;
+  organisation_id: string;
+  name: string;
+  description: string | null;
+  category_tags: string[];
+  role_tags: string[];
+  status: CompetencyPersonaStatus;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  archived_at?: string | null;
+}
+
+export interface CompetencyPersonaItem {
+  id: string;
+  organisation_id: string;
+  persona_id: string;
+  competency_type_id: string;
+  requirement_level: CompetencyPersonaRequirementLevel;
+  validity_period_months_override?: number | null;
+  warning_days_override?: number | null;
+  notes: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PersonCompetencyPersona {
+  id: string;
+  organisation_id: string;
+  person_id: string;
+  persona_id: string;
+  status: PersonCompetencyPersonaStatus;
+  notes: string | null;
+  assigned_at: string;
+  assigned_by: string | null;
+  removed_at?: string | null;
+  removed_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PersonCompetencyOverride {
+  id: string;
+  organisation_id: string;
+  person_id: string;
+  persona_id: string | null;
+  competency_type_id: string;
+  override_type: PersonCompetencyOverrideType;
+  reason: string | null;
+  active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface CompetencyTemplateItem {

@@ -8,7 +8,7 @@ This report is based on inspection of the current codebase at the accepted dashb
 
 - Dashboard and readiness surfaces in `src/app/dashboard/page.tsx`.
 - Requirements lifecycle, template imports, evidence criteria, linked documents, linked competencies, linked actions, archive/inactive views, and action drawers in `src/app/dashboard/requirements/page.tsx`.
-- People Matrix and Competency Registry in `src/app/dashboard/competencies/page.tsx`.
+- People Matrix, Competency Registry, and competency personas/templates in `src/app/dashboard/competencies/page.tsx`.
 - Evidence Vault upload, metadata, archive, private signed open flow, and backlinks in `src/app/dashboard/vault/page.tsx`.
 - Asset Matrix, asset categories, assignments, checks, evidence links, and history in `src/app/dashboard/matrix/page.tsx`.
 - Audit Pack Builder in `src/app/dashboard/audit-packs/page.tsx`.
@@ -360,7 +360,7 @@ Partly supported:
 Missing or awkward:
 
 - No employment status history.
-- No role-to-competency rule model.
+- A competency persona/template foundation now exists for local testing, but hosted Supabase migration/RLS verification is still required before it can be treated as production-ready.
 - No person external ID uniqueness beyond employee number conventions.
 - Rich person status requires the hosted Supabase migration draft before production persistence can be verified.
 
@@ -380,17 +380,17 @@ What works:
 
 Partly supported:
 
-- "Required for this person" is inferred from matrix/type presence, records, and Not Required status. There is no first-class assignment table saying which competency applies to which role/person.
+- "Required for this person" is now partly supported through competency personas/templates and per-person overrides, but this is still a foundation rather than a complete rule engine.
 - Archived/inactive competency types can be hidden, but applicability rules are limited.
 
 Missing or awkward:
 
-- A person with a role may need only a subset of competency types; today the matrix can still appear as if all active types apply unless marked Not Required.
+- Automatic role inheritance is still intentionally conservative. Personas can be assigned explicitly and bulk-applied by role/department preview, but they are not silently inherited on every role change.
 - Bulk import of assignments and records must avoid creating accidental requirements for every person.
 
 Before bulk import:
 
-- Add person-to-competency assignment import semantics or a role/profile assignment layer.
+- Extend the persona foundation into import-ready assignment semantics with explicit source, preview, and rollback behaviour.
 - Treat Not Required as an explicit assignment outcome, not a data cleanup shortcut.
 
 ### Competency Registry
@@ -410,7 +410,7 @@ Partly supported:
 Missing or awkward:
 
 - No production migration for all registry convenience fields.
-- No role-based competency templates.
+- A competency persona/template foundation now exists, including multiple personas per person and required/optional/conditional persona items, but remote persistence still depends on the pending migration draft.
 
 Before bulk import:
 
