@@ -30,6 +30,8 @@ What Stage 3B does **not** include:
 - hosted Supabase migration changes
 - storage, auth, or RLS changes
 
+Stage 3C design work is documented separately in [docs/EVIDENCE_PACK_BUILDER_PRIVATE_EXPORT_DESIGN.md](C:/Vigilen/docs/EVIDENCE_PACK_BUILDER_PRIVATE_EXPORT_DESIGN.md).
+
 ## Local draft behaviour
 
 Pack drafts are stored locally in the browser and scoped by user and organisation:
