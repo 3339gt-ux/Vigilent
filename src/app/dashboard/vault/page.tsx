@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
@@ -14,6 +14,7 @@ import { Action, EvidenceDocument, Asset, RecordImageAttachment } from '@/lib/ty
 import { ImageLightbox } from '@/components/media/ImageLightbox';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import { calculateEvidenceFileHash } from '@/lib/evidenceStorage';
+import { getDuplicateChecksEnabled, setDuplicateChecksEnabled } from '@/lib/userPreferences';
 import {
   Search,
   Filter,
@@ -54,6 +55,7 @@ import {
   usePersistentViewState
 } from '@/components/FilterControls';
 import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 export default function EvidenceVault() {
   const {
@@ -117,6 +119,7 @@ export default function EvidenceVault() {
   const [density, setDensity] = useState<'comfortable' | 'compact'>('comfortable');
   const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
+  const [duplicateChecksEnabled, setDuplicateChecksEnabledState] = useState(() => getDuplicateChecksEnabled());
   const { interfaceDetailLevel } = useInterfaceDetailLevel();
 
   const activeFiltersCount = useMemo(() => {
@@ -129,6 +132,15 @@ export default function EvidenceVault() {
       showOnlyStarredDocs
     ].filter(Boolean).length;
   }, [selectedCategory, selectedStatus, linkFilter, docTypeFilter, uploadedByFilter, showOnlyStarredDocs]);
+
+  useEffect(() => {
+    const handleUpdate = (event: Event) => {
+      const customEvent = event as CustomEvent<{ enabled?: boolean }>;
+      setDuplicateChecksEnabledState(customEvent.detail?.enabled ?? getDuplicateChecksEnabled());
+    };
+    window.addEventListener('lumen-duplicate-checks-updated', handleUpdate);
+    return () => window.removeEventListener('lumen-duplicate-checks-updated', handleUpdate);
+  }, []);
   const [bulkCategory, setBulkCategory] = useState('');
   const [bulkStatus, setBulkStatus] = useState('');
   const [bulkReviewDate, setBulkReviewDate] = useState('');
@@ -367,6 +379,7 @@ export default function EvidenceVault() {
     onConfirm: () => void;
     onCancel: () => void;
   } | null>(null);
+  useBodyScrollLock(Boolean(showUploadModal || largePreviewDoc || duplicateWarning));
   const [newCustomCategory, setNewCustomCategory] = useState('');
   const [categoryMessage, setCategoryMessage] = useState('');
   const [isCatDropdownOpen, setIsCatDropdownOpen] = useState(false);
@@ -459,8 +472,8 @@ export default function EvidenceVault() {
     setUploadSuccess('');
     try {
       const fileHash = await calculateEvidenceFileHash(newFile);
-      const duplicates = await findPossibleDuplicateDocuments(newFile, fileHash);
-      if (duplicates.length > 0) {
+      const duplicates = duplicateChecksEnabled ? await findPossibleDuplicateDocuments(newFile, fileHash) : [];
+      if (duplicateChecksEnabled && duplicates.length > 0) {
         setIsUploading(false);
         setDuplicateWarning({
           file: newFile,
@@ -1720,6 +1733,32 @@ export default function EvidenceVault() {
         </p>
       </details>
 
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-border bg-card p-3 text-xs">
+        <div className="flex items-start gap-2">
+          <AlertCircle className={`w-4 h-4 mt-0.5 shrink-0 ${duplicateChecksEnabled ? 'text-emerald-600 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`} />
+          <div>
+            <p className="font-bold text-foreground">Duplicate checking {duplicateChecksEnabled ? 'enabled' : 'disabled'}</p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              {duplicateChecksEnabled
+                ? 'Uploads are checked for matching file hash and similar metadata before saving.'
+                : 'Duplicate checks are off. Review files carefully before uploading.'}
+            </p>
+          </div>
+        </div>
+        <label className="inline-flex items-center gap-2 font-bold text-foreground cursor-pointer">
+          <input
+            type="checkbox"
+            checked={duplicateChecksEnabled}
+            onChange={event => {
+              setDuplicateChecksEnabled(event.target.checked);
+              setDuplicateChecksEnabledState(event.target.checked);
+            }}
+            className="accent-indigo-600 w-4 h-4"
+          />
+          Check duplicates before upload
+        </label>
+      </div>
+
       <EvidenceDropzone
         label="Drop evidence files anywhere here or choose files"
         helperText={`Creates private Evidence Vault documents in General by default. Configure metadata and links after upload. Max ${formatMaxEvidenceUploadSize()}.`}
@@ -1727,7 +1766,7 @@ export default function EvidenceVault() {
         multiple
         onUpload={uploadVaultFile}
         onComplete={docs => setBulkConfigDocs(docs)}
-        findDuplicates={findPossibleDuplicateDocuments}
+        findDuplicates={duplicateChecksEnabled ? findPossibleDuplicateDocuments : undefined}
         onOpenExistingDocument={async (document) => {
           const url = await getDocumentSignedUrl(document.id);
           window.open(url, '_blank', 'noopener,noreferrer');
@@ -2534,7 +2573,6 @@ export default function EvidenceVault() {
                                         />
                                       </div>
                                       <span className="text-[10px] text-muted-foreground block truncate">{doc.file_name}</span>
-                                      {doc.file_hash && <span className="text-[9px] text-amber-500 font-bold">Duplicate checks enabled</span>}
                                       {(vaultView === 'archive' || density === 'comfortable') && (
                                         <span className="text-[9px] text-muted-foreground block">
                                           Links: {linkSummary.requirementCount} req, {linkSummary.criterionCount} criteria, {linkSummary.actionCount} actions, {linkSummary.competencyCount} competencies

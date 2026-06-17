@@ -344,6 +344,7 @@ export interface Person {
   start_date: string | null;
   end_date: string | null;
   active: boolean;
+  person_status?: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;

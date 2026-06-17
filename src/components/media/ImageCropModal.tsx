@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { ZoomIn, RotateCw, Check, X, RefreshCw } from 'lucide-react';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 interface ImageCropModalProps {
   imageSrc: string; // dataUrl or url
@@ -23,6 +24,7 @@ export function ImageCropModal({
   const [aspectRatio, setAspectRatio] = useState<string>(preferredAspectRatio);
   const [isDragging, setIsDragging] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  useBodyScrollLock(true);
   const dragStart = useRef({ x: 0, y: 0 });
 
   const containerRef = useRef<HTMLDivElement>(null);

@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { evidenceStorageBucket, isDemoMode, requireDemoMode, requireProductionEnv, signedUrlTtlSeconds } from './env';
 import { throwSupabaseError } from './supabaseDiagnostics';
+import { getPersonOperationalStatus, personStatusToActiveFlag } from './personStatus';
 import {
   buildEvidenceStoragePath,
   calculateEvidenceFileHash,
@@ -3675,16 +3676,18 @@ export const dbService = {
   async upsertPerson(input: Partial<Person> & Pick<Person, 'first_name' | 'last_name' | 'person_type'>): Promise<Person> {
     const orgId = shouldUseSupabase() ? await getCurrentSupabaseOrganizationId() : MOCK_ORG.id;
     const displayName = input.display_name || `${input.first_name} ${input.last_name}`.trim();
+    const personStatus = getPersonOperationalStatus({ ...input, active: input.active ?? true });
     const payload = {
       ...input,
       organisation_id: orgId,
       display_name: displayName,
-      active: input.active ?? true,
+      person_status: personStatus,
+      active: personStatusToActiveFlag(personStatus),
       updated_at: nowIso()
     };
 
     const before = input.id ? await fetchRecordById('people', input.id) : null;
-    let after: Person;
+    let after: Person | null = null;
 
     if (shouldUseSupabase()) {
       const { data, error } = await supabase!
@@ -3692,18 +3695,36 @@ export const dbService = {
         .upsert([payload])
         .select()
         .single();
-      if (error) throwSupabaseError('people.upsert active organisation', error);
-      await this.logActivity('Person Saved', `Saved person "${data.display_name}".`);
-      after = data;
+      if (error) {
+        const message = `${error.message || ''} ${error.details || ''}`.toLowerCase();
+        if (error.code === '42703' || error.code === 'PGRST204' || message.includes('person_status')) {
+          const fallbackPayload = { ...payload } as Partial<typeof payload>;
+          delete fallbackPayload.person_status;
+          const { data: fallbackData, error: fallbackError } = await supabase!
+            .from('people')
+            .upsert([fallbackPayload])
+            .select()
+            .single();
+          if (fallbackError) throwSupabaseError('people.upsert active organisation', fallbackError);
+          await this.logActivity('Person Saved', `Saved person "${fallbackData.display_name}".`);
+          after = { ...fallbackData, person_status: personStatus };
+        } else {
+          throwSupabaseError('people.upsert active organisation', error);
+        }
+      } else {
+        await this.logActivity('Person Saved', `Saved person "${data.display_name}".`);
+        after = data;
+      }
     } else {
       const people = getStorageItem('vigilen_people', MOCK_PEOPLE);
       if (input.id) {
         const idx = people.findIndex((person: Person) => person.id === input.id);
         if (idx !== -1) {
-          after = { ...people[idx], ...payload };
-          people[idx] = after;
+          const savedPerson = { ...people[idx], ...payload };
+          after = savedPerson;
+          people[idx] = savedPerson;
           setStorageItem('vigilen_people', people);
-          await this.logActivity('Person Saved', `Saved person "${after.display_name}".`);
+          await this.logActivity('Person Saved', `Saved person "${savedPerson.display_name}".`);
         } else {
           throw new Error('Person not found');
         }
@@ -3721,7 +3742,8 @@ export const dbService = {
           person_type: input.person_type,
           start_date: input.start_date || null,
           end_date: input.end_date || null,
-          active: input.active ?? true,
+          active: payload.active,
+          person_status: personStatus,
           notes: input.notes || null,
           created_at: nowIso(),
           updated_at: nowIso()
@@ -3730,6 +3752,10 @@ export const dbService = {
         setStorageItem('vigilen_people', people);
         await this.logActivity('Person Added', `Created person "${after.display_name}".`);
       }
+    }
+
+    if (!after) {
+      throw new Error('Person save failed.');
     }
 
     let actionType = 'person_edited';

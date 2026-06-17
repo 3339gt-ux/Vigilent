@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { calculateEvidenceFileHash, evidenceAcceptAttribute, formatMaxEvidenceUploadSize, validateEvidenceFile } from '@/lib/evidenceStorage';
 import type { EvidenceDocument } from '@/lib/types';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 export type EvidenceUploadQueueItem = {
   id: string;
@@ -76,6 +77,7 @@ export function EvidenceDropzone({
     matches: EvidenceDocument[];
     resolve: (decision: 'upload' | 'skip' | 'cancel-all') => void;
   } | null>(null);
+  useBodyScrollLock(Boolean(duplicateDecision));
 
   const updateItem = (id: string, patch: Partial<EvidenceUploadQueueItem>) => {
     setQueue(current => current.map(item => item.id === id ? { ...item, ...patch } : item));

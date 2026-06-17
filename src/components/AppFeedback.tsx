@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { AlertTriangle, CheckCircle2, X } from 'lucide-react';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 export type ToastState = {
   type: 'success' | 'error' | 'info';
@@ -47,6 +48,7 @@ export function InlineToast({ toast, onDismiss }: { toast: ToastState; onDismiss
 
 export function ConfirmDialog({ request, onCancel }: { request: ConfirmRequest; onCancel: () => void }) {
   const [busy, setBusy] = React.useState(false);
+  useBodyScrollLock(Boolean(request));
 
   React.useEffect(() => {
     if (!request) return;

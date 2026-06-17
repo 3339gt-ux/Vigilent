@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useApp, VygilenceTheme, InterfaceStyle, ThemePreference } from '@/context/AppContext';
+import { useApp, VygilenceTheme, InterfaceStyle } from '@/context/AppContext';
 import { isDemoMode, evidenceStorageBucket } from '@/lib/env';
-import { Save, ShieldAlert, Key, Bell, User, CheckCircle2, Copy, Check, Palette, Sun, Moon, CircleDot, ArrowRight, Eye, Sparkles, ShieldCheck, Activity } from 'lucide-react';
+import { Save, ShieldAlert, Key, Bell, User, CheckCircle2, Copy, Check, Palette, Sun, Moon, CircleDot, Eye, Sparkles, ShieldCheck, Activity } from 'lucide-react';
 import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
+import { getDuplicateChecksEnabled, setDuplicateChecksEnabled } from '@/lib/userPreferences';
 
 export default function SettingsPage() {
   const {
@@ -52,6 +53,7 @@ export default function SettingsPage() {
   const [alertDays90, setAlertDays90] = useState(false);
   const [emailAlerts, setEmailAlerts] = useState(true);
   const [smsAlerts, setSmsAlerts] = useState(false);
+  const [duplicateChecksEnabled, setDuplicateChecksEnabledState] = useState(() => getDuplicateChecksEnabled());
 
   // API Key States
   const [apiKey, setApiKey] = useState('vig_demo_c10a4e3ff98d5c64c781e002da76e');
@@ -334,6 +336,26 @@ export default function SettingsPage() {
                   type="checkbox"
                   checked={smsAlerts}
                   onChange={e => setSmsAlerts(e.target.checked)}
+                  className="accent-indigo-600 w-4 h-4"
+                />
+              </label>
+            </div>
+
+            <div className="space-y-3 border-t border-border/60 pt-4">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-2">Evidence Upload Safety</span>
+              <label htmlFor="duplicate-checks" className="flex items-center justify-between gap-3 p-2.5 bg-muted/40 hover:bg-muted/80 rounded-lg cursor-pointer border border-border/50">
+                <div className="space-y-0.5">
+                  <span className="font-bold text-foreground block">Duplicate checks before upload</span>
+                  <span className="text-[10px] text-muted-foreground block">Enabled by default. Turn off only when testing or deliberately replacing records.</span>
+                </div>
+                <input
+                  id="duplicate-checks"
+                  type="checkbox"
+                  checked={duplicateChecksEnabled}
+                  onChange={event => {
+                    setDuplicateChecksEnabled(event.target.checked);
+                    setDuplicateChecksEnabledState(event.target.checked);
+                  }}
                   className="accent-indigo-600 w-4 h-4"
                 />
               </label>

@@ -25,6 +25,7 @@ import type {
   Requirement,
   RequirementEvidenceCriterion
 } from '@/lib/types';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 type BulkUploadConfigurationPanelProps = {
   documents: EvidenceDocument[];
@@ -119,6 +120,7 @@ export function BulkUploadConfigurationPanel(props: BulkUploadConfigurationPanel
     onLinkAction,
     onLinkCompetencyRecord
   } = props;
+  useBodyScrollLock(documents.length > 0);
 
   const [forms, setForms] = useState<Record<string, FormState>>(() =>
     Object.fromEntries(documents.map(doc => [doc.id, formFromDoc(doc, props)]))

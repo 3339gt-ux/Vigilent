@@ -5,6 +5,7 @@ import { Image as ImageIcon, Trash2, Edit2, Star, Eye, Upload, AlertCircle, Refr
 import { ImageCropModal } from './ImageCropModal';
 import { ImageLightbox } from './ImageLightbox';
 import { useApp } from '@/context/AppContext';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 interface ImageAttachmentManagerProps {
   entityType: string;
@@ -79,6 +80,7 @@ export function ImageAttachmentManager({
 
   // Lightbox Flow
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  useBodyScrollLock(Boolean(editingDetailsId || cropSrc || lightboxIndex !== null));
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageRoleKey = imageRoleOptions.map((option) => option.value).join('|');

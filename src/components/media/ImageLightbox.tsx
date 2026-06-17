@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ZoomIn, ZoomOut, Maximize2, Download, X, ChevronLeft, ChevronRight, FileText, User, Calendar, Tag, Shield } from 'lucide-react';
 import { RecordImageAttachment } from '@/lib/types';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 interface ImageLightboxProps {
   attachments: RecordImageAttachment[];
@@ -22,6 +23,7 @@ export function ImageLightbox({
   const [secureUrl, setSecureUrl] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  useBodyScrollLock(true);
 
   const currentAttachment = attachments[currentIndex];
 

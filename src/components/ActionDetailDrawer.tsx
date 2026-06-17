@@ -4,6 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { ImageAttachmentManager } from '@/components/media/ImageAttachmentManager';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import {
   Action,
   ActionDocument,
@@ -57,6 +58,7 @@ export function ActionDetailDrawer({
   onFindDuplicates
 }: ActionDetailDrawerProps) {
   const { organization } = useApp();
+  useBodyScrollLock(Boolean(action));
   const [updateType, setUpdateType] = useState<ActionUpdateType>('Note');
   const [updateNote, setUpdateNote] = useState('');
   const [selectedDocumentId, setSelectedDocumentId] = useState('');

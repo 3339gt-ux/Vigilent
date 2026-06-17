@@ -349,6 +349,7 @@ What works:
 - `people` table supports employee number, names, email, department, role, person type, active state, start/end date, notes, organisation scope, and timestamps.
 - Competency Matrix person drawer allows person profile review and management.
 - People are used by competency records and search.
+- Core usability hardening adds operational person statuses such as Active, On Leave, Temporarily Inactive, Suspended, Inactive, and Archived / Left Business while preserving the legacy active/inactive flag for compatibility.
 
 Partly supported:
 
@@ -361,6 +362,7 @@ Missing or awkward:
 - No employment status history.
 - No role-to-competency rule model.
 - No person external ID uniqueness beyond employee number conventions.
+- Rich person status requires the hosted Supabase migration draft before production persistence can be verified.
 
 Before bulk import:
 
@@ -443,6 +445,7 @@ Before bulk import:
 What works:
 
 - Upload validates files and creates private evidence documents.
+- Duplicate checking remains enabled by default, but users can disable it from Settings or the Evidence Vault upload area for controlled testing or deliberate replacement workflows.
 - Metadata includes category, title, issue/expiry/review/training/calibration dates, tags, custom metadata, original/safe filename, storage path, MIME type, size, uploaded_by, organisation_id, and status.
 - Documents link to requirements, evidence criteria, actions, competency records, and asset checks.
 - Detail/preview panels expose metadata and links.

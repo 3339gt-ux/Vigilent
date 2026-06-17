@@ -12,9 +12,20 @@ import { COMPETENCY_TEMPLATE_PACKS } from '@/lib/competencyTemplates';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import { exportCsv, exportDateStamp, ExportRow } from '@/lib/exportData';
 import type { Action, CompetencyCategory, CompetencyRecord, CompetencyStatus, CompetencyType, Person, PersonType, RequirementRiskLevel } from '@/lib/types';
+import {
+  getPersonOperationalStatus,
+  isPersonOperationallyActive,
+  personStatusClass,
+  personStatusToActiveFlag,
+  PERSON_STATUS_FILTER_OPTIONS,
+  PERSON_STATUS_OPTIONS,
+  PersonOperationalStatus,
+  PersonStatusFilter
+} from '@/lib/personStatus';
 import { Link as LinkIcon, Plus, Search, Upload, UserCheck, X, ArrowLeft, Calendar, Paperclip, AlertCircle, Download } from 'lucide-react';
 import { isDemoMode } from '@/lib/env';
 import { ConfirmDialog, ConfirmRequest, InlineToast, ToastState } from '@/components/AppFeedback';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import {
   useFilterFavourites,
   useSavedViews,
@@ -107,6 +118,7 @@ export default function CompetencyMatrixPage() {
   // Premium filtering and sorting states
   const [roleFilter, setRoleFilter] = useState('All');
   const [personTypeFilter, setPersonTypeFilter] = useState('All');
+  const [personOperationalStatusFilter, setPersonOperationalStatusFilter] = useState<PersonStatusFilter>('Current');
   const [statusFilter, setStatusFilter] = useState('All');
   const [showOnlyMissingExpired, setShowOnlyMissingExpired] = useState(false);
   const [showOnlyExpiringSoon, setShowOnlyExpiringSoon] = useState(false);
@@ -125,6 +137,7 @@ export default function CompetencyMatrixPage() {
       departmentFilter !== 'All',
       roleFilter !== 'All',
       personTypeFilter !== 'All',
+      personOperationalStatusFilter !== 'Current',
       typeFilter !== 'All',
       statusFilter !== 'All',
       showOnlyMissingExpired,
@@ -132,7 +145,7 @@ export default function CompetencyMatrixPage() {
       showOnlyFavourites,
       showOnlyPeopleWithGaps
     ].filter(Boolean).length;
-  }, [departmentFilter, roleFilter, personTypeFilter, typeFilter, statusFilter, showOnlyMissingExpired, showOnlyExpiringSoon, showOnlyFavourites, showOnlyPeopleWithGaps]);
+  }, [departmentFilter, roleFilter, personTypeFilter, personOperationalStatusFilter, typeFilter, statusFilter, showOnlyMissingExpired, showOnlyExpiringSoon, showOnlyFavourites, showOnlyPeopleWithGaps]);
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [workspaceSearch, setWorkspaceSearch] = useState('');
@@ -149,6 +162,7 @@ export default function CompetencyMatrixPage() {
     role: '',
     person_type: 'Employee' as PersonType,
     active: true,
+    person_status: 'Active' as PersonOperationalStatus,
     start_date: '',
     end_date: '',
     notes: ''
@@ -225,8 +239,13 @@ export default function CompetencyMatrixPage() {
   const [activeTab, setActiveTab] = useState<'matrix' | 'registry'>('matrix');
   const [selectedCompetencyId, setSelectedCompetencyId] = useState<string | null>(null);
   const [competencyWorkspaceTab, setCompetencyWorkspaceTab] = useState<'overview' | 'settings' | 'people' | 'evidence' | 'requirements' | 'actions' | 'history'>('overview');
+  const [competencyPeopleSearch, setCompetencyPeopleSearch] = useState('');
+  const [competencyPeoplePersonStatusFilter, setCompetencyPeoplePersonStatusFilter] = useState<PersonStatusFilter>('Current');
+  const [competencyPeopleRecordStatusFilter, setCompetencyPeopleRecordStatusFilter] = useState<'All' | CompetencyStatus>('All');
+  const [competencyPeopleSort, setCompetencyPeopleSort] = useState<'name' | 'person_status' | 'record_status' | 'expiry'>('name');
   const [isCreatingCompetency, setIsCreatingCompetency] = useState(false);
   const [showArchivedCompetencies, setShowArchivedCompetencies] = useState(false);
+  useBodyScrollLock(Boolean(activeCell || selectedPerson || selectedCompetencyId || isCreatingCompetency));
 
   // Registry Filters Setup
   const [registrySearch, setRegistrySearch] = useState('');
@@ -278,7 +297,14 @@ export default function CompetencyMatrixPage() {
   const canArchive = currentUserRole === 'Owner' || currentUserRole === 'Admin';
   const supportsCustomRegistryPeriods = isDemoMode;
 
-  const activePeople = useMemo(() => people.filter(person => person.active), [people]);
+  const activePeople = useMemo(() => {
+    return people.filter(person => {
+      const status = getPersonOperationalStatus(person);
+      if (personOperationalStatusFilter === 'All') return true;
+      if (personOperationalStatusFilter === 'Current') return isPersonOperationallyActive(status);
+      return status === personOperationalStatusFilter;
+    });
+  }, [people, personOperationalStatusFilter]);
   const activeTypes = useMemo(() => {
     return showArchivedCompetencies
       ? competencyTypes
@@ -524,6 +550,10 @@ export default function CompetencyMatrixPage() {
     updateUrlParams(activeTab, id);
     if (id) {
       setCompetencyWorkspaceTab('overview');
+      setCompetencyPeopleSearch('');
+      setCompetencyPeoplePersonStatusFilter('Current');
+      setCompetencyPeopleRecordStatusFilter('All');
+      setCompetencyPeopleSort('name');
     }
   };
 
@@ -755,7 +785,7 @@ export default function CompetencyMatrixPage() {
     user?.id || 'guest',
     organization?.id,
     'competency-people',
-    [search, departmentFilter, roleFilter, personTypeFilter, statusFilter, showOnlyMissingExpired, showOnlyExpiringSoon, showOnlyPeopleWithGaps, sortBy]
+    [search, departmentFilter, roleFilter, personTypeFilter, personOperationalStatusFilter, statusFilter, showOnlyMissingExpired, showOnlyExpiringSoon, showOnlyPeopleWithGaps, sortBy]
   );
   const peopleSelection = useBulkSelection(peoplePagination.paginatedItems);
   const selectedBulkPeople = sortedPeople.filter(person => peopleSelection.selectedIds.has(person.id));
@@ -832,6 +862,7 @@ export default function CompetencyMatrixPage() {
     setDepartmentFilter('All');
     setRoleFilter('All');
     setPersonTypeFilter('All');
+    setPersonOperationalStatusFilter('Current');
     setTypeFilter('All');
     setStatusFilter('All');
     setShowOnlyMissingExpired(false);
@@ -851,6 +882,7 @@ export default function CompetencyMatrixPage() {
       setDepartmentFilter(f.departmentFilter || 'All');
       setRoleFilter(f.roleFilter || 'All');
       setPersonTypeFilter(f.personTypeFilter || 'All');
+      setPersonOperationalStatusFilter((f.personOperationalStatusFilter as PersonStatusFilter) || 'Current');
       setTypeFilter(f.typeFilter || 'All');
       setStatusFilter(f.statusFilter || 'All');
       setShowOnlyMissingExpired(!!f.showOnlyMissingExpired);
@@ -870,6 +902,7 @@ export default function CompetencyMatrixPage() {
       departmentFilter,
       roleFilter,
       personTypeFilter,
+      personOperationalStatusFilter,
       typeFilter,
       statusFilter,
       showOnlyMissingExpired,
@@ -891,6 +924,7 @@ export default function CompetencyMatrixPage() {
     const deptMatch = (f.departmentFilter || 'All') === departmentFilter;
     const roleMatch = (f.roleFilter || 'All') === roleFilter;
     const pTypeMatch = (f.personTypeFilter || 'All') === personTypeFilter;
+    const personStatusMatch = ((f.personOperationalStatusFilter as PersonStatusFilter) || 'Current') === personOperationalStatusFilter;
     const catMatch = (f.typeFilter || 'All') === typeFilter;
     const statusMatch = (f.statusFilter || 'All') === statusFilter;
     const missExpMatch = (!!f.showOnlyMissingExpired) === showOnlyMissingExpired;
@@ -899,7 +933,7 @@ export default function CompetencyMatrixPage() {
     const gapsMatch = (!!f.showOnlyPeopleWithGaps) === showOnlyPeopleWithGaps;
     const sortMatch = (!f.sortBy) || f.sortBy === sortBy;
 
-    return !(searchMatch && deptMatch && roleMatch && pTypeMatch && catMatch && statusMatch && missExpMatch && expSoonMatch && favMatch && gapsMatch && sortMatch);
+    return !(searchMatch && deptMatch && roleMatch && pTypeMatch && personStatusMatch && catMatch && statusMatch && missExpMatch && expSoonMatch && favMatch && gapsMatch && sortMatch);
   }, [
     activeViewId,
     allViews,
@@ -907,6 +941,7 @@ export default function CompetencyMatrixPage() {
     departmentFilter,
     roleFilter,
     personTypeFilter,
+    personOperationalStatusFilter,
     typeFilter,
     statusFilter,
     showOnlyMissingExpired,
@@ -925,6 +960,7 @@ export default function CompetencyMatrixPage() {
       departmentFilter,
       roleFilter,
       personTypeFilter,
+      personOperationalStatusFilter,
       typeFilter,
       statusFilter,
       showOnlyMissingExpired,
@@ -942,6 +978,9 @@ export default function CompetencyMatrixPage() {
       if (typeof stored.departmentFilter === 'string') setDepartmentFilter(stored.departmentFilter);
       if (typeof stored.roleFilter === 'string') setRoleFilter(stored.roleFilter);
       if (typeof stored.personTypeFilter === 'string') setPersonTypeFilter(stored.personTypeFilter);
+      if (typeof stored.personOperationalStatusFilter === 'string' && PERSON_STATUS_FILTER_OPTIONS.includes(stored.personOperationalStatusFilter as PersonStatusFilter)) {
+        setPersonOperationalStatusFilter(stored.personOperationalStatusFilter as PersonStatusFilter);
+      }
       if (typeof stored.typeFilter === 'string') setTypeFilter(stored.typeFilter);
       if (typeof stored.statusFilter === 'string') setStatusFilter(stored.statusFilter);
       if (typeof stored.showOnlyMissingExpired === 'boolean') setShowOnlyMissingExpired(stored.showOnlyMissingExpired);
@@ -959,6 +998,7 @@ export default function CompetencyMatrixPage() {
       departmentFilter,
       roleFilter,
       personTypeFilter,
+      personOperationalStatusFilter,
       typeFilter,
       statusFilter,
       showOnlyMissingExpired,
@@ -1069,6 +1109,14 @@ export default function CompetencyMatrixPage() {
         onClear: () => setPersonTypeFilter('All')
       });
     }
+    if (personOperationalStatusFilter !== 'Current') {
+      chips.push({
+        key: 'personOperationalStatus',
+        label: 'Person Status',
+        valueLabel: personOperationalStatusFilter,
+        onClear: () => setPersonOperationalStatusFilter('Current')
+      });
+    }
     if (typeFilter !== 'All') {
       chips.push({
         key: 'category',
@@ -1123,6 +1171,7 @@ export default function CompetencyMatrixPage() {
     departmentFilter,
     roleFilter,
     personTypeFilter,
+    personOperationalStatusFilter,
     typeFilter,
     statusFilter,
     showOnlyMissingExpired,
@@ -1164,6 +1213,7 @@ export default function CompetencyMatrixPage() {
       role: person.role || '',
       person_type: person.person_type || 'Employee',
       active: person.active ?? true,
+      person_status: getPersonOperationalStatus(person),
       start_date: person.start_date || '',
       end_date: person.end_date || '',
       notes: person.notes || ''
@@ -1187,7 +1237,8 @@ export default function CompetencyMatrixPage() {
         department: personForm.department.trim() || null,
         role: personForm.role.trim() || null,
         person_type: personForm.person_type,
-        active: personForm.active,
+        active: personStatusToActiveFlag(personForm.person_status),
+        person_status: personForm.person_status,
         start_date: personForm.start_date || null,
         end_date: personForm.end_date || null,
         notes: personForm.notes.trim() || null
@@ -1205,8 +1256,11 @@ export default function CompetencyMatrixPage() {
   const applyPeopleBulkUpdate = () => {
     if (selectedBulkPeople.length === 0) return;
     const updates: Partial<Person> = {};
-    if (bulkPersonActive === 'active') updates.active = true;
-    if (bulkPersonActive === 'inactive') updates.active = false;
+    if (bulkPersonActive) {
+      const nextStatus = bulkPersonActive as PersonOperationalStatus;
+      updates.person_status = nextStatus;
+      updates.active = personStatusToActiveFlag(nextStatus);
+    }
     if (bulkPersonDepartment.trim()) updates.department = bulkPersonDepartment.trim();
     if (bulkPersonRole.trim()) updates.role = bulkPersonRole.trim();
     if (bulkPersonType) updates.person_type = bulkPersonType as PersonType;
@@ -1234,6 +1288,7 @@ export default function CompetencyMatrixPage() {
               role: person.role || null,
               person_type: person.person_type,
               active: person.active,
+              person_status: getPersonOperationalStatus(person),
               start_date: person.start_date || null,
               end_date: person.end_date || null,
               notes: person.notes || null,
@@ -1274,6 +1329,7 @@ export default function CompetencyMatrixPage() {
               role: person.role || null,
               person_type: person.person_type,
               active: person.active,
+              person_status: getPersonOperationalStatus(person),
               start_date: person.start_date || null,
               end_date: person.end_date || null,
               notes: person.notes || null
@@ -1545,6 +1601,7 @@ export default function CompetencyMatrixPage() {
       start_date: newPerson.start_date || null,
       end_date: null,
       active: true,
+      person_status: 'Active',
       notes: newPerson.notes || null
     });
     setNewPerson({ first_name: '', last_name: '', employee_number: '', email: '', department: '', role: '', person_type: 'Employee', start_date: '', notes: '' });
@@ -1833,6 +1890,16 @@ export default function CompetencyMatrixPage() {
                         </select>
                       </div>
                       <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Person Status</label>
+                        <select
+                          value={personOperationalStatusFilter}
+                          onChange={event => setPersonOperationalStatusFilter(event.target.value as PersonStatusFilter)}
+                          className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                        >
+                          {PERSON_STATUS_FILTER_OPTIONS.map(status => <option key={status} value={status}>{status}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
                         <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Sort By</label>
                         <select
                           value={sortBy}
@@ -2028,6 +2095,16 @@ export default function CompetencyMatrixPage() {
                         </select>
                       </div>
                       <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Person Status</label>
+                        <select
+                          value={personOperationalStatusFilter}
+                          onChange={event => setPersonOperationalStatusFilter(event.target.value as PersonStatusFilter)}
+                          className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                        >
+                          {PERSON_STATUS_FILTER_OPTIONS.map(status => <option key={status} value={status}>{status}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
                         <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Sort By</label>
                         <select
                           value={sortBy}
@@ -2190,9 +2267,8 @@ export default function CompetencyMatrixPage() {
             message="Selection can span pages in this session."
           >
             <select value={bulkPersonActive} onChange={event => setBulkPersonActive(event.target.value)} className="px-2.5 py-1.5 bg-card border border-border rounded-lg font-bold text-foreground outline-none">
-              <option value="">Active state...</option>
-              <option value="active">Mark Active</option>
-              <option value="inactive">Mark Inactive</option>
+              <option value="">Person status...</option>
+              {PERSON_STATUS_OPTIONS.map(status => <option key={status} value={status}>Mark {status}</option>)}
             </select>
             <input value={bulkPersonDepartment} onChange={event => setBulkPersonDepartment(event.target.value)} placeholder="Department..." className="px-2.5 py-1.5 bg-card border border-border rounded-lg font-bold text-foreground outline-none w-32" />
             <input value={bulkPersonRole} onChange={event => setBulkPersonRole(event.target.value)} placeholder="Role..." className="px-2.5 py-1.5 bg-card border border-border rounded-lg font-bold text-foreground outline-none w-28" />
@@ -2283,6 +2359,7 @@ export default function CompetencyMatrixPage() {
                     const paddingClass = density === 'comfortable' ? 'p-3' : 'p-1.5';
                     const textClass = density === 'comfortable' ? 'text-xs' : 'text-[11px]';
                     const isPersonSelected = peopleSelection.isSelected(person.id);
+                    const personOperationalStatus = getPersonOperationalStatus(person);
 
                     return (
                       <tr key={person.id} className={`hover:bg-muted/30 transition-colors ${isPersonSelected ? 'bg-indigo-500/5' : ''}`}>
@@ -2321,8 +2398,11 @@ export default function CompetencyMatrixPage() {
                                 <span className="text-[9px] text-muted-foreground block truncate mt-0.5 max-w-[200px]">
                                   {person.department || 'No dept'} | {person.role || 'No role'}
                                 </span>
+                                <span className={`inline-flex px-1.5 py-0.5 rounded-full border text-[8px] font-extrabold mt-1 ${personStatusClass(personOperationalStatus)}`}>
+                                  {personOperationalStatus}
+                                </span>
                                 {personGapsCount > 0 && (
-                                  <span className="inline-block bg-rose-500/10 text-rose-600 dark:text-rose-400 font-extrabold text-[8px] px-1 rounded mt-0.5">
+                                  <span className="inline-block bg-rose-500/10 text-rose-600 dark:text-rose-400 font-extrabold text-[8px] px-1 rounded mt-1 ml-1">
                                     {personGapsCount} gap{personGapsCount > 1 ? 's' : ''}
                                   </span>
                                 )}
@@ -3337,12 +3417,91 @@ export default function CompetencyMatrixPage() {
               {/* people tab */}
               {competencyWorkspaceTab === 'people' && (
                 <div className="space-y-4 text-xs">
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">People With Competency Records</h3>
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">People With Competency Records</h3>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Search, filter and sort assigned people without leaving this competency.</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          value={competencyPeopleSearch}
+                          onChange={event => setCompetencyPeopleSearch(event.target.value)}
+                          placeholder="Search people..."
+                          className="w-44 pl-8 pr-2.5 py-1.5 bg-card border border-border rounded-lg text-xs outline-none"
+                        />
+                      </div>
+                      <select
+                        value={competencyPeoplePersonStatusFilter}
+                        onChange={event => setCompetencyPeoplePersonStatusFilter(event.target.value as PersonStatusFilter)}
+                        className="px-2.5 py-1.5 bg-card border border-border rounded-lg text-xs font-bold outline-none"
+                      >
+                        {PERSON_STATUS_FILTER_OPTIONS.map(status => <option key={status} value={status}>{status}</option>)}
+                      </select>
+                      <select
+                        value={competencyPeopleRecordStatusFilter}
+                        onChange={event => setCompetencyPeopleRecordStatusFilter(event.target.value as 'All' | CompetencyStatus)}
+                        className="px-2.5 py-1.5 bg-card border border-border rounded-lg text-xs font-bold outline-none"
+                      >
+                        <option value="All">All record statuses</option>
+                        {statusOptions.map(status => <option key={status} value={status}>{status}</option>)}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCompetencyPeopleSearch('');
+                          setCompetencyPeoplePersonStatusFilter('Current');
+                          setCompetencyPeopleRecordStatusFilter('All');
+                          setCompetencyPeopleSort('name');
+                        }}
+                        className="px-2.5 py-1.5 bg-muted hover:bg-muted/80 border border-border rounded-lg text-xs font-bold"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
                   {(() => {
                     const assignedCells = buildCompetencyMatrix(people, [selectedCompetency], competencyRecords)
                       .filter(cell => cell.record && cell.status !== 'Not Required');
+                    const searchTerm = competencyPeopleSearch.trim().toLowerCase();
+                    const filteredAssignedCells = assignedCells
+                      .filter(cell => {
+                        const personStatus = getPersonOperationalStatus(cell.person);
+                        const matchesPersonStatus =
+                          competencyPeoplePersonStatusFilter === 'All' ||
+                          (competencyPeoplePersonStatusFilter === 'Current' && isPersonOperationallyActive(personStatus)) ||
+                          personStatus === competencyPeoplePersonStatusFilter;
+                        const matchesRecordStatus = competencyPeopleRecordStatusFilter === 'All' || cell.status === competencyPeopleRecordStatusFilter;
+                        const haystack = `${cell.person.display_name} ${cell.person.department || ''} ${cell.person.role || ''} ${cell.person.email || ''}`.toLowerCase();
+                        return matchesPersonStatus && matchesRecordStatus && (!searchTerm || haystack.includes(searchTerm));
+                      })
+                      .sort((a, b) => {
+                        if (competencyPeopleSort === 'person_status') {
+                          return getPersonOperationalStatus(a.person).localeCompare(getPersonOperationalStatus(b.person)) || a.person.display_name.localeCompare(b.person.display_name);
+                        }
+                        if (competencyPeopleSort === 'record_status') {
+                          return a.status.localeCompare(b.status) || a.person.display_name.localeCompare(b.person.display_name);
+                        }
+                        if (competencyPeopleSort === 'expiry') {
+                          const aDate = a.record?.expiry_date || '9999-12-31';
+                          const bDate = b.record?.expiry_date || '9999-12-31';
+                          return aDate.localeCompare(bDate) || a.person.display_name.localeCompare(b.person.display_name);
+                        }
+                        return a.person.display_name.localeCompare(b.person.display_name);
+                      });
+                    const sortButtonClass = (sort: typeof competencyPeopleSort) =>
+                      `inline-flex items-center gap-1 hover:text-foreground ${competencyPeopleSort === sort ? 'text-indigo-600 dark:text-indigo-300' : ''}`;
                     if (assignedCells.length === 0) {
                       return <p className="italic text-muted-foreground">No active people currently have a record for this competency.</p>;
+                    }
+                    if (filteredAssignedCells.length === 0) {
+                      return (
+                        <div className="border border-border rounded-xl bg-muted/20 p-6 text-center">
+                          <p className="font-bold text-foreground">No assigned people match these filters.</p>
+                          <p className="text-muted-foreground mt-1">Clear the search or status filters to see all assigned records.</p>
+                        </div>
+                      );
                     }
 
                     return (
@@ -3350,14 +3509,23 @@ export default function CompetencyMatrixPage() {
                         <table className="w-full text-left border-collapse">
                           <thead>
                             <tr className="bg-muted/50 border-b border-border text-muted-foreground font-bold uppercase tracking-wider text-[10px]">
-                              <th className="p-3">Teammate</th>
+                              <th className="p-3">
+                                <button type="button" onClick={() => setCompetencyPeopleSort('name')} className={sortButtonClass('name')}>Teammate {competencyPeopleSort === 'name' ? '^' : ''}</button>
+                              </th>
                               <th className="p-3">Department & Role</th>
-                              <th className="p-3">Compliance Status</th>
-                              <th className="p-3">Completed / Expiry</th>
+                              <th className="p-3">
+                                <button type="button" onClick={() => setCompetencyPeopleSort('person_status')} className={sortButtonClass('person_status')}>Person Status {competencyPeopleSort === 'person_status' ? '^' : ''}</button>
+                              </th>
+                              <th className="p-3">
+                                <button type="button" onClick={() => setCompetencyPeopleSort('record_status')} className={sortButtonClass('record_status')}>Record Status {competencyPeopleSort === 'record_status' ? '^' : ''}</button>
+                              </th>
+                              <th className="p-3">
+                                <button type="button" onClick={() => setCompetencyPeopleSort('expiry')} className={sortButtonClass('expiry')}>Completed / Expiry {competencyPeopleSort === 'expiry' ? '^' : ''}</button>
+                              </th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border/60">
-                            {assignedCells.map(cell => (
+                            {filteredAssignedCells.map(cell => (
                               <tr key={cell.person.id} className="hover:bg-muted/10 transition-colors">
                                 <td className="p-3">
                                   <button
@@ -3373,6 +3541,11 @@ export default function CompetencyMatrixPage() {
                                 <td className="p-3">
                                   <span className="font-semibold">{cell.person.department || '—'}</span>
                                   <span className="text-muted-foreground block text-[10px] mt-0.5">{cell.person.role || '—'}</span>
+                                </td>
+                                <td className="p-3">
+                                  <span className={`px-2 py-0.5 rounded-full border text-[9px] font-bold ${personStatusClass(getPersonOperationalStatus(cell.person))}`}>
+                                    {getPersonOperationalStatus(cell.person)}
+                                  </span>
                                 </td>
                                 <td className="p-3">
                                   <span className={`px-2 py-0.5 rounded-full border text-[9px] font-bold ${statusClass(cell.status)}`}>
@@ -3736,7 +3909,12 @@ export default function CompetencyMatrixPage() {
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block">Person Detail Workspace</span>
                 <h2 className="text-xl font-extrabold">{selectedPerson.display_name}</h2>
-                <p className="text-xs text-muted-foreground mt-1">{selectedPerson.role || selectedPerson.person_type} | {selectedPerson.department || 'No department'}</p>
+                <div className="flex flex-wrap items-center gap-2 mt-1">
+                  <p className="text-xs text-muted-foreground">{selectedPerson.role || selectedPerson.person_type} | {selectedPerson.department || 'No department'}</p>
+                  <span className={`px-2 py-0.5 rounded-full border text-[9px] font-extrabold ${personStatusClass(getPersonOperationalStatus(selectedPerson))}`}>
+                    {getPersonOperationalStatus(selectedPerson)}
+                  </span>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 {!isEditingPerson ? (
@@ -3847,9 +4025,15 @@ export default function CompetencyMatrixPage() {
                       </label>
                       <label className="space-y-1 block">
                         <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold block">Status</span>
-                        <select value={personForm.active ? 'active' : 'inactive'} onChange={event => setPersonForm({ ...personForm, active: event.target.value === 'active' })} className="w-full px-2.5 py-1.5 bg-card border border-border rounded-lg outline-none cursor-pointer">
-                          <option value="active">Active</option>
-                          <option value="inactive">Inactive</option>
+                        <select
+                          value={personForm.person_status}
+                          onChange={event => {
+                            const nextStatus = event.target.value as PersonOperationalStatus;
+                            setPersonForm({ ...personForm, person_status: nextStatus, active: personStatusToActiveFlag(nextStatus) });
+                          }}
+                          className="w-full px-2.5 py-1.5 bg-card border border-border rounded-lg outline-none cursor-pointer"
+                        >
+                          {PERSON_STATUS_OPTIONS.map(status => <option key={status} value={status}>{status}</option>)}
                         </select>
                       </label>
                     </div>
@@ -3885,7 +4069,6 @@ export default function CompetencyMatrixPage() {
                         ['Department', selectedPerson.department || 'Not set'],
                         ['Role', selectedPerson.role || 'Not set'],
                         ['Type', selectedPerson.person_type],
-                        ['Status', selectedPerson.active ? 'Active' : 'Inactive'],
                         ['Start', selectedPerson.start_date || 'Not set'],
                         ['End', selectedPerson.end_date || 'Not set']
                       ].map(([label, value]) => (
@@ -3894,6 +4077,12 @@ export default function CompetencyMatrixPage() {
                           <span className="font-bold text-foreground break-words text-[11px]">{value}</span>
                         </div>
                       ))}
+                      <div className="p-2.5 bg-card border border-border rounded-lg">
+                        <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold block">Status</span>
+                        <span className={`inline-flex mt-1 px-2 py-0.5 rounded-full border text-[9px] font-extrabold ${personStatusClass(getPersonOperationalStatus(selectedPerson))}`}>
+                          {getPersonOperationalStatus(selectedPerson)}
+                        </span>
+                      </div>
                     </div>
 
                     {selectedPerson.notes && <p className="text-xs text-muted-foreground bg-card border border-border rounded-lg p-3 leading-normal">{selectedPerson.notes}</p>}
