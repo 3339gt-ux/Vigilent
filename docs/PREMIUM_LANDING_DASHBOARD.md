@@ -63,6 +63,15 @@ An interactive visual system map representing the current compliance and readine
 - **Hero Accent Customization**:
   - Prepared with structured hero CSS variables mapping primary, secondary, glow, and connector colors.
   - Integrated local-only customization setting (`Hero Accent`) inside the customization panel with options: Default Blue/Violet, Cyan/Emerald, Blue/Amber, Violet/Rose, Rainbow Spectrum. Persists user preference via `localStorage` with a reset control.
+- **Dashboard Home Variations**:
+  - Users can select from 6 distinct visual styles for the central overview area:
+    - **Command Map**: Original interactive SVG relationship map showing progress rings and satellite modules.
+    - **Executive Command Bar**: Premium dashboard of visual KPI cards for readiness, actions, assets, evidence, and competencies.
+    - **Operations Taskboard**: Work-queue layout grouping urgent items into Overdue, Due Soon, Evidence Required, and Awaiting Review lanes.
+    - **Evidence Readiness**: Detailed status of unclassified files, duplicate checks, coverage, and missing evidence alerts.
+    - **Matrix Overview**: Consolidated card-based status grids tracking teammates, assets, requirements, and actions.
+    - **Focus Mode**: Low-clutter, highly focused daily dashboard presenting priorities, quick actions, and upcoming milestones.
+  - All variations leverage unified hooks to read real-time workspace metrics, respect active themes (Dark, Light, Midtone), and persist choices in `localStorage` namespaced to the user/organization session.
 - **Prototype Reference Route**:
   - The prototype page at `/dashboard-prototypes/exact-hero` remains fully available as a static, pixel-perfect visual reference.
 

@@ -16,6 +16,7 @@ This document describes the design, implementation, and storage mechanics of the
 * **Draft Transaction Flow**: Real-time **Save**, **Cancel**, and **Reset to Defaults** operations to commit, discard, or flush customized configurations.
 * **Readability Settings Panel**: Configures visual presentation rules (font sizes, density spacing, border-radius controls, contrast preferences, motion settings, and accent color palettes) applied live to the workspace UI.
 * **Extended Hero Controls**: Support for layout presets (`Balanced Orbit`, `Focus Area`, `Structured List`), central orb metric content selections, and visual detail levels.
+* **Selectable Dashboard Home Variations**: The home screen supports 6 visual hero/layout variations (Command Map, Executive Command Bar, Operations Taskboard, Evidence Readiness, Matrix Overview, Focus Mode) stored in local preferences and previewed live inside the Customize Modal.
 * **Dark / Light / Midtone Theme Support**: Built to dynamically inherit from the root theme structure, preserving readable text contrast and gradient borders across all mode shifts.
 
 ---
@@ -55,6 +56,7 @@ type DashboardCustomization = {
   defaultRailTab: 'focus' | 'upcoming' | 'action' | 'activity';
   density: 'comfortable' | 'compact' | 'executive';
   heroStyle: 'map' | 'core' | 'list';
+  dashboardHomeVariant?: 'map' | 'executive-bar' | 'taskboard' | 'evidence-readiness' | 'matrix-overview' | 'focus-mode';
   heroDetailLevel: 'minimal' | 'balanced' | 'full';
   visibleRightRailSections: string[];
   dataWindow: 'snapshot' | '7days' | '30days' | '90days';
@@ -136,3 +138,4 @@ LUMÉN strictly enforces data honesty in compliance visualization:
 1. **No Fake Analytics**: The dashboard does not generate fictional trends, mock compliance scores, or fake timelines.
 2. **Honest Empty States**: If an organization has no active data or records matching a detailed widget view, the UI renders an honest empty state ("No entries recorded") instead of generating mock placeholder entries.
 3. **No Unauthenticated Leaks**: Widget configurations cannot read, write, or leak evidence files or auth contexts outside the tenant boundary.
+4. **Data Honesty in Layout Variations**: All selectable dashboard home variations map to real, snapshot-based data only. Fake trend lines, fake historical claims, and fake regulator/certification badges are strictly forbidden. Empty or unavailable states are honestly marked.

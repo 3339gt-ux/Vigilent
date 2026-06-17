@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
 import Link from 'next/link';
 import ComplianceHeroCore from './components/ComplianceHeroCore';
+import DashboardHomeVariants from './components/DashboardHomeVariants';
 import { InlineToast, ToastState } from '@/components/AppFeedback';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
@@ -417,6 +418,7 @@ type DashboardCustomization = {
   defaultRailTab: 'focus' | 'upcoming' | 'action' | 'activity';
   density: 'comfortable' | 'compact' | 'executive';
   heroStyle: 'map' | 'core' | 'list';
+  dashboardHomeVariant?: 'map' | 'executive-bar' | 'taskboard' | 'evidence-readiness' | 'matrix-overview' | 'focus-mode';
   heroDetailLevel: 'minimal' | 'balanced' | 'full';
   visibleRightRailSections: string[];
   dataWindow: 'snapshot' | '7days' | '30days' | '90days';
@@ -471,6 +473,7 @@ const DEFAULT_CUSTOMIZATION_SETTINGS: DashboardCustomization = {
   defaultRailTab: 'focus',
   density: 'comfortable',
   heroStyle: 'map',
+  dashboardHomeVariant: 'map',
   heroDetailLevel: 'balanced',
   visibleRightRailSections: ['snapshot', 'focus', 'upcoming', 'action', 'activity', 'expiring', 'upload-console'],
   dataWindow: 'snapshot',
@@ -779,6 +782,7 @@ export default function DashboardPage() {
           defaultRailTab: parsed.defaultRailTab || DEFAULT_CUSTOMIZATION_SETTINGS.defaultRailTab,
           density: parsed.density || DEFAULT_CUSTOMIZATION_SETTINGS.density,
           heroStyle: parsed.heroStyle || DEFAULT_CUSTOMIZATION_SETTINGS.heroStyle,
+          dashboardHomeVariant: parsed.dashboardHomeVariant || DEFAULT_CUSTOMIZATION_SETTINGS.dashboardHomeVariant || 'map',
           heroDetailLevel: parsed.heroDetailLevel || DEFAULT_CUSTOMIZATION_SETTINGS.heroDetailLevel,
           visibleRightRailSections: parsed.visibleRightRailSections || DEFAULT_CUSTOMIZATION_SETTINGS.visibleRightRailSections,
           dataWindow: parsed.dataWindow || DEFAULT_CUSTOMIZATION_SETTINGS.dataWindow,
@@ -3050,71 +3054,94 @@ export default function DashboardPage() {
             {/* Central content depending on toggle */}
             <div className="p-5">
               {activeViewMode === 'system' ? (
-                <>
-                  {isEditingDashboard && (
-                    <div className="mb-4 p-2.5 bg-indigo-500/5 border border-indigo-500/15 text-indigo-600 dark:text-indigo-400 rounded-lg text-center text-[11px] font-medium flex items-center justify-center gap-2">
-                      <Move className="w-3.5 h-3.5 animate-pulse" />
-                      <span>Drag nodes to reposition. Connectors update automatically.</span>
-                    </div>
+                <DashboardHomeVariants
+                  variant={(isCustomizationOpen ? modalCustomization.dashboardHomeVariant : currentCustomization.dashboardHomeVariant) || 'map'}
+                  stats={stats}
+                  documents={documents}
+                  classifiedDocsCount={classifiedDocsCount}
+                  unclassifiedDocs={unclassifiedDocs}
+                  people={people}
+                  competencyRecords={competencyRecords}
+                  competencySummary={competencySummary}
+                  totalAssetChecks={totalAssetChecks}
+                  compliantAssetChecks={compliantAssetChecks}
+                  overdueAssetChecks={overdueAssetChecks}
+                  upcomingAssetChecks={upcomingAssetChecks}
+                  auditPacks={auditPacks}
+                  actions={actions}
+                  activeActionsCount={activeActionsCount}
+                  overdueActionsCount={overdueActionsCount}
+                  activeRequirements={activeRequirements}
+                  greyRequirementCount={greyRequirementCount}
+                  onNavigate={(path) => router.push(path)}
+                  renderCommandMap={() => (
+                    <>
+                      {isEditingDashboard && (
+                        <div className="mb-4 p-2.5 bg-indigo-500/5 border border-indigo-500/15 text-indigo-600 dark:text-indigo-400 rounded-lg text-center text-[11px] font-medium flex items-center justify-center gap-2">
+                          <Move className="w-3.5 h-3.5 animate-pulse" />
+                          <span>Drag nodes to reposition. Connectors update automatically.</span>
+                        </div>
+                      )}
+                      <ComplianceHeroCore
+                        theme={theme}
+                        readinessScore={readinessScore}
+                        readinessLabel={readinessLabel}
+                        isMotionReduced={isMotionReduced}
+                        effectIntensity={currentCustomization.effectIntensity || 'standard'}
+                        heroAccent={currentCustomization.heroAccent || 'default'}
+                        heroLayoutPreset={currentCustomization.heroLayoutPreset || 'balanced-orbit'}
+                        dragEnabled={isEditingDashboard}
+                        customPositions={currentCustomization.heroCustomPositions}
+                        onCustomPositionsChange={(positions) => {
+                          if (tempCustomization) {
+                            setTempCustomization({ ...tempCustomization, heroCustomPositions: positions });
+                          }
+                        }}
+                        requirementsData={{
+                          active: stats.activeRequirements,
+                          compliant: stats.compliantCount,
+                          warnings: stats.expiredCount,
+                          percent: stats.activeRequirements > 0 ? Math.round((stats.compliantCount / stats.activeRequirements) * 100) : 0,
+                          metricText: `${stats.compliantCount}/${stats.activeRequirements} compliant`
+                        }}
+                        vaultData={{
+                          total: documents.length,
+                          classified: classifiedDocsCount,
+                          warnings: unclassifiedDocs.length,
+                          percent: documents.length > 0 ? Math.round((classifiedDocsCount / documents.length) * 100) : 0,
+                          metricText: `${classifiedDocsCount}/${documents.length} classified`
+                        }}
+                        competencyData={{
+                          total: people.length,
+                          warnings: competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').length,
+                          percent: competencySummary.compliancePercent,
+                          metricText: `${competencySummary.compliancePercent}% valid`
+                        }}
+                        matrixData={{
+                          total: totalAssetChecks,
+                          compliant: compliantAssetChecks,
+                          warnings: overdueAssetChecks.length,
+                          percent: totalAssetChecks > 0 ? Math.round((compliantAssetChecks / totalAssetChecks) * 100) : 0,
+                          metricText: `${compliantAssetChecks}/${totalAssetChecks} checks`
+                        }}
+                        auditPacksData={{
+                          total: auditPacks.length,
+                          ready: auditPacks.filter(p => p.status === 'Ready').length,
+                          warnings: 0,
+                          percent: auditPacks.length > 0 ? Math.round((auditPacks.filter(p => p.status === 'Ready').length / auditPacks.length) * 100) : 0,
+                          metricText: `${auditPacks.filter(p => p.status === 'Ready').length}/${auditPacks.length} ready`
+                        }}
+                        reportsData={{
+                          total: reportViewCount,
+                          metricText: `${reportViewCount} available`
+                        }}
+                        onNodeMouseEnter={handleNodeMouseEnter}
+                        onNodeMouseLeave={handleNodeMouseLeave}
+                        onNodeClick={handleNodeClick}
+                      />
+                    </>
                   )}
-                  <ComplianceHeroCore
-                    theme={theme}
-                    readinessScore={readinessScore}
-                    readinessLabel={readinessLabel}
-                    isMotionReduced={isMotionReduced}
-                    effectIntensity={currentCustomization.effectIntensity || 'standard'}
-                    heroAccent={currentCustomization.heroAccent || 'default'}
-                    heroLayoutPreset={currentCustomization.heroLayoutPreset || 'balanced-orbit'}
-                    dragEnabled={isEditingDashboard}
-                    customPositions={currentCustomization.heroCustomPositions}
-                    onCustomPositionsChange={(positions) => {
-                      if (tempCustomization) {
-                        setTempCustomization({ ...tempCustomization, heroCustomPositions: positions });
-                      }
-                    }}
-                    requirementsData={{
-                      active: stats.activeRequirements,
-                      compliant: stats.compliantCount,
-                      warnings: stats.expiredCount,
-                      percent: stats.activeRequirements > 0 ? Math.round((stats.compliantCount / stats.activeRequirements) * 100) : 0,
-                      metricText: `${stats.compliantCount}/${stats.activeRequirements} compliant`
-                    }}
-                    vaultData={{
-                      total: documents.length,
-                      classified: classifiedDocsCount,
-                      warnings: unclassifiedDocs.length,
-                      percent: documents.length > 0 ? Math.round((classifiedDocsCount / documents.length) * 100) : 0,
-                      metricText: `${classifiedDocsCount}/${documents.length} classified`
-                    }}
-                    competencyData={{
-                      total: people.length,
-                      warnings: competencyRecords.filter(r => r.status === 'Expired' || r.status === 'Missing').length,
-                      percent: competencySummary.compliancePercent,
-                      metricText: `${competencySummary.compliancePercent}% valid`
-                    }}
-                    matrixData={{
-                      total: totalAssetChecks,
-                      compliant: compliantAssetChecks,
-                      warnings: overdueAssetChecks.length,
-                      percent: totalAssetChecks > 0 ? Math.round((compliantAssetChecks / totalAssetChecks) * 100) : 0,
-                      metricText: `${compliantAssetChecks}/${totalAssetChecks} checks`
-                    }}
-                    auditPacksData={{
-                      total: auditPacks.length,
-                      ready: auditPacks.filter(p => p.status === 'Ready').length,
-                      warnings: 0,
-                      percent: auditPacks.length > 0 ? Math.round((auditPacks.filter(p => p.status === 'Ready').length / auditPacks.length) * 100) : 0,
-                      metricText: `${auditPacks.filter(p => p.status === 'Ready').length}/${auditPacks.length} ready`
-                    }}
-                    reportsData={{
-                      total: reportViewCount,
-                      metricText: `${reportViewCount} available`
-                    }}
-                    onNodeMouseEnter={handleNodeMouseEnter}
-                    onNodeMouseLeave={handleNodeMouseLeave}
-                    onNodeClick={handleNodeClick}
-                  />
-                </>
+                />
               ) : (
                 /* Tabular List View of Workspace modules */
                 <div className="overflow-x-auto">
@@ -4940,6 +4967,33 @@ export default function DashboardPage() {
                       <option value="core">Compliance Core Only</option>
                       <option value="list">List Overview</option>
                     </select>
+                  </div>
+                  <div className="space-y-1 col-span-2">
+                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Dashboard Home Style</label>
+                    <select
+                      value={modalCustomization.dashboardHomeVariant || 'map'}
+                      onChange={(e) => setModalCustomization({ ...modalCustomization, dashboardHomeVariant: e.target.value as DashboardCustomization['dashboardHomeVariant'] })}
+                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                    >
+                      <option value="map">Command Map</option>
+                      <option value="executive-bar">Executive Command Bar</option>
+                      <option value="taskboard">Operations Taskboard</option>
+                      <option value="evidence-readiness">Evidence Readiness</option>
+                      <option value="matrix-overview">Matrix Overview</option>
+                      <option value="focus-mode">Focus Mode</option>
+                    </select>
+                    <p className="text-[10px] text-muted-foreground/80 mt-1 italic leading-relaxed">
+                      {
+                        {
+                          'map': 'Command Map — visual relationship map of programme areas.',
+                          'executive-bar': 'Executive Command Bar — compact KPIs and data points.',
+                          'taskboard': 'Operations Taskboard — action-led work queue.',
+                          'evidence-readiness': 'Evidence Readiness — evidence coverage and missing proof view.',
+                          'matrix-overview': 'Matrix Overview — people, asset and requirement status overview.',
+                          'focus-mode': 'Focus Mode — simplified daily priority view.'
+                        }[modalCustomization.dashboardHomeVariant || 'map']
+                      }
+                    </p>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Hero Detail Level</label>

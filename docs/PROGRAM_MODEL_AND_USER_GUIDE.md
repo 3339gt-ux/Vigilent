@@ -599,6 +599,7 @@ What works:
 
 - Dashboard reads real app collections and readiness report.
 - It has KPIs, Compliance Core, quick actions, right rail, attention items, and customisation foundation.
+- It supports 6 selectable dashboard home layouts/variations: Command Map (default SVG relationship map), Executive Command Bar (compact top KPIs), Operations Taskboard (action-led lanes), Evidence Readiness (evidence coverage focus), Matrix Overview (people/asset/requirement status), and Focus Mode (low-clutter daily view). These variations can be switched and previewed live via the Customize Dashboard panel, and choices persist in localStorage namespaced to the user/organization session.
 - It avoids fake historical trend by showing current/snapshot wording where history is unavailable.
 
 Partly supported:
