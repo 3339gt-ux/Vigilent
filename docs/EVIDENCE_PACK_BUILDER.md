@@ -67,3 +67,15 @@ LUMEN-Audit-Pack-[Pack-Name]/
     └── export-trail.json
 ```
 - A prominent amber alert banner reminds the user that actual document downloads are disabled in this preview pass.
+
+---
+
+## Stage 3A UX Polish Pass (June 2026)
+
+Following a manual browser QA and visual review, a targeted UX polish pass was executed:
+- **Local Draft Status & Safety Banner:** A dedicated warning banner was added to the sidebar explaining that drafts are local-only and no files are uploaded or exported.
+- **Readable Checklists:** Child checklists are mapped from technical keys to highly descriptive text labels (e.g., `Include summary/details`, `Include linked evidence metadata`, `Include images metadata`).
+- **File Export Deferral:** Staged the deferred `Include files` option with line-through text decoration and a specific sub-caption highlighting that files are deferred pending export safety review.
+- **Manifest Preview Empty States:** The Planned Export folder structure modal remains accessible even when no items are included, rendering a guide directing users on how to populate and preview their pack.
+- **Sidebar Empty State:** Updated instructions to clearly direct users: `Open a requirement, person, asset, evidence record or action, then choose "Add to pack".`
+- **Navigation Action Tooltips:** Added descriptive standard browser tooltips on `PackBuilderAddButton` actions to clarify their dynamic behavior on hover.

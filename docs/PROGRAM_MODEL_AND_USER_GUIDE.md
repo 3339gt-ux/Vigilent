@@ -781,7 +781,11 @@ Use Reports to inspect data quality, readiness, evidence, competencies, assets, 
 
 ### Audit Packs
 
-Use Audit Packs to assemble selected requirements and linked evidence references into an internal review pack. The pack records references; it does not publish private evidence files.
+Use the Evidence Pack Builder Sidebar to assemble selected requirements, teammates, assets, actions, and evidence documents into an internal review pack. The builder maintains a local organization-scoped draft pack within your browser.
+
+- **Planned Folder Hierarchy:** Preview your pack layout in a structured manifest tree.
+- **Include Options:** Fine-tune what metadata (profiles, linked records, images, reviews) is included per item.
+- **Safe Deferral:** Actual physical file downloading, external sharing, and ZIP export are deferred pending security review. Evidence files remain protected in secure private storage.
 
 ### Audit Trail
 

@@ -80,6 +80,41 @@ export function EvidencePackBuilderSidebar() {
     }
   };
 
+  const getOptionLabel = (optKey: string) => {
+    switch (optKey) {
+      case 'includeDetails':
+        return 'Include summary/details';
+      case 'includeEvidence':
+        return 'Include linked evidence metadata';
+      case 'includeActions':
+        return 'Include actions';
+      case 'includeReviews':
+        return 'Include reviews';
+      case 'includeImages':
+        return 'Include images metadata';
+      case 'includeProfile':
+        return 'Include profile summary';
+      case 'includeCompetencies':
+        return 'Include assigned competencies';
+      case 'includePrimaryImage':
+        return 'Include primary image metadata';
+      case 'includeGallery':
+        return 'Include gallery metadata';
+      case 'includeChecks':
+        return 'Include check records';
+      case 'includeMetadata':
+        return 'Include document metadata';
+      case 'includeLinkedRecords':
+        return 'Include linked records';
+      case 'includeNotes':
+        return 'Include closure notes';
+      case 'includeFiles':
+        return 'Include files — deferred until export safety review';
+      default:
+        return optKey;
+    }
+  };
+
   // Group items by type
   const groupedItems = items.reduce<Record<PackItemType, PackItem[]>>((acc, item) => {
     if (!acc[item.type]) acc[item.type] = [];
@@ -153,8 +188,8 @@ export function EvidencePackBuilderSidebar() {
           <div className="flex items-center gap-2">
             <FolderArchive className="w-4 h-4 text-indigo-650 dark:text-indigo-400" />
             <h3 className="text-xs font-black uppercase tracking-wider text-foreground">Pack Builder</h3>
-            <span className="px-1.5 py-0.5 rounded-full text-[8px] font-bold bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20">
-              Draft
+            <span className="px-1.5 py-0.5 rounded-full text-[8px] font-bold bg-amber-500/10 text-amber-705 dark:text-amber-400 border border-amber-500/20">
+              Local Draft
             </span>
           </div>
           <div className="flex items-center gap-1">
@@ -179,6 +214,14 @@ export function EvidencePackBuilderSidebar() {
 
         {/* Scrollable Workspace */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* Local-Only Safety Banner */}
+          <div className="p-2.5 bg-amber-500/10 dark:bg-amber-500/5 border border-amber-500/20 rounded-xl text-[9.5px] text-amber-800 dark:text-amber-300 flex items-start gap-1.5 leading-relaxed">
+            <ShieldAlert className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-700 dark:text-amber-400" />
+            <div>
+              <span className="font-bold">Local-Only Draft:</span> No files are uploaded or exported. Full ZIP/private-file export is deferred.
+            </div>
+          </div>
+
           {/* Pack Details */}
           <div className="space-y-3 bg-muted/20 border border-border/60 p-3 rounded-xl">
             <div>
@@ -220,10 +263,10 @@ export function EvidencePackBuilderSidebar() {
 
             {activeCount === 0 ? (
               <div className="text-center p-8 border border-dashed border-border rounded-xl bg-muted/10">
-                <Folder className="w-8 h-8 mx-auto text-muted-foreground/40 stroke-[1.5]" />
+                <Folder className="w-8 h-8 mx-auto text-indigo-500/60 dark:text-indigo-400/60 stroke-[1.5]" />
                 <h4 className="text-xs font-bold text-foreground mt-2">Pack is empty</h4>
-                <p className="text-[10px] text-muted-foreground mt-1 leading-normal max-w-[180px] mx-auto">
-                  Navigate through LUMÉN and click "Add to pack" on any record, person, action, or document.
+                <p className="text-[10px] text-muted-foreground mt-1.5 leading-normal max-w-[200px] mx-auto">
+                  Open a requirement, person, asset, evidence record or action, then choose "Add to pack".
                 </p>
               </div>
             ) : (
@@ -293,10 +336,10 @@ export function EvidencePackBuilderSidebar() {
                                       return (
                                         <label
                                           key={optKey}
-                                          className={`flex items-start gap-1.5 font-semibold leading-normal ${
+                                          className={`flex items-start gap-2 py-0.5 leading-normal ${
                                             isFileOption
-                                              ? 'text-muted-foreground cursor-not-allowed'
-                                              : 'text-foreground cursor-pointer select-none'
+                                              ? 'text-muted-foreground/60 cursor-not-allowed'
+                                              : 'text-foreground hover:text-indigo-650 dark:hover:text-indigo-400 cursor-pointer select-none'
                                           }`}
                                         >
                                           <input
@@ -308,18 +351,19 @@ export function EvidencePackBuilderSidebar() {
                                                 [optKey]: !item.options[optKey]
                                               })
                                             }
-                                            className="rounded border-border text-indigo-650 h-3 w-3 mt-0.5"
+                                            className="rounded border-border text-indigo-650 h-3.5 w-3.5 mt-0.5 shrink-0"
                                           />
                                           <div className="flex flex-col">
-                                            <span>
-                                              {optKey
-                                                .replace('include', '')
-                                                .replace(/([A-Z])/g, ' $1')
-                                                .trim()}
+                                            <span className={`text-[10.5px] font-medium leading-tight ${
+                                              isFileOption
+                                                ? 'line-through decoration-muted-foreground/30 text-muted-foreground/50'
+                                                : 'text-foreground/90'
+                                            }`}>
+                                              {getOptionLabel(optKey)}
                                             </span>
                                             {isFileOption && (
-                                              <span className="text-[8px] text-amber-600 dark:text-amber-400 font-medium leading-tight mt-0.5 block">
-                                                File export is deferred until ZIP/private file export review.
+                                              <span className="text-[8px] text-amber-600 dark:text-amber-400 font-bold leading-tight mt-0.5 block">
+                                                Deferred pending file export safety review.
                                               </span>
                                             )}
                                           </div>
@@ -353,8 +397,7 @@ export function EvidencePackBuilderSidebar() {
           <button
             type="button"
             onClick={() => setShowPreviewModal(true)}
-            disabled={includedCount === 0}
-            className="w-full py-2 bg-muted hover:bg-muted/80 disabled:opacity-50 text-foreground border border-border font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            className="w-full py-2 bg-muted hover:bg-muted/80 text-foreground border border-border font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
           >
             <Eye className="w-3.5 h-3.5" />
             Preview Pack Manifest
@@ -380,9 +423,9 @@ export function EvidencePackBuilderSidebar() {
             {/* Modal Header */}
             <div className="p-5 border-b border-border flex justify-between items-center bg-muted/10">
               <div>
-                <h3 className="text-sm font-black uppercase tracking-wider text-foreground">Export Pack Structure Preview</h3>
+                <h3 className="text-sm font-black uppercase tracking-wider text-foreground">Planned Export Folder Structure</h3>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Virtual directory representation of the generated bundle manifest.
+                  A preview of how your compiled evidence pack will be structured when export is enabled.
                 </p>
               </div>
               <button
@@ -396,107 +439,122 @@ export function EvidencePackBuilderSidebar() {
 
             {/* Modal Content */}
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[10px] text-amber-800 dark:text-amber-300 flex items-start gap-2 shadow-xs">
-                <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-amber-700 dark:text-amber-400" />
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[10px] text-amber-800 dark:text-amber-300 flex items-start gap-2 shadow-xs leading-relaxed">
+                <ShieldAlert className="w-4.5 h-4.5 shrink-0 mt-0.5 text-amber-700 dark:text-amber-400" />
                 <div>
-                  <span className="font-bold">Virtual Preview Only:</span> This pass previews the pack structure. Full ZIP export with private files is deferred for Codex/security review.
+                  <span className="font-bold block mb-0.5">Planned Pack Structure Preview</span>
+                  This preview shows the intended pack structure. Full ZIP export is not enabled in this foundation pass. Private-file export is deferred until a comprehensive Codex/security review.
                 </div>
               </div>
 
               {/* Directory Render Box */}
-              <div className="bg-zinc-950 text-zinc-100 rounded-xl p-4 font-mono text-xs overflow-x-auto shadow-inner border border-zinc-800 leading-relaxed min-h-[200px]">
-                <span className="text-indigo-400">📁 LUMEN-Audit-Pack-{packName.replace(/\s+/g, '-') || 'Draft'}/</span>
-                <div className="pl-4 space-y-1">
-                  <div>├── 📁 00-Pack-Index/</div>
-                  <div className="pl-4 text-zinc-400">├── 📄 manifest.json <span className="text-zinc-500">(Contains included metadata indices)</span></div>
-                  <div className="pl-4 text-zinc-400">└── 📄 index.html <span className="text-zinc-500">(Clean HTML index directory)</span></div>
+              <div className="bg-zinc-950 text-zinc-100 rounded-xl p-4 font-mono text-xs overflow-x-auto shadow-inner border border-zinc-800 leading-relaxed min-h-[200px] flex flex-col justify-center">
+                {items.filter(i => i.included).length === 0 ? (
+                  <div className="text-center py-12 text-zinc-500 font-sans flex flex-col items-center justify-center space-y-3">
+                    <Folder className="w-10 h-10 opacity-30 text-indigo-400 stroke-[1.5]" />
+                    <div className="space-y-1">
+                      <p className="text-xs font-bold text-zinc-400">Preview Empty</p>
+                      <p className="text-[10px] text-zinc-500 leading-normal max-w-[280px]">
+                        Add records to your pack and tick their checkboxes to preview the planned export folder structure.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <span className="text-indigo-400">📁 LUMEN-Audit-Pack-{packName.replace(/\s+/g, '-') || 'Draft'}/</span>
+                    <div className="pl-4 space-y-1">
+                      <div>├── 📁 00-Pack-Index/</div>
+                      <div className="pl-4 text-zinc-400">├── 📄 manifest.json <span className="text-zinc-500">(Contains included metadata indices)</span></div>
+                      <div className="pl-4 text-zinc-400">└── 📄 index.html <span className="text-zinc-500">(Clean HTML index directory)</span></div>
 
-                  {/* Requirements Group */}
-                  {groupedItems.requirement.filter(i => i.included).length > 0 && (
-                    <>
-                      <div>├── 📁 01-Requirements/</div>
-                      {groupedItems.requirement.filter(i => i.included).map(item => (
-                        <div key={item.id} className="pl-4">
-                          <div>├── 📁 {item.title.replace(/\s+/g, '-')}/</div>
-                          <div className="pl-4 text-zinc-500">
-                            {item.options.includeDetails && <div>├── 📄 requirement.json</div>}
-                            {item.options.includeEvidence && <div>├── 📄 linked-evidence.json</div>}
-                            {item.options.includeActions && <div>├── 📄 actions.json</div>}
-                            {item.options.includeReviews && <div>└── 📄 reviews.json</div>}
-                          </div>
-                        </div>
-                      ))}
-                    </>
-                  )}
+                      {/* Requirements Group */}
+                      {groupedItems.requirement.filter(i => i.included).length > 0 && (
+                        <>
+                          <div>├── 📁 01-Requirements/</div>
+                          {groupedItems.requirement.filter(i => i.included).map(item => (
+                            <div key={item.id} className="pl-4">
+                              <div>├── 📁 {item.title.replace(/\s+/g, '-')}/</div>
+                              <div className="pl-4 text-zinc-500">
+                                {item.options.includeDetails && <div>├── 📄 requirement.json</div>}
+                                {item.options.includeEvidence && <div>├── 📄 linked-evidence.json</div>}
+                                {item.options.includeActions && <div>├── 📄 actions.json</div>}
+                                {item.options.includeReviews && <div>└── 📄 reviews.json</div>}
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      )}
 
-                  {/* Teammates Group */}
-                  {groupedItems.person.filter(i => i.included).length > 0 && (
-                    <>
-                      <div>├── 📁 02-People/</div>
-                      {groupedItems.person.filter(i => i.included).map(item => (
-                        <div key={item.id} className="pl-4">
-                          <div>├── 📁 {item.title.replace(/\s+/g, '-')}/</div>
-                          <div className="pl-4 text-zinc-500">
-                            {item.options.includeProfile && <div>├── 📄 profile.json</div>}
-                            {item.options.includeCompetencies && <div>├── 📄 competencies.json</div>}
-                            {item.options.includeActions && <div>└── 📄 actions.json</div>}
-                          </div>
-                        </div>
-                      ))}
-                    </>
-                  )}
+                      {/* Teammates Group */}
+                      {groupedItems.person.filter(i => i.included).length > 0 && (
+                        <>
+                          <div>├── 📁 02-People/</div>
+                          {groupedItems.person.filter(i => i.included).map(item => (
+                            <div key={item.id} className="pl-4">
+                              <div>├── 📁 {item.title.replace(/\s+/g, '-')}/</div>
+                              <div className="pl-4 text-zinc-500">
+                                {item.options.includeProfile && <div>├── 📄 profile.json</div>}
+                                {item.options.includeCompetencies && <div>├── 📄 competencies.json</div>}
+                                {item.options.includeActions && <div>└── 📄 actions.json</div>}
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      )}
 
-                  {/* Assets Group */}
-                  {groupedItems.asset.filter(i => i.included).length > 0 && (
-                    <>
-                      <div>├── 📁 03-Assets/</div>
-                      {groupedItems.asset.filter(i => i.included).map(item => (
-                        <div key={item.id} className="pl-4">
-                          <div>├── 📁 {item.title.replace(/\s+/g, '-')}/</div>
-                          <div className="pl-4 text-zinc-500">
-                            {item.options.includeProfile && <div>├── 📄 profile.json</div>}
-                            {item.options.includeChecks && <div>└── 📄 checks.json</div>}
-                          </div>
-                        </div>
-                      ))}
-                    </>
-                  )}
+                      {/* Assets Group */}
+                      {groupedItems.asset.filter(i => i.included).length > 0 && (
+                        <>
+                          <div>├── 📁 03-Assets/</div>
+                          {groupedItems.asset.filter(i => i.included).map(item => (
+                            <div key={item.id} className="pl-4">
+                              <div>├── 📁 {item.title.replace(/\s+/g, '-')}/</div>
+                              <div className="pl-4 text-zinc-500">
+                                {item.options.includeProfile && <div>├── 📄 profile.json</div>}
+                                {item.options.includeChecks && <div>└── 📄 checks.json</div>}
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      )}
 
-                  {/* Actions Group */}
-                  {groupedItems.action.filter(i => i.included).length > 0 && (
-                    <>
-                      <div>├── 📁 04-Actions/</div>
-                      {groupedItems.action.filter(i => i.included).map(item => (
-                        <div key={item.id} className="pl-4">
-                          <div>├── 📁 {item.title.replace(/\s+/g, '-')}/</div>
-                          <div className="pl-4 text-zinc-500">
-                            {item.options.includeDetails && <div>├── 📄 action.json</div>}
-                            {item.options.includeNotes && <div>└── 📄 closure-notes.json</div>}
-                          </div>
-                        </div>
-                      ))}
-                    </>
-                  )}
+                      {/* Actions Group */}
+                      {groupedItems.action.filter(i => i.included).length > 0 && (
+                        <>
+                          <div>├── 📁 04-Actions/</div>
+                          {groupedItems.action.filter(i => i.included).map(item => (
+                            <div key={item.id} className="pl-4">
+                              <div>├── 📁 {item.title.replace(/\s+/g, '-')}/</div>
+                              <div className="pl-4 text-zinc-500">
+                                {item.options.includeDetails && <div>├── 📄 action.json</div>}
+                                {item.options.includeNotes && <div>└── 📄 closure-notes.json</div>}
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      )}
 
-                  {/* Evidence Group */}
-                  {groupedItems.evidence.filter(i => i.included).length > 0 && (
-                    <>
-                      <div>├── 📁 05-Evidence-Metadata/</div>
-                      {groupedItems.evidence.filter(i => i.included).map(item => (
-                        <div key={item.id} className="pl-4">
-                          <div>├── 📁 {item.title.replace(/\s+/g, '-')}/</div>
-                          <div className="pl-4 text-zinc-500">
-                            {item.options.includeMetadata && <div>├── 📄 metadata.json</div>}
-                            {item.options.includeLinkedRecords && <div>└── 📄 linked-records.json</div>}
-                          </div>
-                        </div>
-                      ))}
-                    </>
-                  )}
+                      {/* Evidence Group */}
+                      {groupedItems.evidence.filter(i => i.included).length > 0 && (
+                        <>
+                          <div>├── 📁 05-Evidence-Metadata/</div>
+                          {groupedItems.evidence.filter(i => i.included).map(item => (
+                            <div key={item.id} className="pl-4">
+                              <div>├── 📁 {item.title.replace(/\s+/g, '-')}/</div>
+                              <div className="pl-4 text-zinc-500">
+                                {item.options.includeMetadata && <div>├── 📄 metadata.json</div>}
+                                {item.options.includeLinkedRecords && <div>└── 📄 linked-records.json</div>}
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      )}
 
-                  <div>└── 📁 99-Export-Logs/</div>
-                  <div className="pl-4 text-zinc-400">└── 📄 export-trail.json <span className="text-zinc-500">(Traceability logs)</span></div>
-                </div>
+                      <div>└── 📁 99-Export-Logs/</div>
+                      <div className="pl-4 text-zinc-400">└── 📄 export-trail.json <span className="text-zinc-500">(Traceability logs)</span></div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 

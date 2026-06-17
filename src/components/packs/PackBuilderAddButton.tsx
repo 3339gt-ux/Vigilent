@@ -36,6 +36,7 @@ export function PackBuilderAddButton({
     <button
       type="button"
       onClick={handleToggle}
+      title={isInPack ? "Click to remove this item from the local pack draft" : "Add this item to the local pack draft"}
       className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all select-none cursor-pointer border shrink-0 ${
         isInPack
           ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400 hover:bg-rose-500/10 hover:text-rose-600 hover:border-rose-500/25 group'
