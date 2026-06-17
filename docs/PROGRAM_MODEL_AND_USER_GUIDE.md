@@ -552,6 +552,7 @@ What works:
 - Audit Pack Builder selects requirements, gathers linked documents, missing evidence warnings, due/expiry warnings, open actions, and competency warnings.
 - Pack rows can be exported to CSV and print/save-as-PDF.
 - Packs store requirement IDs and document IDs; files remain private and open through signed URLs.
+- Evidence Pack Builder Sidebar: A persistent sidebar that lets users collect requirements, teammates, assets, evidence documents, and action records as a local draft pack, configure child include options, and preview the virtual export structure.
 
 Partly supported:
 

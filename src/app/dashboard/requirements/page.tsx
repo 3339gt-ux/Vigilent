@@ -8,6 +8,7 @@ import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
 import { ImageAttachmentManager } from '@/components/media/ImageAttachmentManager';
+import { PackBuilderAddButton } from '@/components/packs/PackBuilderAddButton';
 import { REQUIREMENT_CATEGORY_GROUPS, flattenCategoryGroups } from '@/lib/categoryPresets';
 import { exportCsv, exportDateStamp, ExportRow } from '@/lib/exportData';
 import type { Action, ActionStatus, Requirement, RequirementEvidenceCoverage, RequirementLifecycleStatus, RequirementStatus } from '@/lib/types';
@@ -2356,6 +2357,12 @@ export default function RequirementsPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                  <PackBuilderAddButton
+                    type="requirement"
+                    id={selectedAssessed.id}
+                    title={selectedAssessed.title}
+                    sourceRoute="/dashboard/requirements"
+                  />
                   <button
                     onClick={() => selectRequirement(null)}
                     className="p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground rounded-lg transition-colors border border-border/40 cursor-pointer"

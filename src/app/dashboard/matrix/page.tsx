@@ -6,6 +6,7 @@ import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
 import { ImageAttachmentManager } from '@/components/media/ImageAttachmentManager';
+import { PackBuilderAddButton } from '@/components/packs/PackBuilderAddButton';
 import {
   Asset,
   AssetCheckType,
@@ -1687,17 +1688,25 @@ export default function AssetMatrix() {
                   </span>
                 )}
               </div>
-              <button
-                onClick={() => {
-                  setActiveAsset(null);
-                  setActiveCell(null);
-                  setShowAddHistoryInWorkspace(false);
-                  setIsEditingAsset(false);
-                }}
-                className="p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <PackBuilderAddButton
+                  type="asset"
+                  id={activeAsset.id}
+                  title={activeAsset.name}
+                  sourceRoute="/dashboard/matrix"
+                />
+                <button
+                  onClick={() => {
+                    setActiveAsset(null);
+                    setActiveCell(null);
+                    setShowAddHistoryInWorkspace(false);
+                    setIsEditingAsset(false);
+                  }}
+                  className="p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Three-Column Grid */}

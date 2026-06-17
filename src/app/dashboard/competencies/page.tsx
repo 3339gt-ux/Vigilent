@@ -7,6 +7,7 @@ import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/Inter
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { ImageAttachmentManager } from '@/components/media/ImageAttachmentManager';
 import { PersonAvatar } from '@/components/media/PersonAvatar';
+import { PackBuilderAddButton } from '@/components/packs/PackBuilderAddButton';
 import { buildCompetencyMatrix, calculateCompetencyStatus } from '@/lib/competencyEngine';
 import { buildPersonCompetencyExpectations, PERSONA_REQUIREMENT_LEVELS, type PersonaGapStatus } from '@/lib/competencyPersonas';
 import { COMPETENCY_TEMPLATE_PACKS } from '@/lib/competencyTemplates';
@@ -4810,6 +4811,12 @@ export default function CompetencyMatrixPage() {
                 >
                   Next
                 </button>
+                <PackBuilderAddButton
+                  type="person"
+                  id={selectedPerson.id}
+                  title={selectedPerson.display_name}
+                  sourceRoute="/dashboard/competencies"
+                />
                 <button
                   onClick={() => {
                     setSelectedPerson(null);

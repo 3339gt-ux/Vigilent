@@ -12,6 +12,7 @@ import { EVIDENCE_CATEGORY_GROUPS, flattenCategoryGroups } from '@/lib/categoryP
 import { exportCsv, exportDateStamp, ExportRow } from '@/lib/exportData';
 import { Action, EvidenceDocument, Asset, RecordImageAttachment } from '@/lib/types';
 import { ImageLightbox } from '@/components/media/ImageLightbox';
+import { PackBuilderAddButton } from '@/components/packs/PackBuilderAddButton';
 import { evidenceAcceptAttribute, formatMaxEvidenceUploadSize } from '@/lib/evidenceStorage';
 import { calculateEvidenceFileHash } from '@/lib/evidenceStorage';
 import { getDuplicateChecksEnabled, setDuplicateChecksEnabled } from '@/lib/userPreferences';
@@ -2699,12 +2700,20 @@ export default function EvidenceVault() {
                     {selectedDoc.title}
                   </h2>
                 </div>
-                <button
-                  onClick={() => setSelectedDoc(null)}
-                  className="p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <PackBuilderAddButton
+                    type="evidence"
+                    id={selectedDoc.id}
+                    title={selectedDoc.title}
+                    sourceRoute="/dashboard/vault"
+                  />
+                  <button
+                    onClick={() => setSelectedDoc(null)}
+                    className="p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               {/* Editing Form */}

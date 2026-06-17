@@ -5,6 +5,7 @@ import { useApp } from '@/context/AppContext';
 import { ImageAttachmentManager } from '@/components/media/ImageAttachmentManager';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { PackBuilderAddButton } from '@/components/packs/PackBuilderAddButton';
 import {
   Action,
   ActionDocument,
@@ -164,9 +165,17 @@ export function ActionDetailDrawer({
               {action.status}
             </span>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-muted rounded-lg" aria-label="Close action detail">
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <PackBuilderAddButton
+              type="action"
+              id={action.id}
+              title={action.title}
+              sourceRoute="/dashboard"
+            />
+            <button onClick={onClose} className="p-2 hover:bg-muted rounded-lg" aria-label="Close action detail">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         <div className="p-5 space-y-6">

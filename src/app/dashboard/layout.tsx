@@ -34,6 +34,9 @@ import {
 import { BulkUploadConfigurationPanel } from '@/components/BulkUploadConfigurationPanel';
 import { NotificationBell } from '@/components/NotificationBell';
 import { GlobalSearchPanel } from '@/components/GlobalSearchPanel';
+import { EvidencePackBuilderProvider } from '@/components/packs/EvidencePackBuilderProvider';
+import { EvidencePackBuilderSidebar } from '@/components/packs/EvidencePackBuilderSidebar';
+import { PackBuilderToggle } from '@/components/packs/PackBuilderToggle';
 
 function AppearanceControls({ compact = false }: { compact?: boolean }) {
   const { themePreference, setThemePreference } = useApp();
@@ -70,6 +73,14 @@ function AppearanceControls({ compact = false }: { compact?: boolean }) {
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <EvidencePackBuilderProvider>
+      <DashboardLayoutInner>{children}</DashboardLayoutInner>
+    </EvidencePackBuilderProvider>
+  );
+}
+
+function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { user, organization, logout, theme, isLoading, isAuthenticated } = useApp();
@@ -440,6 +451,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
             <div className="flex items-center gap-3">
               <GlobalSearchPanel dropdownAlign="sm:right-0 sm:top-full sm:mt-2" />
+              <PackBuilderToggle />
             </div>
           </header>
 
@@ -451,6 +463,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             <div className="flex items-center gap-1.5">
               <GlobalSearchPanel dropdownAlign="sm:right-0 sm:top-full sm:mt-2" />
+              <PackBuilderToggle />
               <NotificationBell dropdownAlign="right-0 top-full mt-2" />
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -517,9 +530,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           )}
 
           {/* 4. Active Page Content */}
-          <main className="flex-1 p-4 md:p-8 overflow-y-auto max-w-7xl w-full mx-auto">
-            {children}
-          </main>
+          <div className="flex-1 flex overflow-hidden">
+            <main className="flex-1 p-4 md:p-8 overflow-y-auto max-w-7xl w-full mx-auto">
+              {children}
+            </main>
+            <EvidencePackBuilderSidebar />
+          </div>
         </div>
       </div>
 
