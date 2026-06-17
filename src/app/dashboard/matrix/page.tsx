@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
 import { ImageAttachmentManager } from '@/components/media/ImageAttachmentManager';
 import {
@@ -190,6 +191,8 @@ export default function AssetMatrix() {
   const [linkingFormValidUntil, setLinkingFormValidUntil] = useState('');
   const [linkingFormNotes, setLinkingFormNotes] = useState('');
   const [linkingFormPerformedBy, setLinkingFormPerformedBy] = useState('');
+
+  useBodyScrollLock(Boolean(activeAsset || showAddAssetModal || showAddCheckTypeModal || showCategoryManager || activeCell));
 
   const { interfaceDetailLevel } = useInterfaceDetailLevel();
 

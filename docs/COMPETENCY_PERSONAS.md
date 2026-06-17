@@ -70,11 +70,20 @@ The current foundation includes:
 
 This foundation does not yet include:
 
-- a full dedicated persona import template in Bulk Import Centre;
-- automatic silent role-based inheritance on save;
-- hosted Supabase production persistence unless the pending migration is applied;
-- remote staging verification of RLS and relationship guards;
+- a full dedicated persona import template in Bulk Import Centre (deferred);
+- automatic silent role-based inheritance on save (deferred);
+- hosted Supabase production persistence and remote application/RLS verification (deferred);
+- Evidence Pack Builder (not yet implemented);
 - richer per-item conditional logic rules.
+
+## Browser QA & Usability Polish
+
+A dedicated browser QA and visual/UX polish pass was conducted on the competency personas and usability fix pack systems:
+- Person status badges and filters were refined for readability and visual contrast.
+- Duplicate checking toggle messaging in the Evidence Vault was streamlined and polished.
+- Table sorting, filtering, and search in nested lists (e.g. competency assigned teammates) were verified.
+- Global background scroll lock hooks were integrated across drawers, lightboxes, and modals.
+- Persona requirement level option labeling and suppression warnings were polished with preferred microcopy.
 
 ## Supabase migration status
 

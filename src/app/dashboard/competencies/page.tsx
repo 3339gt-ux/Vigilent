@@ -967,7 +967,7 @@ export default function CompetencyMatrixPage() {
     if (reason === null) return;
     setConfirmRequest({
       title: 'Suppress persona competency?',
-      description: 'This keeps existing competency records and evidence, but removes the persona expectation for this person until you restore it.',
+      description: 'This marks the competency as not applicable for this person. Existing competency records and evidence are preserved, but the persona expectation is removed until restored.',
       confirmLabel: 'Suppress',
       tone: 'warning',
       onConfirm: async () => {
@@ -2364,7 +2364,11 @@ export default function CompetencyMatrixPage() {
                           onChange={event => setPersonOperationalStatusFilter(event.target.value as PersonStatusFilter)}
                           className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
                         >
-                          {PERSON_STATUS_FILTER_OPTIONS.map(status => <option key={status} value={status}>{status}</option>)}
+                          {PERSON_STATUS_FILTER_OPTIONS.map(status => (
+                            <option key={status} value={status}>
+                              {status === 'Current' ? 'Current Teammates' : status === 'All' ? 'All Person Statuses' : status}
+                            </option>
+                          ))}
                         </select>
                       </div>
                       <div className="flex flex-col gap-1">
@@ -2589,7 +2593,11 @@ export default function CompetencyMatrixPage() {
                           onChange={event => setPersonOperationalStatusFilter(event.target.value as PersonStatusFilter)}
                           className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs font-semibold text-foreground outline-none cursor-pointer"
                         >
-                          {PERSON_STATUS_FILTER_OPTIONS.map(status => <option key={status} value={status}>{status}</option>)}
+                          {PERSON_STATUS_FILTER_OPTIONS.map(status => (
+                            <option key={status} value={status}>
+                              {status === 'Current' ? 'Current Teammates' : status === 'All' ? 'All Person Statuses' : status}
+                            </option>
+                          ))}
                         </select>
                       </div>
                       <div className="flex flex-col gap-1">
@@ -3478,7 +3486,7 @@ export default function CompetencyMatrixPage() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-extrabold">Competency Personas</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">Reusable expectation templates for people with similar duties.</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Personas are reusable competency templates. Assign one or more to a person to show what they are expected to hold.</p>
                 </div>
                 {canManage && (
                   <button
@@ -3680,7 +3688,13 @@ export default function CompetencyMatrixPage() {
                             onChange={event => setPersonaItemForm({ ...personaItemForm, requirement_level: event.target.value as CompetencyPersonaRequirementLevel })}
                             className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-xs font-semibold text-foreground outline-none cursor-pointer"
                           >
-                            {PERSONA_REQUIREMENT_LEVELS.map(level => <option key={level} value={level}>{level}</option>)}
+                            {PERSONA_REQUIREMENT_LEVELS.map(level => {
+                              let label: string = level;
+                              if (level === 'required') label = 'Required (Must be held unless suppressed)';
+                              else if (level === 'optional') label = 'Optional (Useful but not always required)';
+                              else if (level === 'conditional') label = 'Conditional (Required only for certain work)';
+                              return <option key={level} value={level}>{label}</option>;
+                            })}
                           </select>
                         </label>
                         <label className="space-y-1 block">
@@ -4279,9 +4293,13 @@ export default function CompetencyMatrixPage() {
                       <select
                         value={competencyPeoplePersonStatusFilter}
                         onChange={event => setCompetencyPeoplePersonStatusFilter(event.target.value as PersonStatusFilter)}
-                        className="px-2.5 py-1.5 bg-card border border-border rounded-lg text-xs font-bold outline-none"
+                        className="px-2.5 py-1.5 bg-card border border-border rounded-lg text-xs font-bold outline-none cursor-pointer"
                       >
-                        {PERSON_STATUS_FILTER_OPTIONS.map(status => <option key={status} value={status}>{status}</option>)}
+                        {PERSON_STATUS_FILTER_OPTIONS.map(status => (
+                          <option key={status} value={status}>
+                            {status === 'Current' ? 'Current Teammates' : status === 'All' ? 'All Person Statuses' : status}
+                          </option>
+                        ))}
                       </select>
                       <select
                         value={competencyPeopleRecordStatusFilter}
@@ -4955,6 +4973,9 @@ export default function CompetencyMatrixPage() {
                       {selectedPersonAssignedPersonas.length} active
                     </span>
                   </div>
+                  <p className="text-[11px] text-muted-foreground leading-normal">
+                    Personas are reusable competency templates. Assign one or more to a person to show what they are expected to hold.
+                  </p>
 
                   {canManage && (
                     <div className="space-y-2 p-3 rounded-xl border border-border bg-card">

@@ -1734,18 +1734,10 @@ export default function EvidenceVault() {
       </details>
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-border bg-card p-3 text-xs">
-        <div className="flex items-start gap-2">
-          <AlertCircle className={`w-4 h-4 mt-0.5 shrink-0 ${duplicateChecksEnabled ? 'text-emerald-600 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`} />
-          <div>
-            <p className="font-bold text-foreground">Duplicate checking {duplicateChecksEnabled ? 'enabled' : 'disabled'}</p>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">
-              {duplicateChecksEnabled
-                ? 'Uploads are checked for matching file hash and similar metadata before saving.'
-                : 'Duplicate checks are off. Review files carefully before uploading.'}
-            </p>
-          </div>
-        </div>
-        <label className="inline-flex items-center gap-2 font-bold text-foreground cursor-pointer">
+        <span className="text-muted-foreground pl-1">
+          Safety Check: <strong className="text-foreground">Verify files for potential duplicate content before saving.</strong>
+        </span>
+        <label className="inline-flex items-center gap-2 font-bold text-foreground cursor-pointer select-none">
           <input
             type="checkbox"
             checked={duplicateChecksEnabled}
@@ -1758,6 +1750,15 @@ export default function EvidenceVault() {
           Check duplicates before upload
         </label>
       </div>
+
+      {!duplicateChecksEnabled && (
+        <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-medium rounded-xl flex items-start gap-2 shadow-xs">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-700 dark:text-amber-300" />
+          <div>
+            <span className="font-bold">Duplicate Checking Disabled:</span> Uploads will bypass hash/metadata comparison. Please review files manually to avoid creating redundant evidence records.
+          </div>
+        </div>
+      )}
 
       <EvidenceDropzone
         label="Drop evidence files anywhere here or choose files"

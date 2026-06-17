@@ -3,6 +3,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useApp, useInterfaceDetailLevel } from '@/context/AppContext';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { FiltersAndToolsButton, AdvancedControlsPanel } from '@/components/InterfaceDetailControls';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
@@ -361,6 +362,8 @@ export default function RequirementsPage() {
   const [categoryMessage, setCategoryMessage] = useState('');
   const [isCatDropdownOpen, setIsCatDropdownOpen] = useState(false);
   const [catSearchQuery, setCatSearchQuery] = useState('');
+
+  useBodyScrollLock(Boolean(selectedRequirement || showCreateModal || showImportModal));
 
   const requirementCategoryOptions = useMemo(() => {
     const names = new Set<string>([
