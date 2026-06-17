@@ -29,7 +29,9 @@ import {
   UploadCloud,
   History,
   Star,
-  BarChart3
+  BarChart3,
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 import { BulkUploadConfigurationPanel } from '@/components/BulkUploadConfigurationPanel';
 import { NotificationBell } from '@/components/NotificationBell';
@@ -83,7 +85,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, organization, logout, theme, isLoading, isAuthenticated } = useApp();
+  const { user, organization, logout, theme, isLoading, isAuthenticated, authError, refreshSession } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
   const [sidebarPinned, setSidebarPinned] = React.useState(false);
@@ -290,6 +292,56 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
           <LumenLogo iconOnly variant="auto" height={28} />
         </div>
         <p className="text-xs text-muted-foreground font-medium animate-pulse">Checking credentials & workspace config...</p>
+      </div>
+    );
+  }
+
+  if (authError && (!user || !organization)) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-6">
+        <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 rounded-full bg-amber-500/10 p-2 text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="h-4 w-4" />
+            </div>
+            <div className="space-y-2">
+              <h1 className="text-sm font-black uppercase tracking-wider text-foreground">
+                Workspace bootstrap blocked
+              </h1>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {authError}
+              </p>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                No access was granted automatically. Refresh the workspace or return to sign-in and try again.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void refreshSession()}
+              className="inline-flex items-center gap-2 rounded-lg bg-indigo-650 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-indigo-700"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Retry workspace load
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push('/login')}
+              className="rounded-lg border border-border px-3 py-2 text-xs font-bold text-foreground transition-colors hover:bg-muted"
+            >
+              Go to sign-in
+            </button>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="rounded-lg border border-border px-3 py-2 text-xs font-bold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              Refresh page
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

@@ -316,6 +316,8 @@ const emptyReadinessReport = buildReadinessReport({
   requirementActions: []
 });
 
+const WORKSPACE_BOOTSTRAP_TIMEOUT_MS = 8000;
+
 const profileFromAuthUser = (authUser: User): Profile => ({
   id: authUser.id,
   organization_id: null,
@@ -767,12 +769,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const loadData = async () => {
     setIsLoading(true);
     setAuthError(null);
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     try {
-      if (isDemoMode) {
-        await loadDemoData();
-      } else {
-        await loadProductionData();
-      }
+      const timedBootstrap = new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          reject(new Error(
+            isDemoMode
+              ? 'Local workspace bootstrap timed out. Refresh the page. If this keeps happening after code changes, restart the local Next.js server and try again.'
+              : 'Workspace bootstrap timed out while verifying your session and organisation access. Refresh and try again.'
+          ));
+        }, WORKSPACE_BOOTSTRAP_TIMEOUT_MS);
+      });
+
+      await Promise.race([
+        isDemoMode ? loadDemoData() : loadProductionData(),
+        timedBootstrap
+      ]);
     } catch (err) {
       const diagnostics = logSupabaseError('AppContext.loadData', err);
       const message = getFriendlyErrorMessage(
@@ -791,6 +803,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       clearWorkspaceState();
     } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
       setIsLoading(false);
     }
   };
