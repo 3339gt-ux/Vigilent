@@ -552,7 +552,7 @@ What works:
 - Audit Pack Builder selects requirements, gathers linked documents, missing evidence warnings, due/expiry warnings, open actions, and competency warnings.
 - Pack rows can be exported to CSV and print/save-as-PDF.
 - Packs store requirement IDs and document IDs; files remain private and open through signed URLs.
-- Evidence Pack Builder Sidebar: A persistent sidebar that lets users collect requirements, teammates, assets, evidence documents, and action records as a local draft pack, configure child include options, preview the export structure, and generate a metadata-only ZIP with traceability files.
+- Evidence Pack Builder Sidebar: A persistent sidebar that lets users collect requirements, teammates, assets, evidence documents, and action records as a local draft pack, configure child include options, preview the export structure, generate a metadata ZIP, and run a local-testing full ZIP export with selected private files plus included/failed/deferred traceability logs.
 
 Partly supported:
 
@@ -787,7 +787,8 @@ Use the Evidence Pack Builder Sidebar to assemble selected requirements, teammat
 - **Planned Folder Hierarchy:** Preview your pack layout in a structured manifest tree.
 - **Include Options:** Fine-tune what metadata (profiles, linked records, images, reviews) is included per item.
 - **Metadata ZIP Export:** The builder can export a metadata-only ZIP containing summaries, traceability files, and deferred-file logs.
-- **Safe Deferral:** Actual private file downloading and external sharing remain deferred pending security review. Evidence files remain protected in secure private storage.
+- **Full ZIP Export (Local Testing):** The builder can also export selected private evidence and image files into the ZIP when the linked records still pass organisation and permission checks. Included, failed, and deferred file logs are written into the archive.
+- **Production Boundary:** Hosted Supabase storage, RLS, and organisation-isolation verification still need to be completed before treating private-file export as production ready.
 
 ### Audit Trail
 

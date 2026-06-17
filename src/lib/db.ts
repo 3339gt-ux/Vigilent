@@ -5363,7 +5363,7 @@ export const dbService = {
     return data;
   },
 
-  async getDocumentSignedUrl(docId: string): Promise<string> {
+  async getDocumentSignedUrl(docId: string, ttlSeconds: number = signedUrlTtlSeconds): Promise<string> {
     if (!shouldUseSupabase()) {
       const doc = getStorageItem('vigilen_documents', MOCK_DOCUMENTS).find((item: EvidenceDocument) => item.id === docId);
       if (!doc) throw new Error('Document not found.');
@@ -5388,7 +5388,7 @@ export const dbService = {
 
     const { data, error } = await supabase.storage
       .from(evidenceStorageBucket)
-      .createSignedUrl(doc.storage_path, signedUrlTtlSeconds);
+      .createSignedUrl(doc.storage_path, ttlSeconds);
 
     if (error) throwSupabaseError('storage.objects.createSignedUrl evidence document', error);
     if (!data?.signedUrl) throw new Error('Supabase did not return a signed URL.');
@@ -6994,7 +6994,7 @@ export const dbService = {
     );
   },
 
-  async getImageAttachmentSignedUrl(attachmentId: string): Promise<string> {
+  async getImageAttachmentSignedUrl(attachmentId: string, ttlSeconds: number = signedUrlTtlSeconds): Promise<string> {
     if (shouldUseSupabase()) {
       const tableAvailable = await checkImageAttachmentsTableAvailable();
       if (!tableAvailable) throw new Error('Image attachments are not configured on the server.');
@@ -7011,14 +7011,14 @@ export const dbService = {
       if (!att) throw new Error('Image attachment not found.');
 
       if (att.document_id && !att.storage_path) {
-        return this.getDocumentSignedUrl(att.document_id);
+        return this.getDocumentSignedUrl(att.document_id, ttlSeconds);
       }
 
       if (!att.storage_path) throw new Error('Attachment has no storage path.');
 
       const { data: urlData, error: storageError } = await supabase!.storage
         .from(att.storage_bucket || evidenceStorageBucket)
-        .createSignedUrl(att.storage_path, signedUrlTtlSeconds);
+        .createSignedUrl(att.storage_path, ttlSeconds);
 
       if (storageError) throwSupabaseError('storage.objects.createSignedUrl image attachment', storageError);
       if (!urlData?.signedUrl) throw new Error('Could not generate signed URL.');

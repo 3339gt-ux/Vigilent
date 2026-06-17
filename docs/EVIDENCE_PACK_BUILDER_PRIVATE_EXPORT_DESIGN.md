@@ -2,16 +2,38 @@
 
 This document defines the secure design for Stage 3C full Evidence Pack Builder ZIP export with private evidence and image files.
 
-It is a design and security review only.
+It began as a design and security review only.
 
-It does **not** implement private-file export yet.
+Stage 3C-B has now been implemented for local testing against this design. The implementation keeps the same security rules and still requires hosted Supabase verification before production use.
+
+## Stage 3C-B implementation status
+
+The current local-testing checkpoint now includes:
+
+- metadata-only ZIP export
+- full private-file ZIP export for selected, permitted files
+- organisation revalidation before fetch
+- short-lived signed URL fetching with immediate blob download
+- included, failed, and deferred file logs
+- updated traceability rows for actual files
+- conservative file count and size limits
+- summary-only audit events where the existing audit helper can record them safely
+
+The current implementation still treats the following as production blockers:
+
+- hosted Supabase RLS/storage verification
+- multi-user organisation-isolation testing
+- larger-pack browser memory testing
+- operational monitoring and support procedures
+
+One deliberate hardening rule was added during implementation: demo-mode exports reject external placeholder URLs and only allow directly embedded local file data. This keeps local testing from accidentally bundling public placeholder assets.
 
 ## 1. Current baseline
 
 Current state in the codebase:
 
 - Stage 3B metadata-only ZIP export is implemented in [src/lib/evidencePackExport.ts](C:/Vigilen/src/lib/evidencePackExport.ts).
-- Full private-file export remains disabled in [src/components/packs/EvidencePackBuilderSidebar.tsx](C:/Vigilen/src/components/packs/EvidencePackBuilderSidebar.tsx).
+- Full private-file export is now implemented for local testing in [src/components/packs/EvidencePackBuilderSidebar.tsx](C:/Vigilen/src/components/packs/EvidencePackBuilderSidebar.tsx) and [src/lib/evidencePackExport.ts](C:/Vigilen/src/lib/evidencePackExport.ts).
 - Pack Builder draft state is local only and scoped by `userId + organisationId` in [src/components/packs/EvidencePackBuilderProvider.tsx](C:/Vigilen/src/components/packs/EvidencePackBuilderProvider.tsx).
 - Evidence documents use the private Supabase bucket `evidence-documents`.
 - Document opening and image opening already use short-lived signed URLs through:
@@ -22,10 +44,11 @@ Current state in the codebase:
 What is already safe today:
 
 - metadata ZIP export
+- full ZIP export for selected and revalidated private files
 - no signed URLs in ZIP output
 - no public URLs in ZIP output
 - no raw storage paths in ZIP output
-- no file fetches during export
+- short-lived file fetches during export with no URL persistence
 
 ## 2. File source inventory
 
