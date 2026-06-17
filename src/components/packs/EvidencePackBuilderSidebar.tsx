@@ -1,13 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   X,
   ChevronDown,
   ChevronUp,
   Trash2,
   FolderArchive,
-  Info,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -17,12 +16,65 @@ import {
   Activity,
   Folder,
   Eye,
-  Settings,
-  ShieldAlert
+  ShieldAlert,
+  Download,
+  Loader2
 } from 'lucide-react';
 import { usePackBuilder, PackItem, PackItemType } from './EvidencePackBuilderProvider';
+import { useApp } from '@/context/AppContext';
+import { buildEvidencePackMetadataZip } from '@/lib/evidencePackExport';
+
+const previewRootDate = 'YYYY-MM-DD';
+
+function sanitizePreviewName(value: string) {
+  const normalized = value.trim().replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/-+/g, '-');
+  return normalized.replace(/^-|-$/g, '') || 'Draft';
+}
+
+function getPreviewSummaryFile(type: PackItemType) {
+  switch (type) {
+    case 'requirement':
+      return 'requirement-summary.json';
+    case 'person':
+      return 'person-summary.json';
+    case 'asset':
+      return 'asset-summary.json';
+    case 'evidence':
+      return 'evidence-metadata.json';
+    case 'action':
+      return 'action-summary.json';
+    default:
+      return 'item-summary.json';
+  }
+}
 
 export function EvidencePackBuilderSidebar() {
+  const {
+    user,
+    organization,
+    frameworkRequirements,
+    requirementDocuments,
+    requirementEvidenceCriteria,
+    requirementEvidenceCriterionMatches,
+    reviews,
+    requirementActions,
+    people,
+    competencyRecords,
+    competencyTypes,
+    competencyRecordDocuments,
+    documents,
+    actions,
+    actionDocuments,
+    actionObjectLinks,
+    actionUpdates,
+    assets,
+    assetCheckAssignments,
+    assetCheckRecords,
+    assetCheckEvidenceLinks,
+    assetHistoryEvents,
+    imageAttachments
+  } = useApp();
+
   const {
     isOpen,
     isCollapsed,
@@ -41,6 +93,22 @@ export function EvidencePackBuilderSidebar() {
 
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [isExportingMetadata, setIsExportingMetadata] = useState(false);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  const groupedItems = useMemo<Record<PackItemType, PackItem[]>>(() => (
+    items.reduce<Record<PackItemType, PackItem[]>>((acc, item) => {
+      acc[item.type].push(item);
+      return acc;
+    }, {
+      requirement: [],
+      person: [],
+      asset: [],
+      evidence: [],
+      action: []
+    })
+  ), [items]);
 
   if (!isOpen) return null;
 
@@ -62,6 +130,8 @@ export function EvidencePackBuilderSidebar() {
         return <FileText className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />;
       case 'action':
         return <Activity className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />;
+      default:
+        return null;
     }
   };
 
@@ -77,6 +147,8 @@ export function EvidencePackBuilderSidebar() {
         return 'Document';
       case 'action':
         return 'Action';
+      default:
+        return type;
     }
   };
 
@@ -87,7 +159,7 @@ export function EvidencePackBuilderSidebar() {
       case 'includeEvidence':
         return 'Include linked evidence metadata';
       case 'includeActions':
-        return 'Include actions';
+        return 'Include linked actions';
       case 'includeReviews':
         return 'Include reviews';
       case 'includeImages':
@@ -107,31 +179,76 @@ export function EvidencePackBuilderSidebar() {
       case 'includeLinkedRecords':
         return 'Include linked records';
       case 'includeNotes':
-        return 'Include closure notes';
+        return 'Include action notes/updates';
       case 'includeFiles':
-        return 'Include files — deferred until export safety review';
+        return 'Include files - deferred until export safety review';
       default:
         return optKey;
     }
   };
 
-  // Group items by type
-  const groupedItems = items.reduce<Record<PackItemType, PackItem[]>>((acc, item) => {
-    if (!acc[item.type]) acc[item.type] = [];
-    acc[item.type].push(item);
-    return acc;
-  }, {
-    requirement: [],
-    person: [],
-    asset: [],
-    evidence: [],
-    action: []
-  });
-
   const activeCount = items.length;
-  const includedCount = items.filter(i => i.included).length;
+  const includedItems = items.filter(item => item.included);
+  const includedCount = includedItems.length;
 
-  // Render Collapsed Strip
+  const handleMetadataExport = async () => {
+    if (includedCount === 0) {
+      setExportMessage(null);
+      setExportError('Add at least one requirement, person, asset, evidence record or action before exporting.');
+      return;
+    }
+
+    setIsExportingMetadata(true);
+    setExportMessage(null);
+    setExportError(null);
+
+    try {
+      const { blob, filename, rootFolderName, includedCount: exportedCount } = await buildEvidencePackMetadataZip({
+        packName,
+        packDescription,
+        exportedBy: user?.full_name || 'Unknown user',
+        organisationName: organization?.name || 'Unknown organisation',
+        items,
+        requirements: frameworkRequirements,
+        requirementDocuments,
+        requirementEvidenceCriteria,
+        requirementEvidenceCriterionMatches,
+        reviews,
+        requirementActions,
+        people,
+        competencyRecords,
+        competencyTypes,
+        competencyRecordDocuments,
+        documents,
+        actions,
+        actionDocuments,
+        actionObjectLinks,
+        actionUpdates,
+        assets,
+        assetCheckAssignments,
+        assetCheckRecords,
+        assetCheckEvidenceLinks,
+        assetHistoryEvents,
+        imageAttachments
+      });
+
+      const downloadUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = downloadUrl;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(downloadUrl);
+
+      setExportMessage(`Metadata ZIP exported: ${filename}. Included ${exportedCount} item${exportedCount === 1 ? '' : 's'} in ${rootFolderName}.`);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : 'Metadata ZIP export failed. Please try again.');
+    } finally {
+      setIsExportingMetadata(false);
+    }
+  };
+
   if (isCollapsed) {
     return (
       <div
@@ -159,10 +276,7 @@ export function EvidencePackBuilderSidebar() {
             )}
           </div>
         </div>
-        <div className="h-0 w-0 border-t-[80px] border-t-muted-foreground/10 absolute top-1/2 -translate-y-1/2" />
-        <span
-          className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 select-none rotate-90 whitespace-nowrap my-20 origin-center"
-        >
+        <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 select-none rotate-90 whitespace-nowrap my-20 origin-center">
           Pack Builder
         </span>
         <button
@@ -181,9 +295,7 @@ export function EvidencePackBuilderSidebar() {
 
   return (
     <>
-      {/* Sidebar Panel */}
       <aside className="w-80 border-l border-border bg-card flex flex-col h-full shrink-0 select-none animate-in slide-in-from-right duration-250 z-30">
-        {/* Header */}
         <div className="p-4 border-b border-border flex justify-between items-center bg-muted/10 shrink-0">
           <div className="flex items-center gap-2">
             <FolderArchive className="w-4 h-4 text-indigo-650 dark:text-indigo-400" />
@@ -212,17 +324,14 @@ export function EvidencePackBuilderSidebar() {
           </div>
         </div>
 
-        {/* Scrollable Workspace */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* Local-Only Safety Banner */}
           <div className="p-2.5 bg-amber-500/10 dark:bg-amber-500/5 border border-amber-500/20 rounded-xl text-[9.5px] text-amber-800 dark:text-amber-300 flex items-start gap-1.5 leading-relaxed">
             <ShieldAlert className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-700 dark:text-amber-400" />
             <div>
-              <span className="font-bold">Local-Only Draft:</span> No files are uploaded or exported. Full ZIP/private-file export is deferred.
+              <span className="font-bold">Local Draft:</span> Metadata ZIP export is available for structure, traceability and record summaries only. Private-file export remains deferred.
             </div>
           </div>
 
-          {/* Pack Details */}
           <div className="space-y-3 bg-muted/20 border border-border/60 p-3 rounded-xl">
             <div>
               <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">Pack Name</label>
@@ -246,7 +355,6 @@ export function EvidencePackBuilderSidebar() {
             </div>
           </div>
 
-          {/* Grouped Items List */}
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Draft Contents ({activeCount})</span>
@@ -266,7 +374,7 @@ export function EvidencePackBuilderSidebar() {
                 <Folder className="w-8 h-8 mx-auto text-indigo-500/60 dark:text-indigo-400/60 stroke-[1.5]" />
                 <h4 className="text-xs font-bold text-foreground mt-2">Pack is empty</h4>
                 <p className="text-[10px] text-muted-foreground mt-1.5 leading-normal max-w-[200px] mx-auto">
-                  Open a requirement, person, asset, evidence record or action, then choose "Add to pack".
+                  Open a requirement, person, asset, evidence record or action, then choose &quot;Add to pack&quot;.
                 </p>
               </div>
             ) : (
@@ -292,7 +400,6 @@ export function EvidencePackBuilderSidebar() {
                                 item.included ? 'border-border' : 'border-border/40 opacity-60'
                               }`}
                             >
-                              {/* Item Summary Bar */}
                               <div className="p-2.5 flex items-center justify-between gap-2 hover:bg-muted/10 transition-colors">
                                 <div className="flex items-center gap-2 min-w-0">
                                   <input
@@ -324,7 +431,6 @@ export function EvidencePackBuilderSidebar() {
                                 </div>
                               </div>
 
-                              {/* Expanded Child Checklist */}
                               {isExpanded && (
                                 <div className="border-t border-border bg-muted/10 p-2.5 space-y-2 text-[10px]">
                                   <span className="font-bold text-[9px] uppercase tracking-wider text-muted-foreground block pl-0.5">
@@ -346,11 +452,7 @@ export function EvidencePackBuilderSidebar() {
                                             type="checkbox"
                                             checked={item.options[optKey]}
                                             disabled={isFileOption}
-                                            onChange={() =>
-                                              updateItemOptions(item.id, item.type, {
-                                                [optKey]: !item.options[optKey]
-                                              })
-                                            }
+                                            onChange={() => updateItemOptions(item.id, item.type, { [optKey]: !item.options[optKey] })}
                                             className="rounded border-border text-indigo-650 h-3.5 w-3.5 mt-0.5 shrink-0"
                                           />
                                           <div className="flex flex-col">
@@ -363,7 +465,7 @@ export function EvidencePackBuilderSidebar() {
                                             </span>
                                             {isFileOption && (
                                               <span className="text-[8px] text-amber-600 dark:text-amber-400 font-bold leading-tight mt-0.5 block">
-                                                Deferred pending file export safety review.
+                                                Deferred pending private-file export hardening.
                                               </span>
                                             )}
                                           </div>
@@ -385,14 +487,23 @@ export function EvidencePackBuilderSidebar() {
           </div>
         </div>
 
-        {/* Footer Actions */}
         <div className="p-4 border-t border-border space-y-2.5 bg-muted/10 shrink-0">
           <div className="text-[10px] text-muted-foreground flex justify-between px-1">
             <span>Included Items:</span>
-            <span className="font-bold text-foreground">
-              {includedCount} / {activeCount}
-            </span>
+            <span className="font-bold text-foreground">{includedCount} / {activeCount}</span>
           </div>
+
+          {exportMessage && (
+            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-2 text-[10px] leading-relaxed text-emerald-800 dark:text-emerald-300">
+              {exportMessage}
+            </div>
+          )}
+
+          {exportError && (
+            <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-2.5 py-2 text-[10px] leading-relaxed text-rose-800 dark:text-rose-300">
+              {exportError}
+            </div>
+          )}
 
           <button
             type="button"
@@ -405,27 +516,48 @@ export function EvidencePackBuilderSidebar() {
 
           <button
             type="button"
+            onClick={handleMetadataExport}
+            disabled={isExportingMetadata}
+            className="w-full py-2 bg-indigo-650 hover:bg-indigo-700 disabled:bg-indigo-650/60 text-white border border-transparent rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors disabled:cursor-not-allowed"
+          >
+            {isExportingMetadata ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Exporting metadata ZIP...
+              </>
+            ) : (
+              <>
+                <Download className="w-3.5 h-3.5" />
+                Export metadata pack (.zip)
+              </>
+            )}
+          </button>
+
+          <button
+            type="button"
             disabled
             className="w-full py-2 bg-indigo-600/50 text-white/50 border border-transparent rounded-lg text-xs font-bold flex flex-col items-center justify-center cursor-not-allowed leading-tight"
           >
-            <span>Prepare ZIP export</span>
+            <span>Export full pack with files</span>
             <span className="text-[8px] text-white/30 font-medium">
-              Deferred for Codex/security review
+              Full private-file export is deferred for Codex/security review.
             </span>
           </button>
+
+          <p className="px-1 text-[9px] leading-relaxed text-muted-foreground">
+            Metadata ZIPs include summaries, traceability files and deferred-file logs only. No private evidence files, signed URLs, public URLs or raw storage paths are included.
+          </p>
         </div>
       </aside>
 
-      {/* Manifest Preview Modal */}
       {showPreviewModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="bg-card border border-border w-full max-w-2xl h-[70vh] rounded-2xl flex flex-col relative shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            {/* Modal Header */}
             <div className="p-5 border-b border-border flex justify-between items-center bg-muted/10">
               <div>
                 <h3 className="text-sm font-black uppercase tracking-wider text-foreground">Planned Export Folder Structure</h3>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                  A preview of how your compiled evidence pack will be structured when export is enabled.
+                  A preview of the metadata-only ZIP structure generated from the current local draft.
                 </p>
               </div>
               <button
@@ -437,128 +569,71 @@ export function EvidencePackBuilderSidebar() {
               </button>
             </div>
 
-            {/* Modal Content */}
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[10px] text-amber-800 dark:text-amber-300 flex items-start gap-2 shadow-xs leading-relaxed">
                 <ShieldAlert className="w-4.5 h-4.5 shrink-0 mt-0.5 text-amber-700 dark:text-amber-400" />
                 <div>
-                  <span className="font-bold block mb-0.5">Planned Pack Structure Preview</span>
-                  This preview shows the intended pack structure. Full ZIP export is not enabled in this foundation pass. Private-file export is deferred until a comprehensive Codex/security review.
+                  <span className="font-bold block mb-0.5">Metadata ZIP Structure Preview</span>
+                  This preview shows the safe export structure only. Private evidence and image files are not included. Full private-file export remains deferred until a dedicated security review is complete.
                 </div>
               </div>
 
-              {/* Directory Render Box */}
               <div className="bg-zinc-950 text-zinc-100 rounded-xl p-4 font-mono text-xs overflow-x-auto shadow-inner border border-zinc-800 leading-relaxed min-h-[200px] flex flex-col justify-center">
-                {items.filter(i => i.included).length === 0 ? (
+                {includedItems.length === 0 ? (
                   <div className="text-center py-12 text-zinc-500 font-sans flex flex-col items-center justify-center space-y-3">
                     <Folder className="w-10 h-10 opacity-30 text-indigo-400 stroke-[1.5]" />
                     <div className="space-y-1">
                       <p className="text-xs font-bold text-zinc-400">Preview Empty</p>
                       <p className="text-[10px] text-zinc-500 leading-normal max-w-[280px]">
-                        Add records to your pack and tick their checkboxes to preview the planned export folder structure.
+                        Add records to your pack and tick their checkboxes to preview the planned metadata ZIP structure.
                       </p>
                     </div>
                   </div>
                 ) : (
                   <>
-                    <span className="text-indigo-400">📁 LUMEN-Audit-Pack-{packName.replace(/\s+/g, '-') || 'Draft'}/</span>
+                    <span className="text-indigo-400">LUMEN-Audit-Pack-{sanitizePreviewName(packName)}-{previewRootDate}/</span>
                     <div className="pl-4 space-y-1">
-                      <div>├── 📁 00-Pack-Index/</div>
-                      <div className="pl-4 text-zinc-400">├── 📄 manifest.json <span className="text-zinc-500">(Contains included metadata indices)</span></div>
-                      <div className="pl-4 text-zinc-400">└── 📄 index.html <span className="text-zinc-500">(Clean HTML index directory)</span></div>
+                      <div>|-- 00-Pack-Index/</div>
+                      <div className="pl-4 text-zinc-400">|-- pack-summary.json</div>
+                      <div className="pl-4 text-zinc-400">|-- pack-summary.csv</div>
+                      <div className="pl-4 text-zinc-400">|-- included-items.json</div>
+                      <div className="pl-4 text-zinc-400">|-- traceability-map.csv</div>
+                      <div className="pl-4 text-zinc-400">`-- export-notes.txt</div>
 
-                      {/* Requirements Group */}
-                      {groupedItems.requirement.filter(i => i.included).length > 0 && (
-                        <>
-                          <div>├── 📁 01-Requirements/</div>
-                          {groupedItems.requirement.filter(i => i.included).map(item => (
-                            <div key={item.id} className="pl-4">
-                              <div>├── 📁 {item.title.replace(/\s+/g, '-')}/</div>
-                              <div className="pl-4 text-zinc-500">
-                                {item.options.includeDetails && <div>├── 📄 requirement.json</div>}
-                                {item.options.includeEvidence && <div>├── 📄 linked-evidence.json</div>}
-                                {item.options.includeActions && <div>├── 📄 actions.json</div>}
-                                {item.options.includeReviews && <div>└── 📄 reviews.json</div>}
+                      {(Object.keys(groupedItems) as PackItemType[]).map((type) => {
+                        const exported = groupedItems[type].filter(item => item.included);
+                        if (exported.length === 0) return null;
+
+                        const folderName = ({
+                          requirement: '01-Requirements',
+                          person: '02-People',
+                          asset: '03-Assets',
+                          action: '04-Actions',
+                          evidence: '05-Evidence-Metadata'
+                        } as Record<PackItemType, string>)[type];
+
+                        return (
+                          <React.Fragment key={type}>
+                            <div>|-- {folderName}/</div>
+                            {exported.map(item => (
+                              <div key={item.id} className="pl-4">
+                                <div>|-- {sanitizePreviewName(item.title)}-{item.id.slice(0, 8)}/</div>
+                                <div className="pl-4 text-zinc-500">`-- {getPreviewSummaryFile(type)}</div>
                               </div>
-                            </div>
-                          ))}
-                        </>
-                      )}
+                            ))}
+                          </React.Fragment>
+                        );
+                      })}
 
-                      {/* Teammates Group */}
-                      {groupedItems.person.filter(i => i.included).length > 0 && (
-                        <>
-                          <div>├── 📁 02-People/</div>
-                          {groupedItems.person.filter(i => i.included).map(item => (
-                            <div key={item.id} className="pl-4">
-                              <div>├── 📁 {item.title.replace(/\s+/g, '-')}/</div>
-                              <div className="pl-4 text-zinc-500">
-                                {item.options.includeProfile && <div>├── 📄 profile.json</div>}
-                                {item.options.includeCompetencies && <div>├── 📄 competencies.json</div>}
-                                {item.options.includeActions && <div>└── 📄 actions.json</div>}
-                              </div>
-                            </div>
-                          ))}
-                        </>
-                      )}
-
-                      {/* Assets Group */}
-                      {groupedItems.asset.filter(i => i.included).length > 0 && (
-                        <>
-                          <div>├── 📁 03-Assets/</div>
-                          {groupedItems.asset.filter(i => i.included).map(item => (
-                            <div key={item.id} className="pl-4">
-                              <div>├── 📁 {item.title.replace(/\s+/g, '-')}/</div>
-                              <div className="pl-4 text-zinc-500">
-                                {item.options.includeProfile && <div>├── 📄 profile.json</div>}
-                                {item.options.includeChecks && <div>└── 📄 checks.json</div>}
-                              </div>
-                            </div>
-                          ))}
-                        </>
-                      )}
-
-                      {/* Actions Group */}
-                      {groupedItems.action.filter(i => i.included).length > 0 && (
-                        <>
-                          <div>├── 📁 04-Actions/</div>
-                          {groupedItems.action.filter(i => i.included).map(item => (
-                            <div key={item.id} className="pl-4">
-                              <div>├── 📁 {item.title.replace(/\s+/g, '-')}/</div>
-                              <div className="pl-4 text-zinc-500">
-                                {item.options.includeDetails && <div>├── 📄 action.json</div>}
-                                {item.options.includeNotes && <div>└── 📄 closure-notes.json</div>}
-                              </div>
-                            </div>
-                          ))}
-                        </>
-                      )}
-
-                      {/* Evidence Group */}
-                      {groupedItems.evidence.filter(i => i.included).length > 0 && (
-                        <>
-                          <div>├── 📁 05-Evidence-Metadata/</div>
-                          {groupedItems.evidence.filter(i => i.included).map(item => (
-                            <div key={item.id} className="pl-4">
-                              <div>├── 📁 {item.title.replace(/\s+/g, '-')}/</div>
-                              <div className="pl-4 text-zinc-500">
-                                {item.options.includeMetadata && <div>├── 📄 metadata.json</div>}
-                                {item.options.includeLinkedRecords && <div>└── 📄 linked-records.json</div>}
-                              </div>
-                            </div>
-                          ))}
-                        </>
-                      )}
-
-                      <div>└── 📁 99-Export-Logs/</div>
-                      <div className="pl-4 text-zinc-400">└── 📄 export-trail.json <span className="text-zinc-500">(Traceability logs)</span></div>
+                      <div>`-- 99-Export-Logs/</div>
+                      <div className="pl-4 text-zinc-400">|-- deferred-files.csv</div>
+                      <div className="pl-4 text-zinc-400">`-- export-limitations.txt</div>
                     </div>
                   </>
                 )}
               </div>
             </div>
 
-            {/* Modal Footer */}
             <div className="p-4 border-t border-border flex justify-end bg-muted/10 shrink-0">
               <button
                 type="button"
