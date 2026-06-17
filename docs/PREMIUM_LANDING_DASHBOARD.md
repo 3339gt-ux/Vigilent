@@ -147,20 +147,19 @@ The dashboard incorporates a live interactive intelligence layer enabling deep i
 - **Window Drag Handler**: Dragging files anywhere over the dashboard page automatically slides out a premium dropzone panel from the right.
 - **Context Classification Dialog**: Dropping files opens an interactive classification dialog where users select a target context (General, Requirement, Action, Asset, Competency) and select the specific target record to automatically link files privately upon upload.
 
-### Advanced Layout Customization Panel
+### Layout Customization Panel
 - Triggered by clicking the **"Customize"** button in the dashboard controls.
-- Opens an overlay dialog permitting users to:
-  - **Layout Density**: Toggle between **Comfortable**, **Compact**, and **Executive** density levels. Adjusts margins, grid gaps, card padding, and heading typography dynamically.
-  - **Hero Style**: Choose between **System Map** (full diagram), **Compliance Core Only** (hides satellite nodes & paths), and **List Overview** (tabular module overview).
-  - **Hero Detail Level**: Toggle between **Minimal**, **Balanced**, and **Full** representation styles.
-  - **Motion Preference**: Toggle between **Standard animations** and **Reduced motion** (which suppresses pings and flow line packet animations).
-  - **Effect Intensity**: Choose between **Subtle**, **Standard**, and **Vibrant** rendering of SVG path glows and shadows.
-  - **Upcoming Items Window**: Controls how far ahead the right-rail due-item list looks (**Due Today**, **7 Days**, **30 Days**, **90 Days**). It does not alter the readiness score or create historical data.
-  - **Right Rail Sections**: Multi-select visible sections (Snapshot, Focus, Next 7 Days, Needs Action, Activity).
-  - **KPI Sorting & Visibility**: Hide or reorder the Top KPI cards.
-- **Undo Capability**: A dedicated **"Undo Changes"** button instantly reverts all un-saved tweaks to the previously stored configuration.
+- Opens an overlay dialog reorganised into 6 progressive tabs to reduce clutter:
+  - **Home Style**: Select the dashboard home layout variant using interactive option cards with descriptions and helper badges (e.g. Command Map, Executive Command Bar, Operations Taskboard, Evidence Readiness, Matrix Overview, Focus Mode).
+  - **Visible Sections**: Toggle showing/hiding top KPI cards, lower panels, and right rail sections.
+  - **Layout**: Reorder top KPI cards via Up/Down controls and configure default view modes and horizon windows.
+  - **Readability**: Adjust font sizes, spacing densities, and border corner radius styles.
+  - **Colours & Theme**: Choose global accent and hero colors, or high contrast mode.
+  - **Advanced**: Configure graph layout presets, detail levels, motion preference, and effects intensity.
+- **Undo Capability**: A dedicated **"Cancel"** or **"Undo Changes"** button instantly reverts all un-saved tweaks to the previously stored configuration.
 - **Reset Defaults**: Loads the default configuration into the customization form; **Save Changes** applies it.
 - Scoped to `vygilence_dashboard_customization_${userId}_${orgId}` in `localStorage`.
+
 
 ### Historical Trend Honesty Assertions
 - The compliance trend widget charts current workspace statistics and does not simulate fake historical progression coordinates. In compliance mode, it explicitly prints "Historical trend unavailable" next to the current snapshot point to prevent auditing inaccuracies.

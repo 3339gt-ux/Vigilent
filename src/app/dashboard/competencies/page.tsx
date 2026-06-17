@@ -313,7 +313,7 @@ export default function CompetencyMatrixPage() {
     warning_days_override: ''
   });
   const [showArchivedCompetencies, setShowArchivedCompetencies] = useState(false);
-  useBodyScrollLock(Boolean(activeCell || selectedPerson || selectedCompetencyId || selectedPersonaId || isCreatingCompetency || isCreatingPersona));
+  useBodyScrollLock(Boolean((activeCell && !selectedPerson) || selectedPerson || selectedCompetencyId || isCreatingCompetency));
 
   // Registry Filters Setup
   const [registrySearch, setRegistrySearch] = useState('');

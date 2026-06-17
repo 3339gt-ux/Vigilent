@@ -7,6 +7,7 @@ import Link from 'next/link';
 import ComplianceHeroCore from './components/ComplianceHeroCore';
 import DashboardHomeVariants from './components/DashboardHomeVariants';
 import { InlineToast, ToastState } from '@/components/AppFeedback';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
 import { EvidenceDropzone } from '@/components/EvidenceDropzone';
 import { evidenceAcceptAttribute } from '@/lib/evidenceStorage';
@@ -989,6 +990,7 @@ export default function DashboardPage() {
 
   // Customization modal open/closed state
   const [isCustomizationOpen, setIsCustomizationOpen] = useState(false);
+  const [activeCustomiseTab, setActiveCustomiseTab] = useState<'homeStyle' | 'sections' | 'layout' | 'readability' | 'theme' | 'advanced'>('homeStyle');
 
 
   const densityStyles = useMemo(() => {
@@ -1049,6 +1051,8 @@ export default function DashboardPage() {
   const [quickActionMessage, setQuickActionMessage] = useState('');
   const [quickActionError, setQuickActionError] = useState('');
   const [isQuickActionSaving, setIsQuickActionSaving] = useState(false);
+
+  useBodyScrollLock(isCustomizationOpen || isUploadModalOpen || Boolean(activeQuickActionModal));
 
   // Quick Action Form states
   const [requirementForm, setRequirementForm] = useState({
@@ -2985,6 +2989,7 @@ export default function DashboardPage() {
                     <button
                       onClick={() => {
                         setModalCustomization(customization);
+                        setActiveCustomiseTab('homeStyle');
                         setIsCustomizationOpen(true);
                       }}
                       className="px-2.5 py-1 bg-muted hover:bg-muted/80 border border-border rounded-md text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer text-muted-foreground hover:text-foreground"
@@ -4800,399 +4805,507 @@ export default function DashboardPage() {
       {/* Layout Customization Modal */}
       {isCustomizationOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-card w-full max-w-lg border border-border rounded-2xl p-6 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto flex flex-col justify-between text-left">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-border/60 pb-3">
-                <div className="flex items-center gap-2">
-                  <Settings className="w-4 h-4 text-indigo-500" />
-                  <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider">Customize Dashboard Layout</h3>
-                </div>
-                <button
-                  onClick={() => {
-                    setModalCustomization(customization);
-                    setIsCustomizationOpen(false);
-                  }}
-                  className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+          <div className="bg-card w-full max-w-2xl border border-border rounded-2xl p-6 shadow-2xl space-y-6 max-h-[90vh] flex flex-col text-left">
+            <div className="flex items-center justify-between border-b border-border/60 pb-3 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <Settings className="w-4 h-4 text-indigo-500" />
+                <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider">Customize Dashboard Layout</h3>
               </div>
-
-              {/* KPI Cards Configuration */}
-              <div className="space-y-2">
-                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Top KPI Cards (Show & Reorder)</span>
-                <div className="space-y-1.5 border border-border/60 rounded-xl p-3 bg-muted/10 max-h-56 overflow-y-auto">
-                  {modalCustomization.kpiOrder.map((kpiId, index) => {
-                    const isVisible = modalCustomization.visibleKpis.includes(kpiId);
-                    const label = kpiId === 'health' ? 'Compliance Health' :
-                                  kpiId === 'requirements' ? 'Framework Requirements' :
-                                  kpiId === 'evidence' ? 'Evidence Vault Coverage' :
-                                  kpiId === 'training' ? 'Personnel Competency Training' :
-                                  kpiId === 'tasks' ? 'Open Tasks / Gaps' :
-                                  kpiId === 'asset' ? 'Asset Assurance' : kpiId;
-                    return (
-                      <div key={kpiId} className="flex items-center justify-between p-2 bg-card border border-border/60 rounded-lg text-xs font-semibold">
-                        <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={isVisible}
-                            onChange={(e) => {
-                              const newVisible = e.target.checked
-                                ? [...modalCustomization.visibleKpis, kpiId]
-                                : modalCustomization.visibleKpis.filter(id => id !== kpiId);
-                              setModalCustomization({ ...modalCustomization, visibleKpis: newVisible });
-                            }}
-                            className="rounded border-border focus:ring-indigo-500"
-                          />
-                          <span className={isVisible ? 'text-foreground font-bold' : 'text-muted-foreground line-through'}>{label}</span>
-                        </label>
-                        <div className="flex items-center gap-1">
-                          <button
-                            disabled={index === 0}
-                            onClick={() => {
-                              const newOrder = moveKpi(index, -1, modalCustomization.kpiOrder);
-                              setModalCustomization({ ...modalCustomization, kpiOrder: newOrder });
-                            }}
-                            className="p-1 bg-muted hover:bg-muted-foreground/10 disabled:opacity-40 rounded text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
-                          >
-                            ▲
-                          </button>
-                          <button
-                            disabled={index === modalCustomization.kpiOrder.length - 1}
-                            onClick={() => {
-                              const newOrder = moveKpi(index, 1, modalCustomization.kpiOrder);
-                              setModalCustomization({ ...modalCustomization, kpiOrder: newOrder });
-                            }}
-                            className="p-1 bg-muted hover:bg-muted-foreground/10 disabled:opacity-40 rounded text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
-                          >
-                            ▼
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Lower Panels Configuration */}
-              <div className="space-y-2">
-                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Visible Lower Panels</span>
-                <div className="grid grid-cols-2 gap-2 border border-border/60 rounded-xl p-3 bg-muted/10">
-                  {[
-                    { id: 'trend', label: 'Readiness Snapshot' },
-                    { id: 'statusDonut', label: 'Requirement Donut' },
-                    { id: 'readinessGauge', label: 'Readiness Dial' },
-                    { id: 'trainingRing', label: 'Training Ring' },
-                    { id: 'assetCategory', label: 'Asset Categories' },
-                    { id: 'riskGaps', label: 'Risk Level Areas' },
-                    { id: 'alerts', label: 'Workspace Alerts' }
-                  ].map(panel => {
-                    const isVisible = modalCustomization.visiblePanels.includes(panel.id);
-                    return (
-                      <label key={panel.id} className="flex items-center gap-2 p-2 bg-card border border-border/60 rounded-lg text-xs font-semibold cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={isVisible}
-                          onChange={(e) => {
-                            const newVisible = e.target.checked
-                              ? [...modalCustomization.visiblePanels, panel.id]
-                              : modalCustomization.visiblePanels.filter(id => id !== panel.id);
-                            setModalCustomization({ ...modalCustomization, visiblePanels: newVisible });
-                          }}
-                          className="rounded border-border focus:ring-indigo-500"
-                        />
-                        <span className={isVisible ? 'text-foreground' : 'text-muted-foreground'}>{panel.label}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Right Rail Sections Configuration */}
-              <div className="space-y-2">
-                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Right Rail Sections</span>
-                <div className="grid grid-cols-2 gap-2 border border-border/60 rounded-xl p-3 bg-muted/10">
-                  {[
-                    { id: 'snapshot', label: 'Compliance Snapshot' },
-                    { id: 'tasks', label: 'Tasks Feed' },
-                    { id: 'activity', label: 'Recent Activity' },
-                    { id: 'focus', label: 'Focus' },
-                    { id: 'expiring', label: 'Expiring Soon' }
-                  ].map(sec => {
-                    const isVisible = modalCustomization.visibleRightRailSections.includes(sec.id);
-                    return (
-                      <label key={sec.id} className="flex items-center gap-2 p-1.5 bg-card border border-border/60 rounded-lg text-xs font-semibold cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={isVisible}
-                          onChange={(e) => {
-                            const newVisible = e.target.checked
-                              ? [...modalCustomization.visibleRightRailSections, sec.id]
-                              : modalCustomization.visibleRightRailSections.filter(id => id !== sec.id);
-                            setModalCustomization({ ...modalCustomization, visibleRightRailSections: newVisible });
-                          }}
-                          className="rounded border-border focus:ring-indigo-500"
-                        />
-                        <span className={isVisible ? 'text-foreground' : 'text-muted-foreground'}>{sec.label}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Layout & Hero Aesthetics */}
-              <div className="space-y-2">
-                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Layout & Hero Aesthetics</span>
-                <div className="grid grid-cols-2 gap-3 border border-border/60 rounded-xl p-3 bg-muted/10">
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Layout Density</label>
-                    <select
-                      value={modalCustomization.density}
-                      onChange={(e) => setModalCustomization({ ...modalCustomization, density: e.target.value as DashboardCustomization['density'] })}
-                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
-                    >
-                      <option value="comfortable">Comfortable</option>
-                      <option value="compact">Compact</option>
-                      <option value="executive">Executive</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Hero Style</label>
-                    <select
-                      value={modalCustomization.heroStyle}
-                      onChange={(e) => setModalCustomization({ ...modalCustomization, heroStyle: e.target.value as DashboardCustomization['heroStyle'] })}
-                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
-                    >
-                      <option value="map">System Map</option>
-                      <option value="core">Compliance Core Only</option>
-                      <option value="list">List Overview</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1 col-span-2">
-                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Dashboard Home Style</label>
-                    <select
-                      value={modalCustomization.dashboardHomeVariant || 'map'}
-                      onChange={(e) => setModalCustomization({ ...modalCustomization, dashboardHomeVariant: e.target.value as DashboardCustomization['dashboardHomeVariant'] })}
-                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
-                    >
-                      <option value="map">Command Map</option>
-                      <option value="executive-bar">Executive Command Bar</option>
-                      <option value="taskboard">Operations Taskboard</option>
-                      <option value="evidence-readiness">Evidence Readiness</option>
-                      <option value="matrix-overview">Matrix Overview</option>
-                      <option value="focus-mode">Focus Mode</option>
-                    </select>
-                    <p className="text-[10px] text-muted-foreground/80 mt-1 italic leading-relaxed">
-                      {
-                        {
-                          'map': 'Command Map — visual relationship map of programme areas.',
-                          'executive-bar': 'Executive Command Bar — compact KPIs and data points.',
-                          'taskboard': 'Operations Taskboard — action-led work queue.',
-                          'evidence-readiness': 'Evidence Readiness — evidence coverage and missing proof view.',
-                          'matrix-overview': 'Matrix Overview — people, asset and requirement status overview.',
-                          'focus-mode': 'Focus Mode — simplified daily priority view.'
-                        }[modalCustomization.dashboardHomeVariant || 'map']
-                      }
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Hero Detail Level</label>
-                    <select
-                      value={modalCustomization.heroDetailLevel}
-                      onChange={(e) => setModalCustomization({ ...modalCustomization, heroDetailLevel: e.target.value as DashboardCustomization['heroDetailLevel'] })}
-                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
-                    >
-                      <option value="minimal">Minimal</option>
-                      <option value="balanced">Balanced</option>
-                      <option value="full">Full</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Motion Settings</label>
-                    <select
-                      value={modalCustomization.motionPreference}
-                      onChange={(e) => setModalCustomization({ ...modalCustomization, motionPreference: e.target.value as DashboardCustomization['motionPreference'] })}
-                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
-                    >
-                      <option value="standard">Standard animations</option>
-                      <option value="reduced">Reduced motion</option>
-                    </select>
-                  </div>
-                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Hero Accent</label>
-                    <select
-                      value={modalCustomization.heroAccent || 'default'}
-                      onChange={(e) => setModalCustomization({ ...modalCustomization, heroAccent: e.target.value as DashboardCustomization['heroAccent'] })}
-                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
-                    >
-                      <option value="default">Default Blue/Violet</option>
-                      <option value="cyan-emerald">Cyan/Emerald</option>
-                      <option value="blue-amber">Blue/Amber</option>
-                      <option value="violet-rose">Violet/Rose</option>
-                      <option value="rainbow">Rainbow Spectrum</option>
-                      <option value="gold-amber">Gold/Amber</option>
-                      <option value="neon-green">Neon Green</option>
-                      <option value="sunset-orange">Sunset Orange</option>
-                      <option value="slate-monochrome">Slate Monochrome</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Effects Intensity</label>
-                    <select
-                      value={modalCustomization.effectIntensity || 'standard'}
-                      onChange={(e) => setModalCustomization({ ...modalCustomization, effectIntensity: e.target.value as DashboardCustomization['effectIntensity'] })}
-                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
-                    >
-                      <option value="subtle">Subtle Glows</option>
-                      <option value="standard">Standard Glows & Sweeps</option>
-                      <option value="vibrant">Vibrant Glows & Sweeps</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Hero Layout Preset</label>
-                    <select
-                      value={modalCustomization.heroLayoutPreset || 'balanced-orbit'}
-                      onChange={(e) => setModalCustomization({ ...modalCustomization, heroLayoutPreset: e.target.value as DashboardCustomization['heroLayoutPreset'] })}
-                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
-                    >
-                      <option value="balanced-orbit">Balanced Orbit (Default)</option>
-                      <option value="wide-command-map">Wide Command Map</option>
-                      <option value="compact-core">Compact Core</option>
-                      <option value="operations-focus">Operations Focus</option>
-                      <option value="presentation-mode">Presentation Mode</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Display & Readability Settings */}
-              <div className="space-y-2">
-                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Display & Readability</span>
-                <div className="grid grid-cols-2 gap-3 border border-border/60 rounded-xl p-3 bg-muted/10">
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Font Size Scale</label>
-                    <select
-                      value={modalCustomization.fontSize || 'standard'}
-                      onChange={(e) => setModalCustomization({ ...modalCustomization, fontSize: e.target.value as 'sm' | 'standard' | 'lg' | 'xl' })}
-                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
-                    >
-                      <option value="sm">Small (90%)</option>
-                      <option value="standard">Standard (100%)</option>
-                      <option value="lg">Large (115%)</option>
-                      <option value="xl">Extra Large (125%)</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Pane Spacing</label>
-                    <select
-                      value={modalCustomization.paneSpacing || 'standard'}
-                      onChange={(e) => setModalCustomization({ ...modalCustomization, paneSpacing: e.target.value as 'tight' | 'standard' | 'wide' })}
-                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
-                    >
-                      <option value="tight">Tight (12px)</option>
-                      <option value="standard">Standard (20px)</option>
-                      <option value="wide">Wide (36px)</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Card Corner Radius</label>
-                    <select
-                      value={modalCustomization.cardRadius || 'standard'}
-                      onChange={(e) => setModalCustomization({ ...modalCustomization, cardRadius: e.target.value as 'sharp' | 'standard' | 'soft' | 'rounded' })}
-                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
-                    >
-                      <option value="sharp">Sharp (0px)</option>
-                      <option value="standard">Standard (12px)</option>
-                      <option value="soft">Soft (16px)</option>
-                      <option value="rounded">Rounded (24px)</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Colour Accent Scheme</label>
-                    <select
-                      value={modalCustomization.colourAccent || 'default'}
-                      onChange={(e) => setModalCustomization({ ...modalCustomization, colourAccent: e.target.value as 'default' | 'cyan-emerald' | 'emerald-pulse' | 'violet-rose' | 'azure-amber' | 'blue-amber' | 'rainbow' | 'gold-amber' | 'neon-green' | 'sunset-orange' | 'slate-monochrome' })}
-                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
-                    >
-                      <option value="default">Default Indigo/Violet</option>
-                      <option value="cyan-emerald">Cyan/Emerald</option>
-                      <option value="emerald-pulse">Emerald Pulse</option>
-                      <option value="violet-rose">Violet/Rose</option>
-                      <option value="azure-amber">Azure/Amber</option>
-                      <option value="gold-amber">Gold/Amber</option>
-                      <option value="neon-green">Neon Green</option>
-                      <option value="sunset-orange">Sunset Orange</option>
-                      <option value="slate-monochrome">Slate Monochrome</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Contrast Enhancement</label>
-                    <select
-                      value={modalCustomization.contrast || 'standard'}
-                      onChange={(e) => setModalCustomization({ ...modalCustomization, contrast: e.target.value as 'standard' | 'high' })}
-                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
-                    >
-                      <option value="standard">Standard Contrast</option>
-                      <option value="high">High Contrast Borders</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Interface Motion</label>
-                    <select
-                      value={modalCustomization.motion || 'standard'}
-                      onChange={(e) => setModalCustomization({ ...modalCustomization, motion: e.target.value as 'standard' | 'minimal' })}
-                      className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
-                    >
-                      <option value="standard">Standard Transitions</option>
-                      <option value="minimal">Minimal / Disable Motion</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Defaults Configuration */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Default View Mode</label>
-                  <select
-                    value={modalCustomization.defaultViewMode}
-                    onChange={(e) => setModalCustomization({ ...modalCustomization, defaultViewMode: e.target.value as 'system' | 'list' })}
-                    className="w-full px-2.5 py-1.5 bg-muted border border-border focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
-                  >
-                    <option value="system">System graphical</option>
-                    <option value="list">Module list</option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Default Right Rail Tab</label>
-                  <select
-                    value={modalCustomization.defaultRailTab}
-                    onChange={(e) => setModalCustomization({ ...modalCustomization, defaultRailTab: e.target.value as DashboardCustomization['defaultRailTab'] })}
-                    className="w-full px-2.5 py-1.5 bg-muted border border-border focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
-                  >
-                    <option value="tasks">Tasks list</option>
-                    <option value="activity">Recent activity</option>
-                    <option value="focus">Focus</option>
-                    <option value="expiring">Expiring soon</option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Upcoming Items Window</label>
-                  <select
-                    value={modalCustomization.dataWindow}
-                    onChange={(e) => setModalCustomization({ ...modalCustomization, dataWindow: e.target.value as DashboardCustomization['dataWindow'] })}
-                    className="w-full px-2.5 py-1.5 bg-muted border border-border focus:border-indigo-500 rounded-lg text-xs outline-none transition-colors"
-                  >
-                    <option value="snapshot">Due today</option>
-                    <option value="7days">Next 7 days</option>
-                    <option value="30days">Next 30 days</option>
-                    <option value="90days">Next 90 days</option>
-                  </select>
-                </div>
-              </div>
+              <button
+                onClick={() => {
+                  setModalCustomization(customization);
+                  setIsCustomizationOpen(false);
+                }}
+                className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            <div className="border-t border-border/60 pt-4 mt-6 flex justify-between items-center gap-3">
+            {/* Tabs Navigation */}
+            <div className="flex items-center gap-1 border-b border-border/60 pb-2 overflow-x-auto scrollbar-none flex-shrink-0">
+              {[
+                { id: 'homeStyle', label: 'Home Style' },
+                { id: 'sections', label: 'Visible Sections' },
+                { id: 'layout', label: 'Layout' },
+                { id: 'readability', label: 'Readability' },
+                { id: 'theme', label: 'Colours & Theme' },
+                { id: 'advanced', label: 'Advanced' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveCustomiseTab(tab.id as 'homeStyle' | 'sections' | 'layout' | 'readability' | 'theme' | 'advanced')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all shrink-0 cursor-pointer whitespace-nowrap ${
+                    activeCustomiseTab === tab.id
+                      ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Tab Contents - Scrollable body */}
+            <div className="flex-1 overflow-y-auto pr-1 py-1 space-y-4">
+              {/* 1. Home Style Tab */}
+              {activeCustomiseTab === 'homeStyle' && (
+                <div className="space-y-3 animate-in fade-in duration-150">
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground">Select Dashboard Home Style</h4>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Choose the layout style that best matches your organisation&apos;s workflow.</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 pr-1">
+                    {[
+                      { id: 'map', label: 'Command Map', desc: 'Visual relationship map of programme areas and connections.', badge: 'Interactive Map' },
+                      { id: 'executive-bar', label: 'Executive Command Bar', desc: 'Compact KPIs, core progress dials, and clean data points.', badge: 'KPI Focused' },
+                      { id: 'taskboard', label: 'Operations Taskboard', desc: 'Action-led view focusing on task queues and operational gaps.', badge: 'Task Oriented' },
+                      { id: 'evidence-readiness', label: 'Evidence Readiness', desc: 'Evidence coverage, missing proofs, and expiry schedules.', badge: 'Audit Ready' },
+                      { id: 'matrix-overview', label: 'Matrix Overview', desc: 'Consolidated overview of people, assets, and requirements.', badge: 'All-in-One' },
+                      { id: 'focus-mode', label: 'Focus Mode', desc: 'Simplified view highlighting daily priorities and immediate alerts.', badge: 'Minimal' }
+                    ].map(style => {
+                      const isSelected = (modalCustomization.dashboardHomeVariant || 'map') === style.id;
+                      return (
+                        <button
+                          key={style.id}
+                          onClick={() => setModalCustomization({ ...modalCustomization, dashboardHomeVariant: style.id as DashboardCustomization['dashboardHomeVariant'] })}
+                          className={`flex flex-col text-left p-3 border rounded-xl transition-all cursor-pointer relative group ${
+                            isSelected
+                              ? 'border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 ring-1 ring-indigo-500'
+                              : 'border-border bg-card hover:border-muted-foreground/30 hover:bg-muted/20'
+                          }`}
+                        >
+                          <div className="flex justify-between items-start w-full gap-2">
+                            <span className={`text-xs font-bold ${isSelected ? 'text-indigo-600 dark:text-indigo-400' : 'text-foreground'}`}>
+                              {style.label}
+                            </span>
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${
+                              isSelected
+                                ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300'
+                                : 'bg-muted text-muted-foreground'
+                            }`}>
+                              {style.badge}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground mt-1.5 leading-normal">
+                            {style.desc}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 2. Visible Sections Tab */}
+              {activeCustomiseTab === 'sections' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  {/* Top KPI Cards */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Top KPI Cards</span>
+                    <p className="text-[11px] text-muted-foreground">Select which high-level metrics are displayed at the top of the dashboard.</p>
+                    <div className="grid grid-cols-2 gap-2 border border-border/60 rounded-xl p-3 bg-muted/10">
+                      {modalCustomization.kpiOrder.map(kpiId => {
+                        const isVisible = modalCustomization.visibleKpis.includes(kpiId);
+                        const label = kpiId === 'health' ? 'Compliance Health' :
+                                      kpiId === 'requirements' ? 'Framework Requirements' :
+                                      kpiId === 'evidence' ? 'Evidence Vault Coverage' :
+                                      kpiId === 'training' ? 'Personnel Competency Training' :
+                                      kpiId === 'tasks' ? 'Open Tasks / Gaps' :
+                                      kpiId === 'asset' ? 'Asset Assurance' : kpiId;
+                        return (
+                          <label key={kpiId} className="flex items-center gap-2.5 p-2 bg-card border border-border/60 rounded-lg text-xs font-semibold cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={isVisible}
+                              onChange={(e) => {
+                                const newVisible = e.target.checked
+                                  ? [...modalCustomization.visibleKpis, kpiId]
+                                  : modalCustomization.visibleKpis.filter(id => id !== kpiId);
+                                setModalCustomization({ ...modalCustomization, visibleKpis: newVisible });
+                              }}
+                              className="rounded border-border text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span className={isVisible ? 'text-foreground' : 'text-muted-foreground'}>{label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Lower Panels */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Lower Panels</span>
+                    <p className="text-[11px] text-muted-foreground">Toggle the visibility of specific dashboard sections and status indicators.</p>
+                    <div className="grid grid-cols-2 gap-2 border border-border/60 rounded-xl p-3 bg-muted/10">
+                      {[
+                        { id: 'trend', label: 'Readiness Snapshot' },
+                        { id: 'statusDonut', label: 'Requirement Donut' },
+                        { id: 'readinessGauge', label: 'Readiness Dial' },
+                        { id: 'trainingRing', label: 'Training Ring' },
+                        { id: 'assetCategory', label: 'Asset Categories' },
+                        { id: 'riskGaps', label: 'Risk Level Areas' },
+                        { id: 'alerts', label: 'Workspace Alerts' }
+                      ].map(panel => {
+                        const isVisible = modalCustomization.visiblePanels.includes(panel.id);
+                        return (
+                          <label key={panel.id} className="flex items-center gap-2.5 p-2 bg-card border border-border/60 rounded-lg text-xs font-semibold cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={isVisible}
+                              onChange={(e) => {
+                                const newVisible = e.target.checked
+                                  ? [...modalCustomization.visiblePanels, panel.id]
+                                  : modalCustomization.visiblePanels.filter(id => id !== panel.id);
+                                setModalCustomization({ ...modalCustomization, visiblePanels: newVisible });
+                              }}
+                              className="rounded border-border text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span className={isVisible ? 'text-foreground' : 'text-muted-foreground'}>{panel.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Right Rail Sections */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Right Rail Sections</span>
+                    <p className="text-[11px] text-muted-foreground">Choose the items available in the sidebar navigation rail.</p>
+                    <div className="grid grid-cols-2 gap-2 border border-border/60 rounded-xl p-3 bg-muted/10">
+                      {[
+                        { id: 'snapshot', label: 'Compliance Snapshot' },
+                        { id: 'tasks', label: 'Tasks Feed' },
+                        { id: 'activity', label: 'Recent Activity' },
+                        { id: 'focus', label: 'Focus Priority' },
+                        { id: 'expiring', label: 'Expiring Soon' }
+                      ].map(sec => {
+                        const isVisible = modalCustomization.visibleRightRailSections.includes(sec.id);
+                        return (
+                          <label key={sec.id} className="flex items-center gap-2.5 p-2 bg-card border border-border/60 rounded-lg text-xs font-semibold cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={isVisible}
+                              onChange={(e) => {
+                                const newVisible = e.target.checked
+                                  ? [...modalCustomization.visibleRightRailSections, sec.id]
+                                  : modalCustomization.visibleRightRailSections.filter(id => id !== sec.id);
+                                setModalCustomization({ ...modalCustomization, visibleRightRailSections: newVisible });
+                              }}
+                              className="rounded border-border text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span className={isVisible ? 'text-foreground' : 'text-muted-foreground'}>{sec.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 3. Layout Tab */}
+              {activeCustomiseTab === 'layout' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  {/* KPI Order list */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Reorder KPI Cards</span>
+                    <p className="text-[11px] text-muted-foreground">Adjust the order in which KPI cards appear from left to right.</p>
+                    <div className="space-y-1.5 border border-border/60 rounded-xl p-3 bg-muted/10">
+                      {modalCustomization.kpiOrder.map((kpiId, index) => {
+                        const isVisible = modalCustomization.visibleKpis.includes(kpiId);
+                        const label = kpiId === 'health' ? 'Compliance Health' :
+                                      kpiId === 'requirements' ? 'Framework Requirements' :
+                                      kpiId === 'evidence' ? 'Evidence Vault Coverage' :
+                                      kpiId === 'training' ? 'Personnel Competency Training' :
+                                      kpiId === 'tasks' ? 'Open Tasks / Gaps' :
+                                      kpiId === 'asset' ? 'Asset Assurance' : kpiId;
+                        return (
+                          <div key={kpiId} className="flex items-center justify-between p-2 bg-card border border-border/60 rounded-lg text-xs font-semibold">
+                            <span className={isVisible ? 'text-foreground font-bold' : 'text-muted-foreground/60 line-through font-normal'}>
+                              {label}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                disabled={index === 0}
+                                onClick={() => {
+                                  const newOrder = moveKpi(index, -1, modalCustomization.kpiOrder);
+                                  setModalCustomization({ ...modalCustomization, kpiOrder: newOrder });
+                                }}
+                                className="p-1 bg-muted hover:bg-muted-foreground/10 disabled:opacity-40 rounded text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+                              >
+                                ▲
+                              </button>
+                              <button
+                                disabled={index === modalCustomization.kpiOrder.length - 1}
+                                onClick={() => {
+                                  const newOrder = moveKpi(index, 1, modalCustomization.kpiOrder);
+                                  setModalCustomization({ ...modalCustomization, kpiOrder: newOrder });
+                                }}
+                                className="p-1 bg-muted hover:bg-muted-foreground/10 disabled:opacity-40 rounded text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+                              >
+                                ▼
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Defaults */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Dashboard Defaults</span>
+                    <div className="grid grid-cols-3 gap-3 border border-border/60 rounded-xl p-3 bg-muted/10">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Default View</label>
+                        <select
+                          value={modalCustomization.defaultViewMode}
+                          onChange={(e) => setModalCustomization({ ...modalCustomization, defaultViewMode: e.target.value as DashboardCustomization['defaultViewMode'] })}
+                          className="w-full px-2 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                        >
+                          <option value="system">Graphical</option>
+                          <option value="list">Module List</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Default Sidebar Tab</label>
+                        <select
+                          value={modalCustomization.defaultRailTab}
+                          onChange={(e) => setModalCustomization({ ...modalCustomization, defaultRailTab: e.target.value as DashboardCustomization['defaultRailTab'] })}
+                          className="w-full px-2 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                        >
+                          <option value="tasks">Tasks list</option>
+                          <option value="activity">Recent activity</option>
+                          <option value="focus">Focus priority</option>
+                          <option value="expiring">Expiring soon</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Expiry Horizon</label>
+                        <select
+                          value={modalCustomization.dataWindow}
+                          onChange={(e) => setModalCustomization({ ...modalCustomization, dataWindow: e.target.value as DashboardCustomization['dataWindow'] })}
+                          className="w-full px-2 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                        >
+                          <option value="snapshot">Due Today</option>
+                          <option value="7days">7 Days</option>
+                          <option value="30days">30 Days</option>
+                          <option value="90days">90 Days</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 4. Readability Tab */}
+              {activeCustomiseTab === 'readability' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground">Readability & Spacing</h4>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Customize font sizes, border radius, and spacing density across the app.</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 border border-border/60 rounded-xl p-3 bg-muted/10">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Layout Density</label>
+                      <select
+                        value={modalCustomization.density}
+                        onChange={(e) => setModalCustomization({ ...modalCustomization, density: e.target.value as DashboardCustomization['density'] })}
+                        className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                      >
+                        <option value="comfortable">Comfortable</option>
+                        <option value="compact">Compact</option>
+                        <option value="executive">Executive</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Font Size Scale</label>
+                      <select
+                        value={modalCustomization.fontSize || 'standard'}
+                        onChange={(e) => setModalCustomization({ ...modalCustomization, fontSize: e.target.value as DashboardCustomization['fontSize'] })}
+                        className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                      >
+                        <option value="sm">Small (90%)</option>
+                        <option value="standard">Standard (100%)</option>
+                        <option value="lg">Large (115%)</option>
+                        <option value="xl">Extra Large (125%)</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Pane Spacing</label>
+                      <select
+                        value={modalCustomization.paneSpacing || 'standard'}
+                        onChange={(e) => setModalCustomization({ ...modalCustomization, paneSpacing: e.target.value as DashboardCustomization['paneSpacing'] })}
+                        className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                      >
+                        <option value="tight">Tight (12px)</option>
+                        <option value="standard">Standard (20px)</option>
+                        <option value="wide">Wide (36px)</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Card Corner Radius</label>
+                      <select
+                        value={modalCustomization.cardRadius || 'standard'}
+                        onChange={(e) => setModalCustomization({ ...modalCustomization, cardRadius: e.target.value as DashboardCustomization['cardRadius'] })}
+                        className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                      >
+                        <option value="sharp">Sharp (0px)</option>
+                        <option value="standard">Standard (12px)</option>
+                        <option value="soft">Soft (16px)</option>
+                        <option value="rounded">Rounded (24px)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 5. Colours & Theme Tab */}
+              {activeCustomiseTab === 'theme' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground">Color Accents & Aesthetics</h4>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Adjust color accents and contrast levels for optimal clarity.</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 border border-border/60 rounded-xl p-3 bg-muted/10">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Global Accent Scheme</label>
+                      <select
+                        value={modalCustomization.colourAccent || 'default'}
+                        onChange={(e) => setModalCustomization({ ...modalCustomization, colourAccent: e.target.value as DashboardCustomization['colourAccent'] })}
+                        className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                      >
+                        <option value="default">Default Indigo/Violet</option>
+                        <option value="cyan-emerald">Cyan/Emerald</option>
+                        <option value="emerald-pulse">Emerald Pulse</option>
+                        <option value="violet-rose">Violet/Rose</option>
+                        <option value="azure-amber">Azure/Amber</option>
+                        <option value="gold-amber">Gold/Amber</option>
+                        <option value="neon-green">Neon Green</option>
+                        <option value="sunset-orange">Sunset Orange</option>
+                        <option value="slate-monochrome">Slate Monochrome</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Hero Specific Accent</label>
+                      <select
+                        value={modalCustomization.heroAccent || 'default'}
+                        onChange={(e) => setModalCustomization({ ...modalCustomization, heroAccent: e.target.value as DashboardCustomization['heroAccent'] })}
+                        className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                      >
+                        <option value="default">Default Blue/Violet</option>
+                        <option value="cyan-emerald">Cyan/Emerald</option>
+                        <option value="blue-amber">Blue/Amber</option>
+                        <option value="violet-rose">Violet/Rose</option>
+                        <option value="rainbow">Rainbow Spectrum</option>
+                        <option value="gold-amber">Gold/Amber</option>
+                        <option value="neon-green">Neon Green</option>
+                        <option value="sunset-orange">Sunset Orange</option>
+                        <option value="slate-monochrome">Slate Monochrome</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1 col-span-2">
+                      <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Contrast Mode</label>
+                      <select
+                        value={modalCustomization.contrast || 'standard'}
+                        onChange={(e) => setModalCustomization({ ...modalCustomization, contrast: e.target.value as DashboardCustomization['contrast'] })}
+                        className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                      >
+                        <option value="standard">Standard Contrast</option>
+                        <option value="high">High Contrast Borders</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 6. Advanced Tab */}
+              {activeCustomiseTab === 'advanced' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground">Advanced Layout & Effects</h4>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Fine-tune animations, graphical layout styles, and node intensity parameters.</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 border border-border/60 rounded-xl p-3 bg-muted/10">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Hero Graph Layout</label>
+                      <select
+                        value={modalCustomization.heroStyle}
+                        onChange={(e) => setModalCustomization({ ...modalCustomization, heroStyle: e.target.value as DashboardCustomization['heroStyle'] })}
+                        className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                      >
+                        <option value="map">System Map</option>
+                        <option value="core">Compliance Core Only</option>
+                        <option value="list">List Overview</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Hero Preset Layout</label>
+                      <select
+                        value={modalCustomization.heroLayoutPreset || 'balanced-orbit'}
+                        onChange={(e) => setModalCustomization({ ...modalCustomization, heroLayoutPreset: e.target.value as DashboardCustomization['heroLayoutPreset'] })}
+                        className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                      >
+                        <option value="balanced-orbit">Balanced Orbit</option>
+                        <option value="wide-command-map">Wide Command Map</option>
+                        <option value="compact-core">Compact Core</option>
+                        <option value="operations-focus">Operations Focus</option>
+                        <option value="presentation-mode">Presentation Mode</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Hero Detail Level</label>
+                      <select
+                        value={modalCustomization.heroDetailLevel}
+                        onChange={(e) => setModalCustomization({ ...modalCustomization, heroDetailLevel: e.target.value as DashboardCustomization['heroDetailLevel'] })}
+                        className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                      >
+                        <option value="minimal">Minimal</option>
+                        <option value="balanced">Balanced</option>
+                        <option value="full">Full</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Effects Intensity</label>
+                      <select
+                        value={modalCustomization.effectIntensity || 'standard'}
+                        onChange={(e) => setModalCustomization({ ...modalCustomization, effectIntensity: e.target.value as DashboardCustomization['effectIntensity'] })}
+                        className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                      >
+                        <option value="subtle">Subtle Glows</option>
+                        <option value="standard">Standard Glows</option>
+                        <option value="vibrant">Vibrant Glows</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">Motion Preferences</label>
+                      <select
+                        value={modalCustomization.motionPreference}
+                        onChange={(e) => setModalCustomization({ ...modalCustomization, motionPreference: e.target.value as DashboardCustomization['motionPreference'] })}
+                        className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                      >
+                        <option value="standard">Standard Animations</option>
+                        <option value="reduced">Reduced Motion</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">UI Transition Motion</label>
+                      <select
+                        value={modalCustomization.motion || 'standard'}
+                        onChange={(e) => setModalCustomization({ ...modalCustomization, motion: e.target.value as DashboardCustomization['motion'] })}
+                        className="w-full px-2.5 py-1.5 bg-card border border-border focus:border-indigo-500 rounded-lg text-xs outline-none"
+                      >
+                        <option value="standard">Standard Transitions</option>
+                        <option value="minimal">Disable Motion</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer controls */}
+            <div className="border-t border-border/60 pt-4 flex justify-between items-center gap-3 flex-shrink-0">
               <button
                 onClick={() => {
                   setModalCustomization(DEFAULT_CUSTOMIZATION_SETTINGS);

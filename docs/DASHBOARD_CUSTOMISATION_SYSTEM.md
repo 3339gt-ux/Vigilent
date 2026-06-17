@@ -130,9 +130,28 @@ When the user clicks "Customize Layout" on the dashboard header:
 ### E. Readability Settings
 Readability styles inject inline properties or append CSS variables directly to the root element. These modify sizing, padding, and accent colors instantly. In Phase 4, readability changes live-preview instantly in a draft state and can be reverted by clicking Cancel.
 
+### F. Reorganised Settings Panel
+To reduce complexity and visual clutter, the Layout Customization Panel is organised into 6 distinct, progressive disclosure tabs:
+1. **Home Style**: Select the dashboard home layout variant using interactive option cards with descriptions and helper badges (replacing traditional dropdown selects).
+2. **Visible Sections**: Toggle showing/hiding top KPI cards, lower panels, and right rail sections.
+3. **Layout**: Reorder top KPI cards via Up/Down controls and configure default view modes and horizon windows.
+4. **Readability**: Adjust font sizes, spacing densities, and border corner radius styles.
+5. **Colours & Theme**: Choose global accent and hero colors, or high contrast mode.
+6. **Advanced**: Fine-tune detail levels, motion, and effects intensity.
+
+All settings persist in `localStorage` namespaced to the user and organization tenant.
+
 ---
 
-## 5. Compliance & Data Honesty Rules
+## 5. Body Scroll Locking Rules
+
+To maintain high usability and natural page interaction, body scroll locking is applied strictly to overlays, drawers, and modal popups. Specifically:
+* **Locked Background Scroll**: Enabled when full overlays are active, such as the Asset Matrix drawer, the Requirement details drawer, the Action detail drawer, the Image Lightbox, and the Persona creation modal.
+* **Unlocked Background Scroll**: Disabled/unlocked during normal inline card clicks, persona card selections, dashboard variation choices, tab switching, and inline filters. The `useBodyScrollLock` hook is hardened with unique React identifiers to handle multiple simultaneous overlays safely without permanently locking the viewport.
+
+---
+
+## 6. Compliance & Data Honesty Rules
 
 LUMÉN strictly enforces data honesty in compliance visualization:
 1. **No Fake Analytics**: The dashboard does not generate fictional trends, mock compliance scores, or fake timelines.
