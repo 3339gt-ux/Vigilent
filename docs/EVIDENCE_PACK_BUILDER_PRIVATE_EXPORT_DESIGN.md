@@ -28,6 +28,8 @@ The current implementation still treats the following as production blockers:
 
 One deliberate hardening rule was added during implementation: demo-mode exports reject external placeholder URLs and only allow directly embedded local file data. This keeps local testing from accidentally bundling public placeholder assets.
 
+The implementation also chose contextual per-record file folders over broad aggregate `06-Evidence-Files/` and `07-Image-Attachments/` buckets so exported files remain understandable during audit review.
+
 ## 1. Current baseline
 
 Current state in the codebase:
@@ -240,22 +242,41 @@ These limits should be configurable in code constants, not user-editable setting
 The full export should extend the Stage 3B metadata structure.
 
 ```text
-LUMEN-Audit-Pack-{safe-pack-name}-{YYYY-MM-DD}/
+LUMEN-Evidence-Pack-{safe-pack-name}-{YYYY-MM-DD-HHMM}/
 |-- 00-Pack-Index/
 |   |-- pack-summary.json
 |   |-- pack-summary.csv
 |   |-- included-items.json
 |   |-- traceability-map.csv
-|   |-- included-files.csv
+|   |-- README.txt
 |   `-- export-notes.txt
 |-- 01-Requirements/
+|   `-- {Requirement-Title}/
+|       |-- requirement-summary.json
+|       |-- evidence/
+|       `-- images/
 |-- 02-People/
+|   `-- {Person-Name}/
+|       |-- person-summary.json
+|       |-- competency-evidence/
+|       `-- images/
 |-- 03-Assets/
+|   `-- {Asset-Name}/
+|       |-- asset-summary.json
+|       |-- checks/
+|       |   `-- evidence/
+|       `-- images/
 |-- 04-Actions/
+|   `-- {Action-Title}/
+|       |-- action-summary.json
+|       |-- evidence/
+|       `-- images/
 |-- 05-Evidence-Metadata/
-|-- 06-Evidence-Files/
-|-- 07-Image-Attachments/
+|   `-- {Evidence-Title}/
+|       |-- evidence-metadata.json
+|       `-- files/
 `-- 99-Export-Logs/
+    |-- included-files.csv
     |-- failed-files.csv
     |-- deferred-files.csv
     `-- export-limitations.txt

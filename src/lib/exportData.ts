@@ -3,16 +3,23 @@ export type ExportRow = Record<string, ExportValue>;
 
 export const exportDateStamp = () => new Date().toISOString().slice(0, 10);
 
+const neutralizeSpreadsheetFormula = (value: string) =>
+  /^[=+\-@]/.test(value) ? `'${value}` : value;
+
 const sanitizeCell = (value: ExportValue): string => {
   if (value === null || value === undefined) return '';
-  const text = String(value).replace(/\r?\n/g, ' ').trim();
+  const text = neutralizeSpreadsheetFormula(String(value).replace(/\r?\n/g, ' ').trim());
   if (/[",]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
   return text;
 };
 
 export const rowsToCsv = (rows: ExportRow[]): string => {
   if (rows.length === 0) return '';
-  const headers = Object.keys(rows[0]);
+  const headerSet = new Set<string>();
+  rows.forEach(row => {
+    Object.keys(row).forEach(key => headerSet.add(key));
+  });
+  const headers = Array.from(headerSet);
   return [
     headers.map(sanitizeCell).join(','),
     ...rows.map(row => headers.map(header => sanitizeCell(row[header])).join(','))

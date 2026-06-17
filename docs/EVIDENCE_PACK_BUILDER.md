@@ -4,6 +4,8 @@ LUMEN now includes a local Evidence Pack Builder workspace that lets users colle
 
 Stage 3C-B keeps the existing metadata ZIP export and adds a **full private-file ZIP export for local testing**.
 
+Stage 3C-C improves the full ZIP structure so exported files are grouped by source record context and renamed with audit-friendly filenames instead of raw storage-style names.
+
 ## Scope and boundaries
 
 What Stage 3C-B includes:
@@ -104,26 +106,25 @@ If a file exceeds a limit or cannot be verified, it is excluded and recorded in 
 ## ZIP root folder
 
 ```text
-LUMEN-Audit-Pack-{safe-pack-name}-{YYYY-MM-DD}/
+LUMEN-Evidence-Pack-{safe-pack-name}-{YYYY-MM-DD-HHMM}/
 ```
 
 ## ZIP folder structure
 
 ```text
-LUMEN-Audit-Pack-{safe-pack-name}-{YYYY-MM-DD}/
+LUMEN-Evidence-Pack-{safe-pack-name}-{YYYY-MM-DD-HHMM}/
 |-- 00-Pack-Index/
 |   |-- pack-summary.json
 |   |-- pack-summary.csv
 |   |-- included-items.json
 |   |-- traceability-map.csv
+|   |-- README.txt
 |   `-- export-notes.txt
 |-- 01-Requirements/
 |-- 02-People/
 |-- 03-Assets/
 |-- 04-Actions/
 |-- 05-Evidence-Metadata/
-|-- 06-Evidence-Files/
-|-- 07-Image-Attachments/
 `-- 99-Export-Logs/
     |-- included-files.csv
     |-- failed-files.csv
@@ -138,6 +139,19 @@ LUMEN-Audit-Pack-{safe-pack-name}-{YYYY-MM-DD}/
 - Asset folders contain `asset-summary.json`
 - Action folders contain `action-summary.json`
 - Evidence folders contain `evidence-metadata.json`
+
+### Contextual private-file folders
+
+When full export is used, actual private files are placed under the relevant source record folder rather than a broad generic bucket.
+
+Examples:
+
+- `01-Requirements/Pest-Control/evidence/001-pest-control-certificate.pdf`
+- `01-Requirements/Pest-Control/images/001-pest-control-supporting-image.jpg`
+- `02-People/John-Smith/competency-evidence/001-john-smith-cpc-card.pdf`
+- `03-Assets/Scania-HGV/images/001-scania-hgv-primary-asset-photo.jpg`
+- `04-Actions/Close-Pest-Control-Gap/evidence/001-close-pest-control-gap-evidence-file.pdf`
+- `05-Evidence-Metadata/Goods-In-Transit-Policy/files/001-goods-in-transit-policy-evidence-file.pdf`
 
 Only safe metadata already available in app state is exported. Missing fields are left unavailable rather than fabricated.
 
@@ -167,7 +181,9 @@ This file records each private file that was actually bundled, including:
 
 - pack item id
 - source record id and type
+- source title/name
 - original filename
+- file role label
 - exported filename
 - ZIP-relative path
 - MIME type
@@ -198,6 +214,17 @@ This file explains:
 - that no compliance or certification claim is made
 - that private file export still depends on the selected, permitted current records only
 
+### `README.txt`
+
+This file is included inside `00-Pack-Index/` and explains:
+
+- what the pack contains
+- where requirement, person, asset, action, and evidence folders live
+- where to find included files and images
+- how to use `traceability-map.csv`
+- where to review included, failed, and deferred file logs
+- that signed URLs, public URLs, and raw storage paths are not included
+
 ### `export-limitations.txt`
 
 This file explains:
@@ -220,6 +247,8 @@ Stage 3C-B keeps the main security boundary intact:
 - no cross-organisation export by draft state alone
 
 Each full export revalidates the active organisation and the current source records before fetching any file, then relies on existing Supabase RLS and storage policy enforcement as the final boundary.
+
+CSV export logs are also neutralised against spreadsheet formula injection and escaped for Excel-friendly opening.
 
 ## Audit logging
 

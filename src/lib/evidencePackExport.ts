@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
 import { dbService, getCurrentSupabaseOrganizationId } from './db';
 import { isDemoMode } from './env';
-import { exportDateStamp, rowsToCsv, type ExportRow } from './exportData';
+import { rowsToCsv, type ExportRow } from './exportData';
 import type {
   Action,
   ActionDocument,
@@ -113,8 +113,10 @@ interface IncludedFileRow extends ExportRow {
   item_type: string;
   source_record_id: string;
   source_record_type: string;
+  source_title: string;
   display_title: string;
   original_filename: string;
+  file_role_label: string;
   exported_filename: string;
   zip_relative_path: string;
   mime_type: string;
@@ -128,7 +130,10 @@ interface FailedFileRow extends ExportRow {
   item_type: string;
   source_record_id: string;
   source_record_type: string;
+  source_title: string;
   display_title: string;
+  original_filename: string;
+  file_role_label: string;
   child_section: string;
   failure_stage: string;
   reason: string;
@@ -146,16 +151,15 @@ interface PackFileCandidate {
   sourceRecordType: 'evidence_document' | 'record_image_attachment';
   sourceEntityId: string;
   sourceEntityType: string;
+  sourceTitle: string;
   displayTitle: string;
   originalFilename: string;
-  safeExportFilename: string;
   mimeType: string | null;
   sizeBytes: number | null;
   organisationId: string;
   childSection: string;
   childSectionIncluded: boolean;
-  zipRootFolder: '06-Evidence-Files' | '07-Image-Attachments';
-  zipCategoryFolder: string;
+  fileRoleLabel: string;
 }
 
 interface PackFileFailure {
@@ -166,10 +170,7 @@ interface PackFileFailure {
 
 interface PackFileFetchResult {
   candidate: PackFileCandidate;
-  blob: Blob;
   data: Uint8Array;
-  originalFilename: string;
-  safeFileName: string;
   mimeType: string | null;
   sizeBytes: number;
 }
@@ -223,6 +224,8 @@ interface BuildPackArtifactsResult {
   traceabilityRows: TraceabilityRow[];
   deferredRows: DeferredFileRow[];
   packSummary: Record<string, unknown>;
+  itemFolderPaths: Map<string, string>;
+  safeIncludedItems: Array<Record<string, unknown>>;
 }
 
 const FILE_EXPORT_DEFERRED_REASON =
@@ -238,6 +241,9 @@ const WARN_FULL_EXPORT_FILES = 50;
 const WARN_FULL_EXPORT_TOTAL_BYTES = 100 * 1024 * 1024;
 const MAX_FULL_EXPORT_FILE_BYTES = 25 * 1024 * 1024;
 const PER_FILE_TIMEOUT_MS = 20_000;
+const ZIP_SEGMENT_MAX_LENGTH = 64;
+const ZIP_FILE_STEM_MAX_LENGTH = 96;
+const ZIP_ROOT_NAME_MAX_LENGTH = 80;
 
 const optionLabels: Record<string, string> = {
   includeDetails: 'summary/details',
@@ -256,23 +262,130 @@ const optionLabels: Record<string, string> = {
   includeFiles: 'files'
 };
 
-const sanitizeSegment = (value: string, fallback: string) => {
+const normalizeSegment = (value: string, fallback: string, options?: { lowercase?: boolean; maxLength?: number }) => {
   const normalized = value
     .normalize('NFKD')
     .replace(/[^\x00-\x7F]/g, '')
-    .replace(/[^a-zA-Z0-9._ -]/g, ' ')
+    .replace(/[\\/:*?"<>|]/g, ' ')
+    .replace(/[\u0000-\u001f]/g, ' ')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
-    .replace(/^[.-]+|[.-]+$/g, '')
-    .toLowerCase();
-  return normalized || fallback;
+    .replace(/^[.-]+|[.-]+$/g, '');
+  const cased = options?.lowercase === false ? normalized : normalized.toLowerCase();
+  const clipped = cased.slice(0, options?.maxLength ?? ZIP_SEGMENT_MAX_LENGTH).replace(/[-.]+$/g, '');
+  return clipped || fallback;
 };
 
-const sanitizeZipPathSegment = (value: string, fallback: string) =>
-  sanitizeSegment(value, fallback).replace(/[\\/]/g, '-');
+const sanitizeZipPathSegment = (value: string, fallback: string, options?: { lowercase?: boolean; maxLength?: number }) =>
+  normalizeSegment(value, fallback, {
+    lowercase: options?.lowercase ?? true,
+    maxLength: options?.maxLength ?? ZIP_SEGMENT_MAX_LENGTH
+  }).replace(/[\\/]/g, '-');
 
-const itemFolderName = (title: string, id: string) =>
-  `${sanitizeSegment(title, 'item')}-${id.slice(0, 8)}`;
+const formatExportMinuteStamp = (value: Date) => {
+  const year = value.getFullYear();
+  const month = `${value.getMonth() + 1}`.padStart(2, '0');
+  const day = `${value.getDate()}`.padStart(2, '0');
+  const hours = `${value.getHours()}`.padStart(2, '0');
+  const minutes = `${value.getMinutes()}`.padStart(2, '0');
+  return `${year}-${month}-${day}-${hours}${minutes}`;
+};
+
+const buildRootFolderName = (packName: string, exportedAt: string) => {
+  const safePackName = sanitizeZipPathSegment(packName, 'evidence-pack', {
+    lowercase: false,
+    maxLength: ZIP_ROOT_NAME_MAX_LENGTH
+  });
+  return `LUMEN-Evidence-Pack-${safePackName}-${formatExportMinuteStamp(new Date(exportedAt))}`;
+};
+
+const itemFolderKey = (item: Pick<PackDraftItem, 'id' | 'type'>) => `${item.type}:${item.id}`;
+
+const buildUniqueItemFolderPath = (
+  item: PackDraftItem,
+  prefix: string,
+  usedPaths: Set<string>
+) => {
+  const desired = `${prefix}/${sanitizeZipPathSegment(item.title, `${item.type}-${item.id.slice(0, 6)}`, {
+    lowercase: false,
+    maxLength: ZIP_SEGMENT_MAX_LENGTH
+  })}`;
+  return makeUniqueZipPath(desired, usedPaths);
+};
+
+const itemFolderPrefix = (itemType: PackItemType) => {
+  switch (itemType) {
+    case 'requirement':
+      return '01-Requirements';
+    case 'person':
+      return '02-People';
+    case 'asset':
+      return '03-Assets';
+    case 'action':
+      return '04-Actions';
+    case 'evidence':
+      return '05-Evidence-Metadata';
+    default:
+      return '99-Unknown';
+  }
+};
+
+const buildItemFolderPaths = (items: PackDraftItem[]) => {
+  const usedPaths = new Set<string>();
+  const map = new Map<string, string>();
+  items.forEach(item => {
+    map.set(itemFolderKey(item), buildUniqueItemFolderPath(item, itemFolderPrefix(item.type), usedPaths));
+  });
+  return map;
+};
+
+const normalizeFileRoleLabel = (candidate: PackFileCandidate) => {
+  const sourceSlug = sanitizeZipPathSegment(candidate.packItemTitle, candidate.packItemType, { lowercase: true, maxLength: 40 });
+  const roleSlug = sanitizeZipPathSegment(candidate.fileRoleLabel, candidate.kind === 'image' ? 'supporting-image' : 'evidence-file', {
+    lowercase: true,
+    maxLength: 52
+  });
+
+  if (!roleSlug || roleSlug === sourceSlug) {
+    return candidate.kind === 'image' ? 'supporting-image' : 'evidence-file';
+  }
+  if (roleSlug.startsWith(`${sourceSlug}-`)) {
+    return roleSlug.slice(sourceSlug.length + 1) || (candidate.kind === 'image' ? 'supporting-image' : 'evidence-file');
+  }
+  return roleSlug;
+};
+
+const buildContextualFileStem = (candidate: PackFileCandidate, sequence: number) => {
+  const sourceSlug = sanitizeZipPathSegment(candidate.packItemTitle || candidate.sourceTitle, candidate.packItemType, {
+    lowercase: true,
+    maxLength: 40
+  });
+  const roleSlug = normalizeFileRoleLabel(candidate);
+  const stem = `${String(sequence).padStart(3, '0')}-${sourceSlug}${roleSlug ? `-${roleSlug}` : ''}`;
+  return stem.slice(0, ZIP_FILE_STEM_MAX_LENGTH).replace(/-+$/g, '');
+};
+
+const buildContextualFolderForCandidate = (candidate: PackFileCandidate, itemFolderPath: string) => {
+  if (candidate.packItemType === 'requirement') {
+    return `${itemFolderPath}/${candidate.kind === 'image' ? 'images' : 'evidence'}`;
+  }
+  if (candidate.packItemType === 'person') {
+    return `${itemFolderPath}/${candidate.kind === 'image' ? 'images' : 'competency-evidence'}`;
+  }
+  if (candidate.packItemType === 'asset') {
+    if (candidate.kind === 'image') return `${itemFolderPath}/images`;
+    return candidate.childSection === 'includeChecks' ? `${itemFolderPath}/checks/evidence` : `${itemFolderPath}/evidence`;
+  }
+  if (candidate.packItemType === 'action') {
+    return `${itemFolderPath}/${candidate.kind === 'image' ? 'images' : 'evidence'}`;
+  }
+  return `${itemFolderPath}/${candidate.kind === 'image' ? 'images' : 'files'}`;
+};
+
+const buildContextualFilename = (candidate: PackFileCandidate, sequence: number, mimeType: string | null) => {
+  const extension = getFileExtension(candidate.originalFilename, mimeType);
+  return `${buildContextualFileStem(candidate, sequence)}${extension}`;
+};
 
 const sourceModuleFromRoute = (route: string) => {
   if (route.includes('/requirements')) return 'Requirements';
@@ -281,6 +394,23 @@ const sourceModuleFromRoute = (route: string) => {
   if (route.includes('/vault')) return 'Evidence Vault';
   if (route.includes('/dashboard')) return 'Dashboard';
   return 'Unknown';
+};
+
+const sourceModuleFromPackItemType = (itemType: PackItemType) => {
+  switch (itemType) {
+    case 'requirement':
+      return 'Requirements';
+    case 'person':
+      return 'Competencies';
+    case 'asset':
+      return 'Asset Matrix';
+    case 'evidence':
+      return 'Evidence Vault';
+    case 'action':
+      return 'Dashboard';
+    default:
+      return 'Unknown';
+  }
 };
 
 const safeDocumentMetadata = (document: EvidenceDocument, fileExportStatus: 'deferred' | 'available' = 'deferred') => ({
@@ -470,7 +600,7 @@ const addTraceabilityRow = (
     pack_item_id: `${item.type}:${item.id}`,
     item_type: item.type,
     item_title: item.title,
-    source_module: sourceModuleFromRoute(item.sourceRoute),
+    source_module: extras?.source_module || sourceModuleFromRoute(item.sourceRoute),
     source_entity_id: item.id,
     source_record_type: extras?.source_record_type || '',
     source_record_id: extras?.source_record_id || '',
@@ -592,30 +722,42 @@ const getFileExtension = (filename: string, mimeType: string | null) => {
   return '';
 };
 
-const buildSafeExportFilename = (
-  preferredName: string,
-  fallbackBase: string,
-  mimeType: string | null,
-  sourceId: string
-) => {
-  const extension = getFileExtension(preferredName, mimeType);
-  const baseSource = preferredName.replace(/\.[^.]+$/, '');
-  const safeBase = sanitizeZipPathSegment(baseSource, fallbackBase);
-  const ext = extension || '';
-  return `${safeBase || fallbackBase}-${sourceId.slice(0, 8)}${ext}`;
-};
-
 const isDocumentExportableFromState = (document: EvidenceDocument) =>
   document.status !== 'deleted' && !document.archived_at && !document.deleted_at && !document.permanently_deleted_at;
 
 const isImageExportableFromState = (attachment: RecordImageAttachment) => !attachment.archived_at;
+
+const buildDocumentRoleLabel = (item: PackDraftItem, document: EvidenceDocument) => {
+  const primaryLabel = document.title || document.original_file_name || document.file_name || 'evidence-file';
+  const label = sanitizeZipPathSegment(primaryLabel.replace(/\.[^.]+$/, ''), 'evidence-file', {
+    lowercase: true,
+    maxLength: 52
+  });
+  const source = sanitizeZipPathSegment(item.title, item.type, { lowercase: true, maxLength: 40 });
+  return label === source ? 'evidence-file' : label;
+};
+
+const buildImageRoleLabel = (attachment: RecordImageAttachment) => {
+  if (attachment.caption) {
+    return sanitizeZipPathSegment(attachment.caption, 'supporting-image', { lowercase: true, maxLength: 52 });
+  }
+  const role = (attachment.image_role || '').toLowerCase();
+  if (attachment.is_primary || role === 'primary') return 'primary-asset-photo';
+  if (role === 'gallery') return 'gallery-image';
+  if (role === 'before') return 'before-image';
+  if (role === 'after') return 'after-image';
+  if (role === 'avatar') return 'profile-image';
+  if (role) {
+    return sanitizeZipPathSegment(`${role}-image`, 'supporting-image', { lowercase: true, maxLength: 52 });
+  }
+  return 'supporting-image';
+};
 
 const pushDocumentCandidate = (
   list: PackFileCandidate[],
   item: PackDraftItem,
   document: EvidenceDocument,
   childSection: string,
-  zipCategoryFolder: string,
   organisationId: string
 ) => {
   if (document.organization_id !== organisationId) return;
@@ -632,21 +774,15 @@ const pushDocumentCandidate = (
     sourceRecordType: 'evidence_document',
     sourceEntityId: document.id,
     sourceEntityType: 'evidence_document',
+    sourceTitle: item.title,
     displayTitle: document.title,
     originalFilename: document.original_file_name || document.file_name,
-    safeExportFilename: buildSafeExportFilename(
-      document.safe_file_name || document.original_file_name || document.file_name,
-      sanitizeZipPathSegment(document.title || 'document', 'document'),
-      document.mime_type || null,
-      document.id
-    ),
     mimeType: document.mime_type || null,
     sizeBytes: document.file_size_bytes ?? null,
     organisationId,
     childSection,
     childSectionIncluded: true,
-    zipRootFolder: '06-Evidence-Files',
-    zipCategoryFolder
+    fileRoleLabel: buildDocumentRoleLabel(item, document)
   });
 };
 
@@ -655,7 +791,6 @@ const pushImageCandidate = (
   item: PackDraftItem,
   attachment: RecordImageAttachment,
   childSection: string,
-  zipCategoryFolder: string,
   organisationId: string
 ) => {
   if (attachment.organisation_id !== organisationId) return;
@@ -673,21 +808,15 @@ const pushImageCandidate = (
     sourceRecordType: 'record_image_attachment',
     sourceEntityId: attachment.entity_id,
     sourceEntityType: attachment.entity_type,
+    sourceTitle: item.title,
     displayTitle: attachment.caption || attachment.file_name || `${attachment.entity_type} image`,
     originalFilename: preferredName,
-    safeExportFilename: buildSafeExportFilename(
-      preferredName,
-      sanitizeZipPathSegment(`${attachment.entity_type}-${attachment.image_role || 'image'}`, 'image'),
-      attachment.mime_type || null,
-      attachment.id
-    ),
     mimeType: attachment.mime_type || null,
     sizeBytes: attachment.file_size_bytes ?? null,
     organisationId,
     childSection,
     childSectionIncluded: true,
-    zipRootFolder: '07-Image-Attachments',
-    zipCategoryFolder
+    fileRoleLabel: buildImageRoleLabel(attachment)
   });
 };
 
@@ -716,14 +845,14 @@ const collectPackFileCandidates = (data: ExportContextData) => {
         [...requirementDocs, ...criterionDocs].forEach(document => {
           if (seen.has(document.id)) return;
           seen.add(document.id);
-          pushDocumentCandidate(candidates, item, document, 'includeEvidence', 'requirements', data.organisationId);
+          pushDocumentCandidate(candidates, item, document, 'includeEvidence', data.organisationId);
         });
       }
 
       if (item.options.includeImages) {
         data.imageAttachments
           .filter(attachment => attachment.entity_type === 'requirement' && attachment.entity_id === item.id)
-          .forEach(attachment => pushImageCandidate(candidates, item, attachment, 'includeImages', 'requirements', data.organisationId));
+          .forEach(attachment => pushImageCandidate(candidates, item, attachment, 'includeImages', data.organisationId));
       }
     }
 
@@ -737,14 +866,14 @@ const collectPackFileCandidates = (data: ExportContextData) => {
             const document = documentMap.get(link.document_id);
             if (!document || seen.has(document.id)) return;
             seen.add(document.id);
-            pushDocumentCandidate(candidates, item, document, 'includeEvidence', 'people', data.organisationId);
+            pushDocumentCandidate(candidates, item, document, 'includeEvidence', data.organisationId);
           });
       }
 
       if (item.options.includeImages) {
         data.imageAttachments
           .filter(attachment => attachment.entity_type === 'person' && attachment.entity_id === item.id)
-          .forEach(attachment => pushImageCandidate(candidates, item, attachment, 'includeImages', 'people', data.organisationId));
+          .forEach(attachment => pushImageCandidate(candidates, item, attachment, 'includeImages', data.organisationId));
       }
     }
 
@@ -757,7 +886,7 @@ const collectPackFileCandidates = (data: ExportContextData) => {
             const document = documentMap.get(link.document_id);
             if (!document || seen.has(document.id)) return;
             seen.add(document.id);
-            pushDocumentCandidate(candidates, item, document, 'includeChecks', 'assets', data.organisationId);
+            pushDocumentCandidate(candidates, item, document, 'includeChecks', data.organisationId);
           });
 
         data.assetHistoryEvents
@@ -766,7 +895,7 @@ const collectPackFileCandidates = (data: ExportContextData) => {
             const document = documentMap.get(event.evidence_document_id!);
             if (!document || seen.has(document.id)) return;
             seen.add(document.id);
-            pushDocumentCandidate(candidates, item, document, 'includeChecks', 'assets', data.organisationId);
+            pushDocumentCandidate(candidates, item, document, 'includeChecks', data.organisationId);
           });
       }
 
@@ -777,7 +906,7 @@ const collectPackFileCandidates = (data: ExportContextData) => {
             attachment.entity_id === item.id &&
             (attachment.is_primary || attachment.image_role === 'primary')
           )
-          .forEach(attachment => pushImageCandidate(candidates, item, attachment, 'includePrimaryImage', 'assets', data.organisationId));
+          .forEach(attachment => pushImageCandidate(candidates, item, attachment, 'includePrimaryImage', data.organisationId));
       }
 
       if (item.options.includeGallery) {
@@ -787,7 +916,7 @@ const collectPackFileCandidates = (data: ExportContextData) => {
             attachment.entity_id === item.id &&
             !(attachment.is_primary || attachment.image_role === 'primary')
           )
-          .forEach(attachment => pushImageCandidate(candidates, item, attachment, 'includeGallery', 'assets', data.organisationId));
+          .forEach(attachment => pushImageCandidate(candidates, item, attachment, 'includeGallery', data.organisationId));
       }
     }
 
@@ -800,28 +929,28 @@ const collectPackFileCandidates = (data: ExportContextData) => {
             const document = documentMap.get(link.document_id);
             if (!document || seen.has(document.id)) return;
             seen.add(document.id);
-            pushDocumentCandidate(candidates, item, document, 'includeEvidence', 'actions', data.organisationId);
+            pushDocumentCandidate(candidates, item, document, 'includeEvidence', data.organisationId);
           });
       }
 
       if (item.options.includeImages) {
         data.imageAttachments
           .filter(attachment => attachment.entity_type === 'action' && attachment.entity_id === item.id)
-          .forEach(attachment => pushImageCandidate(candidates, item, attachment, 'includeImages', 'actions', data.organisationId));
+          .forEach(attachment => pushImageCandidate(candidates, item, attachment, 'includeImages', data.organisationId));
       }
     }
 
     if (item.type === 'evidence' && item.options.includeMetadata) {
       const document = documentMap.get(item.id);
       if (document) {
-        pushDocumentCandidate(candidates, item, document, 'includeMetadata', 'documents', data.organisationId);
+        pushDocumentCandidate(candidates, item, document, 'includeMetadata', data.organisationId);
       }
     }
 
     if (item.type === 'evidence' && item.options.includeLinkedRecords) {
       data.imageAttachments
         .filter(attachment => attachment.entity_type === 'evidence_document' && attachment.entity_id === item.id)
-        .forEach(attachment => pushImageCandidate(candidates, item, attachment, 'includeLinkedRecords', 'documents', data.organisationId));
+        .forEach(attachment => pushImageCandidate(candidates, item, attachment, 'includeLinkedRecords', data.organisationId));
     }
 
     if (item.options.includeFiles === false && !item.options.includeEvidence && !item.options.includeImages && !item.options.includePrimaryImage && !item.options.includeGallery && item.type !== 'evidence') {
@@ -866,16 +995,15 @@ export const previewFullEvidencePackExport = (data: ExportContextData): FullPack
 
 const buildPackArtifacts = (data: ExportContextData, options: BuildPackArtifactsOptions): BuildPackArtifactsResult => {
   const zip = new JSZip();
-  const today = exportDateStamp();
-  const safePackName = sanitizeSegment(data.packName, 'audit-pack');
-  const root = `LUMEN-Audit-Pack-${safePackName}-${today}`;
+  const exportedAt = new Date().toISOString();
+  const root = buildRootFolderName(data.packName, exportedAt);
   const rootFolder = zip.folder(root);
   if (!rootFolder) {
     throw new Error('Unable to create the ZIP root folder.');
   }
 
   const includedItems = data.items.filter(item => item.included);
-  const exportedAt = new Date().toISOString();
+  const itemFolderPaths = buildItemFolderPaths(includedItems);
   const traceabilityRows: TraceabilityRow[] = [];
   const deferredRows: DeferredFileRow[] = [];
   const competencyRecordMap = new Map(data.competencyRecords.map(record => [record.id, record]));
@@ -908,28 +1036,11 @@ const buildPackArtifacts = (data: ExportContextData, options: BuildPackArtifacts
     }
   };
 
-  const packSummaryCsv: ExportRow[] = [{
-    pack_name: data.packName,
-    organisation_name: data.organisationName,
-    exported_by: data.exportedBy,
-    exported_at: exportedAt,
-    export_scope: options.exportMode,
-    total_draft_items: data.items.length,
-    included_items: includedItems.length,
-    excluded_items: data.items.length - includedItems.length,
-    requirements: countsByType.requirement,
-    people: countsByType.person,
-    assets: countsByType.asset,
-    evidence: countsByType.evidence,
-    actions: countsByType.action,
-    includes_private_files: options.exportMode === 'full-private-files' ? 'yes' : 'no',
-    private_file_export: options.exportMode === 'full-private-files' ? 'enabled' : 'deferred'
-  }];
-
   const safeIncludedItems = includedItems.map(item => ({
     id: item.id,
     type: item.type,
     title: item.title,
+    folder_path: itemFolderPaths.get(itemFolderKey(item)) || '',
     source_route: item.sourceRoute,
     source_module: sourceModuleFromRoute(item.sourceRoute),
     added_at: item.added_at,
@@ -946,16 +1057,11 @@ const buildPackArtifacts = (data: ExportContextData, options: BuildPackArtifacts
     }))
   }));
 
-  const indexFolder = rootFolder.folder('00-Pack-Index');
   const requirementsFolder = rootFolder.folder('01-Requirements');
   const peopleFolder = rootFolder.folder('02-People');
   const assetsFolder = rootFolder.folder('03-Assets');
   const actionsFolder = rootFolder.folder('04-Actions');
   const evidenceFolder = rootFolder.folder('05-Evidence-Metadata');
-  if (options.exportMode === 'full-private-files') {
-    rootFolder.folder('06-Evidence-Files');
-    rootFolder.folder('07-Image-Attachments');
-  }
   rootFolder.folder('99-Export-Logs');
 
   for (const item of includedItems) {
@@ -1022,7 +1128,7 @@ const buildPackArtifacts = (data: ExportContextData, options: BuildPackArtifacts
         }
       };
 
-      const folder = requirementsFolder?.folder(itemFolderName(item.title, item.id));
+      const folder = requirementsFolder?.folder((itemFolderPaths.get(itemFolderKey(item)) || '').replace('01-Requirements/', ''));
       folder?.file('requirement-summary.json', asJson(requirementSummary));
     }
 
@@ -1077,7 +1183,7 @@ const buildPackArtifacts = (data: ExportContextData, options: BuildPackArtifacts
         }
       };
 
-      const folder = peopleFolder?.folder(itemFolderName(item.title, item.id));
+      const folder = peopleFolder?.folder((itemFolderPaths.get(itemFolderKey(item)) || '').replace('02-People/', ''));
       folder?.file('person-summary.json', asJson(personSummary));
     }
 
@@ -1142,7 +1248,7 @@ const buildPackArtifacts = (data: ExportContextData, options: BuildPackArtifacts
         }
       };
 
-      const folder = assetsFolder?.folder(itemFolderName(item.title, item.id));
+      const folder = assetsFolder?.folder((itemFolderPaths.get(itemFolderKey(item)) || '').replace('03-Assets/', ''));
       folder?.file('asset-summary.json', asJson(assetSummary));
     }
 
@@ -1193,7 +1299,7 @@ const buildPackArtifacts = (data: ExportContextData, options: BuildPackArtifacts
         }
       };
 
-      const folder = actionsFolder?.folder(itemFolderName(item.title, item.id));
+      const folder = actionsFolder?.folder((itemFolderPaths.get(itemFolderKey(item)) || '').replace('04-Actions/', ''));
       folder?.file('action-summary.json', asJson(actionSummary));
     }
 
@@ -1257,7 +1363,7 @@ const buildPackArtifacts = (data: ExportContextData, options: BuildPackArtifacts
         }
       };
 
-      const folder = evidenceFolder?.folder(itemFolderName(item.title, item.id));
+      const folder = evidenceFolder?.folder((itemFolderPaths.get(itemFolderKey(item)) || '').replace('05-Evidence-Metadata/', ''));
       folder?.file('evidence-metadata.json', asJson(evidenceSummary));
     }
 
@@ -1284,10 +1390,6 @@ const buildPackArtifacts = (data: ExportContextData, options: BuildPackArtifacts
     }
   }
 
-  indexFolder?.file('pack-summary.json', asJson(packSummary));
-  indexFolder?.file('pack-summary.csv', rowsToCsv(packSummaryCsv));
-  indexFolder?.file('included-items.json', asJson(safeIncludedItems));
-
   return {
     zip,
     rootFolderName: root,
@@ -1295,20 +1397,106 @@ const buildPackArtifacts = (data: ExportContextData, options: BuildPackArtifacts
     exportedAt,
     traceabilityRows,
     deferredRows,
-    packSummary
+    packSummary,
+    itemFolderPaths,
+    safeIncludedItems
   };
+};
+
+const buildPackSummaryCsvRows = (packSummary: Record<string, unknown>): ExportRow[] => {
+  const countsByType = (packSummary.counts_by_type as Record<string, number> | undefined) || {};
+  const security = (packSummary.security as Record<string, unknown> | undefined) || {};
+  const toCellValue = (value: unknown) => (value === null || value === undefined ? '' : String(value));
+
+  return [{
+    pack_name: toCellValue(packSummary.pack_name),
+    organisation_name: toCellValue(packSummary.organisation_name),
+    exported_by: toCellValue(packSummary.exported_by),
+    exported_at: toCellValue(packSummary.exported_at),
+    export_scope: toCellValue(packSummary.export_scope),
+    total_draft_items: toCellValue(packSummary.total_draft_items),
+    included_items: toCellValue(packSummary.included_items),
+    excluded_items: toCellValue(packSummary.excluded_items),
+    requirements: toCellValue(countsByType.requirement),
+    people: toCellValue(countsByType.person),
+    assets: toCellValue(countsByType.asset),
+    evidence: toCellValue(countsByType.evidence),
+    actions: toCellValue(countsByType.action),
+    included_file_count: toCellValue((packSummary as { included_file_count?: number }).included_file_count),
+    failed_file_count: toCellValue((packSummary as { failed_file_count?: number }).failed_file_count),
+    deferred_file_count: toCellValue((packSummary as { deferred_file_count?: number }).deferred_file_count),
+    total_exported_bytes: toCellValue((packSummary as { total_exported_bytes?: number }).total_exported_bytes),
+    includes_private_files: security.includes_private_files === true ? 'yes' : 'no',
+    private_file_export: security.full_private_file_export_deferred === true ? 'deferred' : 'enabled'
+  }];
+};
+
+const buildZipReadmeText = (
+  mode: 'metadata-only' | 'full-private-files',
+  data: ExportContextData,
+  artifacts: BuildPackArtifactsResult,
+  counts?: {
+    includedFiles?: number;
+    failedFiles?: number;
+    deferredFiles?: number;
+  }
+) => {
+  const baseLines = [
+    'LUMEN Evidence Pack',
+    '',
+    `Pack: ${data.packName}`,
+    `Organisation: ${data.organisationName}`,
+    `Exported: ${artifacts.exportedAt}`,
+    '',
+    'What this pack contains:',
+    '- Requirements are grouped under 01-Requirements',
+    '- People are grouped under 02-People',
+    '- Assets are grouped under 03-Assets',
+    '- Actions are grouped under 04-Actions',
+    '- Standalone evidence records are grouped under 05-Evidence-Metadata',
+    '',
+    'How to use this pack:',
+    '- Open the summary JSON files inside each source record folder for metadata context.',
+    '- Look inside evidence/, competency-evidence/, images/, files/, or checks/evidence/ subfolders for included files.',
+    '- Use 00-Pack-Index/traceability-map.csv to see how each exported file maps back to its source record.',
+    '- Use 99-Export-Logs/included-files.csv, failed-files.csv, and deferred-files.csv to review export coverage.',
+    '',
+    'Important notes:',
+    '- Missing or inaccessible files are logged rather than silently omitted.',
+    '- Signed URLs, public URLs, and raw storage paths are not included in this ZIP.',
+    '- LUMEN does not certify compliance and this export does not replace professional judgement.'
+  ];
+
+  if (mode === 'metadata-only') {
+    baseLines.splice(8, 0, '- This ZIP contains metadata, traceability, and deferred-file logs only.');
+  } else {
+    baseLines.splice(8, 0, '- This ZIP includes selected, permitted private files grouped by their source record context.');
+    baseLines.push(
+      '',
+      `Included files: ${counts?.includedFiles ?? 0}`,
+      `Failed files: ${counts?.failedFiles ?? 0}`,
+      `Deferred files: ${counts?.deferredFiles ?? 0}`
+    );
+  }
+
+  return baseLines.join('\n');
 };
 
 const writeMetadataZipIndexes = (
   artifacts: BuildPackArtifactsResult,
   exportNotes: string,
-  exportLimitations: string
+  exportLimitations: string,
+  readmeText: string
 ) => {
   const rootFolder = artifacts.zip.folder(artifacts.rootFolderName);
   const indexFolder = rootFolder?.folder('00-Pack-Index');
   const logsFolder = rootFolder?.folder('99-Export-Logs');
 
+  indexFolder?.file('pack-summary.json', asJson(artifacts.packSummary));
+  indexFolder?.file('pack-summary.csv', rowsToCsv(buildPackSummaryCsvRows(artifacts.packSummary)));
+  indexFolder?.file('included-items.json', asJson(artifacts.safeIncludedItems));
   indexFolder?.file('traceability-map.csv', rowsToCsv(artifacts.traceabilityRows));
+  indexFolder?.file('README.txt', readmeText);
   indexFolder?.file('export-notes.txt', exportNotes);
   logsFolder?.file('deferred-files.csv', rowsToCsv(artifacts.deferredRows));
   logsFolder?.file('export-limitations.txt', exportLimitations);
@@ -1344,7 +1532,8 @@ export const buildEvidencePackMetadataZip = async (data: ExportContextData) => {
       `- No raw storage paths are included.`,
       `- This export is generated from the current local Pack Builder draft state.`,
       `- Future full private-file export must be security reviewed before release.`
-    ].join('\n')
+    ].join('\n'),
+    buildZipReadmeText('metadata-only', data, artifacts)
   );
 
   const blob = await artifacts.zip.generateAsync({ type: 'blob' });
@@ -1417,10 +1606,7 @@ const fetchCandidateBlob = async (
     const sizeBytes = blob.size || candidate.sizeBytes || 0;
     return {
       candidate,
-      blob,
       data,
-      originalFilename: candidate.originalFilename,
-      safeFileName: candidate.safeExportFilename,
       mimeType: candidate.mimeType || blob.type || null,
       sizeBytes
     };
@@ -1429,16 +1615,25 @@ const fetchCandidateBlob = async (
   }
 };
 
-const toIncludedFileRow = (candidate: PackFileCandidate, zipRelativePath: string, sizeBytes: number, exportedAt: string): IncludedFileRow => ({
+const toIncludedFileRow = (
+  candidate: PackFileCandidate,
+  zipRelativePath: string,
+  exportedFilename: string,
+  mimeType: string | null,
+  sizeBytes: number,
+  exportedAt: string
+): IncludedFileRow => ({
   pack_item_id: `${candidate.packItemType}:${candidate.packItemId}`,
   item_type: candidate.packItemType,
   source_record_id: candidate.sourceRecordId,
   source_record_type: candidate.sourceRecordType,
+  source_title: candidate.sourceTitle,
   display_title: candidate.displayTitle,
   original_filename: candidate.originalFilename,
-  exported_filename: candidate.safeExportFilename,
+  file_role_label: candidate.fileRoleLabel,
+  exported_filename: exportedFilename,
   zip_relative_path: zipRelativePath,
-  mime_type: candidate.mimeType || '',
+  mime_type: mimeType || candidate.mimeType || '',
   size_bytes: String(sizeBytes),
   child_section: candidate.childSection,
   export_timestamp: exportedAt
@@ -1449,7 +1644,10 @@ const toFailedFileRow = (failure: PackFileFailure, exportedAt: string): FailedFi
   item_type: failure.candidate.packItemType,
   source_record_id: failure.candidate.sourceRecordId,
   source_record_type: failure.candidate.sourceRecordType,
+  source_title: failure.candidate.sourceTitle,
   display_title: failure.candidate.displayTitle,
+  original_filename: failure.candidate.originalFilename,
+  file_role_label: failure.candidate.fileRoleLabel,
   child_section: failure.candidate.childSection,
   failure_stage: failure.failureStage,
   reason: failure.reason,
@@ -1479,6 +1677,7 @@ const recordFailure = (
     'failed',
     failure.reason,
     {
+      source_module: sourceModuleFromPackItemType(failure.candidate.packItemType),
       source_record_type: failure.candidate.sourceRecordType,
       source_record_id: failure.candidate.sourceRecordId,
       failure_reason: failure.reason
@@ -1584,15 +1783,14 @@ export const buildFullEvidencePackZip = async (
   });
 
   const rootFolder = artifacts.zip.folder(artifacts.rootFolderName);
-  const evidenceFilesFolder = rootFolder?.folder('06-Evidence-Files');
-  const imageFilesFolder = rootFolder?.folder('07-Image-Attachments');
   const logsFolder = rootFolder?.folder('99-Export-Logs');
 
   const usedZipPaths = new Set<string>();
   const includedRows: IncludedFileRow[] = [];
   const failedRows: FailedFileRow[] = [];
   const failures: PackFileFailure[] = [];
-  const fetchedBySource = new Map<string, { zipRelativePath: string; sizeBytes: number }>();
+  const fetchedBySource = new Map<string, { data: Uint8Array; sizeBytes: number; mimeType: string | null }>();
+  const folderSequenceCounts = new Map<string, number>();
 
   let processedCandidates = 0;
   let includedFiles = 0;
@@ -1644,35 +1842,9 @@ export const buildFullEvidencePackZip = async (
     }
 
     const existing = fetchedBySource.get(candidate.physicalSourceKey);
-    if (existing) {
-      processedCandidates += 1;
-      includedRows.push(toIncludedFileRow(candidate, existing.zipRelativePath, existing.sizeBytes, artifacts.exportedAt));
-      addTraceabilityRow(
-        artifacts.traceabilityRows,
-        artifacts.exportedAt,
-        {
-          id: candidate.packItemId,
-          type: candidate.packItemType,
-          title: candidate.packItemTitle,
-          sourceRoute: '',
-          added_at: artifacts.exportedAt,
-          included: true,
-          options: { [candidate.childSection]: true }
-        },
-        candidate.childSection,
-        'included',
-        'Included via shared export file.',
-        {
-          source_record_type: candidate.sourceRecordType,
-          source_record_id: candidate.sourceRecordId,
-          zip_relative_path: existing.zipRelativePath
-        }
-      );
-      continue;
-    }
 
     try {
-      const fetchResult = await withOneRetry(() => fetchCandidateBlob(candidate, options.signal));
+      const fetchResult = existing ?? await withOneRetry(() => fetchCandidateBlob(candidate, options.signal));
 
       if (fetchResult.sizeBytes > MAX_FULL_EXPORT_FILE_BYTES) {
         recordFailure(failures, {
@@ -1701,26 +1873,38 @@ export const buildFullEvidencePackZip = async (
         break;
       }
 
-      const safeCategory = sanitizeZipPathSegment(candidate.zipCategoryFolder, candidate.kind);
-      const desiredRelativePath = `${candidate.zipRootFolder}/${safeCategory}/${fetchResult.safeFileName}`;
-      const zipRelativePath = makeUniqueZipPath(desiredRelativePath, usedZipPaths);
-
-      if (candidate.kind === 'document') {
-        evidenceFilesFolder?.file(zipRelativePath.replace('06-Evidence-Files/', ''), fetchResult.data);
-      } else {
-        imageFilesFolder?.file(zipRelativePath.replace('07-Image-Attachments/', ''), fetchResult.data);
+      const itemFolderPath = artifacts.itemFolderPaths.get(itemFolderKey({ id: candidate.packItemId, type: candidate.packItemType }));
+      if (!itemFolderPath) {
+        recordFailure(failures, {
+          candidate,
+          failureStage: 'path-build',
+          reason: 'Could not resolve the source record folder for export.'
+        }, artifacts.traceabilityRows, artifacts.exportedAt);
+        continue;
       }
 
-      fetchedBySource.set(candidate.physicalSourceKey, {
-        zipRelativePath,
-        sizeBytes: fetchResult.sizeBytes
-      });
+      const contextualFolder = buildContextualFolderForCandidate(candidate, itemFolderPath);
+      const nextSequence = (folderSequenceCounts.get(contextualFolder) ?? 0) + 1;
+      folderSequenceCounts.set(contextualFolder, nextSequence);
+      const exportedFilename = buildContextualFilename(candidate, nextSequence, fetchResult.mimeType);
+      const desiredRelativePath = `${contextualFolder}/${exportedFilename}`;
+      const zipRelativePath = makeUniqueZipPath(desiredRelativePath, usedZipPaths);
+
+      if (!existing) {
+        fetchedBySource.set(candidate.physicalSourceKey, {
+          data: fetchResult.data,
+          sizeBytes: fetchResult.sizeBytes,
+          mimeType: fetchResult.mimeType
+        });
+      }
+
+      rootFolder?.file(zipRelativePath, fetchResult.data);
 
       totalBytes += fetchResult.sizeBytes;
       processedCandidates += 1;
       includedFiles += 1;
 
-      includedRows.push(toIncludedFileRow(candidate, zipRelativePath, fetchResult.sizeBytes, artifacts.exportedAt));
+      includedRows.push(toIncludedFileRow(candidate, zipRelativePath, exportedFilename, fetchResult.mimeType, fetchResult.sizeBytes, artifacts.exportedAt));
       addTraceabilityRow(
         artifacts.traceabilityRows,
         artifacts.exportedAt,
@@ -1735,8 +1919,9 @@ export const buildFullEvidencePackZip = async (
         },
         candidate.childSection,
         'included',
-        'Private file included in full export.',
+        existing ? 'Private file included in full export using a reused in-memory fetch.' : 'Private file included in full export.',
         {
+          source_module: sourceModuleFromPackItemType(candidate.packItemType),
           source_record_type: candidate.sourceRecordType,
           source_record_id: candidate.sourceRecordId,
           zip_relative_path: zipRelativePath
@@ -1788,6 +1973,14 @@ export const buildFullEvidencePackZip = async (
   logsFolder?.file('included-files.csv', rowsToCsv(includedRows));
   logsFolder?.file('failed-files.csv', rowsToCsv(failedRows));
 
+  artifacts.packSummary = {
+    ...artifacts.packSummary,
+    included_file_count: includedFiles,
+    failed_file_count: failures.length,
+    deferred_file_count: artifacts.deferredRows.length,
+    total_exported_bytes: totalBytes
+  };
+
   writeMetadataZipIndexes(
     artifacts,
     [
@@ -1817,7 +2010,12 @@ export const buildFullEvidencePackZip = async (
       `- Full export uses temporary in-memory file access only.`,
       `- Current hard limits: ${MAX_FULL_EXPORT_FILES} files, ${formatBytes(MAX_FULL_EXPORT_TOTAL_BYTES)} total, ${formatBytes(MAX_FULL_EXPORT_FILE_BYTES)} per file.`,
       `- Production use still requires hosted Supabase storage/RLS verification.`
-    ].join('\n')
+    ].join('\n'),
+    buildZipReadmeText('full-private-files', data, artifacts, {
+      includedFiles,
+      failedFiles: failures.length,
+      deferredFiles: artifacts.deferredRows.length
+    })
   );
 
   const blob = await artifacts.zip.generateAsync({ type: 'blob' });

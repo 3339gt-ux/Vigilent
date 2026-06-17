@@ -31,11 +31,24 @@ import {
   type PackExportProgress
 } from '@/lib/evidencePackExport';
 
-const previewRootDate = 'YYYY-MM-DD';
+const previewRootDate = 'YYYY-MM-DD-HHMM';
 
 function sanitizePreviewName(value: string) {
   const normalized = value.trim().replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/-+/g, '-');
   return normalized.replace(/^-|-$/g, '') || 'Draft';
+}
+
+function getPreviewSubfolder(type: PackItemType, kind: 'evidence' | 'images') {
+  if (type === 'person') {
+    return kind === 'evidence' ? 'competency-evidence' : 'images';
+  }
+  if (type === 'asset') {
+    return kind === 'evidence' ? 'checks/evidence' : 'images';
+  }
+  if (type === 'evidence') {
+    return kind === 'evidence' ? 'files' : 'images';
+  }
+  return kind === 'evidence' ? 'evidence' : 'images';
 }
 
 function getPreviewSummaryFile(type: PackItemType) {
@@ -792,13 +805,14 @@ export function EvidencePackBuilderSidebar() {
                   </div>
                 ) : (
                   <>
-                    <span className="text-indigo-400">LUMEN-Audit-Pack-{sanitizePreviewName(packName)}-{previewRootDate}/</span>
+                    <span className="text-indigo-400">LUMEN-Evidence-Pack-{sanitizePreviewName(packName)}-{previewRootDate}/</span>
                     <div className="pl-4 space-y-1">
                       <div>|-- 00-Pack-Index/</div>
                       <div className="pl-4 text-zinc-400">|-- pack-summary.json</div>
                       <div className="pl-4 text-zinc-400">|-- pack-summary.csv</div>
                       <div className="pl-4 text-zinc-400">|-- included-items.json</div>
                       <div className="pl-4 text-zinc-400">|-- traceability-map.csv</div>
+                      <div className="pl-4 text-zinc-400">|-- README.txt</div>
                       <div className="pl-4 text-zinc-400">`-- export-notes.txt</div>
 
                       {(Object.keys(groupedItems) as PackItemType[]).map((type) => {
@@ -817,19 +831,19 @@ export function EvidencePackBuilderSidebar() {
                           <React.Fragment key={type}>
                             <div>|-- {folderName}/</div>
                             {exported.map(item => (
-                              <div key={item.id} className="pl-4">
-                                <div>|-- {sanitizePreviewName(item.title)}-{item.id.slice(0, 8)}/</div>
-                                <div className="pl-4 text-zinc-500">`-- {getPreviewSummaryFile(type)}</div>
+                            <div key={item.id} className="pl-4">
+                                <div>|-- {sanitizePreviewName(item.title)}/</div>
+                                <div className="pl-4 text-zinc-500">|-- {getPreviewSummaryFile(type)}</div>
+                                <div className="pl-4 text-zinc-500">|-- {getPreviewSubfolder(type, 'evidence')}/</div>
+                                <div className="pl-8 text-zinc-600">`-- 001-{sanitizePreviewName(item.title).toLowerCase()}-evidence-file.ext</div>
+                                <div className="pl-4 text-zinc-500">`-- {getPreviewSubfolder(type, 'images')}/</div>
+                                <div className="pl-8 text-zinc-600">`-- 001-{sanitizePreviewName(item.title).toLowerCase()}-supporting-image.ext</div>
                               </div>
                             ))}
                           </React.Fragment>
                         );
                       })}
 
-                      <div>|-- 06-Evidence-Files/</div>
-                      <div className="pl-4 text-zinc-400">`-- documents/...</div>
-                      <div>|-- 07-Image-Attachments/</div>
-                      <div className="pl-4 text-zinc-400">`-- assets|people|requirements|actions|documents/...</div>
                       <div>`-- 99-Export-Logs/</div>
                       <div className="pl-4 text-zinc-400">|-- included-files.csv</div>
                       <div className="pl-4 text-zinc-400">|-- failed-files.csv</div>
@@ -879,6 +893,7 @@ export function EvidencePackBuilderSidebar() {
                 <ul className="space-y-1 list-disc pl-4">
                   <li>Only selected, currently accessible files in this organisation will be fetched.</li>
                   <li>Missing or inaccessible files will be listed in <span className="font-bold">failed-files.csv</span>.</li>
+                  <li>Exported files are grouped by source record and renamed with audit-friendly context.</li>
                   <li>No signed URLs, public URLs or raw storage paths will be written into the ZIP.</li>
                   <li>Full export is for local testing only and does not certify compliance.</li>
                 </ul>
