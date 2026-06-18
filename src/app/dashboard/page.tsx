@@ -907,6 +907,8 @@ export default function DashboardPage() {
     const preset = customization.dashboardGridPreset || '6-balanced';
     setTempCustomization({
       ...customization,
+      dashboardLayoutMode: 'editable',
+      dashboardGridPreset: preset,
       editableHomepagePanes: Array.isArray(customization.editableHomepagePanes) && customization.editableHomepagePanes.length > 0
         ? customization.editableHomepagePanes
         : createEditablePanePreset(preset)
