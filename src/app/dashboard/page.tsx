@@ -5126,45 +5126,48 @@ export default function DashboardPage() {
                       ))}
                     </div>
                   )}
-                  <div className="grid grid-cols-2 gap-3 pr-1">
-                    {[
-                      { id: 'map', label: 'Command Map', desc: 'Visual relationship map of programme areas and connections.', badge: 'Interactive Map' },
-                      { id: 'executive-bar', label: 'Executive Command Bar', desc: 'Compact KPIs, core progress dials, and clean data points.', badge: 'KPI Focused' },
-                      { id: 'taskboard', label: 'Operations Taskboard', desc: 'Action-led view focusing on task queues and operational gaps.', badge: 'Task Oriented' },
-                      { id: 'evidence-readiness', label: 'Evidence Readiness', desc: 'Evidence coverage, missing proofs, and expiry schedules.', badge: 'Audit Ready' },
-                      { id: 'matrix-overview', label: 'Matrix Overview', desc: 'Consolidated overview of people, assets, and requirements.', badge: 'All-in-One' },
-                      { id: 'focus-mode', label: 'Focus Mode', desc: 'Simplified view highlighting daily priorities and immediate alerts.', badge: 'Minimal' }
-                    ].map(style => {
-                      const isSelected = (modalCustomization.dashboardHomeVariant || 'map') === style.id;
-                      return (
-                        <button
-                          key={style.id}
-                          onClick={() => setModalCustomization({ ...modalCustomization, dashboardHomeVariant: style.id as DashboardCustomization['dashboardHomeVariant'] })}
-                          className={`flex flex-col text-left p-3 border rounded-xl transition-all cursor-pointer relative group ${
-                            isSelected
-                              ? 'border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 ring-1 ring-indigo-500'
-                              : 'border-border bg-card hover:border-muted-foreground/30 hover:bg-muted/20'
-                          }`}
-                        >
-                          <div className="flex justify-between items-start w-full gap-2">
-                            <span className={`text-xs font-bold ${isSelected ? 'text-indigo-600 dark:text-indigo-400' : 'text-foreground'}`}>
-                              {style.label}
-                            </span>
-                            <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${
+                  {modalCustomization.dashboardLayoutMode !== 'editable' && (
+                    <div className="grid grid-cols-2 gap-3 pr-1 animate-in fade-in duration-150">
+                      {[
+                        { id: 'map', label: 'Command Map', desc: 'Visual relationship map of programme areas and connections.', badge: 'Interactive Map' },
+                        { id: 'executive-bar', label: 'Executive Command Bar', desc: 'Compact KPIs, core progress dials, and clean data points.', badge: 'KPI Focused' },
+                        { id: 'taskboard', label: 'Operations Taskboard', desc: 'Action-led view focusing on task queues and operational gaps.', badge: 'Task Oriented' },
+                        { id: 'evidence-readiness', label: 'Evidence Readiness', desc: 'Evidence coverage, missing proofs, and expiry schedules.', badge: 'Audit Ready' },
+                        { id: 'matrix-overview', label: 'Matrix Overview', desc: 'Consolidated overview of people, assets, and requirements.', badge: 'All-in-One' },
+                        { id: 'focus-mode', label: 'Focus Mode', desc: 'Simplified view highlighting daily priorities and immediate alerts.', badge: 'Minimal' }
+                      ].map(style => {
+                        const isSelected = (modalCustomization.dashboardHomeVariant || 'map') === style.id;
+                        return (
+                          <button
+                            key={style.id}
+                            type="button"
+                            onClick={() => setModalCustomization({ ...modalCustomization, dashboardHomeVariant: style.id as DashboardCustomization['dashboardHomeVariant'] })}
+                            className={`flex flex-col text-left p-3 border rounded-xl transition-all cursor-pointer relative group ${
                               isSelected
-                                ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300'
-                                : 'bg-muted text-muted-foreground'
-                            }`}>
-                              {style.badge}
-                            </span>
-                          </div>
-                          <p className="text-[10px] text-muted-foreground mt-1.5 leading-normal">
-                            {style.desc}
-                          </p>
-                        </button>
-                      );
-                    })}
-                  </div>
+                                ? 'border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 ring-1 ring-indigo-500'
+                                : 'border-border bg-card hover:border-muted-foreground/30 hover:bg-muted/20'
+                            }`}
+                          >
+                            <div className="flex justify-between items-start w-full gap-2">
+                              <span className={`text-xs font-bold ${isSelected ? 'text-indigo-600 dark:text-indigo-400' : 'text-foreground'}`}>
+                                {style.label}
+                              </span>
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${
+                                isSelected
+                                  ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300'
+                                  : 'bg-muted text-muted-foreground'
+                              }`}>
+                                {style.badge}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground mt-1.5 leading-normal">
+                              {style.desc}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 

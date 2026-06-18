@@ -197,3 +197,14 @@ LUMÉN strictly enforces data honesty in compliance visualization:
 2. **Honest Empty States**: If an organization has no active data or records matching a detailed widget view, the UI renders an honest empty state ("No entries recorded") instead of generating mock placeholder entries.
 3. **No Unauthenticated Leaks**: Widget configurations cannot read, write, or leak evidence files or auth contexts outside the tenant boundary.
 4. **Data Honesty in Layout Variations**: All selectable dashboard home variations map to real, snapshot-based data only. Fake trend lines, fake historical claims, and fake regulator/certification badges are strictly forbidden. Empty or unavailable states are honestly marked.
+
+---
+
+## 7. Visual QA & UX Polish (Antigravity Pass)
+
+The dashboard customization system was polished and hardened during a visual QA pass:
+* **Settings Panel converted to Drawer**: The `PaneSettingsPanel` component was refactored into a slide-over drawer structure with a dark backdrop overlay and scroll lock. This aligns it with the rest of the detail drawers in the application.
+* **Sticky Footer Actions**: Primary actions for resetting, duplicating, and removing individual panes are pinned as a sticky footer at the bottom of the drawer, avoiding a giant "settings wall" and making it extremely easy to use.
+* **Scroll Lock Integration**: The slide-over settings drawer integrates with the `useBodyScrollLock` hook, preventing main-page scrolling while editing a pane's options.
+* **Git and Build Hardening**: Fixed duplicate React markup fragments and cleaned up JSX tags to resolve compilation errors.
+* **Data Honesty and Contrast**: Verified that all themes (light, dark, and midtone) maintain correct text-foreground contrast and visual borders. No fake trends or compliance badges are shown.

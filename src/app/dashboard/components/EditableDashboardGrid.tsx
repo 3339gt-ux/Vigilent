@@ -24,6 +24,7 @@ import {
   X
 } from 'lucide-react';
 import { usePackBuilder } from '@/components/packs/EvidencePackBuilderProvider';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 export type DashboardLayoutMode = 'classic' | 'editable';
 export type DashboardGridPreset = '4-large' | '6-balanced' | '8-operations' | '12-executive' | 'custom';
@@ -782,103 +783,144 @@ function PaneRenderer({
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
-      className={`${spanClasses[pane.span]} min-h-[190px] rounded-lg border bg-card shadow-sm transition-all ${
-        isEditing ? 'border-indigo-500/35 ring-1 ring-indigo-500/10' : 'border-border/80 hover:border-border'
+      className={`${spanClasses[pane.span]} min-h-[190px] rounded-lg border bg-card shadow-xs transition-all ${
+        isEditing
+          ? 'border-dashed border-indigo-500/40 bg-indigo-500/[0.01] hover:border-indigo-500 hover:bg-indigo-500/[0.03] cursor-grab active:cursor-grabbing hover:shadow-md'
+          : 'border-border/80 hover:border-border'
       }`}
     >
-      <div className="flex h-full flex-col p-4">
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              {isEditing && <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" />}
-              <h3 className="truncate text-xs font-black uppercase tracking-wider text-foreground">{pane.title}</h3>
+      <div className="flex h-full flex-col p-4 justify-between">
+        <div className="flex-1 flex flex-col">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                {isEditing && <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground/50 cursor-grab" />}
+                <h3 className="truncate text-xs font-black uppercase tracking-wider text-foreground">{pane.title}</h3>
+              </div>
+              {pane.style.showHelper && (
+                <p className="mt-1 line-clamp-2 text-[10px] font-medium text-muted-foreground">
+                  {metric.description}
+                </p>
+              )}
             </div>
-            {pane.style.showHelper && (
-              <p className="mt-1 line-clamp-2 text-[10px] font-medium text-muted-foreground">
-                {metric.description}
+            {!isEditing && (
+              <button
+                type="button"
+                onClick={() => onNavigate(result.route)}
+                className={`rounded-md border px-2 py-1 text-[9px] font-black uppercase ${classes.bg} ${classes.border} ${classes.text}`}
+              >
+                Open
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-1 flex-col justify-between gap-3">
+            {pane.type === 'quick-actions' ? (
+              <QuickActionPane onNavigate={onNavigate} />
+            ) : showQueue && result.queue ? (
+              <QueueList items={result.queue} emptyState={metric.emptyState} onNavigate={onNavigate} />
+            ) : pane.type === 'module-summary' ? (
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: 'Requirements', value: data.requirementCounts.active, route: '/dashboard/requirements', icon: ClipboardList },
+                  { label: 'Evidence', value: data.evidenceCounts.total, route: '/dashboard/vault', icon: FolderLock },
+                  { label: 'People', value: data.competencyCounts.people, route: '/dashboard/competencies', icon: Users },
+                  { label: 'Assets', value: data.assetCounts.totalChecks, route: '/dashboard/matrix', icon: Package }
+                ].map(module => {
+                  const Icon = module.icon;
+                  return (
+                    <button key={module.label} type="button" onClick={() => onNavigate(module.route)} className="rounded-lg border border-border bg-muted/20 p-2 text-left hover:bg-muted/40">
+                      <Icon className="mb-2 h-4 w-4 text-indigo-500" />
+                      <p className="text-lg font-black text-foreground">{module.value}</p>
+                      <p className="text-[10px] font-bold text-muted-foreground">{module.label}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : displayMode === 'bar' && result.bars ? (
+              <ProgressBars bars={result.bars} />
+            ) : displayMode === 'donut' && result.bars ? (
+              <SnapshotDonut result={result} accent={accent} />
+            ) : pane.type === 'mini-chart' ? (
+              <div className="space-y-3">
+                {result.bars ? <ProgressBars bars={result.bars} /> : <p className="text-xs text-muted-foreground">{metric.emptyState}</p>}
+                <p className="rounded-md border border-border bg-muted/20 px-2 py-1 text-[10px] font-bold text-muted-foreground">
+                  Current snapshot only. Trend unavailable until historical snapshots are enabled.
+                </p>
+              </div>
+            ) : (
+              <div className={compact ? 'space-y-2' : 'space-y-3'}>
+                <div className={`font-black tracking-tight ${classes.text} ${valueClass}`}>{result.value}</div>
+                <p className="text-xs font-bold text-foreground">{result.helper}</p>
+                {result.bars && !compact && <ProgressBars bars={result.bars.slice(0, 2)} />}
+              </div>
+            )}
+
+            {pane.type === 'pack-builder' && !showQueue && (
+              <p className="rounded-md border border-border bg-muted/20 px-2 py-1 text-[10px] font-bold text-muted-foreground">
+                Pack Builder data is local to this browser and workspace.
               </p>
             )}
           </div>
-          {isEditing ? (
-            <div className="flex shrink-0 items-center gap-1">
-              <button type="button" onClick={onOpenSettings} title="Pane settings" className="rounded-md border border-border bg-muted/30 p-1 text-muted-foreground hover:text-foreground">
+        </div>
+
+        {isEditing && (
+          <div className="mt-4 flex items-center justify-between border-t border-border/40 pt-2.5">
+            <span className="text-[9px] font-black uppercase tracking-wider bg-muted/65 px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground select-none">
+              Span: {pane.span}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={onOpenSettings}
+                title="Pane settings"
+                className="rounded-md border border-border bg-muted/30 p-1 text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-all cursor-pointer"
+              >
                 <Settings className="h-3.5 w-3.5" />
               </button>
-              <button type="button" onClick={() => onMove(-1)} title="Move pane left/up" className="rounded-md border border-border bg-muted/30 p-1 text-muted-foreground hover:text-foreground">
+              <button
+                type="button"
+                onClick={() => onMove(-1)}
+                title="Move left/up"
+                className="rounded-md border border-border bg-muted/30 p-1 text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-all cursor-pointer"
+              >
                 <ArrowUp className="h-3.5 w-3.5" />
               </button>
-              <button type="button" onClick={() => onMove(1)} title="Move pane right/down" className="rounded-md border border-border bg-muted/30 p-1 text-muted-foreground hover:text-foreground">
+              <button
+                type="button"
+                onClick={() => onMove(1)}
+                title="Move right/down"
+                className="rounded-md border border-border bg-muted/30 p-1 text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-all cursor-pointer"
+              >
                 <ArrowDown className="h-3.5 w-3.5" />
               </button>
-              <button type="button" onClick={onDuplicate} title="Duplicate pane" className="rounded-md border border-border bg-muted/30 p-1 text-muted-foreground hover:text-foreground">
+              <button
+                type="button"
+                onClick={onDuplicate}
+                title="Duplicate pane"
+                className="rounded-md border border-border bg-muted/30 p-1 text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-all cursor-pointer"
+              >
                 <Copy className="h-3.5 w-3.5" />
               </button>
-              <button type="button" onClick={onHide} title="Hide pane" className="rounded-md border border-border bg-muted/30 p-1 text-muted-foreground hover:text-foreground">
+              <button
+                type="button"
+                onClick={onHide}
+                title="Hide pane"
+                className="rounded-md border border-border bg-muted/30 p-1 text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-all cursor-pointer"
+              >
                 <EyeOff className="h-3.5 w-3.5" />
               </button>
-              <button type="button" onClick={onRemove} title="Remove pane" className="rounded-md border border-border bg-muted/30 p-1 text-muted-foreground hover:text-rose-500">
+              <button
+                type="button"
+                onClick={onRemove}
+                title="Remove pane"
+                className="rounded-md border border-border bg-muted/30 p-1 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-all cursor-pointer"
+              >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => onNavigate(result.route)}
-              className={`rounded-md border px-2 py-1 text-[9px] font-black uppercase ${classes.bg} ${classes.border} ${classes.text}`}
-            >
-              Open
-            </button>
-          )}
-        </div>
-
-        <div className="flex flex-1 flex-col justify-between gap-3">
-          {pane.type === 'quick-actions' ? (
-            <QuickActionPane onNavigate={onNavigate} />
-          ) : showQueue && result.queue ? (
-            <QueueList items={result.queue} emptyState={metric.emptyState} onNavigate={onNavigate} />
-          ) : pane.type === 'module-summary' ? (
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { label: 'Requirements', value: data.requirementCounts.active, route: '/dashboard/requirements', icon: ClipboardList },
-                { label: 'Evidence', value: data.evidenceCounts.total, route: '/dashboard/vault', icon: FolderLock },
-                { label: 'People', value: data.competencyCounts.people, route: '/dashboard/competencies', icon: Users },
-                { label: 'Assets', value: data.assetCounts.totalChecks, route: '/dashboard/matrix', icon: Package }
-              ].map(module => {
-                const Icon = module.icon;
-                return (
-                  <button key={module.label} type="button" onClick={() => onNavigate(module.route)} className="rounded-lg border border-border bg-muted/20 p-2 text-left hover:bg-muted/40">
-                    <Icon className="mb-2 h-4 w-4 text-indigo-500" />
-                    <p className="text-lg font-black text-foreground">{module.value}</p>
-                    <p className="text-[10px] font-bold text-muted-foreground">{module.label}</p>
-                  </button>
-                );
-              })}
-            </div>
-          ) : displayMode === 'bar' && result.bars ? (
-            <ProgressBars bars={result.bars} />
-          ) : displayMode === 'donut' && result.bars ? (
-            <SnapshotDonut result={result} accent={accent} />
-          ) : pane.type === 'mini-chart' ? (
-            <div className="space-y-3">
-              {result.bars ? <ProgressBars bars={result.bars} /> : <p className="text-xs text-muted-foreground">{metric.emptyState}</p>}
-              <p className="rounded-md border border-border bg-muted/20 px-2 py-1 text-[10px] font-bold text-muted-foreground">
-                Current snapshot only. Trend unavailable until historical snapshots are enabled.
-              </p>
-            </div>
-          ) : (
-            <div className={compact ? 'space-y-2' : 'space-y-3'}>
-              <div className={`font-black tracking-tight ${classes.text} ${valueClass}`}>{result.value}</div>
-              <p className="text-xs font-bold text-foreground">{result.helper}</p>
-              {result.bars && !compact && <ProgressBars bars={result.bars.slice(0, 2)} />}
-            </div>
-          )}
-
-          {pane.type === 'pack-builder' && !showQueue && (
-            <p className="rounded-md border border-border bg-muted/20 px-2 py-1 text-[10px] font-bold text-muted-foreground">
-              Pack Builder data is local to this browser and workspace.
-            </p>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -902,24 +944,30 @@ function PaneSettingsPanel({
   const metric = metricByKey.get(pane.metricKey) || metricDefinitions[0];
   const displayModes = getSupportedDisplayModes(pane.type, pane.metricKey);
 
+  useBodyScrollLock(true);
+
   const updatePane = (patch: Partial<DashboardPaneConfig>) => {
     onUpdate({ ...pane, ...patch });
   };
 
   return (
-    <aside className="rounded-lg border border-border bg-card p-4 shadow-sm">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-xs font-black uppercase tracking-wider text-foreground">Pane Settings</h3>
-          <p className="mt-1 text-[10px] font-medium text-muted-foreground">{metric.module} source: {metric.label}</p>
+    <div className="fixed inset-0 z-50 bg-black/60 flex justify-end animate-in fade-in duration-200" onClick={onClose}>
+      <aside
+        className="bg-card border-l border-border w-full max-w-md h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-200 text-left"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="p-4 border-b border-border flex items-start justify-between gap-3 bg-muted/10 shrink-0">
+          <div>
+            <h3 className="text-xs font-black uppercase tracking-wider text-foreground">Pane Settings</h3>
+            <p className="mt-1 text-[10px] font-medium text-muted-foreground">{metric.module} source: {metric.label}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-all cursor-pointer">
+            <X className="h-4 w-4" />
+          </button>
         </div>
-        <button type="button" onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
 
-      <div className="space-y-5">
-        <section className="space-y-3">
+        <div className="flex-1 overflow-y-auto p-4 space-y-5">
+          <section className="space-y-3">
           <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Content</h4>
           <label className="block space-y-1">
             <span className="text-[10px] font-bold text-muted-foreground">Title</span>
@@ -1044,22 +1092,38 @@ function PaneSettingsPanel({
           </div>
         </section>
 
-        <section className="flex flex-wrap gap-2 border-t border-border pt-4">
-          <button type="button" onClick={onReset} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-bold text-muted-foreground hover:bg-muted hover:text-foreground">
-            <RefreshCw className="h-3.5 w-3.5" />
-            Reset pane
-          </button>
-          <button type="button" onClick={onDuplicate} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-bold text-muted-foreground hover:bg-muted hover:text-foreground">
-            <Copy className="h-3.5 w-3.5" />
-            Duplicate
-          </button>
-          <button type="button" onClick={onRemove} className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/25 px-3 py-2 text-[11px] font-bold text-rose-600 hover:bg-rose-500/10">
+        </div>
+
+        <div className="p-4 border-t border-border bg-muted/10 flex flex-wrap gap-2 shrink-0 justify-between">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onReset}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-2 text-[11px] font-bold text-muted-foreground hover:bg-muted hover:text-foreground transition-all cursor-pointer"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Reset
+            </button>
+            <button
+              type="button"
+              onClick={onDuplicate}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-2 text-[11px] font-bold text-muted-foreground hover:bg-muted hover:text-foreground transition-all cursor-pointer"
+            >
+              <Copy className="h-3.5 w-3.5" />
+              Duplicate
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={onRemove}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/25 bg-rose-500/[0.04] px-3 py-2 text-[11px] font-bold text-rose-600 hover:bg-rose-500/10 transition-all cursor-pointer"
+          >
             <Trash2 className="h-3.5 w-3.5" />
             Remove
           </button>
-        </section>
-      </div>
-    </aside>
+        </div>
+      </aside>
+    </div>
   );
 }
 
