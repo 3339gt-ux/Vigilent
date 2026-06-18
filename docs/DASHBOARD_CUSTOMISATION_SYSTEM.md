@@ -210,3 +210,16 @@ The dashboard customization system was polished and hardened during a visual QA 
 * **Scroll Lock Integration**: The slide-over settings drawer integrates with the `useBodyScrollLock` hook, preventing main-page scrolling while editing a pane's options.
 * **Git and Build Hardening**: Fixed duplicate React markup fragments and cleaned up JSX tags to resolve compilation errors.
 * **Data Honesty and Contrast**: Verified that all themes (light, dark, and midtone) maintain correct text-foreground contrast and visual borders. No fake trends or compliance badges are shown.
+
+---
+
+## 8. Stage 4B Browser Polish and Usability Hardening
+
+During the final Stage 4B visual polish and usability QA pass, the editable dashboard homepage system was further hardened:
+* **Dynamic Selected Outlining**: High-visibility glowing outline (`ring-2 ring-indigo-500 bg-indigo-500/[0.02]`) applied to the card currently active in the configuration drawer, ensuring the user immediately links the settings form to the corresponding grid node.
+* **DND Target Highlighting**: When dragging a dashboard card over other cards, the target card illuminates dynamically with a scale transition and deep indigo border, providing crucial feedback on the final layout flow.
+* **Padlocked Specialized Data Sources**: When pane type is set to a specialized component (`quick-actions`, `upload-console`, `pack-builder`, `module-summary`), the data source select dropdown is disabled and marked with a padlock indicator to prevent broken layout mappings.
+* **Smart Filter Visibility Rules**: Filters (record limit, timeframe, status scope, overdue switches) are grouped under a dedicated section, cleanly disabled when the pane type is not a `work-queue`, and annotated with a plain-English notice explaining the dependency.
+* **Spacious vs. Compact Reflow Layout**: Spacing metrics are enhanced to create a stark visual contrast between compact (tight padding and grid rows) and normal detail options.
+* **Responsive Sticky Drawer Footer Layout**: Pinned actions (Reset, Duplicate, Remove) and a dedicated "Close Settings" command are locked in a sticky bottom container, with all buttons sporting smooth transition classes and comfortable tap target dimensions.
+* **Known Caveats**: `/dashboard/imports` briefly displays a bootstrap loading screen on cold load, then resolves automatically through the default timeout parameters.

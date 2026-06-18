@@ -1366,6 +1366,7 @@ function PaneRenderer({
   data,
   packItemCount,
   isEditing,
+  isSelected = false,
   onNavigate,
   onOpenSettings,
   onMove,
@@ -1383,6 +1384,7 @@ function PaneRenderer({
   data: DashboardMetricSnapshot;
   packItemCount: number;
   isEditing: boolean;
+  isSelected?: boolean;
   onNavigate: (path: string) => void;
   onOpenSettings: () => void;
   onMove: (direction: -1 | 1) => void;
@@ -1396,6 +1398,7 @@ function PaneRenderer({
   isDragged: boolean;
   onQuickAction?: (action: DashboardQuickAction) => void;
 }) {
+  const [isDragTarget, setIsDragTarget] = useState(false);
   const metric = metricByKey.get(pane.metricKey) || metricDefinitions[0];
   const result = metric.resolver(data, packItemCount);
   const accent = accentClasses[pane.style.accent];
@@ -1405,19 +1408,26 @@ function PaneRenderer({
   const valueClass = valueFontClasses[pane.style.fontSize];
   const titleClass = titleFontClasses[pane.style.fontSize];
   const helperClass = helperFontClasses[pane.style.fontSize];
+  
   const emphasisClass =
     pane.style.emphasis === 'hero'
-      ? 'tracking-tight'
+      ? `font-black tracking-tight ${accent.text}`
       : pane.style.emphasis === 'strong'
-        ? 'tracking-normal'
-        : 'tracking-wide';
+        ? 'font-extrabold tracking-normal text-foreground'
+        : 'font-semibold tracking-wide text-foreground/90';
+
   const cardClass = [
-    'group relative overflow-hidden rounded-2xl border bg-card shadow-xs transition-all',
+    'group relative overflow-hidden rounded-2xl border bg-card shadow-xs transition-all duration-200 text-left',
     spanClasses[pane.span],
     accent.border,
-    isEditing ? 'ring-1 ring-dashed ring-indigo-500/25 hover:shadow-md hover:ring-indigo-500/40' : 'hover:shadow-sm',
+    isEditing
+      ? isSelected
+        ? 'border-indigo-500 ring-2 ring-indigo-500 bg-indigo-500/[0.02] dark:border-indigo-400 dark:ring-indigo-400'
+        : 'border-dashed border-indigo-500/35 hover:border-indigo-500/60 hover:shadow-md hover:bg-indigo-500/[0.01] dark:border-indigo-500/25 dark:hover:border-indigo-400/40'
+      : 'hover:shadow-sm',
     isDragged ? 'scale-[0.98] opacity-60' : '',
-    isCompact ? 'p-3' : 'p-4'
+    isDragTarget ? 'ring-2 ring-indigo-500 bg-indigo-500/10 scale-[1.01] dark:ring-indigo-400 dark:bg-indigo-500/5' : '',
+    isCompact ? 'p-3' : 'p-5 lg:p-6'
   ].join(' ');
 
   const renderBody = () => {
@@ -1435,14 +1445,14 @@ function PaneRenderer({
 
     if (pane.type === 'pack-builder') {
       return (
-        <div className="space-y-3">
-          <div className={`${valueClass} font-black text-foreground ${emphasisClass}`}>{result.value}</div>
+        <div className={isCompact ? 'space-y-2' : 'space-y-4'}>
+          <div className={`${valueClass} ${emphasisClass}`}>{result.value}</div>
           <p className={`${helperClass} text-muted-foreground`}>{result.helper}</p>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => onQuickAction?.('build-pack')}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-500/25 bg-slate-500/10 px-3 py-2 text-[11px] font-black text-slate-700 hover:bg-slate-500/15 dark:text-slate-300"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-500/25 bg-slate-500/10 px-3 py-1.5 text-[11px] font-black text-slate-700 hover:bg-slate-500/15 dark:text-slate-300 transition-all duration-150"
             >
               <FileText className="h-3.5 w-3.5" />
               Open Pack Builder
@@ -1450,7 +1460,7 @@ function PaneRenderer({
             <button
               type="button"
               onClick={() => onNavigate(result.route)}
-              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-[11px] font-black text-foreground hover:bg-muted/20"
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-[11px] font-black text-foreground hover:bg-muted/20 transition-all duration-150"
             >
               <ClipboardList className="h-3.5 w-3.5" />
               View audit packs
@@ -1473,8 +1483,8 @@ function PaneRenderer({
     }
 
     return (
-      <div className="space-y-4">
-        <div className={`${valueClass} font-black text-foreground ${emphasisClass}`}>{result.value}</div>
+      <div className={isCompact ? 'space-y-2' : 'space-y-4'}>
+        <div className={`${valueClass} ${emphasisClass}`}>{result.value}</div>
         {pane.style.showHelper && (
           <p className={`${helperClass} text-muted-foreground`}>{result.helper}</p>
         )}
@@ -1495,7 +1505,9 @@ function PaneRenderer({
     <section
       className={cardClass}
       onDragOver={isEditing ? onDragOver : undefined}
-      onDrop={isEditing ? onDrop : undefined}
+      onDragEnter={isEditing ? (e) => { e.preventDefault(); e.stopPropagation(); setIsDragTarget(true); } : undefined}
+      onDragLeave={isEditing ? () => setIsDragTarget(false) : undefined}
+      onDrop={isEditing ? (e) => { e.preventDefault(); e.stopPropagation(); setIsDragTarget(false); onDrop(); } : undefined}
       data-dashboard-pane-id={pane.id}
     >
       <div className={`absolute inset-x-0 top-0 h-1 ${accent.bar}`} />
@@ -1509,14 +1521,14 @@ function PaneRenderer({
           )}
         </div>
         {isEditing ? (
-          <div className="flex items-center gap-1 rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-1 shadow-sm">
+          <div className="flex items-center gap-1 rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-1 shadow-sm shrink-0">
             <button
               type="button"
               draggable
               onDragStart={onDragStart}
               onDragEnd={onDragEnd}
-              title="Drag to reorder"
-              className="inline-flex items-center gap-1 rounded-lg border border-indigo-500/20 bg-card px-2 py-1 text-[10px] font-black text-indigo-600 hover:bg-indigo-500/10 dark:text-indigo-400"
+              title="Drag layout pane to reorder"
+              className="inline-flex items-center gap-1 rounded-lg border border-indigo-500/20 bg-card px-2.5 py-1.5 text-[10px] font-black text-indigo-600 hover:bg-indigo-500/10 dark:text-indigo-400 cursor-grab active:cursor-grabbing transition-all duration-150"
             >
               <GripVertical className="h-3.5 w-3.5" />
               Move
@@ -1524,48 +1536,48 @@ function PaneRenderer({
             <button
               type="button"
               onClick={onOpenSettings}
-              title="Open pane settings"
-              className="rounded-lg border border-border bg-card px-2 py-1 text-[10px] font-black text-foreground hover:bg-muted/20"
+              title="Open pane configuration panel"
+              className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-[10px] font-black text-foreground hover:bg-muted/20 transition-all duration-150"
             >
               Settings
             </button>
             <button
               type="button"
               onClick={() => onMove(-1)}
-              title="Move pane up"
-              className="rounded-lg border border-border bg-card p-1.5 text-muted-foreground hover:text-foreground"
+              title="Shift pane layout position up"
+              className="rounded-lg border border-border bg-card p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/20 transition-all duration-150"
             >
               <ArrowUp className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
               onClick={() => onMove(1)}
-              title="Move pane down"
-              className="rounded-lg border border-border bg-card p-1.5 text-muted-foreground hover:text-foreground"
+              title="Shift pane layout position down"
+              className="rounded-lg border border-border bg-card p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/20 transition-all duration-150"
             >
               <ArrowDown className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
               onClick={onDuplicate}
-              title="Duplicate pane"
-              className="rounded-lg border border-border bg-card p-1.5 text-muted-foreground hover:text-foreground"
+              title="Duplicate pane settings"
+              className="rounded-lg border border-border bg-card p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/20 transition-all duration-150"
             >
               <Copy className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
               onClick={onHide}
-              title="Hide pane"
-              className="rounded-lg border border-border bg-card p-1.5 text-muted-foreground hover:text-foreground"
+              title="Hide pane from grid layout"
+              className="rounded-lg border border-border bg-card p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/20 transition-all duration-150"
             >
               <EyeOff className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
               onClick={onRemove}
-              title="Remove pane"
-              className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-1.5 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400"
+              title="Permanently remove pane layout"
+              className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-1.5 text-rose-600 hover:bg-rose-500/10 hover:border-rose-500/35 dark:text-rose-400 transition-all duration-150"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -1574,7 +1586,7 @@ function PaneRenderer({
           <button
             type="button"
             onClick={() => onNavigate(result.route)}
-            className={`rounded-full border px-2 py-1 text-[10px] font-black uppercase tracking-wider ${accent.border} ${accent.text} ${accent.bg}`}
+            className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${accent.border} ${accent.text} ${accent.bg} hover:brightness-95 dark:hover:brightness-110 transition-all duration-150`}
           >
             Open
           </button>
@@ -1613,29 +1625,30 @@ function PaneSettingsPanel({
   return (
     <div className="fixed inset-0 z-[75] bg-black/60 flex justify-end animate-in fade-in duration-200" onClick={onClose}>
       <aside
-        className="h-full w-full max-w-lg overflow-hidden border-l border-border bg-card shadow-2xl"
+        className="h-full w-full max-w-lg flex flex-col border-l border-border bg-card shadow-2xl animate-in slide-in-from-right duration-200"
         onClick={event => event.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-border bg-muted/10 p-4">
+        <div className="flex items-start justify-between gap-3 border-b border-border bg-muted/10 p-4 shrink-0">
           <div>
             <h3 className="text-xs font-black uppercase tracking-wider text-foreground">Pane Settings</h3>
-            <p className="mt-1 text-[11px] text-muted-foreground">{metric.module} source • {metric.label}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground font-semibold">{metric.module} source • {metric.label}</p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+          <button type="button" onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150">
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="h-[calc(100%-78px)] overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-4 space-y-6">
           <div className="space-y-6">
-            <section className="space-y-3">
+            <section className="space-y-3 text-left">
               <div>
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Content</h4>
-                <p className="mt-1 text-[11px] text-muted-foreground">Choose what this pane shows and how the title should behave.</p>
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">Content</h4>
+                <p className="mt-1 text-[11px] text-muted-foreground font-medium">Choose what this pane shows and how the title should behave.</p>
               </div>
               <label className="block space-y-1">
                 <span className="text-[10px] font-bold text-muted-foreground">Data source</span>
                 <select
+                  disabled={['quick-actions', 'upload-console', 'pack-builder', 'module-summary'].includes(pane.type)}
                   value={pane.metricKey}
                   onChange={event => {
                     const metricKey = event.target.value as DashboardMetricKey;
@@ -1648,12 +1661,17 @@ function PaneSettingsPanel({
                       titleMode: shouldUpdateTitle ? 'suggested' : pane.titleMode
                     });
                   }}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500 disabled:opacity-60 disabled:bg-muted transition-all duration-150"
                 >
                   {metricDefinitions.map(item => (
                     <option key={item.key} value={item.key}>{item.label}</option>
                   ))}
                 </select>
+                {['quick-actions', 'upload-console', 'pack-builder', 'module-summary'].includes(pane.type) && (
+                  <p className="text-[9px] font-semibold text-muted-foreground mt-0.5">
+                    🔒 Data source is locked for this specialized pane type.
+                  </p>
+                )}
               </label>
               <label className="block space-y-1">
                 <span className="text-[10px] font-bold text-muted-foreground">Pane type</span>
@@ -1663,7 +1681,7 @@ function PaneSettingsPanel({
                     const type = event.target.value as DashboardPaneType;
                     updatePane({ type, displayMode: coerceDisplayMode(type, pane.metricKey, pane.displayMode) });
                   }}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500 transition-all duration-150"
                 >
                   {paneTypeOptions.map(item => (
                     <option key={item.id} value={item.id}>{item.label}</option>
@@ -1675,7 +1693,7 @@ function PaneSettingsPanel({
                 <input
                   value={pane.title}
                   onChange={event => updatePane({ title: event.target.value, titleMode: 'custom' })}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500 transition-all duration-150"
                 />
               </label>
               <div className="flex items-center justify-between rounded-lg border border-border bg-muted/15 px-3 py-2">
@@ -1686,17 +1704,17 @@ function PaneSettingsPanel({
                 <button
                   type="button"
                   onClick={() => updatePane({ title: suggestedTitle, titleMode: 'suggested' })}
-                  className="rounded-lg border border-border bg-card px-3 py-2 text-[11px] font-black text-foreground hover:bg-muted/20"
+                  className="rounded-lg border border-border bg-card px-3 py-2 text-[11px] font-black text-foreground hover:bg-muted/20 transition-all duration-150"
                 >
                   Use suggested title
                 </button>
               </div>
             </section>
 
-            <section className="space-y-3">
+            <section className="space-y-3 text-left">
               <div>
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Display</h4>
-                <p className="mt-1 text-[11px] text-muted-foreground">Choose the visual style and layout density that best fits this pane.</p>
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">Display & Filters</h4>
+                <p className="mt-1 text-[11px] text-muted-foreground font-medium">Choose the visual style, layout density, and filters for this pane.</p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <label className="block space-y-1">
@@ -1704,7 +1722,7 @@ function PaneSettingsPanel({
                   <select
                     value={pane.displayMode}
                     onChange={event => updatePane({ displayMode: event.target.value as DashboardPaneDisplayMode })}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500 transition-all duration-150"
                   >
                     {displayModes.map(mode => (
                       <option key={mode} value={mode}>{mode}</option>
@@ -1716,7 +1734,7 @@ function PaneSettingsPanel({
                   <select
                     value={pane.span}
                     onChange={event => updatePane({ span: event.target.value as DashboardPaneSpan })}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500 transition-all duration-150"
                   >
                     <option value="1">1 column</option>
                     <option value="2">2 columns</option>
@@ -1726,78 +1744,92 @@ function PaneSettingsPanel({
                   </select>
                 </label>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="block space-y-1">
-                  <span className="text-[10px] font-bold text-muted-foreground">Records shown</span>
-                  <select
-                    value={pane.filters?.recordLimit || DEFAULT_RECORD_LIMIT}
-                    onChange={event => updatePane({
-                      filters: { ...pane.filters, recordLimit: Number(event.target.value) as DashboardRecordLimit }
-                    })}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500"
-                  >
-                    <option value={3}>3</option>
-                    <option value={5}>5</option>
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                  </select>
-                </label>
-                <label className="block space-y-1">
-                  <span className="text-[10px] font-bold text-muted-foreground">Timeframe</span>
-                  <select
-                    value={pane.filters?.timeframe || DEFAULT_TIMEFRAME}
-                    onChange={event => updatePane({
-                      filters: { ...pane.filters, timeframe: event.target.value as DashboardTimeframe }
-                    })}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500"
-                  >
-                    <option value="today">Today</option>
-                    <option value="7days">Next 7 days</option>
-                    <option value="14days">Next 14 days</option>
-                    <option value="30days">Next 30 days</option>
-                    <option value="60days">Next 60 days</option>
-                    <option value="90days">Next 90 days</option>
-                    <option value="all">All visible</option>
-                  </select>
-                </label>
-                <label className="block space-y-1">
-                  <span className="text-[10px] font-bold text-muted-foreground">Status scope</span>
-                  <select
-                    value={pane.filters?.statusScope || 'all'}
-                    onChange={event => updatePane({
-                      filters: {
-                        ...pane.filters,
-                        statusScope: event.target.value as NonNullable<DashboardPaneConfig['filters']>['statusScope']
-                      }
-                    })}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500"
-                  >
-                    <option value="all">All visible</option>
-                    <option value="overdue">Overdue</option>
-                    <option value="due-soon">Due soon</option>
-                    <option value="expiring">Expiring</option>
-                    <option value="missing">Missing</option>
-                    <option value="valid">Valid</option>
-                    <option value="expired">Expired</option>
-                  </select>
-                </label>
-                <label className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs font-bold text-foreground">
-                  <input
-                    type="checkbox"
-                    checked={pane.filters?.includeOverdue ?? true}
-                    onChange={event => updatePane({
-                      filters: { ...pane.filters, includeOverdue: event.target.checked }
-                    })}
-                  />
-                  Include overdue items
-                </label>
+              
+              <div className="border-t border-border/50 pt-3 space-y-3 text-left">
+                <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Queue Filters</div>
+                {pane.type !== 'work-queue' && (
+                  <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400/80 bg-amber-500/5 border border-amber-500/15 rounded-lg p-2 leading-relaxed">
+                    {"Filters are disabled because they only apply to the \"Work Queue\" pane type."}
+                  </p>
+                )}
+                <div className={`grid grid-cols-2 gap-2 ${pane.type !== 'work-queue' ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}>
+                  <label className="block space-y-1">
+                    <span className="text-[10px] font-bold text-muted-foreground">Records shown</span>
+                    <select
+                      disabled={pane.type !== 'work-queue'}
+                      value={pane.filters?.recordLimit || DEFAULT_RECORD_LIMIT}
+                      onChange={event => updatePane({
+                        filters: { ...pane.filters, recordLimit: Number(event.target.value) as DashboardRecordLimit }
+                      })}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500 disabled:opacity-50 transition-all duration-150"
+                    >
+                      <option value={3}>3 records</option>
+                      <option value={5}>5 records</option>
+                      <option value={10}>10 records</option>
+                      <option value={20}>20 records</option>
+                    </select>
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-[10px] font-bold text-muted-foreground">Timeframe</span>
+                    <select
+                      disabled={pane.type !== 'work-queue'}
+                      value={pane.filters?.timeframe || DEFAULT_TIMEFRAME}
+                      onChange={event => updatePane({
+                        filters: { ...pane.filters, timeframe: event.target.value as DashboardTimeframe }
+                      })}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500 disabled:opacity-50 transition-all duration-150"
+                    >
+                      <option value="today">Today</option>
+                      <option value="7days">Next 7 days</option>
+                      <option value="14days">Next 14 days</option>
+                      <option value="30days">Next 30 days</option>
+                      <option value="60days">Next 60 days</option>
+                      <option value="90days">Next 90 days</option>
+                      <option value="all">All visible</option>
+                    </select>
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-[10px] font-bold text-muted-foreground">Status scope</span>
+                    <select
+                      disabled={pane.type !== 'work-queue'}
+                      value={pane.filters?.statusScope || 'all'}
+                      onChange={event => updatePane({
+                        filters: {
+                          ...pane.filters,
+                          statusScope: event.target.value as NonNullable<DashboardPaneConfig['filters']>['statusScope']
+                        }
+                      })}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500 disabled:opacity-50 transition-all duration-150"
+                    >
+                      <option value="all">All visible</option>
+                      <option value="overdue">Overdue</option>
+                      <option value="due-soon">Due soon</option>
+                      <option value="expiring">Expiring</option>
+                      <option value="missing">Missing</option>
+                      <option value="valid">Valid</option>
+                      <option value="expired">Expired</option>
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs font-bold text-foreground cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      disabled={pane.type !== 'work-queue'}
+                      checked={pane.filters?.includeOverdue ?? true}
+                      onChange={event => updatePane({
+                        filters: { ...pane.filters, includeOverdue: event.target.checked }
+                      })}
+                      className="rounded text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
+                    />
+                    Include overdue
+                  </label>
+                </div>
               </div>
             </section>
 
-            <section className="space-y-3">
+            <section className="space-y-3 text-left">
               <div>
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Style</h4>
-                <p className="mt-1 text-[11px] text-muted-foreground">Typography and accent settings preview live before Save.</p>
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">Style</h4>
+                <p className="mt-1 text-[11px] text-muted-foreground font-medium">Typography and accent settings preview live before Save.</p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <label className="block space-y-1">
@@ -1805,7 +1837,7 @@ function PaneSettingsPanel({
                   <select
                     value={pane.style.fontSize}
                     onChange={event => updatePane({ style: { ...pane.style, fontSize: event.target.value as DashboardPaneFontSize } })}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500 transition-all duration-150"
                   >
                     <option value="sm">Small</option>
                     <option value="md">Standard</option>
@@ -1818,7 +1850,7 @@ function PaneSettingsPanel({
                   <select
                     value={pane.style.emphasis}
                     onChange={event => updatePane({ style: { ...pane.style, emphasis: event.target.value as DashboardPaneEmphasis } })}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500 transition-all duration-150"
                   >
                     <option value="normal">Normal</option>
                     <option value="strong">Strong</option>
@@ -1830,65 +1862,73 @@ function PaneSettingsPanel({
                   <select
                     value={pane.style.accent}
                     onChange={event => updatePane({ style: { ...pane.style, accent: event.target.value as DashboardPaneAccent } })}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-indigo-500 transition-all duration-150"
                   >
                     {Object.keys(accentClasses).map(accent => (
                       <option key={accent} value={accent}>{accent}</option>
                     ))}
                   </select>
                 </label>
-                <label className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs font-bold text-foreground">
+                <label className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs font-bold text-foreground cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={pane.style.compact}
                     onChange={event => updatePane({ style: { ...pane.style, compact: event.target.checked } })}
+                    className="rounded text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
                   />
                   Compact layout
                 </label>
-                <label className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs font-bold text-foreground">
+                <label className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs font-bold text-foreground cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={pane.style.showHelper}
                     onChange={event => updatePane({ style: { ...pane.style, showHelper: event.target.checked } })}
+                    className="rounded text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
                   />
                   Show helper text
                 </label>
               </div>
             </section>
-
-            <section className="space-y-3">
-              <div>
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Actions</h4>
-                <p className="mt-1 text-[11px] text-muted-foreground">Use confirmations before removing or resetting panes.</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={onDuplicate}
-                  className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-[11px] font-black text-foreground hover:bg-muted/20"
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                  Duplicate
-                </button>
-                <button
-                  type="button"
-                  onClick={onReset}
-                  className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-[11px] font-black text-foreground hover:bg-muted/20"
-                >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  Reset pane
-                </button>
-                <button
-                  type="button"
-                  onClick={onRemove}
-                  className="inline-flex items-center gap-2 rounded-lg border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-[11px] font-black text-rose-600 hover:bg-rose-500/15 dark:text-rose-400"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Remove pane
-                </button>
-              </div>
-            </section>
           </div>
+        </div>
+
+        <div className="p-4 border-t border-border bg-muted/10 flex flex-wrap gap-2 shrink-0 justify-between items-center">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onReset}
+              title="Reset pane to default settings"
+              className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-black text-foreground hover:bg-muted/20 hover:text-foreground transition-all duration-150"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Reset
+            </button>
+            <button
+              type="button"
+              onClick={onDuplicate}
+              title="Create a copy of this pane"
+              className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-black text-foreground hover:bg-muted/20 hover:text-foreground transition-all duration-150"
+            >
+              <Copy className="h-3.5 w-3.5" />
+              Duplicate
+            </button>
+            <button
+              type="button"
+              onClick={onRemove}
+              title="Remove pane from layout"
+              className="inline-flex items-center gap-1 rounded-lg border border-rose-500/25 bg-rose-500/10 px-2.5 py-1.5 text-[11px] font-black text-rose-600 hover:bg-rose-500/15 dark:text-rose-400 transition-all duration-150"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Remove
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-indigo-500/25 bg-indigo-500/10 px-4 py-1.5 text-[11px] font-black text-indigo-600 hover:bg-indigo-500/20 dark:text-indigo-400 transition-all duration-150"
+          >
+            Close Settings
+          </button>
         </div>
       </aside>
     </div>
@@ -2016,33 +2056,33 @@ export default function EditableDashboardGrid({
 
   return (
     <div className="space-y-4">
-      <div className={`rounded-2xl border p-4 shadow-xs transition-all ${
+      <div className={`rounded-2xl border p-5 shadow-xs transition-all duration-200 ${
         isEditing
-          ? 'border-indigo-500/30 bg-indigo-500/5 ring-1 ring-indigo-500/15'
+          ? 'border-indigo-500 bg-indigo-500/[0.04] ring-1 ring-indigo-500/20 dark:bg-indigo-500/[0.02] dark:border-indigo-500/30'
           : 'border-border bg-card'
       }`}>
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-start gap-3">
-            <div className="rounded-xl border border-indigo-500/25 bg-indigo-500/10 p-2 text-indigo-600 dark:text-indigo-400">
+            <div className="rounded-xl border border-indigo-500/25 bg-indigo-500/10 p-2 text-indigo-600 dark:text-indigo-400 shrink-0">
               <LayoutGrid className="h-4 w-4" />
             </div>
-            <div>
+            <div className="text-left">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-sm font-black uppercase tracking-wider text-foreground">
-                  {isEditing ? 'Editing Dashboard' : 'Editable Homepage'}
+                  {isEditing ? 'Editing Dashboard Layout' : 'Editable Homepage'}
                 </h2>
                 {isEditing && (
-                  <span className="rounded-full border border-indigo-500/25 bg-indigo-500/10 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                  <span className="rounded-full border border-indigo-500/25 bg-indigo-500/10 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
                     Full pane mode
                   </span>
                 )}
                 {isEditing && hasUnsavedChanges && (
-                  <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-400">
-                    Unsaved changes
+                  <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-400 animate-pulse">
+                    ⚠️ Unsaved changes
                   </span>
                 )}
               </div>
-              <p className="mt-1 text-[11px] font-medium text-muted-foreground">
+              <p className="mt-1 text-[11px] font-medium text-muted-foreground leading-relaxed">
                 Every visible homepage section is represented as a movable pane. Metrics stay data-backed, and trend views stay honestly marked as current snapshots only.
               </p>
             </div>
@@ -2052,7 +2092,7 @@ export default function EditableDashboardGrid({
               <button
                 type="button"
                 onClick={addPane}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-500/25 bg-indigo-500/10 px-3 py-2 text-[11px] font-black text-indigo-600 hover:bg-indigo-500/20 dark:text-indigo-400"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-500/25 bg-indigo-500/10 px-3.5 py-2 text-[11px] font-black text-indigo-600 hover:bg-indigo-500/20 dark:text-indigo-400 transition-all duration-150"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Add pane
@@ -2062,16 +2102,16 @@ export default function EditableDashboardGrid({
         </div>
 
         {isEditing && (
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-wrap gap-2 border-t border-border/50 pt-3">
             {Object.entries(presetLabels).map(([preset, label]) => (
               <button
                 key={preset}
                 type="button"
                 onClick={() => applyPreset(preset as DashboardGridPreset)}
-                className={`rounded-lg border px-3 py-2 text-[11px] font-black transition-colors ${
+                className={`rounded-lg border px-3 py-2 text-[11px] font-black transition-all duration-150 ${
                   config.preset === preset
-                    ? 'border-indigo-500 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
-                    : 'border-border bg-card text-muted-foreground hover:text-foreground'
+                    ? 'border-indigo-500 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                    : 'border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted/10 hover:border-muted-foreground/25'
                 }`}
               >
                 {label}
@@ -2082,14 +2122,14 @@ export default function EditableDashboardGrid({
       </div>
 
       {isEditing && hiddenPanes.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3">
-          <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Hidden panes</span>
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3 text-left">
+          <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mr-1">Hidden panes</span>
           {hiddenPanes.map(pane => (
             <button
               key={pane.id}
               type="button"
               onClick={() => updatePane({ ...pane, visible: true })}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-2 py-1 text-[10px] font-bold text-muted-foreground hover:text-foreground"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-2.5 py-1 text-[10px] font-bold text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-muted-foreground/30 transition-all duration-150"
             >
               <Eye className="h-3 w-3" />
               {pane.title}
@@ -2106,6 +2146,7 @@ export default function EditableDashboardGrid({
             data={data}
             packItemCount={packBuilder.items.length}
             isEditing={isEditing}
+            isSelected={selectedPaneId === pane.id}
             onNavigate={onNavigate}
             onQuickAction={onQuickAction}
             onOpenSettings={() => setSelectedPaneId(pane.id)}
@@ -2150,7 +2191,7 @@ export default function EditableDashboardGrid({
 
       {visiblePanes.length === 0 && (
         <div className="rounded-lg border border-dashed border-border bg-muted/20 p-8 text-center">
-          <Sparkles className="mx-auto mb-3 h-5 w-5 text-indigo-500" />
+          <Sparkles className="mx-auto mb-3 h-5 w-5 text-indigo-500 animate-pulse" />
           <p className="text-sm font-bold text-foreground">No panes are visible.</p>
           <p className="mt-1 text-xs text-muted-foreground">Add a pane or restore hidden panes while editing.</p>
         </div>
