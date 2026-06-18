@@ -736,6 +736,7 @@ const getColSpan = (size?: 'sm' | 'md' | 'lg' | 'full') => {
 };
 
 export default function DashboardPage() {
+  const router = useRouter();
   const {
     organization,
     theme,
@@ -1991,8 +1992,6 @@ export default function DashboardPage() {
   const currentSelectedAction = selectedAction
     ? actions.find(action => action.id === selectedAction.id) || selectedAction
     : null;
-
-  const router = useRouter();
 
   const [hoveredInsight, setHoveredInsight] = useState<{
     id: string;
