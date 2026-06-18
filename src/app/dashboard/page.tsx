@@ -6,6 +6,14 @@ import { useApp } from '@/context/AppContext';
 import Link from 'next/link';
 import ComplianceHeroCore from './components/ComplianceHeroCore';
 import DashboardHomeVariants from './components/DashboardHomeVariants';
+import EditableDashboardGrid, {
+  createEditablePanePreset,
+  type DashboardGridPreset,
+  type DashboardLayoutMode,
+  type DashboardMetricSnapshot,
+  type EditableDashboardConfig,
+  type DashboardPaneConfig
+} from './components/EditableDashboardGrid';
 import { InlineToast, ToastState } from '@/components/AppFeedback';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { ActionDetailDrawer } from '@/components/ActionDetailDrawer';
@@ -40,9 +48,7 @@ import {
   EyeOff,
   ArrowUp,
   ArrowDown,
-  RefreshCw,
-  Check,
-  RotateCcw
+  Check
 } from 'lucide-react';
 
 const scoreTone = (score: number | null) => {
@@ -430,6 +436,9 @@ type DashboardCustomization = {
   heroCustomPositions?: Record<string, { x: number; y: number }>;
   rightRailOrder?: string[];
   lowerPanelsOrder?: string[];
+  dashboardLayoutMode?: DashboardLayoutMode;
+  dashboardGridPreset?: DashboardGridPreset;
+  editableHomepagePanes?: DashboardPaneConfig[];
 
   // Readability / window settings
   fontSize: 'sm' | 'standard' | 'lg' | 'xl';
@@ -485,6 +494,9 @@ const DEFAULT_CUSTOMIZATION_SETTINGS: DashboardCustomization = {
   heroCustomPositions: undefined,
   rightRailOrder: ['snapshot', 'focus-card', 'expiring', 'upload-console'],
   lowerPanelsOrder: ['quickActions', 'trend', 'statusDonut', 'readinessGauge', 'trainingRing', 'assetCategory', 'riskGaps', 'alerts'],
+  dashboardLayoutMode: 'classic',
+  dashboardGridPreset: '6-balanced',
+  editableHomepagePanes: createEditablePanePreset('6-balanced'),
 
   // Readability
   fontSize: 'standard',
@@ -551,7 +563,6 @@ const WidgetWrapper = ({
       const next = { ...prev };
 
       const defaultVisibleKpis = ['health', 'requirements', 'evidence', 'training', 'tasks', 'asset'];
-      const defaultVisiblePanels = ['trend', 'statusDonut', 'readinessGauge', 'trainingRing', 'assetCategory', 'riskGaps', 'alerts'];
       const defaultVisibleRightRail = ['snapshot', 'focus-card', 'expiring', 'upload-console'];
 
       const isKpi = defaultVisibleKpis.includes(id);
@@ -794,6 +805,11 @@ export default function DashboardPage() {
           heroCustomPositions: parsed.heroCustomPositions,
           rightRailOrder: parsed.rightRailOrder || DEFAULT_CUSTOMIZATION_SETTINGS.rightRailOrder,
           lowerPanelsOrder: parsed.lowerPanelsOrder || DEFAULT_CUSTOMIZATION_SETTINGS.lowerPanelsOrder,
+          dashboardLayoutMode: parsed.dashboardLayoutMode === 'editable' ? 'editable' : 'classic',
+          dashboardGridPreset: parsed.dashboardGridPreset || DEFAULT_CUSTOMIZATION_SETTINGS.dashboardGridPreset,
+          editableHomepagePanes: Array.isArray(parsed.editableHomepagePanes)
+            ? parsed.editableHomepagePanes
+            : createEditablePanePreset(parsed.dashboardGridPreset || DEFAULT_CUSTOMIZATION_SETTINGS.dashboardGridPreset || '6-balanced'),
 
           // Readability
           fontSize: parsed.fontSize || DEFAULT_CUSTOMIZATION_SETTINGS.fontSize,
@@ -852,6 +868,58 @@ export default function DashboardPage() {
     }
     return customization;
   }, [isEditingDashboard, tempCustomization, customization]);
+
+  // Toast state
+  const [toast, setToast] = useState<ToastState>(null);
+
+  const currentEditableHomepage = useMemo<EditableDashboardConfig>(() => {
+    const preset = currentCustomization.dashboardGridPreset || '6-balanced';
+    const panes = Array.isArray(currentCustomization.editableHomepagePanes) && currentCustomization.editableHomepagePanes.length > 0
+      ? currentCustomization.editableHomepagePanes
+      : createEditablePanePreset(preset);
+    return { preset, panes };
+  }, [currentCustomization]);
+
+  const updateEditableHomepage = useCallback((config: EditableDashboardConfig) => {
+    setTempCustomization(prev => {
+      const base = prev || customization;
+      return {
+        ...base,
+        dashboardLayoutMode: 'editable',
+        dashboardGridPreset: config.preset,
+        editableHomepagePanes: config.panes
+      };
+    });
+  }, [customization]);
+
+  const startDashboardEditMode = useCallback(() => {
+    const preset = customization.dashboardGridPreset || '6-balanced';
+    setTempCustomization({
+      ...customization,
+      editableHomepagePanes: Array.isArray(customization.editableHomepagePanes) && customization.editableHomepagePanes.length > 0
+        ? customization.editableHomepagePanes
+        : createEditablePanePreset(preset)
+    });
+    setIsEditingDashboard(true);
+  }, [customization]);
+
+  const cancelDashboardEditMode = useCallback(() => {
+    setTempCustomization(null);
+    setIsEditingDashboard(false);
+  }, []);
+
+  const resetEditableHomepageDraft = useCallback(() => {
+    setTempCustomization(prev => {
+      const base = prev || customization;
+      const preset = base.dashboardGridPreset || '6-balanced';
+      return {
+        ...base,
+        dashboardLayoutMode: 'editable',
+        editableHomepagePanes: createEditablePanePreset(preset)
+      };
+    });
+    setToast({ type: 'info', message: 'Editable homepage panes reset to the selected preset. Save to keep the change.' });
+  }, [customization]);
 
   const handleMoveWidget = useCallback((widgetId: string, direction: 'up' | 'down') => {
     if (!tempCustomization) return;
@@ -981,11 +1049,6 @@ export default function DashboardPage() {
       return cust.visiblePanels.includes('quickActions') ?? true;
     }
     return cust.visiblePanels.includes(widgetId);
-  }, [tempCustomization, customization]);
-
-  const isInRightRail = useCallback((widgetId: string) => {
-    const cust = tempCustomization || customization;
-    return cust.rightRailOrder?.includes(widgetId) ?? false;
   }, [tempCustomization, customization]);
 
   // Customization modal open/closed state
@@ -1426,6 +1489,151 @@ export default function DashboardPage() {
 
   const readinessLabel = useMemo(() => getReadinessLabel(readinessScore), [readinessScore, getReadinessLabel]);
 
+  const editableDashboardData = useMemo<DashboardMetricSnapshot>(() => {
+    const mapQueueItem = (item: (typeof allTasksAndExpiries)[number], fallbackStatus: string) => ({
+      id: item.id,
+      title: item.requirement.title,
+      subtitle: item.requirement.next_due_date
+        ? `Due ${new Date(item.requirement.next_due_date).toLocaleDateString()} | ${item.requirement.category}`
+        : item.requirement.category,
+      status: item.isOverdue ? 'Overdue' : fallbackStatus,
+      route: item.link || '/dashboard/reports'
+    });
+
+    const openActions = actions.filter(action => action.status === 'Open' || action.status === 'In Progress');
+    const overdueActionItems = openActions
+      .filter(action => {
+        const dueDate = action.target_due_date || action.due_date;
+        return dueDate ? new Date(dueDate) < today : false;
+      })
+      .slice(0, 5)
+      .map(action => ({
+        id: action.id,
+        title: action.title,
+        subtitle: action.target_due_date || action.due_date
+          ? `Due ${new Date(action.target_due_date || action.due_date || '').toLocaleDateString()} | ${action.owner || 'Unassigned'}`
+          : action.owner || 'Unassigned',
+        status: 'Overdue',
+        route: `/dashboard/requirements?selectedAction=${action.id}`
+      }));
+
+    const recentEvidenceCutoff = new Date(today);
+    recentEvidenceCutoff.setDate(recentEvidenceCutoff.getDate() - 30);
+    const recentlyUploadedEvidence = documents.filter(document => {
+      if (!document.created_at) return false;
+      return new Date(document.created_at) >= recentEvidenceCutoff;
+    }).length;
+
+    const peopleStatusCounts = people.reduce(
+      (acc, person) => {
+        const status = (person.person_status || (person.active ? 'Active' : 'Inactive')).toLowerCase();
+        if (status.includes('leave')) acc.onLeave += 1;
+        else if (status.includes('suspend')) acc.suspended += 1;
+        else if (!person.active || status.includes('inactive') || status.includes('archived') || status.includes('left')) acc.inactive += 1;
+        else acc.active += 1;
+        return acc;
+      },
+      { active: 0, onLeave: 0, suspended: 0, inactive: 0 }
+    );
+
+    return {
+      readinessScore,
+      readinessLabel,
+      requirementCounts: {
+        active: stats.activeRequirements,
+        green: stats.compliantCount,
+        amber: stats.expiringSoonCount,
+        red: stats.expiredCount,
+        grey: greyRequirementCount
+      },
+      evidenceCounts: {
+        total: documents.length,
+        classified: classifiedDocsCount,
+        unclassified: unclassifiedDocs.length,
+        recentlyUploaded: recentlyUploadedEvidence
+      },
+      actionCounts: {
+        total: actions.length,
+        open: activeActionsCount,
+        overdue: overdueActionsCount,
+        dueSoon: next7DaysItems.filter(item => item.requirement.category === 'Action').length
+      },
+      competencyCounts: {
+        people: people.length,
+        valid: competencyRecords.filter(record => record.status === 'Valid').length,
+        expiring: competencyRecords.filter(record => record.status === 'Expiring Soon').length,
+        expired: competencyRecords.filter(record => record.status === 'Expired').length,
+        missing: competencyRecords.filter(record => record.status === 'Missing').length
+      },
+      peopleStatusCounts,
+      assetCounts: {
+        totalChecks: totalAssetChecks,
+        compliantChecks: compliantAssetChecks,
+        dueSoonChecks: upcomingAssetChecks.length,
+        overdueChecks: overdueAssetChecks.length
+      },
+      auditLogCount: safeActivity.length,
+      savedReportCount: reportViewCount,
+      queues: {
+        overdue: [
+          ...needsActionItems.filter(item => item.isOverdue).slice(0, 5).map(item => mapQueueItem(item, 'Overdue')),
+          ...overdueActionItems
+        ].slice(0, 5),
+        dueSoon: next7DaysItems.slice(0, 5).map(item => mapQueueItem(item, 'Due soon')),
+        missingEvidence: [
+          ...activeRequirements
+            .filter(requirement => requirement.status === 'RED' || requirement.status === 'GREY')
+            .slice(0, 5)
+            .map(requirement => ({
+              id: requirement.id,
+              title: requirement.title,
+              subtitle: `${requirement.category} | ${requirement.owner || 'Unassigned'}`,
+              status: requirement.status === 'GREY' ? 'Unassessed' : 'Missing',
+              route: `/dashboard/requirements?id=${requirement.id}`
+            })),
+          ...unclassifiedDocs.slice(0, 3).map(document => ({
+            id: document.id,
+            title: document.title,
+            subtitle: document.category || 'Evidence Vault',
+            status: 'Unclassified',
+            route: `/dashboard/vault?id=${document.id}`
+          }))
+        ].slice(0, 5),
+        recentActivity: safeActivity.map(log => ({
+          id: log.id,
+          title: log.action || 'Workspace activity',
+          subtitle: log.created_at ? new Date(log.created_at).toLocaleString() : 'Recent activity',
+          status: 'Activity',
+          route: '/dashboard/audit-trail'
+        }))
+      }
+    };
+  }, [
+    activeActionsCount,
+    activeRequirements,
+    actions,
+    allTasksAndExpiries,
+    classifiedDocsCount,
+    competencyRecords,
+    compliantAssetChecks,
+    documents,
+    greyRequirementCount,
+    needsActionItems,
+    next7DaysItems,
+    overdueActionsCount,
+    overdueAssetChecks.length,
+    people,
+    readinessLabel,
+    readinessScore,
+    reportViewCount,
+    safeActivity,
+    stats,
+    today,
+    totalAssetChecks,
+    unclassifiedDocs,
+    upcomingAssetChecks.length
+  ]);
+
   // Central Map Satellite Nodes configuration
   const satelliteNodes = useMemo(() => {
     return [
@@ -1733,9 +1941,6 @@ export default function DashboardPage() {
     : null;
 
   const router = useRouter();
-
-  // Toast state
-  const [toast, setToast] = useState<ToastState>(null);
 
   const [hoveredInsight, setHoveredInsight] = useState<{
     id: string;
@@ -2947,7 +3152,7 @@ export default function DashboardPage() {
                 {isEditingDashboard ? (
                   <>
                     <span className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 dark:text-indigo-400 rounded-md text-[10px] font-black uppercase tracking-wider animate-pulse">
-                      Editing Hero Layout
+                      {currentCustomization.dashboardLayoutMode === 'editable' ? 'Editing Homepage' : 'Editing Hero Layout'}
                     </span>
                     <button
                       onClick={() => {
@@ -2962,7 +3167,9 @@ export default function DashboardPage() {
                     </button>
                     <button
                       onClick={() => {
-                        if (tempCustomization) {
+                        if (currentCustomization.dashboardLayoutMode === 'editable') {
+                          resetEditableHomepageDraft();
+                        } else if (tempCustomization) {
                           setTempCustomization({
                             ...tempCustomization,
                             heroCustomPositions: undefined
@@ -2975,10 +3182,7 @@ export default function DashboardPage() {
                       Reset Layout
                     </button>
                     <button
-                      onClick={() => {
-                        setTempCustomization(null);
-                        setIsEditingDashboard(false);
-                      }}
+                      onClick={cancelDashboardEditMode}
                       className="px-2.5 py-1 bg-muted hover:bg-muted/80 border border-border rounded-md text-[10px] font-bold text-muted-foreground hover:text-foreground transition-all cursor-pointer"
                     >
                       Cancel
@@ -2997,18 +3201,13 @@ export default function DashboardPage() {
                     >
                       <Settings className="w-3.5 h-3.5" /> Customize
                     </button>
-                    {customization.heroStyle !== 'list' && (
-                      <button
-                        onClick={() => {
-                          setTempCustomization({ ...customization });
-                          setIsEditingDashboard(true);
-                        }}
-                        className="px-2.5 py-1 bg-muted hover:bg-muted/80 border border-border rounded-md text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer text-muted-foreground hover:text-foreground"
-                        title="Interactive layout sandbox"
-                      >
-                        Edit Layout
-                      </button>
-                    )}
+                    <button
+                      onClick={startDashboardEditMode}
+                      className="px-2.5 py-1 bg-muted hover:bg-muted/80 border border-border rounded-md text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer text-muted-foreground hover:text-foreground"
+                      title="Edit dashboard homepage"
+                    >
+                      Edit Dashboard
+                    </button>
                   </>
                 )}
                 {prevCustomization && (
@@ -3058,7 +3257,15 @@ export default function DashboardPage() {
 
             {/* Central content depending on toggle */}
             <div className="p-5">
-              {activeViewMode === 'system' ? (
+              {currentCustomization.dashboardLayoutMode === 'editable' ? (
+                <EditableDashboardGrid
+                  config={currentEditableHomepage}
+                  isEditing={isEditingDashboard}
+                  data={editableDashboardData}
+                  onChange={updateEditableHomepage}
+                  onNavigate={(path) => router.push(path)}
+                />
+              ) : activeViewMode === 'system' ? (
                 <DashboardHomeVariants
                   variant={(isCustomizationOpen ? modalCustomization.dashboardHomeVariant : currentCustomization.dashboardHomeVariant) || 'map'}
                   stats={stats}
@@ -4855,6 +5062,70 @@ export default function DashboardPage() {
                     <h4 className="text-xs font-bold text-foreground">Select Dashboard Home Style</h4>
                     <p className="text-[11px] text-muted-foreground mt-0.5">Choose the layout style that best matches your organisation&apos;s workflow.</p>
                   </div>
+                  <div className="grid grid-cols-2 gap-3 border border-border/60 rounded-xl p-3 bg-muted/10">
+                    {[
+                      { id: 'classic', label: 'Guided home variations', desc: 'Use the existing curated command map, taskboard, focus and matrix homepage styles.' },
+                      { id: 'editable', label: 'Editable pane grid', desc: 'Build a custom 4, 6, 8, or 12 pane homepage from live workspace metrics.' }
+                    ].map(option => {
+                      const isSelected = (modalCustomization.dashboardLayoutMode || 'classic') === option.id;
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => {
+                            const mode = option.id as DashboardLayoutMode;
+                            const preset = modalCustomization.dashboardGridPreset || '6-balanced';
+                            setModalCustomization({
+                              ...modalCustomization,
+                              dashboardLayoutMode: mode,
+                              editableHomepagePanes: mode === 'editable' && (!modalCustomization.editableHomepagePanes || modalCustomization.editableHomepagePanes.length === 0)
+                                ? createEditablePanePreset(preset)
+                                : modalCustomization.editableHomepagePanes
+                            });
+                          }}
+                          className={`flex flex-col rounded-xl border p-3 text-left transition-all ${
+                            isSelected
+                              ? 'border-indigo-500 bg-indigo-50/30 text-indigo-600 ring-1 ring-indigo-500 dark:bg-indigo-950/20 dark:text-indigo-400'
+                              : 'border-border bg-card text-foreground hover:border-muted-foreground/30 hover:bg-muted/20'
+                          }`}
+                        >
+                          <span className="text-xs font-black">{option.label}</span>
+                          <span className="mt-1 text-[10px] font-medium text-muted-foreground">{option.desc}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {modalCustomization.dashboardLayoutMode === 'editable' && (
+                    <div className="grid grid-cols-5 gap-2 border border-border/60 rounded-xl p-3 bg-muted/10">
+                      {[
+                        { id: '4-large', label: '4 large' },
+                        { id: '6-balanced', label: '6 balanced' },
+                        { id: '8-operations', label: '8 ops' },
+                        { id: '12-executive', label: '12 detail' },
+                        { id: 'custom', label: 'Custom' }
+                      ].map(preset => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => {
+                            const nextPreset = preset.id as DashboardGridPreset;
+                            setModalCustomization({
+                              ...modalCustomization,
+                              dashboardGridPreset: nextPreset,
+                              editableHomepagePanes: createEditablePanePreset(nextPreset)
+                            });
+                          }}
+                          className={`rounded-lg border px-2 py-1.5 text-[10px] font-black transition-all ${
+                            (modalCustomization.dashboardGridPreset || '6-balanced') === preset.id
+                              ? 'border-indigo-500 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                              : 'border-border bg-card text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-3 pr-1">
                     {[
                       { id: 'map', label: 'Command Map', desc: 'Visual relationship map of programme areas and connections.', badge: 'Interactive Map' },

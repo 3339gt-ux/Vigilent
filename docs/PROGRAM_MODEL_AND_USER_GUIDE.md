@@ -600,12 +600,15 @@ What works:
 - Dashboard reads real app collections and readiness report.
 - It has KPIs, Compliance Core, quick actions, right rail, attention items, and customisation foundation.
 - It supports 6 selectable dashboard home layouts/variations: Command Map (default SVG relationship map), Executive Command Bar (compact top KPIs), Operations Taskboard (action-led lanes), Evidence Readiness (evidence coverage focus), Matrix Overview (people/asset/requirement status), and Focus Mode (low-clutter daily view). These variations can be switched and previewed live via the Customize Dashboard panel, and choices persist in localStorage namespaced to the user/organization session.
+- It now also supports an advanced editable homepage pane grid for local testing. Users can choose 4-pane, 6-pane, 8-pane, 12-pane, or custom presets; add, hide, duplicate, remove, reset, and reorder panes; and configure pane content, display mode, size, font, emphasis, accent colour, and helper text from a live draft.
+- Editable dashboard panes are backed by a fixed metric registry that reads current workspace data only. Snapshot-only or unavailable metrics are labelled honestly rather than being turned into fake trends.
 - It avoids fake historical trend by showing current/snapshot wording where history is unavailable.
 
 Partly supported:
 
 - Dashboard customisation is local/user-level, not organisation-wide.
 - Drilldowns depend on route params implemented in target modules.
+- Pixel-level freeform pane positioning and drag-resize handles remain deferred. Stage 4A supports responsive pane spans, drag/drop reorder, and button-based reorder fallback.
 
 Missing or awkward:
 
@@ -686,11 +689,12 @@ Before bulk import:
 What works:
 
 - Settings exposes diagnostics and demo reset/high-volume controls when appropriate.
-- Dashboard customisation supports local pane visibility/order/detail/readability settings.
+- Dashboard customisation supports local pane visibility/order/detail/readability settings, selectable home variations, and an editable homepage pane grid with preset layouts.
 
 Partly supported:
 
 - Dashboard customisation is local browser state, not server persisted.
+- Editable homepage preferences are browser-local and should not be treated as shared workspace configuration.
 
 Missing or awkward:
 

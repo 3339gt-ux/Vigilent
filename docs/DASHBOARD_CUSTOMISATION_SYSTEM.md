@@ -17,6 +17,9 @@ This document describes the design, implementation, and storage mechanics of the
 * **Readability Settings Panel**: Configures visual presentation rules (font sizes, density spacing, border-radius controls, contrast preferences, motion settings, and accent color palettes) applied live to the workspace UI.
 * **Extended Hero Controls**: Support for layout presets (`Balanced Orbit`, `Focus Area`, `Structured List`), central orb metric content selections, and visual detail levels.
 * **Selectable Dashboard Home Variations**: The home screen supports 6 visual hero/layout variations (Command Map, Executive Command Bar, Operations Taskboard, Evidence Readiness, Matrix Overview, Focus Mode) stored in local preferences and previewed live inside the Customize Modal.
+* **Editable Homepage Pane Grid**: The dashboard can now run in an advanced editable homepage mode alongside the classic home variations. Users can choose 4-pane infographic, 6-pane balanced, 8-pane operations, 12-pane executive detail, or custom layouts, then add, hide, duplicate, reset, resize, reorder, and configure panes from a live preview.
+* **Pane and Metric Registry**: Editable homepage panes use a strict local registry of supported pane types (`Stat Tile`, `Progress / Readiness`, `Status Bars`, `Mini Chart`, `Work Queue`, `Module Summary`, `Quick Actions`, and `Pack Builder Summary`) and selectable data sources. Each metric resolves from existing app state only and provides honest empty-state copy when data is unavailable.
+* **Pane Settings Drawer**: Each editable pane has focused settings for content, display mode, span, font size, emphasis, accent colour, helper text, duplication, reset, and removal. Changes preview immediately in the editable homepage draft and only persist after Save.
 * **Dark / Light / Midtone Theme Support**: Built to dynamically inherit from the root theme structure, preserving readable text contrast and gradient borders across all mode shifts.
 
 ---
@@ -30,7 +33,7 @@ This document describes the design, implementation, and storage mechanics of the
 * **Major vs. Minor Hero Nodes**: Interactive nodes represent primary categories; minor sub-nodes are rendered as smaller orbits to avoid clutter.
 
 ### Deferred Features (Future Roadmap)
-* **Freeform Drag-and-Drop Grid**: Grid layouts currently use structured column zones and flex ordering. Full 2D drag-and-drop handles are deferred to avoid layout instability.
+* **Freeform Coordinate Grid**: Stage 4A supports drag/drop reordering plus keyboard/button move controls inside a responsive grid. Pixel-level 2D positioning and manual drag-resize handles remain deferred to avoid layout instability.
 * **Database-Backed Layout Persistence**: Multi-device or shared team configurations are deferred. Settings are stored exclusively in the browser's `localStorage` to keep database schema and RLS policies untouched.
 * **Organisation-Wide Master Templates**: Force-pushing layouts to other members of the organization is deferred.
 * **Hero Node Rearranging and Custom Mapping**: Editing the coordinate positions of individual SVG nodes on the map is deferred.
@@ -67,6 +70,9 @@ type DashboardCustomization = {
   heroCustomPositions?: Record<string, { x: number; y: number }>;
   rightRailOrder?: string[];
   lowerPanelsOrder?: string[];
+  dashboardLayoutMode?: 'classic' | 'editable';
+  dashboardGridPreset?: '4-large' | '6-balanced' | '8-operations' | '12-executive' | 'custom';
+  editableHomepagePanes?: DashboardPaneConfig[];
 
   // Readability / window settings
   fontSize: 'sm' | 'standard' | 'lg' | 'xl';
@@ -104,6 +110,30 @@ type DashboardCustomization = {
 };
 ```
 
+Editable homepage pane records include:
+
+```typescript
+type DashboardPaneConfig = {
+  id: string;
+  type: 'stat' | 'readiness' | 'status-bars' | 'mini-chart' | 'work-queue' | 'module-summary' | 'quick-actions' | 'pack-builder';
+  title: string;
+  metricKey: string;
+  displayMode: 'stat' | 'bar' | 'donut' | 'list' | 'compact' | 'detailed';
+  span: '1' | '2' | '3' | '4' | 'full';
+  order: number;
+  visible: boolean;
+  style: {
+    fontSize: 'sm' | 'md' | 'lg' | 'xl';
+    emphasis: 'normal' | 'strong' | 'hero';
+    accent: 'indigo' | 'emerald' | 'amber' | 'rose' | 'sky' | 'violet' | 'slate';
+    compact?: boolean;
+    showHelper?: boolean;
+  };
+  filters?: Record<string, string | number | boolean>;
+  thresholds?: Record<string, number>;
+};
+```
+
 ---
 
 ## 4. How Customisation Operations Work
@@ -126,11 +156,20 @@ When the user clicks "Customize Layout" on the dashboard header:
 * **Save**: Copies the state of `tempCustomization` to `currentCustomization`, writes it to `localStorage`, and exits edit mode.
 * **Cancel**: Discards `tempCustomization` changes, reverting to the saved state of `currentCustomization`, and exits edit mode.
 * **Reset to Defaults**: Replaces the active configuration with `DEFAULT_CUSTOMIZATION_SETTINGS`, deletes the custom key from `localStorage`, and updates both states.
+* **Editable Homepage Reset**: While editing the advanced homepage grid, Reset restores the currently selected pane preset in the draft state and requires Save before persistence.
 
-### E. Readability Settings
+### E. Editable Homepage Pane Operations
+* **Preset Selection**: Users choose the pane count and starting composition from the Home Style tab before entering Edit Dashboard.
+* **Live Preview**: Edit Mode renders the actual homepage grid with pane boundaries, drag handles, move controls, hide/remove actions, and settings shortcuts.
+* **Drag/Reorder**: Panes can be dragged to a new order. Up/Down buttons provide a keyboard-friendly fallback.
+* **Add/Duplicate/Hide/Remove**: Users can add a blank pane, duplicate a configured pane, hide panes into a recovery dock, or remove panes from the draft layout.
+* **Pane Settings**: Settings are grouped around content, display, style, and actions. Data source changes immediately re-render the pane with real workspace data.
+* **Persistence**: Save commits the full pane array to the existing user/organisation-scoped local preference key. Cancel discards the draft.
+
+### F. Readability Settings
 Readability styles inject inline properties or append CSS variables directly to the root element. These modify sizing, padding, and accent colors instantly. In Phase 4, readability changes live-preview instantly in a draft state and can be reverted by clicking Cancel.
 
-### F. Reorganised Settings Panel
+### G. Reorganised Settings Panel
 To reduce complexity and visual clutter, the Layout Customization Panel is organised into 6 distinct, progressive disclosure tabs:
 1. **Home Style**: Select the dashboard home layout variant using interactive option cards with descriptions and helper badges (replacing traditional dropdown selects).
 2. **Visible Sections**: Toggle showing/hiding top KPI cards, lower panels, and right rail sections.

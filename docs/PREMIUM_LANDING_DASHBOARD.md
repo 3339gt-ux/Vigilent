@@ -72,6 +72,11 @@ An interactive visual system map representing the current compliance and readine
     - **Matrix Overview**: Consolidated card-based status grids tracking teammates, assets, requirements, and actions.
     - **Focus Mode**: Low-clutter, highly focused daily dashboard presenting priorities, quick actions, and upcoming milestones.
   - All variations leverage unified hooks to read real-time workspace metrics, respect active themes (Dark, Light, Midtone), and persist choices in `localStorage` namespaced to the user/organization session.
+- **Editable Homepage Mode**:
+  - Users can switch from the classic home variations to an editable pane grid.
+  - Supported presets are `4-pane infographic`, `6-pane balanced`, `8-pane operations`, `12-pane executive detail`, and `Custom`.
+  - Edit Mode supports pane add, hide, remove, duplicate, reset, drag/reorder, button-based reorder fallback, pane span changes, display mode changes, data source selection, font sizing, emphasis, accent colour, and helper text toggles.
+  - Editable panes use only real current workspace data. If historical data or a metric source is unavailable, panes render an honest empty or snapshot-only state rather than creating fake trend lines.
 - **Prototype Reference Route**:
   - The prototype page at `/dashboard-prototypes/exact-hero` remains fully available as a static, pixel-perfect visual reference.
 
@@ -151,6 +156,7 @@ The dashboard incorporates a live interactive intelligence layer enabling deep i
 - Triggered by clicking the **"Customize"** button in the dashboard controls.
 - Opens an overlay dialog reorganised into 6 progressive tabs to reduce clutter:
   - **Home Style**: Select the dashboard home layout variant using interactive option cards with descriptions and helper badges (e.g. Command Map, Executive Command Bar, Operations Taskboard, Evidence Readiness, Matrix Overview, Focus Mode).
+  - **Editable Pane Grid**: Home Style also exposes the advanced editable homepage mode and its pane-count presets. This mode works alongside the existing visual variations rather than replacing them.
   - **Visible Sections**: Toggle showing/hiding top KPI cards, lower panels, and right rail sections.
   - **Layout**: Reorder top KPI cards via Up/Down controls and configure default view modes and horizon windows.
   - **Readability**: Adjust font sizes, spacing densities, and border corner radius styles.
@@ -159,6 +165,17 @@ The dashboard incorporates a live interactive intelligence layer enabling deep i
 - **Undo Capability**: A dedicated **"Cancel"** or **"Undo Changes"** button instantly reverts all un-saved tweaks to the previously stored configuration.
 - **Reset Defaults**: Loads the default configuration into the customization form; **Save Changes** applies it.
 - Scoped to `vygilence_dashboard_customization_${userId}_${orgId}` in `localStorage`.
+
+### Editable Homepage Pane System
+- Triggered by the **"Edit Dashboard"** button once the editable homepage mode is selected.
+- Renders a live responsive grid where each pane can be reordered by drag/drop or by Up/Down controls.
+- Pane settings are opened from each pane and cover:
+  - Content: title and metric/data source.
+  - Display: pane type, display mode, and span.
+  - Style: font size, emphasis, accent colour, compact mode, and helper text.
+  - Actions: reset, duplicate, hide/remove.
+- Save commits the pane configuration to the existing local dashboard preference key; Cancel discards the draft; Reset restores the selected preset.
+- The system is local/user-level only. Organisation-shared dashboard templates and database-backed persistence remain deferred.
 
 
 ### Historical Trend Honesty Assertions
