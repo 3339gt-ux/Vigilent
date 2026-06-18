@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArrowDown,
@@ -223,6 +223,8 @@ interface ConfirmationState {
   tone?: 'default' | 'danger';
   onConfirm: () => void;
 }
+
+type DragTargetPosition = 'before' | 'after';
 
 type DashboardPaneOverrides = Omit<Partial<DashboardPaneConfig>, 'style' | 'filters'> & {
   style?: Partial<DashboardPaneConfig['style']>;
@@ -904,6 +906,25 @@ const normalisePanes = (panes: DashboardPaneConfig[]) =>
       };
     });
 
+const getPaneDropPlacement = (
+  paneElement: HTMLElement,
+  draggedPaneElement: HTMLElement | null,
+  pointerX: number,
+  pointerY: number
+): DragTargetPosition => {
+  const rect = paneElement.getBoundingClientRect();
+  const draggedRect = draggedPaneElement?.getBoundingClientRect();
+  const sameRow = draggedRect
+    ? Math.abs((rect.top + rect.height / 2) - (draggedRect.top + draggedRect.height / 2)) < Math.min(rect.height, draggedRect.height) * 0.65
+    : rect.width >= rect.height;
+
+  if (sameRow) {
+    return pointerX >= rect.left + rect.width / 2 ? 'after' : 'before';
+  }
+
+  return pointerY >= rect.top + rect.height / 2 ? 'after' : 'before';
+};
+
 const getSupportedDisplayModes = (type: DashboardPaneType, metricKey: DashboardMetricKey): DashboardPaneDisplayMode[] => {
   const metricModes = metricByKey.get(metricKey)?.displayModes || ['stat', 'compact'];
   switch (type) {
@@ -1373,17 +1394,12 @@ function PaneRenderer({
   onDuplicate,
   onHide,
   onRemove,
-  onManualDragStart,
-  onManualDragEnter,
-  onManualDragEnd,
-  onNativeDragEnter,
-  onDragStart,
-  onDragEnd,
-  onDragOver,
-  onDrop,
+  onHandlePointerDown,
   canMoveUp,
   canMoveDown,
   isDragged,
+  isDragTarget = false,
+  dragTargetPosition = null,
   onQuickAction
 }: {
   pane: DashboardPaneConfig;
@@ -1397,20 +1413,14 @@ function PaneRenderer({
   onDuplicate: () => void;
   onHide: () => void;
   onRemove: () => void;
-  onManualDragStart: (event: React.PointerEvent<HTMLButtonElement> | React.MouseEvent<HTMLButtonElement>) => void;
-  onManualDragEnter: () => void;
-  onManualDragEnd: () => void;
-  onNativeDragEnter: () => void;
-  onDragStart: (event: React.DragEvent<HTMLElement>) => void;
-  onDragEnd: () => void;
-  onDragOver: (event: React.DragEvent<HTMLElement>) => void;
-  onDrop: () => void;
+  onHandlePointerDown: (event: React.PointerEvent<HTMLButtonElement>) => void;
   canMoveUp: boolean;
   canMoveDown: boolean;
   isDragged: boolean;
+  isDragTarget?: boolean;
+  dragTargetPosition?: DragTargetPosition | null;
   onQuickAction?: (action: DashboardQuickAction) => void;
 }) {
-  const [isDragTarget, setIsDragTarget] = useState(false);
   const metric = metricByKey.get(pane.metricKey) || metricDefinitions[0];
   const result = metric.resolver(data, packItemCount);
   const accent = accentClasses[pane.style.accent];
@@ -1437,7 +1447,7 @@ function PaneRenderer({
         ? 'border-indigo-500 ring-2 ring-indigo-500 bg-indigo-500/[0.02] dark:border-indigo-400 dark:ring-indigo-400'
         : 'border-dashed border-indigo-500/35 hover:border-indigo-500/60 hover:shadow-md hover:bg-indigo-500/[0.01] dark:border-indigo-500/25 dark:hover:border-indigo-400/40'
       : 'hover:shadow-sm',
-    isDragged ? 'scale-[0.98] opacity-60' : '',
+    isDragged ? 'pointer-events-none scale-[0.98] opacity-60 shadow-xl ring-2 ring-indigo-500/20' : '',
     isDragTarget ? 'ring-2 ring-indigo-500 bg-indigo-500/10 scale-[1.01] dark:ring-indigo-400 dark:bg-indigo-500/5' : '',
     isCompact ? 'p-3' : 'p-5 lg:p-6'
   ].join(' ');
@@ -1516,17 +1526,15 @@ function PaneRenderer({
   return (
     <section
       className={cardClass}
-      onPointerEnter={isEditing ? onManualDragEnter : undefined}
-      onMouseEnter={isEditing ? onManualDragEnter : undefined}
-      onPointerUp={isEditing ? onManualDragEnd : undefined}
-      onMouseUp={isEditing ? onManualDragEnd : undefined}
-      onDragOver={isEditing ? onDragOver : undefined}
-      onDragEnter={isEditing ? (e) => { e.preventDefault(); e.stopPropagation(); setIsDragTarget(true); onNativeDragEnter(); } : undefined}
-      onDragLeave={isEditing ? () => setIsDragTarget(false) : undefined}
-      onDrop={isEditing ? (e) => { e.preventDefault(); e.stopPropagation(); setIsDragTarget(false); onDrop(); } : undefined}
       data-dashboard-pane-id={pane.id}
     >
       <div className={`absolute inset-x-0 top-0 h-1 ${accent.bar}`} />
+      {isEditing && isDragTarget && dragTargetPosition === 'before' && (
+        <div className="pointer-events-none absolute inset-x-4 top-2 z-10 h-1 rounded-full bg-indigo-500 shadow-[0_0_0_3px_rgba(99,102,241,0.18)] dark:bg-indigo-400" />
+      )}
+      {isEditing && isDragTarget && dragTargetPosition === 'after' && (
+        <div className="pointer-events-none absolute inset-x-4 bottom-2 z-10 h-1 rounded-full bg-indigo-500 shadow-[0_0_0_3px_rgba(99,102,241,0.18)] dark:bg-indigo-400" />
+      )}
       <div className="flex items-start justify-between gap-3 pb-3">
         <div className="min-w-0">
           <div className={`font-black uppercase tracking-[0.18em] text-muted-foreground ${titleClass}`}>{pane.title}</div>
@@ -1540,16 +1548,12 @@ function PaneRenderer({
           <div className="flex items-center gap-1 rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-1 shadow-sm shrink-0">
             <button
               type="button"
-              draggable
-              onPointerDown={onManualDragStart}
-              onMouseDown={onManualDragStart}
-              onDragStart={onDragStart}
-              onDragEnd={onDragEnd}
+              onPointerDown={onHandlePointerDown}
               title="Drag layout pane to reorder"
-              className="inline-flex items-center gap-1 rounded-lg border border-indigo-500/20 bg-card px-2.5 py-1.5 text-[10px] font-black text-indigo-600 hover:bg-indigo-500/10 dark:text-indigo-400 cursor-grab active:cursor-grabbing transition-all duration-150"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-500/20 bg-card px-3 py-2 text-[10px] font-black text-indigo-600 hover:bg-indigo-500/10 dark:text-indigo-400 cursor-grab active:cursor-grabbing select-none touch-none transition-all duration-150"
             >
               <GripVertical className="h-3.5 w-3.5" />
-              Move
+              Drag to move
             </button>
             <button
               type="button"
@@ -1975,38 +1979,77 @@ export default function EditableDashboardGrid({
   const packBuilder = usePackBuilder();
   const [selectedPaneId, setSelectedPaneId] = useState<string | null>(null);
   const [draggedPaneId, setDraggedPaneId] = useState<string | null>(null);
-  const [pointerDraggedPaneId, setPointerDraggedPaneId] = useState<string | null>(null);
+  const [dragTargetPaneId, setDragTargetPaneId] = useState<string | null>(null);
+  const [dragTargetPosition, setDragTargetPosition] = useState<DragTargetPosition | null>(null);
   const [confirmation, setConfirmation] = useState<ConfirmationState | null>(null);
   const paneIdCounterRef = useRef(0);
-  const activeDragPaneIdRef = useRef<string | null>(null);
+  const configRef = useRef(config);
+  const panesRef = useRef(normalisePanes(config.panes));
   const visiblePanes = useMemo(() => normalisePanes(config.panes).filter(pane => pane.visible), [config.panes]);
+  const dragGestureRef = useRef<{
+    paneId: string | null;
+    pointerId: number | null;
+    startX: number;
+    startY: number;
+    lastClientX: number;
+    lastClientY: number;
+    active: boolean;
+    lastTargetPaneId: string | null;
+    lastTargetPosition: DragTargetPosition | null;
+    rafId: number | null;
+  }>({
+    paneId: null,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    lastClientX: 0,
+    lastClientY: 0,
+    active: false,
+    lastTargetPaneId: null,
+    lastTargetPosition: null,
+    rafId: null
+  });
   const selectedPane = normalisePanes(config.panes).find(pane => pane.id === selectedPaneId) || null;
 
+  const clearDragState = useCallback(() => {
+    if (dragGestureRef.current.rafId !== null) {
+      window.cancelAnimationFrame(dragGestureRef.current.rafId);
+    }
+    dragGestureRef.current = {
+      paneId: null,
+      pointerId: null,
+      startX: 0,
+      startY: 0,
+      lastClientX: 0,
+      lastClientY: 0,
+      active: false,
+      lastTargetPaneId: null,
+      lastTargetPosition: null,
+      rafId: null
+    };
+    setDraggedPaneId(null);
+    setDragTargetPaneId(null);
+    setDragTargetPosition(null);
+  }, []);
+
+  useEffect(() => () => clearDragState(), [clearDragState]);
   useEffect(() => {
-    if (!pointerDraggedPaneId) return;
-    const clearPointerDrag = () => {
-      activeDragPaneIdRef.current = null;
-      setPointerDraggedPaneId(null);
-    };
-    window.addEventListener('pointerup', clearPointerDrag);
-    window.addEventListener('pointercancel', clearPointerDrag);
-    return () => {
-      window.removeEventListener('pointerup', clearPointerDrag);
-      window.removeEventListener('pointercancel', clearPointerDrag);
-    };
-  }, [pointerDraggedPaneId]);
+    configRef.current = config;
+    panesRef.current = normalisePanes(config.panes);
+  }, [config]);
 
   const updatePanes = (panes: DashboardPaneConfig[]) => {
     const orderedPanes = panes.map((pane, index) => ({ ...pane, order: index }));
-    onChange({ ...config, panes: normalisePanes(orderedPanes), preset: config.preset });
+    const nextConfig = configRef.current;
+    onChange({ ...nextConfig, panes: normalisePanes(orderedPanes), preset: nextConfig.preset });
   };
 
   const updatePane = (updatedPane: DashboardPaneConfig) => {
-    updatePanes(config.panes.map(pane => (pane.id === updatedPane.id ? updatedPane : pane)));
+    updatePanes(panesRef.current.map(pane => (pane.id === updatedPane.id ? updatedPane : pane)));
   };
 
   const movePane = (paneId: string, direction: -1 | 1) => {
-    const panes = normalisePanes(config.panes);
+    const panes = panesRef.current;
     const visible = panes.filter(pane => pane.visible);
     const hidden = panes.filter(pane => !pane.visible);
     const index = visible.findIndex(pane => pane.id === paneId);
@@ -2019,77 +2062,165 @@ export default function EditableDashboardGrid({
     updatePanes([...next, ...hidden]);
   };
 
-  const movePaneToTarget = (draggedId: string, targetPaneId: string) => {
+  const movePaneToTarget = (
+    draggedId: string,
+    targetPaneId: string,
+    placement: DragTargetPosition = 'before'
+  ) => {
     if (draggedId === targetPaneId) return false;
-    const panes = normalisePanes(config.panes);
+    const panes = panesRef.current;
     const visible = panes.filter(pane => pane.visible);
     const hidden = panes.filter(pane => !pane.visible);
     const draggedIndex = visible.findIndex(pane => pane.id === draggedId);
-    const targetIndex = visible.findIndex(pane => pane.id === targetPaneId);
     const dragged = visible[draggedIndex];
-    if (!dragged || targetIndex < 0) return false;
+    if (!dragged) return false;
     const next = visible.filter(pane => pane.id !== draggedId);
-    const adjustedTargetIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
-    next.splice(adjustedTargetIndex, 0, dragged);
+    const targetIndex = next.findIndex(pane => pane.id === targetPaneId);
+    if (targetIndex < 0) return false;
+    const insertionIndex = placement === 'after' ? targetIndex + 1 : targetIndex;
+    next.splice(insertionIndex, 0, dragged);
+    const currentOrder = visible.map(pane => pane.id).join('|');
+    const nextOrder = next.map(pane => pane.id).join('|');
+    if (currentOrder === nextOrder) return false;
     updatePanes([...next, ...hidden]);
     return true;
   };
 
-  const dropPane = (targetPaneId: string) => {
-    const activeDragId = draggedPaneId || activeDragPaneIdRef.current;
-    if (!activeDragId) {
-      setDraggedPaneId(null);
-      return;
-    }
-    movePaneToTarget(activeDragId, targetPaneId);
-    activeDragPaneIdRef.current = null;
-    setDraggedPaneId(null);
-  };
+  const startPointerDrag = (paneId: string, event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragGestureRef.current = {
+      paneId,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastClientX: event.clientX,
+      lastClientY: event.clientY,
+      active: false,
+      lastTargetPaneId: null,
+      lastTargetPosition: null,
+      rafId: null
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
 
-  const pointerEnterPane = (targetPaneId: string) => {
-    const activeDragId = pointerDraggedPaneId || activeDragPaneIdRef.current;
-    if (!activeDragId) return;
-    movePaneToTarget(activeDragId, targetPaneId);
-  };
+    const processPointerTarget = (remainingSettles = 5) => {
+      const dragState = dragGestureRef.current;
+      dragState.rafId = null;
+      if (!dragState.active || !dragState.paneId) return;
 
-  const pointerDropPane = (targetPaneId: string) => {
-    const activeDragId = pointerDraggedPaneId || activeDragPaneIdRef.current;
-    if (activeDragId) {
-      movePaneToTarget(activeDragId, targetPaneId);
-    }
-    activeDragPaneIdRef.current = null;
-    setPointerDraggedPaneId(null);
-    setDraggedPaneId(null);
+      const targetElement = (document.elementFromPoint(dragState.lastClientX, dragState.lastClientY) as HTMLElement | null)
+        ?.closest?.('[data-dashboard-pane-id]') as HTMLElement | null;
+
+      if (!targetElement) {
+        if (dragState.lastTargetPaneId || dragState.lastTargetPosition) {
+          dragState.lastTargetPaneId = null;
+          dragState.lastTargetPosition = null;
+          setDragTargetPaneId(null);
+          setDragTargetPosition(null);
+        }
+        return;
+      }
+
+      const targetPaneId = targetElement.getAttribute('data-dashboard-pane-id');
+      if (!targetPaneId || targetPaneId === dragState.paneId) {
+        setDragTargetPaneId(null);
+        setDragTargetPosition(null);
+        dragState.lastTargetPaneId = null;
+        dragState.lastTargetPosition = null;
+        return;
+      }
+
+      const draggedPaneElement = document.querySelector(`[data-dashboard-pane-id="${dragState.paneId}"]`) as HTMLElement | null;
+      const placement = getPaneDropPlacement(targetElement, draggedPaneElement, dragState.lastClientX, dragState.lastClientY);
+      setDragTargetPaneId(targetPaneId);
+      setDragTargetPosition(placement);
+
+      if (dragState.lastTargetPaneId === targetPaneId && dragState.lastTargetPosition === placement) {
+        return;
+      }
+
+      dragState.lastTargetPaneId = targetPaneId;
+      dragState.lastTargetPosition = placement;
+
+      const moved = movePaneToTarget(dragState.paneId, targetPaneId, placement);
+      if (moved && remainingSettles > 0) {
+        dragState.rafId = window.requestAnimationFrame(() => processPointerTarget(remainingSettles - 1));
+      }
+    };
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const dragState = dragGestureRef.current;
+      if (dragState.pointerId !== moveEvent.pointerId || !dragState.paneId) return;
+
+      const travelled = Math.hypot(moveEvent.clientX - dragState.startX, moveEvent.clientY - dragState.startY);
+      if (!dragState.active) {
+        if (travelled < 6) return;
+        dragState.active = true;
+        setDraggedPaneId(dragState.paneId);
+      }
+
+      moveEvent.preventDefault();
+      dragState.lastClientX = moveEvent.clientX;
+      dragState.lastClientY = moveEvent.clientY;
+      if (dragState.rafId === null) {
+        processPointerTarget();
+      }
+    };
+
+    const finishPointerDrag = (pointerId: number | null) => {
+      if (pointerId !== null && dragGestureRef.current.pointerId !== pointerId) return;
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerCancel);
+      window.removeEventListener('keydown', onKeyDown);
+      clearDragState();
+    };
+
+    const onPointerUp = (upEvent: PointerEvent) => finishPointerDrag(upEvent.pointerId);
+    const onPointerCancel = (cancelEvent: PointerEvent) => finishPointerDrag(cancelEvent.pointerId);
+    const onKeyDown = (keyEvent: KeyboardEvent) => {
+      if (keyEvent.key === 'Escape') {
+        finishPointerDrag(null);
+      }
+    };
+
+    window.addEventListener('pointermove', onPointerMove, { passive: false });
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerCancel);
+    window.addEventListener('keydown', onKeyDown);
   };
 
   const duplicatePane = (pane: DashboardPaneConfig) => {
     paneIdCounterRef.current += 1;
+    const currentPanes = panesRef.current;
     const copy: DashboardPaneConfig = {
       ...pane,
       id: `${pane.id}-copy-${paneIdCounterRef.current}`,
       title: `${pane.title} Copy`,
       titleMode: 'custom',
-      order: config.panes.length,
+      order: currentPanes.length,
       visible: true
     };
-    updatePanes([...config.panes, copy]);
+    updatePanes([...currentPanes, copy]);
     setSelectedPaneId(copy.id);
   };
 
   const addPane = () => {
     paneIdCounterRef.current += 1;
+    const currentPanes = panesRef.current;
     const pane = makePane(
-      `pane-custom-${config.panes.length}-${paneIdCounterRef.current}`,
+      `pane-custom-${currentPanes.length}-${paneIdCounterRef.current}`,
       'New Dashboard Pane',
       'stat',
       'overall-readiness',
       '1',
       'stat',
       'indigo',
-      config.panes.length,
+      currentPanes.length,
       { titleMode: 'custom' }
     );
-    updatePanes([...config.panes, pane]);
+    updatePanes([...currentPanes, pane]);
     setSelectedPaneId(pane.id);
   };
 
@@ -2125,7 +2256,7 @@ export default function EditableDashboardGrid({
   const hiddenPanes = normalisePanes(config.panes).filter(pane => !pane.visible);
 
   return (
-    <div className="space-y-4">
+    <div className={`space-y-4 ${draggedPaneId ? 'select-none cursor-grabbing' : ''}`}>
       <div className={`rounded-2xl border p-5 shadow-xs transition-all duration-200 ${
         isEditing
           ? 'border-indigo-500 bg-indigo-500/[0.04] ring-1 ring-indigo-500/20 dark:bg-indigo-500/[0.02] dark:border-indigo-500/30'
@@ -2237,45 +2368,17 @@ export default function EditableDashboardGrid({
                 confirmLabel: 'Remove pane',
                 tone: 'danger',
                 onConfirm: () => {
-                  updatePanes(config.panes.filter(item => item.id !== pane.id));
+                  updatePanes(panesRef.current.filter(item => item.id !== pane.id));
                   if (selectedPaneId === pane.id) setSelectedPaneId(null);
                 }
               })
             }
-            onManualDragStart={event => {
-              event.stopPropagation();
-              activeDragPaneIdRef.current = pane.id;
-              setPointerDraggedPaneId(pane.id);
-              setDraggedPaneId(pane.id);
-            }}
-            onManualDragEnter={() => pointerEnterPane(pane.id)}
-            onManualDragEnd={() => pointerDropPane(pane.id)}
-            onNativeDragEnter={() => {
-              const activeDragId = draggedPaneId || activeDragPaneIdRef.current;
-              if (activeDragId && activeDragId !== pane.id) {
-                movePaneToTarget(activeDragId, pane.id);
-              }
-            }}
-            onDragStart={event => {
-              event.stopPropagation();
-              event.dataTransfer.effectAllowed = 'move';
-              event.dataTransfer.setData('application/x-lumen-dashboard-pane', pane.id);
-              activeDragPaneIdRef.current = pane.id;
-              setDraggedPaneId(pane.id);
-            }}
-            onDragEnd={() => {
-              activeDragPaneIdRef.current = null;
-              setDraggedPaneId(null);
-              setPointerDraggedPaneId(null);
-            }}
-            onDragOver={event => {
-              event.preventDefault();
-              event.stopPropagation();
-            }}
-            onDrop={() => dropPane(pane.id)}
+            onHandlePointerDown={event => startPointerDrag(pane.id, event)}
             canMoveUp={paneIndex > 0}
             canMoveDown={paneIndex < visiblePanes.length - 1}
-            isDragged={draggedPaneId === pane.id || pointerDraggedPaneId === pane.id}
+            isDragged={draggedPaneId === pane.id}
+            isDragTarget={dragTargetPaneId === pane.id}
+            dragTargetPosition={dragTargetPaneId === pane.id ? dragTargetPosition : null}
           />
         ))}
       </div>
@@ -2316,7 +2419,7 @@ export default function EditableDashboardGrid({
               confirmLabel: 'Remove pane',
               tone: 'danger',
               onConfirm: () => {
-                updatePanes(config.panes.filter(item => item.id !== selectedPane.id));
+                updatePanes(panesRef.current.filter(item => item.id !== selectedPane.id));
                 setSelectedPaneId(null);
               }
             })

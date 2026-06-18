@@ -162,6 +162,7 @@ When the user clicks "Customize Layout" on the dashboard header:
 * **Preset Selection**: Users choose the pane count and starting composition from the Home Style tab before entering Edit Dashboard.
 * **Live Preview**: Edit Mode renders the actual homepage grid with pane boundaries, drag handles, move controls, hide/remove actions, and settings shortcuts.
 * **Drag/Reorder**: Panes can be dragged to a new order using a dedicated `Move` handle. Up/Down buttons provide a keyboard-friendly fallback.
+* **Smooth Drag Behaviour**: Pane dragging now uses a pointer-driven reorder path rather than relying on browser file-drag events. The move handle is the only drag start point, the active target shows an insertion marker, and Pack Builder / Evidence file dropzones ignore dashboard pane drags.
 * **Add/Duplicate/Hide/Remove**: Users can add a blank pane, duplicate a configured pane, hide panes into a recovery dock, or remove panes from the draft layout.
 * **Pane Settings**: Settings are grouped around content, display, style, and actions. Data source changes immediately re-render the pane with real workspace data, suggest a matching title, and preserve custom titles unless the user explicitly chooses the suggestion.
 * **Queue Controls**: Work-queue and activity panes expose record-count, timeframe, include-overdue, and status-scope controls so users can build focused operational views without changing the underlying data.
