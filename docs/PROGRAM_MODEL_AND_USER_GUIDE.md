@@ -600,8 +600,9 @@ What works:
 - Dashboard reads real app collections and readiness report.
 - It has KPIs, Compliance Core, quick actions, right rail, attention items, and customisation foundation.
 - It supports 6 selectable dashboard home layouts/variations: Command Map (default SVG relationship map), Executive Command Bar (compact top KPIs), Operations Taskboard (action-led lanes), Evidence Readiness (evidence coverage focus), Matrix Overview (people/asset/requirement status), and Focus Mode (low-clutter daily view). These variations can be switched and previewed live via the Customize Dashboard panel, and choices persist in localStorage namespaced to the user/organization session.
-- It now also supports an advanced editable homepage pane grid for local testing. Users can choose 4-pane, 6-pane, 8-pane, 12-pane, or custom presets; add, hide, duplicate, remove, reset, and reorder panes; and configure pane content, display mode, size, font, emphasis, accent colour, and helper text from a live draft.
-- Editable dashboard panes are backed by a fixed metric registry that reads current workspace data only. Snapshot-only or unavailable metrics are labelled honestly rather than being turned into fake trends.
+- It now also supports an advanced editable homepage pane grid for local testing. Users can choose 4-pane, 6-pane, 8-pane, 12-pane, Audit Prep, People & Assets, Evidence Control, Minimal Daily Focus, or custom presets; add, hide, duplicate, remove, reset, and reorder panes; and configure pane content, display mode, size, title suggestion/custom title, record count, timeframe, status scope, font, emphasis, accent colour, and helper text from a live draft.
+- Editable dashboard mode now treats the homepage as a single pane-based workspace. Top summary cards, right-rail intelligence, quick actions, Pack Builder summary, and the upload-console shortcut can all be moved or hidden through the same pane model.
+- Editable dashboard panes are backed by a fixed metric registry that reads current workspace data only. Snapshot-only or unavailable metrics are labelled honestly rather than being turned into fake trends, and internal pane drags are guarded so they do not trigger file-drop overlays.
 - It avoids fake historical trend by showing current/snapshot wording where history is unavailable.
 
 Partly supported:

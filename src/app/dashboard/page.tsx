@@ -11,6 +11,7 @@ import EditableDashboardGrid, {
   type DashboardGridPreset,
   type DashboardLayoutMode,
   type DashboardMetricSnapshot,
+  type DashboardQuickAction,
   type EditableDashboardConfig,
   type DashboardPaneConfig
 } from './components/EditableDashboardGrid';
@@ -880,6 +881,15 @@ export default function DashboardPage() {
     return { preset, panes };
   }, [currentCustomization]);
 
+  const hasUnsavedDashboardChanges = useMemo(() => {
+    if (!isEditingDashboard || !tempCustomization) return false;
+    try {
+      return JSON.stringify(tempCustomization) !== JSON.stringify(customization);
+    } catch {
+      return true;
+    }
+  }, [customization, isEditingDashboard, tempCustomization]);
+
   const updateEditableHomepage = useCallback((config: EditableDashboardConfig) => {
     setTempCustomization(prev => {
       const base = prev || customization;
@@ -1497,7 +1507,10 @@ export default function DashboardPage() {
         ? `Due ${new Date(item.requirement.next_due_date).toLocaleDateString()} | ${item.requirement.category}`
         : item.requirement.category,
       status: item.isOverdue ? 'Overdue' : fallbackStatus,
-      route: item.link || '/dashboard/reports'
+      route: item.link || '/dashboard/reports',
+      date: item.requirement.next_due_date || null,
+      category: item.requirement.category,
+      overdue: item.isOverdue
     });
 
     const openActions = actions.filter(action => action.status === 'Open' || action.status === 'In Progress');
@@ -1506,7 +1519,6 @@ export default function DashboardPage() {
         const dueDate = action.target_due_date || action.due_date;
         return dueDate ? new Date(dueDate) < today : false;
       })
-      .slice(0, 5)
       .map(action => ({
         id: action.id,
         title: action.title,
@@ -1514,7 +1526,10 @@ export default function DashboardPage() {
           ? `Due ${new Date(action.target_due_date || action.due_date || '').toLocaleDateString()} | ${action.owner || 'Unassigned'}`
           : action.owner || 'Unassigned',
         status: 'Overdue',
-        route: `/dashboard/requirements?selectedAction=${action.id}`
+        route: `/dashboard/requirements?selectedAction=${action.id}`,
+        date: action.target_due_date || action.due_date || null,
+        category: 'Action',
+        overdue: true
       }));
 
     const recentEvidenceCutoff = new Date(today);
@@ -1535,6 +1550,27 @@ export default function DashboardPage() {
       },
       { active: 0, onLeave: 0, suspended: 0, inactive: 0 }
     );
+
+    const mapFocusSuggestion = (suggestion: string, index: number) => {
+      let route = '/dashboard';
+      if (suggestion.includes('Asset Matrix')) {
+        route = '/dashboard/matrix?status=Expired';
+      } else if (suggestion.includes('expired framework requirements')) {
+        route = '/dashboard/requirements?status=RED';
+      } else if (suggestion.includes('vault documents')) {
+        route = '/dashboard/vault?status=Unclassified';
+      } else if (suggestion.includes('gap action tasks')) {
+        route = '/dashboard/requirements?filter=actions';
+      }
+      return {
+        id: `focus-${index}`,
+        title: suggestion,
+        subtitle: 'Priority focus suggestion',
+        status: 'Focus',
+        route,
+        overdue: false
+      };
+    };
 
     return {
       readinessScore,
@@ -1576,36 +1612,51 @@ export default function DashboardPage() {
       savedReportCount: reportViewCount,
       queues: {
         overdue: [
-          ...needsActionItems.filter(item => item.isOverdue).slice(0, 5).map(item => mapQueueItem(item, 'Overdue')),
+          ...needsActionItems.filter(item => item.isOverdue).map(item => mapQueueItem(item, 'Overdue')),
           ...overdueActionItems
-        ].slice(0, 5),
-        dueSoon: next7DaysItems.slice(0, 5).map(item => mapQueueItem(item, 'Due soon')),
+        ].slice(0, 20),
+        dueSoon: allTasksAndExpiries
+          .filter(item => !item.isOverdue)
+          .map(item => mapQueueItem(item, 'Due soon'))
+          .slice(0, 20),
         missingEvidence: [
           ...activeRequirements
             .filter(requirement => requirement.status === 'RED' || requirement.status === 'GREY')
-            .slice(0, 5)
             .map(requirement => ({
               id: requirement.id,
               title: requirement.title,
               subtitle: `${requirement.category} | ${requirement.owner || 'Unassigned'}`,
               status: requirement.status === 'GREY' ? 'Unassessed' : 'Missing',
-              route: `/dashboard/requirements?id=${requirement.id}`
+              route: `/dashboard/requirements?id=${requirement.id}`,
+              category: requirement.category,
+              overdue: requirement.status === 'RED'
             })),
-          ...unclassifiedDocs.slice(0, 3).map(document => ({
+          ...unclassifiedDocs.map(document => ({
             id: document.id,
             title: document.title,
             subtitle: document.category || 'Evidence Vault',
             status: 'Unclassified',
-            route: `/dashboard/vault?id=${document.id}`
+            route: `/dashboard/vault?id=${document.id}`,
+            category: document.category || 'Evidence Vault',
+            overdue: false
           }))
-        ].slice(0, 5),
+        ].slice(0, 20),
         recentActivity: safeActivity.map(log => ({
           id: log.id,
           title: log.action || 'Workspace activity',
           subtitle: log.created_at ? new Date(log.created_at).toLocaleString() : 'Recent activity',
           status: 'Activity',
-          route: '/dashboard/audit-trail'
-        }))
+          route: '/dashboard/audit-trail',
+          date: log.created_at || null,
+          overdue: false
+        })).slice(0, 20),
+        expiring: next7DaysItems
+          .map(item => mapQueueItem(item, 'Expiring soon'))
+          .slice(0, 20),
+        focusSuggestions: smartSuggestions
+          .filter(suggestion => suggestion !== "No current priority suggestions were identified from the available workspace records.")
+          .map(mapFocusSuggestion)
+          .slice(0, 20)
       }
     };
   }, [
@@ -1627,6 +1678,7 @@ export default function DashboardPage() {
     readinessScore,
     reportViewCount,
     safeActivity,
+    smartSuggestions,
     stats,
     today,
     totalAssetChecks,
@@ -1994,6 +2046,42 @@ export default function DashboardPage() {
 
   const [modalCustomization, setModalCustomization] = useState(customization);
 
+  const handleDashboardQuickAction = useCallback((action: DashboardQuickAction) => {
+    switch (action) {
+      case 'upload-evidence':
+        setIsUploadModalOpen(true);
+        return;
+      case 'create-requirement':
+        setActiveQuickActionModal('requirement');
+        return;
+      case 'add-competency':
+        setActiveQuickActionModal('competency');
+        return;
+      case 'create-action':
+        setActiveQuickActionModal('action');
+        return;
+      case 'build-pack':
+        setActiveQuickActionModal('audit-pack');
+        return;
+      case 'view-requirements':
+        router.push('/dashboard/requirements');
+        return;
+      case 'conduct-check':
+        router.push('/dashboard/matrix');
+        return;
+      case 'customize-layout':
+        setModalCustomization(customization);
+        setActiveCustomiseTab('homeStyle');
+        setIsCustomizationOpen(true);
+        return;
+      case 'open-vault':
+        router.push('/dashboard/vault');
+        return;
+      default:
+        return;
+    }
+  }, [customization, router]);
+
   // Live-preview: when the Customize modal is open, use modalCustomization for
   // readability styling so changes are visible behind the modal before Save.
   const previewCustomization = useMemo(() => {
@@ -2021,7 +2109,16 @@ export default function DashboardPage() {
   const dragCounter = React.useRef(0);
 
   useEffect(() => {
+    if (isEditingDashboard) {
+      dragCounter.current = 0;
+      setIsDragOverActive(false);
+      setDroppedFiles(null);
+      setIsDropContextModalOpen(false);
+      return;
+    }
+
     const handleDragEnter = (e: DragEvent) => {
+      if (!e.dataTransfer?.types?.includes('Files')) return;
       e.preventDefault();
       e.stopPropagation();
       dragCounter.current += 1;
@@ -2031,6 +2128,7 @@ export default function DashboardPage() {
     };
 
     const handleDragLeave = (e: DragEvent) => {
+      if (!e.dataTransfer?.types?.includes('Files')) return;
       e.preventDefault();
       e.stopPropagation();
       dragCounter.current -= 1;
@@ -2040,11 +2138,13 @@ export default function DashboardPage() {
     };
 
     const handleDragOver = (e: DragEvent) => {
+      if (!e.dataTransfer?.types?.includes('Files')) return;
       e.preventDefault();
       e.stopPropagation();
     };
 
     const handleDrop = (e: DragEvent) => {
+      if (!e.dataTransfer?.types?.includes('Files')) return;
       e.preventDefault();
       e.stopPropagation();
       dragCounter.current = 0;
@@ -2068,7 +2168,7 @@ export default function DashboardPage() {
       window.removeEventListener('dragover', handleDragOver);
       window.removeEventListener('drop', handleDrop);
     };
-  }, []);
+  }, [isEditingDashboard]);
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
@@ -2879,6 +2979,7 @@ export default function DashboardPage() {
       )}
 
       {/* 2. Top KPI strip */}
+      {currentCustomization.dashboardLayoutMode !== 'editable' && (
       <div className={`grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 ${densityStyles.gridGap}`}>
         {currentCustomization.kpiOrder
           .map(kpiId => {
@@ -3136,17 +3237,24 @@ export default function DashboardPage() {
             );
           })}
       </div>
+      )}
 
       {/* 3. Core content grid with Sidebar Live Rail */}
-      <div className={`grid grid-cols-1 lg:grid-cols-4 ${densityStyles.outerGridGap}`}>
+      <div className={`grid grid-cols-1 ${currentCustomization.dashboardLayoutMode === 'editable' ? '' : 'lg:grid-cols-4'} ${densityStyles.outerGridGap}`}>
         {/* Main Central compliance program map */}
-        <div className={`lg:col-span-3 ${densityStyles.panelSpacing}`}>
+        <div className={`${currentCustomization.dashboardLayoutMode === 'editable' ? '' : 'lg:col-span-3'} ${densityStyles.panelSpacing}`}>
           <div className="bg-card border border-border rounded-xl shadow-xs overflow-hidden">
             {/* Header controls for central overview */}
             <div className="p-4 border-b border-border/60 bg-muted/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <div>
-                <h3 className="text-xs font-black text-foreground uppercase tracking-wider">Compliance Program Overview</h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Interactive program maps and status monitoring of system modules.</p>
+                <h3 className="text-xs font-black text-foreground uppercase tracking-wider">
+                  {currentCustomization.dashboardLayoutMode === 'editable' ? 'Editable Homepage Workspace' : 'Compliance Program Overview'}
+                </h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {currentCustomization.dashboardLayoutMode === 'editable'
+                    ? 'Every homepage section now runs through the pane grid so layout, content and visual settings can be previewed before saving.'
+                    : 'Interactive program maps and status monitoring of system modules.'}
+                </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {isEditingDashboard ? (
@@ -3154,6 +3262,11 @@ export default function DashboardPage() {
                     <span className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 dark:text-indigo-400 rounded-md text-[10px] font-black uppercase tracking-wider animate-pulse">
                       {currentCustomization.dashboardLayoutMode === 'editable' ? 'Editing Homepage' : 'Editing Hero Layout'}
                     </span>
+                    {hasUnsavedDashboardChanges && (
+                      <span className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 rounded-md text-[10px] font-black uppercase tracking-wider">
+                        Unsaved changes
+                      </span>
+                    )}
                     <button
                       onClick={() => {
                         if (tempCustomization) {
@@ -3168,13 +3281,17 @@ export default function DashboardPage() {
                     <button
                       onClick={() => {
                         if (currentCustomization.dashboardLayoutMode === 'editable') {
-                          resetEditableHomepageDraft();
+                          if (window.confirm('Reset the editable homepage layout to the current preset defaults?')) {
+                            resetEditableHomepageDraft();
+                          }
                         } else if (tempCustomization) {
-                          setTempCustomization({
-                            ...tempCustomization,
-                            heroCustomPositions: undefined
-                          });
-                          setToast({ type: 'info', message: 'Positions reset to preset defaults. Save to apply.' });
+                          if (window.confirm('Reset hero positions to their preset defaults?')) {
+                            setTempCustomization({
+                              ...tempCustomization,
+                              heroCustomPositions: undefined
+                            });
+                            setToast({ type: 'info', message: 'Positions reset to preset defaults. Save to apply.' });
+                          }
                         }
                       }}
                       className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-600 dark:text-amber-400 rounded-md text-[10px] font-bold transition-all cursor-pointer"
@@ -3182,7 +3299,11 @@ export default function DashboardPage() {
                       Reset Layout
                     </button>
                     <button
-                      onClick={cancelDashboardEditMode}
+                      onClick={() => {
+                        if (!hasUnsavedDashboardChanges || window.confirm('Discard unsaved dashboard edits and exit Edit Mode?')) {
+                          cancelDashboardEditMode();
+                        }
+                      }}
                       className="px-2.5 py-1 bg-muted hover:bg-muted/80 border border-border rounded-md text-[10px] font-bold text-muted-foreground hover:text-foreground transition-all cursor-pointer"
                     >
                       Cancel
@@ -3264,6 +3385,8 @@ export default function DashboardPage() {
                   data={editableDashboardData}
                   onChange={updateEditableHomepage}
                   onNavigate={(path) => router.push(path)}
+                  onQuickAction={handleDashboardQuickAction}
+                  hasUnsavedChanges={hasUnsavedDashboardChanges}
                 />
               ) : activeViewMode === 'system' ? (
                 <DashboardHomeVariants
@@ -3405,6 +3528,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Program Quick Actions */}
+          {currentCustomization.dashboardLayoutMode !== 'editable' && (
           <section className="bg-card border border-border rounded-xl p-4 flex flex-col justify-between shadow-xs">
             <div className="mb-2">
               <h3 className="text-xs font-black text-foreground uppercase tracking-wider">Program Quick Actions</h3>
@@ -3434,9 +3558,11 @@ export default function DashboardPage() {
               ))}
             </div>
           </section>
+          )}
         </div>
 
         {/* Right-side live intelligence rail */}
+        {currentCustomization.dashboardLayoutMode !== 'editable' && (
         <aside className="space-y-5">
           {/* Rail Section 1: Circular Compliance gauge */}
           {customization.visibleRightRailSections.includes('snapshot') && (
@@ -3790,8 +3916,10 @@ export default function DashboardPage() {
             </div>
           )}
         </aside>
+        )}
       </div>
 
+      {currentCustomization.dashboardLayoutMode !== 'editable' && (
       <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 ${densityStyles.gridGap} transition-all duration-300`}>
         {(currentCustomization.lowerPanelsOrder || DEFAULT_CUSTOMIZATION_SETTINGS.lowerPanelsOrder || [])
 .map(paneId => {
@@ -4352,6 +4480,7 @@ export default function DashboardPage() {
             );
           })}
       </div>
+      )}
 
       {/* 5. Modals and Quick-Upload dialogs */}
       {isUploadModalOpen && (

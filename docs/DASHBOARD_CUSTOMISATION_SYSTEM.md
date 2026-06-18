@@ -17,9 +17,11 @@ This document describes the design, implementation, and storage mechanics of the
 * **Readability Settings Panel**: Configures visual presentation rules (font sizes, density spacing, border-radius controls, contrast preferences, motion settings, and accent color palettes) applied live to the workspace UI.
 * **Extended Hero Controls**: Support for layout presets (`Balanced Orbit`, `Focus Area`, `Structured List`), central orb metric content selections, and visual detail levels.
 * **Selectable Dashboard Home Variations**: The home screen supports 6 visual hero/layout variations (Command Map, Executive Command Bar, Operations Taskboard, Evidence Readiness, Matrix Overview, Focus Mode) stored in local preferences and previewed live inside the Customize Modal.
-* **Editable Homepage Pane Grid**: The dashboard can now run in an advanced editable homepage mode alongside the classic home variations. Users can choose 4-pane infographic, 6-pane balanced, 8-pane operations, 12-pane executive detail, or custom layouts, then add, hide, duplicate, reset, resize, reorder, and configure panes from a live preview.
-* **Pane and Metric Registry**: Editable homepage panes use a strict local registry of supported pane types (`Stat Tile`, `Progress / Readiness`, `Status Bars`, `Mini Chart`, `Work Queue`, `Module Summary`, `Quick Actions`, and `Pack Builder Summary`) and selectable data sources. Each metric resolves from existing app state only and provides honest empty-state copy when data is unavailable.
-* **Pane Settings Drawer**: Each editable pane has focused settings for content, display mode, span, font size, emphasis, accent colour, helper text, duplication, reset, and removal. Changes preview immediately in the editable homepage draft and only persist after Save.
+* **Editable Homepage Pane Grid**: The dashboard can now run in an advanced editable homepage mode alongside the classic home variations. In Stage 4B the editable mode becomes the whole homepage surface rather than only a center-panel insert. Top KPI panes, main operational panes, right-column intelligence panes, quick-action panes, Pack Builder summary, and the safe upload-console pane are all represented as pane configs inside one grid.
+* **Pane and Metric Registry**: Editable homepage panes use a strict local registry of supported pane types (`Stat Tile`, `Progress / Readiness`, `Status Bars`, `Mini Chart`, `Work Queue`, `Module Summary`, `Quick Actions`, `Pack Builder Summary`, and `Upload Console`) plus data-backed metric sources such as readiness, requirement counts, personnel readiness, due soon items, missing evidence, risk gaps, activity, expiring items, and asset checks. Every metric resolves from existing app state only and falls back to honest empty/snapshot-only copy when data is unavailable.
+* **Expanded Presets**: Beyond the 4/6/8/12 layouts, users can now start from `Audit Prep`, `People & Assets`, `Evidence Control`, and `Minimal Daily Focus` presets. Presets change pane mix, display modes, record counts, and density defaults rather than only pane count.
+* **Pane Settings Drawer**: Each editable pane has focused settings for content, display mode, span, title suggestion/custom title handling, record count, timeframe, status scope, font size, emphasis, accent colour, helper text, duplication, reset, and removal. Changes preview immediately in the editable homepage draft and only persist after Save.
+* **Stronger Edit Mode Affordances**: Edit Mode now shows a clear edit banner, stronger pane outlines, larger move handles, visible move up/down controls, and unsaved-change signals so it is obvious that the whole homepage is being edited.
 * **Dark / Light / Midtone Theme Support**: Built to dynamically inherit from the root theme structure, preserving readable text contrast and gradient borders across all mode shifts.
 
 ---
@@ -27,13 +29,11 @@ This document describes the design, implementation, and storage mechanics of the
 ## 2. What Is Partial or Deferred
 
 ### Partial Features (Current Pass)
-* **Reset Individual Pane**: Restores a single pane's default order, visibility, and detail level within Edit Mode (implemented in Phase 2).
-* **Pane Detail Levels**: Stored preferences (Compact, Standard, Detailed) mapped to change the quantity of info rendered in major cards (implemented in Phase 3).
-* **Live Readability Previews**: Readability values preview live inside the customization modal before saving (implemented in Phase 4).
-* **Major vs. Minor Hero Nodes**: Interactive nodes represent primary categories; minor sub-nodes are rendered as smaller orbits to avoid clutter.
+* **Live Upload Console Inside Edit Mode**: The upload console pane remains configurable and movable in Edit Mode, but the live file-drop interaction is intentionally paused while editing so pane drag gestures cannot be mistaken for file drags.
+* **Hero Node Fine Layout Editing**: The classic hero node orbit still supports its existing positioning controls. The Stage 4B work intentionally focuses on the full pane-based homepage path rather than adding more bespoke hero-only controls.
 
 ### Deferred Features (Future Roadmap)
-* **Freeform Coordinate Grid**: Stage 4A supports drag/drop reordering plus keyboard/button move controls inside a responsive grid. Pixel-level 2D positioning and manual drag-resize handles remain deferred to avoid layout instability.
+* **Freeform Coordinate Grid**: Stage 4B supports drag/drop reordering plus keyboard/button move controls inside a responsive dense grid. Pixel-level 2D positioning and manual drag-resize handles remain deferred to avoid layout instability.
 * **Database-Backed Layout Persistence**: Multi-device or shared team configurations are deferred. Settings are stored exclusively in the browser's `localStorage` to keep database schema and RLS policies untouched.
 * **Organisation-Wide Master Templates**: Force-pushing layouts to other members of the organization is deferred.
 * **Hero Node Rearranging and Custom Mapping**: Editing the coordinate positions of individual SVG nodes on the map is deferred.
@@ -156,15 +156,17 @@ When the user clicks "Customize Layout" on the dashboard header:
 * **Save**: Copies the state of `tempCustomization` to `currentCustomization`, writes it to `localStorage`, and exits edit mode.
 * **Cancel**: Discards `tempCustomization` changes, reverting to the saved state of `currentCustomization`, and exits edit mode.
 * **Reset to Defaults**: Replaces the active configuration with `DEFAULT_CUSTOMIZATION_SETTINGS`, deletes the custom key from `localStorage`, and updates both states.
-* **Editable Homepage Reset**: While editing the advanced homepage grid, Reset restores the currently selected pane preset in the draft state and requires Save before persistence.
+* **Editable Homepage Reset**: While editing the advanced homepage grid, Reset restores the currently selected pane preset in the draft state and requires Save before persistence. Remove, duplicate, reset-pane, and discard-edit flows now use confirmation prompts so the user cannot accidentally destroy the layout in one click.
 
 ### E. Editable Homepage Pane Operations
 * **Preset Selection**: Users choose the pane count and starting composition from the Home Style tab before entering Edit Dashboard.
 * **Live Preview**: Edit Mode renders the actual homepage grid with pane boundaries, drag handles, move controls, hide/remove actions, and settings shortcuts.
-* **Drag/Reorder**: Panes can be dragged to a new order. Up/Down buttons provide a keyboard-friendly fallback.
+* **Drag/Reorder**: Panes can be dragged to a new order using a dedicated `Move` handle. Up/Down buttons provide a keyboard-friendly fallback.
 * **Add/Duplicate/Hide/Remove**: Users can add a blank pane, duplicate a configured pane, hide panes into a recovery dock, or remove panes from the draft layout.
-* **Pane Settings**: Settings are grouped around content, display, style, and actions. Data source changes immediately re-render the pane with real workspace data.
+* **Pane Settings**: Settings are grouped around content, display, style, and actions. Data source changes immediately re-render the pane with real workspace data, suggest a matching title, and preserve custom titles unless the user explicitly chooses the suggestion.
+* **Queue Controls**: Work-queue and activity panes expose record-count, timeframe, include-overdue, and status-scope controls so users can build focused operational views without changing the underlying data.
 * **Persistence**: Save commits the full pane array to the existing user/organisation-scoped local preference key. Cancel discards the draft.
+* **Drag Safety**: Dashboard pane drags are treated as internal layout drags. The dashboard smart evidence dropzone ignores them, and only real file drags can trigger upload overlays.
 
 ### F. Readability Settings
 Readability styles inject inline properties or append CSS variables directly to the root element. These modify sizing, padding, and accent colors instantly. In Phase 4, readability changes live-preview instantly in a draft state and can be reverted by clicking Cancel.

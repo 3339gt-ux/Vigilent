@@ -73,9 +73,10 @@ An interactive visual system map representing the current compliance and readine
     - **Focus Mode**: Low-clutter, highly focused daily dashboard presenting priorities, quick actions, and upcoming milestones.
   - All variations leverage unified hooks to read real-time workspace metrics, respect active themes (Dark, Light, Midtone), and persist choices in `localStorage` namespaced to the user/organization session.
 - **Editable Homepage Mode**:
-  - Users can switch from the classic home variations to an editable pane grid.
-  - Supported presets are `4-pane infographic`, `6-pane balanced`, `8-pane operations`, `12-pane executive detail`, and `Custom`.
-  - Edit Mode supports pane add, hide, remove, duplicate, reset, drag/reorder, button-based reorder fallback, pane span changes, display mode changes, data source selection, font sizing, emphasis, accent colour, and helper text toggles.
+  - Users can switch from the classic home variations to an editable pane grid that now represents the whole homepage surface, not only the center panel.
+  - Supported presets are `4-pane large infographic`, `6-pane balanced`, `8-pane operations`, `12-pane executive screen`, `Audit Prep`, `People & Assets`, `Evidence Control`, `Minimal Daily Focus`, and `Custom`.
+  - Edit Mode supports pane add, hide, remove, duplicate, reset, drag/reorder, button-based reorder fallback, pane span changes, display mode changes, data source selection, title suggestion/custom title handling, record count, timeframe, status scope, font sizing, emphasis, accent colour, and helper text toggles.
+  - Top KPI summaries, right-side intelligence panes, quick-action panes, Pack Builder summary, and the safe upload-console pane are all editable pane types inside this mode.
   - Editable panes use only real current workspace data. If historical data or a metric source is unavailable, panes render an honest empty or snapshot-only state rather than creating fake trend lines.
 - **Prototype Reference Route**:
   - The prototype page at `/dashboard-prototypes/exact-hero` remains fully available as a static, pixel-perfect visual reference.
@@ -168,13 +169,14 @@ The dashboard incorporates a live interactive intelligence layer enabling deep i
 
 ### Editable Homepage Pane System
 - Triggered by the **"Edit Dashboard"** button once the editable homepage mode is selected.
-- Renders a live responsive grid where each pane can be reordered by drag/drop or by Up/Down controls.
+- Renders a live responsive dense grid where each pane can be reordered by drag/drop or by Up/Down controls.
 - Pane settings are opened from each pane and cover:
-  - Content: title and metric/data source.
-  - Display: pane type, display mode, and span.
+  - Content: title, suggested title, metric/data source.
+  - Display: pane type, display mode, span, record count, timeframe, and status scope where supported.
   - Style: font size, emphasis, accent colour, compact mode, and helper text.
   - Actions: reset, duplicate, hide/remove.
 - Save commits the pane configuration to the existing local dashboard preference key; Cancel discards the draft; Reset restores the selected preset.
+- Dashboard pane drags are treated as internal layout drags. The smart dashboard evidence dropzone only responds to real file drags, so Edit Mode cannot accidentally trigger Pack Builder or evidence upload overlays.
 - The system is local/user-level only. Organisation-shared dashboard templates and database-backed persistence remain deferred.
 
 
