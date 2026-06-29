@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   icons: {
     icon: productBrand.assets.favicon,
     shortcut: productBrand.assets.favicon,
-    apple: productBrand.assets.iconLight,
+    apple: productBrand.assets.favicon,
   },
 };
 

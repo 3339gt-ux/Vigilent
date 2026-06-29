@@ -8,12 +8,14 @@ export const productBrand = {
   disclaimer:
     'Overview360 is an evidence repository. It does not generate legal advice, build safety templates, or certify regulatory compliance.',
   assets: {
-    logoDark: '/brand/overview360/overview360-logo-dark.png',
-    logoMidtone: '/brand/overview360/overview360-logo-midtone.png',
-    logoLight: '/brand/overview360/overview360-logo-light.png',
-    icon: '/brand/overview360/overview360-icon.png',
-    iconDark: '/brand/overview360/overview360-icon-dark.png',
-    iconLight: '/brand/overview360/overview360-icon-light.png',
+    logo: '/brand/overview360/overview360-lockup.svg',
+    logoDark: '/brand/overview360/overview360-lockup.svg',
+    logoMidtone: '/brand/overview360/overview360-lockup.svg',
+    logoLight: '/brand/overview360/overview360-lockup.svg',
+    iconSvg: '/brand/overview360/overview360-icon.svg',
+    icon: '/brand/overview360/overview360-icon.svg',
+    iconDark: '/brand/overview360/overview360-icon.svg',
+    iconLight: '/brand/overview360/overview360-icon.svg',
     favicon: '/brand/overview360/overview360-favicon.png',
   },
 } as const;
