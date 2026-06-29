@@ -184,7 +184,7 @@ export default function OnboardingPage() {
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[80px] pointer-events-none"></div>
         <div className="flex items-center gap-2 z-10">
-          <LumenLogo variant="dark" height={28} />
+          <LumenLogo variant="official" tone="dark" height={78} />
         </div>
         <div className="z-10 space-y-6 max-w-lg">
           <h2 className="text-4xl font-extrabold leading-tight">

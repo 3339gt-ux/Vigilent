@@ -1,13 +1,15 @@
 export const productBrand = {
   productName: 'Overview360',
   shortName: 'Overview360',
-  wordmarkText: 'OVERVIEW 360',
+  wordmarkText: 'Overview360',
   exportPrefix: 'Overview360',
   legalName: 'Overview360',
   description: 'Overview360 helps teams organise evidence, actions, requirements and audit readiness records.',
   disclaimer:
     'Overview360 is an evidence repository. It does not generate legal advice, build safety templates, or certify regulatory compliance.',
   assets: {
+    officialSvg: '/brand/overview360/overview360-official.svg',
+    officialPng: '/brand/overview360/overview360-official.png',
     logo: '/brand/overview360/overview360-lockup.svg',
     logoDark: '/brand/overview360/overview360-lockup.svg',
     logoMidtone: '/brand/overview360/overview360-lockup.svg',
