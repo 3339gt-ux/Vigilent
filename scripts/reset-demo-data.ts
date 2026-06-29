@@ -61,7 +61,7 @@ async function main() {
   const isRemote = supabaseUrl.includes('supabase.co');
   console.log(`Target database mode: ${isRemote ? 'REMOTE SUPABASE' : 'LOCAL/EMULATED SUPABASE'}`);
   console.log(`Supabase URL:         ${supabaseUrl}`);
-  console.log(`Target Organization:  Vygilence Demo Logistics Ltd`);
+  console.log(`Target Organization:  Overview360 Demo Logistics Ltd`);
   console.log(`Demo Org ID:          00000000-0000-0000-0000-d3e0d3e0d3e0`);
   console.log('=====================================================');
 
@@ -88,14 +88,14 @@ async function main() {
     process.exit(1);
   }
 
-  if (existingOrg && existingOrg.name !== 'Vygilence Demo Logistics Ltd') {
+  if (existingOrg && existingOrg.name !== 'Overview360 Demo Logistics Ltd') {
     console.error(`CRITICAL SAFETY ERROR: Target Org ID ${demoOrgId} belongs to '${existingOrg.name}'.`);
     console.error('ABORTING: Reset aborted to prevent pollution or data loss of real company workspace.');
     process.exit(1);
   }
 
   if (!existingOrg) {
-    console.log('Demo organization Vygilence Demo Logistics Ltd does not exist in the database.');
+    console.log('Demo organization Overview360 Demo Logistics Ltd does not exist in the database.');
     console.log('No data to reset.');
     console.log('=====================================================');
     return;
@@ -144,7 +144,7 @@ async function main() {
   }
 
   console.log('The following records will be deleted:');
-  console.log(`- organizations: 1 (Vygilence Demo Logistics Ltd)`);
+  console.log(`- organizations: 1 (Overview360 Demo Logistics Ltd)`);
   for (const [table, count] of Object.entries(deleteCounts)) {
     console.log(`- ${table}: ${count}`);
   }

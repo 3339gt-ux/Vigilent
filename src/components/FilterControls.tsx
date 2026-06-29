@@ -13,7 +13,7 @@ const safeJsonParse = <T,>(value: string | null, fallback: T): T => {
   try {
     return JSON.parse(value) as T;
   } catch (error) {
-    console.warn('Ignoring corrupt Vygilence view state.', error);
+    console.warn('Ignoring corrupt saved view state.', error);
     return fallback;
   }
 };

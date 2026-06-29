@@ -144,7 +144,7 @@ export default function RegisterPage() {
                   className="mt-1 accent-indigo-600 rounded border-border"
                 />
                 <label htmlFor="register-disclaimer-checkbox" className="text-[11px] leading-relaxed text-muted-foreground">
-                  I acknowledge and agree that LUMÉN functions purely as a tracking database. It <strong>does not</strong> generate legal advice, build regulatory safety statements, or claim compliance status on behalf of my business.
+                  I acknowledge and agree that Overview360 functions purely as a tracking database. It <strong>does not</strong> generate legal advice, build regulatory safety statements, or claim compliance status on behalf of my business.
                 </label>
               </div>
             </div>
@@ -201,7 +201,7 @@ export default function RegisterPage() {
         </div>
 
         <div className="z-10 text-[10px] text-zinc-500">
-          LUMÉN is currently a prototype and requires production security hardening before live use.
+          Overview360 is currently a prototype and requires production security hardening before live use.
         </div>
       </div>
     </div>

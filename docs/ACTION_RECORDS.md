@@ -1,6 +1,6 @@
 # Action Records
 
-Vygilence actions are auditable records attached to operational objects. The current UI attaches actions to requirements, while the schema also includes `action_object_links` so later modules can attach the same action model to audit findings, CAPAs, non-conformances, training gaps, document reviews, risk register entries, and customer audit findings.
+Overview360 actions are auditable records attached to operational objects. The current UI attaches actions to requirements, while the schema also includes `action_object_links` so later modules can attach the same action model to audit findings, CAPAs, non-conformances, training gaps, document reviews, risk register entries, and customer audit findings.
 
 ## Current Tables
 

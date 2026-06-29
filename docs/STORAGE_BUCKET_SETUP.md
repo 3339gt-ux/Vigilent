@@ -22,7 +22,7 @@ The core schema intentionally does not create or drop `storage.objects` policies
 
 ## Object Path
 
-Vygilence writes files only under:
+Overview360 writes files only under:
 
 ```text
 organisations/{organisation_id}/documents/{document_id}/{safe_filename}
@@ -51,7 +51,7 @@ The policy names still use the original `Vigilen` prefix for compatibility with 
   - Role: `authenticated`
   - Allows object updates only inside the user's writable organisation path.
 
-No storage delete policy is required for MVP. Vygilence soft-deletes document records and leaves files in the private bucket.
+No storage delete policy is required for MVP. Overview360 soft-deletes document records and leaves files in the private bucket.
 
 ## Supabase UI Checks
 

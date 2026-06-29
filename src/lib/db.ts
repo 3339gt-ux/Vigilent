@@ -87,7 +87,7 @@ const MOCK_WORKSPACE_NOTIFICATIONS: WorkspaceNotification[] = [
     recipient_user_id: MOCK_PROFILE.id,
     recipient_role: null,
     actor_user_id: null,
-    title: 'Welcome to LUMÉN notifications',
+    title: 'Welcome to Overview360 notifications',
     body: 'Workspace updates, action changes and evidence link activity will appear here.',
     type: 'system',
     severity: 'info',

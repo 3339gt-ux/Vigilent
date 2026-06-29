@@ -1,8 +1,8 @@
-# LUMÉN New User Quickstart
+# Overview360 New User Quickstart
 
-LUMÉN is an audit readiness and evidence workspace. It helps your team organise requirements, people records, asset checks, private evidence, actions, reports, and internal audit packs.
+Overview360 is an audit readiness and evidence workspace. It helps your team organise requirements, people records, asset checks, private evidence, actions, reports, and internal audit packs.
 
-LUMÉN does not provide legal advice, safety advice, certification advice, regulator approval, or a guarantee that an audit will pass. Your organisation decides what requirements to track and what evidence is acceptable.
+Overview360 does not provide legal advice, safety advice, certification advice, regulator approval, or a guarantee that an audit will pass. Your organisation decides what requirements to track and what evidence is acceptable.
 
 ## First-Day Setup
 

@@ -20,7 +20,7 @@ Bulk uploads default to category `General`. Users can edit metadata and links im
 
 ## Duplicate Detection
 
-Vygilence calculates a client-side SHA-256 hash where available and stores it on `evidence_documents.file_hash`. Before a file is uploaded, the UI searches the active organisation, including archived records, for:
+Overview360 calculates a client-side SHA-256 hash where available and stores it on `evidence_documents.file_hash`. Before a file is uploaded, the UI searches the active organisation, including archived records, for:
 
 - matching SHA-256 hash
 - matching original filename

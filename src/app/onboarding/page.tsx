@@ -195,7 +195,7 @@ export default function OnboardingPage() {
           </p>
         </div>
         <div className="z-10 text-[10px] text-zinc-500">
-          LUMÉN uses Supabase Auth and organisation membership checks for production workspace access.
+          Overview360 uses Supabase Auth and organisation membership checks for production workspace access.
         </div>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import JSZip from 'jszip';
+import { productBrand } from './brand';
 import { dbService, getCurrentSupabaseOrganizationId } from './db';
 import { isDemoMode } from './env';
 import { rowsToCsv, type ExportRow } from './exportData';
@@ -296,7 +297,7 @@ const buildRootFolderName = (packName: string, exportedAt: string) => {
     lowercase: false,
     maxLength: ZIP_ROOT_NAME_MAX_LENGTH
   });
-  return `LUMEN-Evidence-Pack-${safePackName}-${formatExportMinuteStamp(new Date(exportedAt))}`;
+  return `${productBrand.exportPrefix}-Evidence-Pack-${safePackName}-${formatExportMinuteStamp(new Date(exportedAt))}`;
 };
 
 const itemFolderKey = (item: Pick<PackDraftItem, 'id' | 'type'>) => `${item.type}:${item.id}`;
@@ -1442,7 +1443,7 @@ const buildZipReadmeText = (
   }
 ) => {
   const baseLines = [
-    'LUMEN Evidence Pack',
+    `${productBrand.productName} Evidence Pack`,
     '',
     `Pack: ${data.packName}`,
     `Organisation: ${data.organisationName}`,
@@ -1464,7 +1465,7 @@ const buildZipReadmeText = (
     'Important notes:',
     '- Missing or inaccessible files are logged rather than silently omitted.',
     '- Signed URLs, public URLs, and raw storage paths are not included in this ZIP.',
-    '- LUMEN does not certify compliance and this export does not replace professional judgement.'
+    `- ${productBrand.productName} does not certify compliance and this export does not replace professional judgement.`
   ];
 
   if (mode === 'metadata-only') {
@@ -1511,7 +1512,7 @@ export const buildEvidencePackMetadataZip = async (data: ExportContextData) => {
   writeMetadataZipIndexes(
     artifacts,
     [
-      `LUMÉN Evidence Pack Export`,
+      `${productBrand.productName} Evidence Pack Export`,
       ``,
       `Pack: ${data.packName}`,
       `Organisation: ${data.organisationName}`,
@@ -1984,7 +1985,7 @@ export const buildFullEvidencePackZip = async (
   writeMetadataZipIndexes(
     artifacts,
     [
-      `LUMÉN Evidence Pack Export`,
+      `${productBrand.productName} Evidence Pack Export`,
       ``,
       `Pack: ${data.packName}`,
       `Organisation: ${data.organisationName}`,

@@ -339,7 +339,7 @@ export default function LoginPage() {
                       className="mt-1 accent-indigo-600 rounded border-border"
                     />
                     <label htmlFor="login-disclaimer-checkbox" className="text-[11px] leading-relaxed text-muted-foreground">
-                      I acknowledge that LUMÉN is an audit readiness repository and <strong>does not</strong> generate legal advice, safety statements, or formal claims of compliance.
+                      I acknowledge that Overview360 is an audit readiness repository and <strong>does not</strong> generate legal advice, safety statements, or formal claims of compliance.
                     </label>
                   </div>
                 </div>
@@ -402,13 +402,13 @@ export default function LoginPage() {
             See it. Manage it.<br />Prove it.
           </h2>
           <blockquote className="border-l-2 border-indigo-500 pl-4 py-1 text-zinc-400 text-sm italic">
-            "LUMÉN enabled our depot managers to track CPC cards and forklift inspections in one simple view. We entered our last audit review with total readiness."
+            "Overview360 enabled our depot managers to track CPC cards and forklift inspections in one simple view. We entered our last audit review with clearer evidence gaps."
             <cite className="block text-xs text-zinc-500 font-semibold mt-2 not-italic">— Head of Logistics, Apex Freight Group</cite>
           </blockquote>
         </div>
 
         <div className="z-10 text-[10px] text-zinc-500">
-          LUMÉN is a continuous evidence monitoring platform. Production security depends on completed Supabase Auth, RLS, and storage configuration.
+          Overview360 is a continuous evidence monitoring platform. Production security depends on completed Supabase Auth, RLS, and storage configuration.
         </div>
       </div>
     </div>

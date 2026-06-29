@@ -1,6 +1,6 @@
 # Competency & Training Management
 
-Vygilence now treats competency as part of the evidence operating model:
+Overview360 now treats competency as part of the evidence operating model:
 
 `Person -> Competency Requirement -> Competency Record -> Evidence Document -> Requirement -> Readiness`
 

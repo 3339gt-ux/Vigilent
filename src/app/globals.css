@@ -336,7 +336,7 @@
   --indigo-950: #ffffff;
 }
 
-/* 7. Vanguard (Premium Vygilence Showcase) */
+/* 7. Vanguard (Premium Showcase) */
 :root[data-theme="vanguard"] {
   --background: 240 20% 96%;
   --foreground: 240 40% 12%;

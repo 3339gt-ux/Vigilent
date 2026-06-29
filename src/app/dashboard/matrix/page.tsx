@@ -875,7 +875,7 @@ export default function AssetMatrix() {
     });
 
     try {
-      exportCsv(`lumen-asset-matrix-export-${exportDateStamp()}.csv`, exportRows);
+      exportCsv(`overview360-asset-matrix-export-${exportDateStamp()}.csv`, exportRows);
       setToast({ type: 'success', message: 'Asset assurance report exported successfully.' });
     } catch {
       setToast({ type: 'error', message: 'Failed to export CSV.' });

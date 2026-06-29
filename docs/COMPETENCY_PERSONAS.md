@@ -1,6 +1,6 @@
 # Competency Personas Foundation
 
-LUMÉN now includes a competency personas/templates foundation for local testing.
+Overview360 now includes a competency personas/templates foundation for local testing.
 
 Personas define the competencies a type of person would normally be expected to hold. They are reusable expectation templates, not destructive automation. Assigning or removing a persona does not delete person competency records, linked evidence, or competency history.
 

@@ -1,6 +1,6 @@
 # Beta Demo Script
 
-Use this script for the first Vygilence beta walkthrough. Keep the demo framed as operational audit readiness, not certification or advice.
+Use this script for the first Overview360 beta walkthrough. Keep the demo framed as operational audit readiness, not certification or advice.
 
 ## Setup
 
@@ -45,10 +45,10 @@ Use this script for the first Vygilence beta walkthrough. Keep the demo framed a
 
 ## Boundaries to Say Out Loud
 
-- Vygilence organises evidence and highlights operational gaps.
-- Vygilence does not provide legal advice.
-- Vygilence does not provide safety advice.
-- Vygilence does not certify compliance or guarantee audit outcomes.
+- Overview360 organises evidence and highlights operational gaps.
+- Overview360 does not provide legal advice.
+- Overview360 does not provide safety advice.
+- Overview360 does not certify compliance or guarantee audit outcomes.
 - Private evidence files are not public links.
 
 ## Close

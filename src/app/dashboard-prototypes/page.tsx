@@ -21,7 +21,7 @@ export default function DashboardPrototypesPage() {
       {/* Switcher Navigation Bar at the top of the route */}
       <nav className="bg-slate-900 border-b border-slate-800 px-6 py-4 flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0 z-30">
         <div>
-          <h1 className="text-lg font-bold text-white tracking-wide">LUMÉN Dashboard Visual Prototypes</h1>
+          <h1 className="text-lg font-bold text-white tracking-wide">Overview360 Dashboard Visual Prototypes</h1>
           <p className="text-xs text-slate-400">
             Static visual concepts only • Not connected to production datastores, Supabase, or live state.
           </p>

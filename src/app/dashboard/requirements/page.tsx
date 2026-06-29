@@ -701,7 +701,7 @@ export default function RequirementsPage() {
       tone: 'primary',
       onConfirm: () => {
         try {
-          exportCsv(`lumen-requirements-${scope}-export-${exportDateStamp()}.csv`, requirementExportRows(rows));
+          exportCsv(`overview360-requirements-${scope}-export-${exportDateStamp()}.csv`, requirementExportRows(rows));
           setToast({ type: 'success', message: 'Requirements exported successfully.' });
         } catch (e) {
           setToast({ type: 'error', message: 'Failed to export requirements.' });
@@ -719,7 +719,7 @@ export default function RequirementsPage() {
       tone: 'primary',
       onConfirm: () => {
         try {
-          exportCsv(`lumen-actions-${scope}-export-${exportDateStamp()}.csv`, actionExportRows(rows));
+          exportCsv(`overview360-actions-${scope}-export-${exportDateStamp()}.csv`, actionExportRows(rows));
           setToast({ type: 'success', message: 'Actions exported successfully.' });
         } catch (e) {
           setToast({ type: 'error', message: 'Failed to export actions.' });

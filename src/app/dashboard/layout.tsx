@@ -375,7 +375,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       <div className="w-full bg-amber-500/10 dark:bg-amber-950/20 border-b border-amber-500/25 py-2 px-4 flex items-center justify-center gap-2 print:hidden">
         <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
         <span className="text-[11px] md:text-xs text-muted-foreground text-center leading-normal">
-          <strong>Notice:</strong> LUMÉN is an evidence repository. It <strong>does not</strong> generate legal advice, build safety templates, or certify regulatory compliance.
+          <strong>Notice:</strong> Overview360 is an evidence repository. It <strong>does not</strong> generate legal advice, build safety templates, or certify regulatory compliance.
         </span>
       </div>
 
@@ -620,7 +620,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
             <div className="space-y-1">
               <h3 className="text-base font-extrabold text-indigo-950 dark:text-indigo-50">Drop evidence files here</h3>
               <p className="text-xs text-muted-foreground">
-                Release files to start uploading securely to LUMÉN
+                Release files to start uploading securely to Overview360
               </p>
             </div>
           </div>

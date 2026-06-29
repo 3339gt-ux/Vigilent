@@ -1,13 +1,13 @@
-# Vygilence Reporting & Analytics Suite - Feature Status
+# Overview360 Reporting & Analytics Suite - Feature Status
 
-This document details the operational status of all reporting and analytics features in Vygilence, distinguishing between locally implemented client-side capabilities and deferred remote database integrations.
+This document details the operational status of all reporting and analytics features in Overview360, distinguishing between locally implemented client-side capabilities and deferred remote database integrations.
 
 ---
 
 ## 1. Implemented Features (Operational)
 
 ### 1.1 Capability Registry (Single Source of Truth)
-* **Registry Location**: [`src/lib/reportCapabilities.ts`](file:///c:/Vigilen/src/lib/reportCapabilities.ts)
+* **Registry Location**: [`src/lib/reportCapabilities.ts`](file:///c:/Overview360/src/lib/reportCapabilities.ts)
 * **Capabilities Enforced**:
   * **Requirements & Readiness**: 8 dimensions, 4 measures (Count, Readiness Rate %, Overdue Count, Avg Days Overdue), 3 date fields, 4 date buckets, 4 visuals, and 8 conditional pivot aggregations.
   * **Evidence Documents**: 7 dimensions, 3 measures (Count, Expiring Soon, Expired), 4 date fields, 4 date buckets, 3 visuals, 1 pivot aggregation.
@@ -36,7 +36,7 @@ This document details the operational status of all reporting and analytics feat
   * Grid data is fully synced with identical precision in CSV exports.
 
 ### 1.5 High-Volume Local UAT Seeding
-* **Seeder Script**: [`scripts/generate-demo-data.ts`](file:///c:/Vigilen/scripts/generate-demo-data.ts)
+* **Seeder Script**: [`scripts/generate-demo-data.ts`](file:///c:/Overview360/scripts/generate-demo-data.ts)
 * **Tested UAT Dataset Volumes**:
   * **Requirements**: 120 items
   * **Evidence Documents**: 350 files
@@ -63,7 +63,7 @@ This document details the operational status of all reporting and analytics feat
 
 ### 2.1 Remote Saved Reports Database Migration
 * **Status**: Deferred. The remote database schema (`public.saved_reports`) is not provisioned in this environment.
-* **Fail Closed Behavior**: If a production user attempts to save a database-backed report, Vygilence throws an explicit error and disables options, rather than silently falling back to client-side localStorage.
+* **Fail Closed Behavior**: If a production user attempts to save a database-backed report, Overview360 throws an explicit error and disables options, rather than silently falling back to client-side localStorage.
 
 ### 2.2 Account-Backed & Organisation-Shared Reports
 * **Status**: Disabled.

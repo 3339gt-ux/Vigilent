@@ -30,6 +30,7 @@ import {
   previewFullEvidencePackExport,
   type PackExportProgress
 } from '@/lib/evidencePackExport';
+import { productBrand } from '@/lib/brand';
 
 const previewRootDate = 'YYYY-MM-DD-HHMM';
 
@@ -805,7 +806,7 @@ export function EvidencePackBuilderSidebar() {
                   </div>
                 ) : (
                   <>
-                    <span className="text-indigo-400">LUMEN-Evidence-Pack-{sanitizePreviewName(packName)}-{previewRootDate}/</span>
+                    <span className="text-indigo-400">{productBrand.exportPrefix}-Evidence-Pack-{sanitizePreviewName(packName)}-{previewRootDate}/</span>
                     <div className="pl-4 space-y-1">
                       <div>|-- 00-Pack-Index/</div>
                       <div className="pl-4 text-zinc-400">|-- pack-summary.json</div>

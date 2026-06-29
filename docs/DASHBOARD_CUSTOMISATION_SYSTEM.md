@@ -1,6 +1,8 @@
-# LUMÉN Dashboard Customisation System
+# Overview360 Dashboard Customisation System
 
-This document describes the design, implementation, and storage mechanics of the local dashboard customisation foundation in LUMÉN (formerly Vygilence/Vigilen).
+This document describes the design, implementation, and storage mechanics of the local dashboard customisation foundation in Overview360.
+
+Some local preference keys retain earlier project-name prefixes for compatibility with existing browser settings.
 
 > [!IMPORTANT]
 > This system is currently a **local/user-level customisation foundation**, not a full organisation-wide or team-shared dashboard builder. All layout configurations, visibility choices, and styling states are stored in the user's local web browser (`localStorage`) and are specific to the logged-in user and current organization tenant.
@@ -195,7 +197,7 @@ To maintain high usability and natural page interaction, body scroll locking is 
 
 ## 6. Compliance & Data Honesty Rules
 
-LUMÉN strictly enforces data honesty in compliance visualization:
+Overview360 strictly enforces data honesty in compliance visualization:
 1. **No Fake Analytics**: The dashboard does not generate fictional trends, mock compliance scores, or fake timelines.
 2. **Honest Empty States**: If an organization has no active data or records matching a detailed widget view, the UI renders an honest empty state ("No entries recorded") instead of generating mock placeholder entries.
 3. **No Unauthenticated Leaks**: Widget configurations cannot read, write, or leak evidence files or auth contexts outside the tenant boundary.

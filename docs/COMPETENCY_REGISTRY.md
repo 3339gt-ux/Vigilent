@@ -1,6 +1,6 @@
 # Competency Registry Management
 
-This document details the architecture, capabilities, and system design of the **Competency Registry Management** module in Vygilence.
+This document details the architecture, capabilities, and system design of the **Competency Registry Management** module in Overview360.
 
 ## Overview
 The Competency module is presented as a two-tab management module:

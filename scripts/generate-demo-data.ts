@@ -135,7 +135,7 @@ export function generateDemoData() {
   // 1. Org and Profile
   const org = {
     id: '00000000-0000-0000-0000-d3e0d3e0d3e0',
-    name: 'Vygilence Demo Logistics Ltd',
+    name: 'Overview360 Demo Logistics Ltd',
     compliance_profile: 'Transport & Warehouse Logistics',
     industry: 'Logistics & Supply Chain',
     country: 'Ireland',
@@ -270,7 +270,7 @@ export function generateDemoData() {
       metadata: {
         seeded_demo: true,
         seed_batch_id: 'batch-demo-logistic-seeding',
-        demo_organisation: 'Vygilence Demo Logistics Ltd'
+        demo_organisation: 'Overview360 Demo Logistics Ltd'
       },
       created_at: new Date(Date.now() - randomRange(10, 150) * 24 * 60 * 60 * 1000).toISOString(),
       updated_at: new Date().toISOString()
@@ -674,7 +674,7 @@ export function generateDemoData() {
       metadata: {
         seeded_demo: true,
         seed_batch_id: 'batch-demo-logistic-seeding',
-        demo_organisation: 'Vygilence Demo Logistics Ltd'
+        demo_organisation: 'Overview360 Demo Logistics Ltd'
       },
       undo_available: evAction.type === 'evidence_archived' || evAction.type === 'evidence_linked',
       undo_action_type: evAction.type === 'evidence_archived' ? 'restore_evidence' : null,
@@ -735,7 +735,7 @@ export function generateDemoData() {
 
 // Running script directly via tsx
 if (require.main === module) {
-  console.log('Generating high-volume Vygilence Demo compliance data...');
+  console.log('Generating high-volume Overview360 demo compliance data...');
   const data = generateDemoData();
   
   const publicDir = path.resolve(process.cwd(), 'public');

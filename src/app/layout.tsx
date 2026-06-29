@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppProvider } from "@/context/AppContext";
+import { productBrand } from "@/lib/brand";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,10 +15,15 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LUMÉN - Audit Readiness & Evidence Intelligence Platform",
-  description: "Securely store compliance evidence, track certificate expiry dates, monitor training records, build audit packs, and identify gaps for transport and warehousing.",
-  keywords: "audit readiness, compliance evidence, fleet tracking, driver cpc, logistics compliance, warehousing audit, O-licence, MOT safety testing",
-  authors: [{ name: "LUMÉN" }],
+  title: `${productBrand.productName} - Audit Readiness & Evidence Operations`,
+  description: productBrand.description,
+  keywords: "audit readiness, evidence repository, expiry tracking, actions, requirements, reports, audit packs",
+  authors: [{ name: productBrand.productName }],
+  icons: {
+    icon: productBrand.assets.favicon,
+    shortcut: productBrand.assets.favicon,
+    apple: productBrand.assets.iconLight,
+  },
 };
 
 export const viewport = {

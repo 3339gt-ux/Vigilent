@@ -372,7 +372,7 @@ export default function SettingsPage() {
 
           <div className="space-y-4 text-xs">
             <p className="text-muted-foreground text-[11px] leading-relaxed">
-              Integrate LUMÉN tracking metrics directly into fleet logistics management systems, or import records programmatically.
+              Integrate Overview360 tracking metrics directly into fleet logistics management systems, or import records programmatically.
             </p>
 
             <div className="space-y-2">
@@ -454,9 +454,9 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Named Vygilence Themes */}
+            {/* Named legacy themes */}
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-2">LUMÉN Theme Palette</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-2">Overview360 Theme Palette</span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {(['sentinel', 'obsidian', 'emerald-watch', 'amber-beacon', 'arc-reactor', 'iron-ledger', 'vanguard'] as const).map(option => {
                   const themeNames: Record<VygilenceTheme, string> = {
