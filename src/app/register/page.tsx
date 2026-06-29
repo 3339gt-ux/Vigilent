@@ -71,7 +71,7 @@ export default function RegisterPage() {
         <div className="max-w-md w-full mx-auto space-y-6 py-8">
           <div className="flex flex-col gap-2">
             <div className="w-12 h-12 flex items-center justify-center">
-              <LumenLogo variant="auto" height={36} />
+              <LumenLogo iconOnly variant="auto" height={36} />
             </div>
             <h1 className="text-3xl font-extrabold tracking-tight mt-4" id="register-heading">
               Initialize your workspace

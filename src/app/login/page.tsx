@@ -190,7 +190,7 @@ export default function LoginPage() {
             <>
               <div className="flex flex-col gap-2">
                 <div className="w-12 h-12 flex items-center justify-center">
-                  <LumenLogo variant="auto" height={36} />
+                  <LumenLogo iconOnly variant="auto" height={36} />
                 </div>
                 <h1 className="text-3xl font-extrabold tracking-tight mt-4">
                   Set new password
@@ -275,7 +275,7 @@ export default function LoginPage() {
             <>
               <div className="flex flex-col gap-2">
                 <div className="w-12 h-12 flex items-center justify-center">
-                  <LumenLogo variant="auto" height={36} />
+                  <LumenLogo iconOnly variant="auto" height={36} />
                 </div>
                 <h1 className="text-3xl font-extrabold tracking-tight mt-4" id="login-heading">
                   Access your workspace

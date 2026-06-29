@@ -23,7 +23,7 @@ export type BrandAppearance = 'dark' | 'light' | 'midtone' | 'auto';
 export function getBrandLogoPath(variant: BrandAppearance = 'auto', iconOnly = false) {
   if (iconOnly) {
     if (variant === 'light') return productBrand.assets.iconLight;
-    if (variant === 'dark') return productBrand.assets.iconDark;
+    if (variant === 'dark' || variant === 'midtone') return productBrand.assets.iconDark;
     return productBrand.assets.icon;
   }
 

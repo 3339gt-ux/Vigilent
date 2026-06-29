@@ -393,7 +393,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 ) : (
                   <div className="flex flex-col gap-0.5">
                     <LumenLogo variant={theme} height={28} />
-                    <span className="text-[9px] text-muted-foreground block truncate pl-[34px] mt-[-4px] leading-tight">{organization.name}</span>
+                    <span className="text-[9px] text-muted-foreground block truncate pl-[50px] mt-[-4px] leading-tight">{organization.name}</span>
                   </div>
                 )}
               </div>
