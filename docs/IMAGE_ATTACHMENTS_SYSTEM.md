@@ -1,11 +1,11 @@
-# Overview360 Universal Image Attachments System
+# AssureCore Universal Image Attachments System
 
 > [!IMPORTANT]
 > **Local Testing Foundation & Remote Migration Requirements**
 > This system is built to fail-safe and run in local/demo mode (with `NEXT_PUBLIC_VIGILEN_APP_MODE=demo`) using `localStorage` metadata and base64/object URLs.
 > For production deployment, the database migration (`supabase/migrations/20260617000000_universal_image_attachments.sql`) must be applied to the remote Supabase database, and the private storage bucket `evidence-documents` must be configured. If these are not configured on the remote database, production uploads will gracefully fail-closed with a clear notification to contact an administrator.
 
-This document describes the design, implementation, and security architecture of the Universal Image Attachments system in Overview360.
+This document describes the design, implementation, and security architecture of the Universal Image Attachments system in AssureCore.
 
 ## Supported Entities & UI Status
 The database schema (`record_image_attachments`) is designed to support a wide range of entity attachments, but the UI integrations are rolled out incrementally:
@@ -64,7 +64,7 @@ All images must follow private Evidence Vault security principles.
 5. **Soft-Delete Only**: Removal of an attachment sets the `archived_at` and `archived_by` fields. Hard-deletes are restricted to database administration roles.
 
 ## Crop & Edit Capability
-Overview360 provides an interactive cropping modal via HTML Canvas:
+AssureCore provides an interactive cropping modal via HTML Canvas:
 * **Aspect Ratio Presets**:
   * `1:1` Square: Default for People avatars.
   * `4:3` Landscape: Default for Assets & checks.

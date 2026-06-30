@@ -1,6 +1,6 @@
 # Asset Assurance and Maintenance System (Asset Matrix)
 
-This document describes the design, architecture, data model, calculation engine, and integration patterns of the **Asset Matrix Assurance and Maintenance System** in Overview360.
+This document describes the design, architecture, data model, calculation engine, and integration patterns of the **Asset Matrix Assurance and Maintenance System** in AssureCore.
 
 ---
 

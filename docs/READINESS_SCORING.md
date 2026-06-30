@@ -11,7 +11,7 @@ Evidence coverage now uses explicit evidence criteria first. Legacy linked docum
 
 Coverage percentage is based on required criteria. Weighted scoring is supported through each criterion `weight`.
 
-Overview360 readiness scoring is intentionally simple and transparent.
+AssureCore readiness scoring is intentionally simple and transparent.
 
 ## Point Values
 

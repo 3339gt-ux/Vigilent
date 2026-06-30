@@ -1,6 +1,6 @@
-# Vygilence Dashboard Visual Prototype Directions
+# AssureCore Dashboard Visual Prototype Directions
 
-This document outlines the three static visual concepts created for the Vygilence dashboard, providing the design rationale, differences, alignment with user targets, and details on what would need to be wired for production.
+This document outlines the three static visual concepts created for the AssureCore dashboard, providing the design rationale, differences, alignment with user targets, and details on what would need to be wired for production.
 
 ## Purpose of the Prototype Page
 The previous attempt to redesign the dashboard directly in the live app led to usability regressions and looked too similar to the original dashboard. To prevent this, we created three isolated, high-fidelity static prototypes at `/dashboard-prototypes` to align on the visual direction before modifying the real codebase.

@@ -910,7 +910,7 @@ export default function EvidenceVault() {
   const handlePermanentDeleteDoc = async (id: string) => {
     setConfirmRequest({
       title: 'Permanently Delete Document',
-      description: 'Permanently delete this archived evidence document? This cannot be undone. Overview360 will mark the record permanently deleted, clean links, and attempt to remove the private storage object.',
+      description: 'Permanently delete this archived evidence document? This cannot be undone. AssureCore will mark the record permanently deleted, clean links, and attempt to remove the private storage object.',
       confirmLabel: 'Delete Permanently',
       tone: 'danger',
       onConfirm: async () => {
@@ -1158,7 +1158,7 @@ export default function EvidenceVault() {
       tone: 'primary',
       onConfirm: () => {
         try {
-          exportCsv(`overview360-evidence-vault-${scope}-export-${exportDateStamp()}.csv`, documentExportRows(rows));
+          exportCsv(`assurecore-evidence-vault-${scope}-export-${exportDateStamp()}.csv`, documentExportRows(rows));
           setToast({ type: 'success', message: 'Evidence documents exported successfully.' });
         } catch (e) {
           setToast({ type: 'error', message: 'Failed to export documents.' });

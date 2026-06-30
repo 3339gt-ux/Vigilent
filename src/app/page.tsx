@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useApp } from '@/context/AppContext';
-import LumenLogo from '@/components/brand/LumenLogo';
+import AssureCoreLogo from '@/components/brand/AssureCoreLogo';
 import { 
   FileCheck, 
   Table, 
@@ -44,7 +44,7 @@ export default function LandingPage() {
       <header className="sticky top-0 z-50 glass-panel border-b border-border/40 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <LumenLogo variant={theme} height={36} />
+            <AssureCoreLogo variant={theme} height={36} />
             <span className="hidden sm:inline-block px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full border border-emerald-500/20">Ready</span>
           </div>
           
@@ -108,7 +108,7 @@ export default function LandingPage() {
             </h1>
             
             <p className="max-w-2xl mx-auto text-lg sm:text-xl text-muted-foreground mb-10 leading-relaxed">
-              Overview360 is the Audit Readiness and Evidence Intelligence Platform for transport, warehousing, logistics and compliance-driven businesses.
+              AssureCore is the Audit Readiness and Evidence Intelligence Platform for transport, warehousing, logistics and compliance-driven businesses.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
@@ -135,7 +135,7 @@ export default function LandingPage() {
                 <div className="w-3 h-3 rounded-full bg-rose-500"></div>
                 <div className="w-3 h-3 rounded-full bg-amber-500"></div>
                 <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-                <div className="text-xs text-muted-foreground ml-4 select-none font-mono">https://app.overview360.com/dashboard</div>
+                <div className="text-xs text-muted-foreground ml-4 select-none font-mono">https://app.assurecore.com/dashboard</div>
               </div>
               <div className="p-6 md:p-8 bg-card/40 grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
                 {/* Simulated Readiness Score Widget */}
@@ -277,7 +277,7 @@ export default function LandingPage() {
                     Audit Readiness Interactive Calculator
                   </h2>
                   <p className="text-muted-foreground text-sm mb-6">
-                    Toggle mock certificates below to see how your readiness score recalculates. Overview360 continuously updates this across your entire fleet, personnel list, and warehouses.
+                    Toggle mock certificates below to see how your readiness score recalculates. AssureCore continuously updates this across your entire fleet, personnel list, and warehouses.
                   </p>
                   
                   <div className="space-y-3">
@@ -370,7 +370,7 @@ export default function LandingPage() {
                   Operational Guidelines & Boundaries
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Overview360 functions strictly as a document tracking database and repository system to support internal readiness audits. Please review our compliance and legal operational boundaries.
+                  AssureCore functions strictly as a document tracking database and repository system to support internal readiness audits. Please review our compliance and legal operational boundaries.
                 </p>
               </div>
             </div>
@@ -381,7 +381,7 @@ export default function LandingPage() {
                   <AlertCircle className="w-4 h-4" /> NO Legal Advice
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Overview360 is not a law firm. The system does not write, interpret, customize, or generate legal documents or statutory compliance advice. All requirements should be verified with licensed counsel.
+                  AssureCore is not a law firm. The system does not write, interpret, customize, or generate legal documents or statutory compliance advice. All requirements should be verified with licensed counsel.
                 </p>
               </div>
 
@@ -390,7 +390,7 @@ export default function LandingPage() {
                   <AlertCircle className="w-4 h-4" /> NO Safety Statements
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Overview360 does not write, generate, or compile safety policy templates, method statements, risk assessments, or health & safety guidelines. All policies must be validated by qualified safety experts.
+                  AssureCore does not write, generate, or compile safety policy templates, method statements, risk assessments, or health & safety guidelines. All policies must be validated by qualified safety experts.
                 </p>
               </div>
 
@@ -399,7 +399,7 @@ export default function LandingPage() {
                   <AlertCircle className="w-4 h-4" /> NO Claims of Compliance
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  An active readiness indicator inside Overview360 does not constitute a legal or official certification of regulatory compliance. Overview360 cannot certify fitness for licensing audits, external agency inspections, or court audits.
+                  An active readiness indicator inside AssureCore does not constitute a legal or official certification of regulatory compliance. AssureCore cannot certify fitness for licensing audits, external agency inspections, or court audits.
                 </p>
               </div>
             </div>
@@ -497,7 +497,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-foreground font-bold">
-                <LumenLogo variant={theme} height={24} />
+                <AssureCoreLogo variant={theme} height={24} />
               </div>
               <p className="max-w-[200px] leading-relaxed">
                 Continuous compliance oversight for logistics, fleet transport and warehouses.
@@ -533,9 +533,9 @@ export default function LandingPage() {
           </div>
           
           <div className="pt-8 border-t border-border/40 flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
-            <p>&copy; {new Date().getFullYear()} Overview360 Inc. All rights reserved.</p>
+            <p>&copy; {new Date().getFullYear()} AssureCore Inc. All rights reserved.</p>
             <p className="max-w-md text-[10px] leading-normal">
-              Disclaimer: Overview360 is a storage utility. It does not provide legal advice, safety reviews, or safety statement templates. Use of the software does not warrant compliance with transport, health and safety, or other regulatory audits.
+              Disclaimer: AssureCore is a storage utility. It does not provide legal advice, safety reviews, or safety statement templates. Use of the software does not warrant compliance with transport, health and safety, or other regulatory audits.
             </p>
           </div>
         </div>

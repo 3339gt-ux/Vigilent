@@ -1,6 +1,6 @@
-# Overview360 Demo Data Seeding & Reset System
+# AssureCore Demo Data Seeding & Reset System
 
-This document outlines the design, safety features, data characteristics, and execution instructions for the Overview360 demo data seeding and reset system. It is designed to safely populate local/demo environments or remote Supabase databases with high-volume, realistic compliance data for testing scale and visual layout fidelity.
+This document outlines the design, safety features, data characteristics, and execution instructions for the AssureCore demo data seeding and reset system. It is designed to safely populate local/demo environments or remote Supabase databases with high-volume, realistic compliance data for testing scale and visual layout fidelity.
 
 ---
 
@@ -10,7 +10,7 @@ The system seeds a deterministic, highly-connected compliance dataset spanning *
 
 | Module / Entity | Table Name | Target Count | Seed Identifiers / Tags |
 | :--- | :--- | :--- | :--- |
-| **Organizations** | `organizations` | 1 | ID: `00000000-0000-0000-0000-d3e0d3e0d3e0`<br>Name: `Overview360 Demo Logistics Ltd` |
+| **Organizations** | `organizations` | 1 | ID: `00000000-0000-0000-0000-d3e0d3e0d3e0`<br>Name: `AssureCore Demo Logistics Ltd` |
 | **Profiles** | `profiles` | 1 | Name: `Demo Administrator`<br>Role: `Owner` |
 | **Organization Members** | `organization_members` | 1 | Binds user `a001a001a001` to organization `d3e0d3e0d3e0` |
 | **People / Employees** | `people` | 120 | Last names suffixed with `[DEMO]` |
@@ -40,7 +40,7 @@ Seeding a remote Supabase instance requires **bypass privileges** for Row Level 
 
 ### Configuration Checklist (`.env.local`)
 ```bash
-# Overview360 Mode (Set to "demo" for browser localStorage, or "production" for Supabase)
+# AssureCore Mode (Set to "demo" for browser localStorage, or "production" for Supabase)
 NEXT_PUBLIC_VIGILEN_APP_MODE=production
 
 # Supabase target API configurations
@@ -57,8 +57,8 @@ SUPABASE_SERVICE_ROLE_KEY=your-private-service-role-key-never-share-this
 
 To protect production and client data, the CLI seeding scripts enforce **strict safety boundaries**:
 
-1. **Explicit Target Only:** Seeding and resets *only* target the organization ID `00000000-0000-0000-0000-d3e0d3e0d3e0` and the name `Overview360 Demo Logistics Ltd`.
-2. **Safety Abort Gate:** If the organization ID `d3e0d3e0d3e0` exists in the database but maps to any name *other* than `Overview360 Demo Logistics Ltd`, the script immediately exits to prevent modifying or replacing client data.
+1. **Explicit Target Only:** Seeding and resets *only* target the organization ID `00000000-0000-0000-0000-d3e0d3e0d3e0` and the name `AssureCore Demo Logistics Ltd`.
+2. **Safety Abort Gate:** If the organization ID `d3e0d3e0d3e0` exists in the database but maps to any name *other* than `AssureCore Demo Logistics Ltd`, the script immediately exits to prevent modifying or replacing client data.
 3. **No Polluting Production:** Real organization rows are untouched.
 4. **Bypassing Triggers Safely:** Immutable audit trail constraints are preserved. Demo events are inserted directly without triggering manual errors.
 

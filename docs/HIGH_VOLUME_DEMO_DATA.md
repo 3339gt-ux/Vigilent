@@ -1,6 +1,6 @@
-# Overview360 High-Volume Demo Dataset Mode
+# AssureCore High-Volume Demo Dataset Mode
 
-This document describes the design, configuration, and safety controls for the **High-Volume Demo Dataset Mode** in the Overview360 platform.
+This document describes the design, configuration, and safety controls for the **High-Volume Demo Dataset Mode** in the AssureCore platform.
 
 ## Purpose
 

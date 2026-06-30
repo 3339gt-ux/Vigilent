@@ -1,6 +1,6 @@
-# Overview360 Dashboard Customisation System
+# AssureCore Dashboard Customisation System
 
-This document describes the design, implementation, and storage mechanics of the local dashboard customisation foundation in Overview360.
+This document describes the design, implementation, and storage mechanics of the local dashboard customisation foundation in AssureCore.
 
 Some local preference keys retain earlier project-name prefixes for compatibility with existing browser settings.
 
@@ -197,7 +197,7 @@ To maintain high usability and natural page interaction, body scroll locking is 
 
 ## 6. Compliance & Data Honesty Rules
 
-Overview360 strictly enforces data honesty in compliance visualization:
+AssureCore strictly enforces data honesty in compliance visualization:
 1. **No Fake Analytics**: The dashboard does not generate fictional trends, mock compliance scores, or fake timelines.
 2. **Honest Empty States**: If an organization has no active data or records matching a detailed widget view, the UI renders an honest empty state ("No entries recorded") instead of generating mock placeholder entries.
 3. **No Unauthenticated Leaks**: Widget configurations cannot read, write, or leak evidence files or auth contexts outside the tenant boundary.

@@ -931,7 +931,7 @@ export default function BulkImportCentrePage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `overview360_${template.id}_${mode === 'example' ? 'example' : 'blank'}_template.csv`;
+    link.download = `assurecore_${template.id}_${mode === 'example' ? 'example' : 'blank'}_template.csv`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -970,7 +970,7 @@ export default function BulkImportCentrePage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `overview360_${selectedType}_validation_report.csv`;
+    link.download = `assurecore_${selectedType}_validation_report.csv`;
     document.body.appendChild(link);
     link.click();
     link.remove();

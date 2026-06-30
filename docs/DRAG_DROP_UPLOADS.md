@@ -1,6 +1,6 @@
 # Drag-And-Drop Evidence Uploads
 
-Overview360 uses a shared `EvidenceDropzone` component for drag-and-drop and multi-file upload surfaces. The component is a UI and queue layer only; it does not create a separate upload backend.
+AssureCore uses a shared `EvidenceDropzone` component for drag-and-drop and multi-file upload surfaces. The component is a UI and queue layer only; it does not create a separate upload backend.
 
 ## Supported Surfaces
 
@@ -47,7 +47,7 @@ The shared dropzone has a compact mode for drawers and matrix cells. Compact mod
 
 ## Bulk Configuration
 
-After Evidence Vault bulk upload, Overview360 opens a configuration panel where uploaded documents can be updated with:
+After Evidence Vault bulk upload, AssureCore opens a configuration panel where uploaded documents can be updated with:
 
 - title
 - category

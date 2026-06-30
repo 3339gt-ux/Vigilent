@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import LumenLogo from '@/components/brand/LumenLogo';
+import AssureCoreLogo from '@/components/brand/AssureCoreLogo';
 import { useApp } from '@/context/AppContext';
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 
@@ -71,7 +71,7 @@ export default function RegisterPage() {
         <div className="max-w-md w-full mx-auto space-y-6 py-8">
           <div className="flex flex-col gap-2">
             <div className="w-12 h-12 flex items-center justify-center">
-              <LumenLogo iconOnly variant="auto" height={36} />
+              <AssureCoreLogo iconOnly variant="auto" height={36} />
             </div>
             <h1 className="text-3xl font-extrabold tracking-tight mt-4" id="register-heading">
               Initialize your workspace
@@ -144,7 +144,7 @@ export default function RegisterPage() {
                   className="mt-1 accent-indigo-600 rounded border-border"
                 />
                 <label htmlFor="register-disclaimer-checkbox" className="text-[11px] leading-relaxed text-muted-foreground">
-                  I acknowledge and agree that Overview360 functions purely as a tracking database. It <strong>does not</strong> generate legal advice, build regulatory safety statements, or claim compliance status on behalf of my business.
+                  I acknowledge and agree that AssureCore functions purely as a tracking database. It <strong>does not</strong> generate legal advice, build regulatory safety statements, or claim compliance status on behalf of my business.
                 </label>
               </div>
             </div>
@@ -182,7 +182,7 @@ export default function RegisterPage() {
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[80px] pointer-events-none"></div>
 
         <div className="flex items-center gap-2 z-10">
-          <LumenLogo variant="official" tone="dark" height={78} />
+          <AssureCoreLogo variant="official" tone="dark" height={78} />
         </div>
 
         <div className="z-10 space-y-6 max-w-lg">
@@ -201,7 +201,7 @@ export default function RegisterPage() {
         </div>
 
         <div className="z-10 text-[10px] text-zinc-500">
-          Overview360 is currently a prototype and requires production security hardening before live use.
+          AssureCore is currently a prototype and requires production security hardening before live use.
         </div>
       </div>
     </div>

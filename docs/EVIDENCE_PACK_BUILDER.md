@@ -1,6 +1,6 @@
 # Evidence Pack Builder - Stage 3C-B Private File Export
 
-Overview360 now includes a local Evidence Pack Builder workspace that lets users collect requirements, teammates, assets, evidence metadata, and actions into a scoped draft pack.
+AssureCore now includes a local Evidence Pack Builder workspace that lets users collect requirements, teammates, assets, evidence metadata, and actions into a scoped draft pack.
 
 Stage 3C-B keeps the existing metadata ZIP export and adds a **full private-file ZIP export for local testing**.
 
@@ -106,13 +106,13 @@ If a file exceeds a limit or cannot be verified, it is excluded and recorded in 
 ## ZIP root folder
 
 ```text
-Overview360-Evidence-Pack-{safe-pack-name}-{YYYY-MM-DD-HHMM}/
+AssureCore-Evidence-Pack-{safe-pack-name}-{YYYY-MM-DD-HHMM}/
 ```
 
 ## ZIP folder structure
 
 ```text
-Overview360-Evidence-Pack-{safe-pack-name}-{YYYY-MM-DD-HHMM}/
+AssureCore-Evidence-Pack-{safe-pack-name}-{YYYY-MM-DD-HHMM}/
 |-- 00-Pack-Index/
 |   |-- pack-summary.json
 |   |-- pack-summary.csv

@@ -1,6 +1,6 @@
 # Production Readiness
 
-Overview360 is not production-ready yet. The current codebase is a prototype with explicit demo mode support and partial Supabase schema groundwork.
+AssureCore is not production-ready yet. The current codebase is a prototype with explicit demo mode support and partial Supabase schema groundwork.
 
 ## Current Gate
 
@@ -63,4 +63,4 @@ Future production variables:
 - RLS tests prove users cannot read, write, update, or delete another organization's data.
 - Storage tests prove users cannot access another organization's files.
 - Billing webhook tests prove subscription state is idempotent and cannot be spoofed from the browser.
-- Product copy review confirms Overview360 does not provide legal advice, safety advice, compliance certification, standards text, or audit-success guarantees.
+- Product copy review confirms AssureCore does not provide legal advice, safety advice, compliance certification, standards text, or audit-success guarantees.

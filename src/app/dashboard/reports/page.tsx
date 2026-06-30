@@ -1515,8 +1515,8 @@ export default function ReportsPage() {
       onConfirm: () => {
         try {
           const csvContent = [
-            [`Overview360 Compliance Report - ${reportName}`],
-            [`Workspace: ${organization?.name || 'Overview360 Demo'}`],
+            [`AssureCore Compliance Report - ${reportName}`],
+            [`Workspace: ${organization?.name || 'AssureCore Demo'}`],
             [`Generated At: ${new Date().toLocaleString()}`],
             [],
             headers,
@@ -1529,7 +1529,7 @@ export default function ReportsPage() {
           const url = URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.href = url;
-          link.setAttribute('download', `overview360-report-${reportName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${new Date().toISOString().split('T')[0]}.csv`);
+          link.setAttribute('download', `assurecore-report-${reportName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${new Date().toISOString().split('T')[0]}.csv`);
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
@@ -1576,7 +1576,7 @@ export default function ReportsPage() {
       <!doctype html>
       <html>
         <head>
-          <title>Overview360 Report - ${escapeHtml(reportName)}</title>
+          <title>AssureCore Report - ${escapeHtml(reportName)}</title>
           <style>
             body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #111827; margin: 32px; background: #fff; }
             h1 { font-size: 24px; margin-bottom: 2px; }
@@ -1592,8 +1592,8 @@ export default function ReportsPage() {
           </style>
         </head>
         <body>
-          <h1>Overview360 Readiness and Evidence Report</h1>
-          <h2>Report: ${escapeHtml(reportName)} | Workspace: ${escapeHtml(organization?.name || 'Overview360 Workspace')}</h2>
+          <h1>AssureCore Readiness and Evidence Report</h1>
+          <h2>Report: ${escapeHtml(reportName)} | Workspace: ${escapeHtml(organization?.name || 'AssureCore Workspace')}</h2>
           <p style="font-size: 11px; color: #6b7280;">
             Generated: ${escapeHtml(new Date().toLocaleString())}<br />
             Filters: category=${escapeHtml(selectedCategory)}, owner=${escapeHtml(selectedOwner)}, requirement status=${escapeHtml(selectedStatus)},
@@ -1601,7 +1601,7 @@ export default function ReportsPage() {
           </p>
           <div>${printContent}</div>
           <div class="disclaimer">
-            Reports reflect the records currently held in Overview360 and depend on the completeness and accuracy of the underlying data.
+            Reports reflect the records currently held in AssureCore and depend on the completeness and accuracy of the underlying data.
           </div>
         </body>
       </html>
@@ -3581,7 +3581,7 @@ export default function ReportsPage() {
                       const isLocal = !isPrebuilt && !!rep.savedReport.is_local;
 
                       const tagLabel = isPrebuilt
-                        ? 'Overview360 Prebuilt'
+                        ? 'AssureCore Prebuilt'
                         : (isOrg ? 'Organisation Report' : (isLocal ? 'Personal Browser Report' : 'Personal Account Report'));
 
                       const tagStyle = isPrebuilt
@@ -3762,7 +3762,7 @@ export default function ReportsPage() {
                 {/* 1. Prebuilt Reports */}
                 {filteredPrebuilt.length > 0 && (
                   <div className="space-y-3">
-                    <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">Overview360 Prebuilt Reports</h3>
+                    <h3 className="text-xs font-extrabold uppercase text-muted-foreground tracking-widest">AssureCore Prebuilt Reports</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {filteredPrebuilt.map(rep => {
                         const isFavourited = favReportIds.includes(rep.id);
@@ -4404,7 +4404,7 @@ export default function ReportsPage() {
                 <AlertTriangle className="w-3.5 h-3.5" /> Scheduling not configured
               </span>
               <p>
-                Automated report deliveries and email scheduling are currently not configured in the Overview360 platform database.
+                Automated report deliveries and email scheduling are currently not configured in the AssureCore platform database.
               </p>
               <p>
                 To share this report configuration with your team, please use the <strong className="text-foreground">Copy Share Link</strong> option to copy a deep link to their workspace dashboard instead.
@@ -4551,7 +4551,7 @@ export default function ReportsPage() {
                   Metrics Glossary & Definitions
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Calculation logic, exclusions, boundaries, and source modules for all Overview360 metrics.
+                  Calculation logic, exclusions, boundaries, and source modules for all AssureCore metrics.
                 </p>
               </div>
               <button
@@ -4651,7 +4651,7 @@ export default function ReportsPage() {
       {/* Report Trust Note */}
       <div className="pt-6 border-t border-border/60 text-center text-[10px] text-muted-foreground leading-relaxed print:block mt-8">
         <span className="font-extrabold text-indigo-650 dark:text-indigo-400 block mb-1">REPORT TRUST NOTE</span>
-        Reports reflect the records currently held in Overview360 and depend on the completeness and accuracy of the underlying data.
+        Reports reflect the records currently held in AssureCore and depend on the completeness and accuracy of the underlying data.
       </div>
 
       <ConfirmDialog request={confirmRequest} onCancel={() => setConfirmRequest(null)} />

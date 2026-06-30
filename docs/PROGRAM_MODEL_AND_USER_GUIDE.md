@@ -1,10 +1,10 @@
-# Overview360 Programme Model and User Guide
+# AssureCore Programme Model and User Guide
 
-Overview360 is an audit readiness and evidence intelligence workspace. It helps an organisation define what must be controlled, connect those controls to people and assets, store private evidence, track gaps, and prepare internal audit packs.
+AssureCore is an audit readiness and evidence intelligence workspace. It helps an organisation define what must be controlled, connect those controls to people and assets, store private evidence, track gaps, and prepare internal audit packs.
 
-Some internal legacy identifiers may still reference earlier project names for compatibility and migration safety. User-facing product copy should use Overview360.
+Some internal legacy identifiers may still reference earlier project names for compatibility and migration safety. User-facing product copy should use AssureCore.
 
-Overview360 is not a legal, safety, certification, regulator, or standards-advice system. It does not create safety statements, method statements, risk assessments, legal documents, or guaranteed audit outcomes. External frameworks, customer requirements, legal obligations, and internal procedures can be represented as source material for requirements, but Overview360 does not certify that any source has been satisfied.
+AssureCore is not a legal, safety, certification, regulator, or standards-advice system. It does not create safety statements, method statements, risk assessments, legal documents, or guaranteed audit outcomes. External frameworks, customer requirements, legal obligations, and internal procedures can be represented as source material for requirements, but AssureCore does not certify that any source has been satisfied.
 
 This report is based on inspection of the current codebase at the accepted dashboard customisation checkpoint. Key implementation evidence includes:
 
@@ -27,7 +27,7 @@ This report is based on inspection of the current codebase at the accepted dashb
 
 ## 1. Executive Summary
 
-The intended Overview360 operating model is coherent:
+The intended AssureCore operating model is coherent:
 
 Requirements define what must be controlled. People and assets are the things being controlled. Competencies, checks, reviews, procedures, and criteria are the structured controls. Evidence proves the controls. Actions fix the gaps. Reports and audit packs show readiness, proof, gaps, and traceability.
 
@@ -79,7 +79,7 @@ Requirements may come from:
 - Asset checks.
 - People and training requirements.
 
-Use external framework names only as customer-controlled source labels. Do not present Overview360 as certifying, interpreting, or guaranteeing compliance with any external framework or regulator.
+Use external framework names only as customer-controlled source labels. Do not present AssureCore as certifying, interpreting, or guaranteeing compliance with any external framework or regulator.
 
 ### Subjects
 
@@ -120,7 +120,7 @@ Examples:
 - Audit.
 - Service record.
 
-Current Overview360 controls include evidence criteria, competency types, person competency records, asset check types, asset check assignments, asset check records, reviews, and actions.
+Current AssureCore controls include evidence criteria, competency types, person competency records, asset check types, asset check assignments, asset check records, reviews, and actions.
 
 ### Evidence
 
@@ -969,13 +969,13 @@ Recommended improvements:
 
 ## 9. New User Walkthrough
 
-### What Overview360 Is
+### What AssureCore Is
 
-Overview360 is a workspace for organising operational requirements, private evidence, people competency records, asset checks, actions, reports, and internal audit packs.
+AssureCore is a workspace for organising operational requirements, private evidence, people competency records, asset checks, actions, reports, and internal audit packs.
 
-### What Overview360 Is Not
+### What AssureCore Is Not
 
-Overview360 does not give legal advice, safety advice, certification advice, or guarantees. It does not create formal safety or legal documents. It stores and organises the evidence and actions that your organisation chooses to manage.
+AssureCore does not give legal advice, safety advice, certification advice, or guarantees. It does not create formal safety or legal documents. It stores and organises the evidence and actions that your organisation chooses to manage.
 
 ### Key Concepts
 

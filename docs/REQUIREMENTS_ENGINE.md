@@ -6,7 +6,7 @@ If no criteria exist, the requirement is treated as `Not Assessed`; broad legacy
 
 ## Purpose
 
-The Requirements Framework is the standards-agnostic foundation for Overview360. It models operational things that must exist, be maintained, checked, or demonstrated without making any external framework the primary object.
+The Requirements Framework is the standards-agnostic foundation for AssureCore. It models operational things that must exist, be maintained, checked, or demonstrated without making any external framework the primary object.
 
 Future framework mapping can add tables such as:
 

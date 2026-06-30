@@ -3,8 +3,9 @@
 import React, { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import LumenLogo from '@/components/brand/LumenLogo';
+import AssureCoreLogo from '@/components/brand/AssureCoreLogo';
 import { useApp } from '@/context/AppContext';
+import { productBrand } from '@/lib/brand';
 import {
   LayoutDashboard,
   FolderLock,
@@ -289,7 +290,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
         <div className="w-12 h-12 flex items-center justify-center animate-pulse">
-          <LumenLogo iconOnly variant="auto" height={28} />
+          <AssureCoreLogo iconOnly variant="auto" height={28} />
         </div>
         <p className="text-xs text-muted-foreground font-medium animate-pulse">Checking credentials & workspace config...</p>
       </div>
@@ -375,7 +376,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       <div className="w-full bg-amber-500/10 dark:bg-amber-950/20 border-b border-amber-500/25 py-2 px-4 flex items-center justify-center gap-2 print:hidden">
         <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
         <span className="text-[11px] md:text-xs text-muted-foreground text-center leading-normal">
-          <strong>Notice:</strong> Overview360 is an evidence repository. It <strong>does not</strong> generate legal advice, build safety templates, or certify regulatory compliance.
+          <strong>Notice:</strong> {productBrand.disclaimer}
         </span>
       </div>
 
@@ -389,10 +390,10 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
             <div className={`flex ${sidebarCollapsed ? 'flex-col gap-2' : 'items-start justify-between gap-3'}`}>
               <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3 min-w-0'}`}>
                 {sidebarCollapsed ? (
-                  <LumenLogo iconOnly variant={theme} height={32} />
+                  <AssureCoreLogo iconOnly variant={theme} height={32} />
                 ) : (
                   <div className="flex flex-col gap-0.5">
-                    <LumenLogo variant={theme} height={28} />
+                    <AssureCoreLogo variant={theme} height={28} />
                     <span className="text-[9px] text-muted-foreground block truncate pl-[50px] mt-[-4px] leading-tight">{organization.name}</span>
                   </div>
                 )}
@@ -509,7 +510,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
           <header className="lg:hidden h-14 bg-card border-b border-border/80 px-4 flex items-center justify-between z-50 print:hidden">
             <div className="flex items-center gap-2">
-              <LumenLogo variant={theme} height={28} />
+              <AssureCoreLogo variant={theme} height={28} />
               <span className="text-[10px] text-muted-foreground border-l border-border pl-2 ml-1 truncate max-w-[120px]">{organization.name}</span>
             </div>
 
@@ -620,7 +621,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
             <div className="space-y-1">
               <h3 className="text-base font-extrabold text-indigo-950 dark:text-indigo-50">Drop evidence files here</h3>
               <p className="text-xs text-muted-foreground">
-                Release files to start uploading securely to Overview360
+                Release files to start uploading securely to {productBrand.productName}
               </p>
             </div>
           </div>

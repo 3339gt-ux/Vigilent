@@ -1,6 +1,6 @@
-# Overview360 Bulk Import Centre
+# AssureCore Bulk Import Centre
 
-The Bulk Import Centre is the safe foundation for importing records from existing customer systems into Overview360.
+The Bulk Import Centre is the safe foundation for importing records from existing customer systems into AssureCore.
 
 Phase 1 is deliberately preview-first. It does not write uploaded spreadsheet rows directly into live requirements, people, asset, competency, evidence, action, report, or audit-pack tables.
 
@@ -368,7 +368,7 @@ Stores each row from the uploaded file with source data, mapped data, row status
 
 ### `external_references`
 
-Stores stable source-system IDs mapped to Overview360 entity IDs. This is required for future updates, duplicate control, and rollback.
+Stores stable source-system IDs mapped to AssureCore entity IDs. This is required for future updates, duplicate control, and rollback.
 
 ## Rollback Design
 

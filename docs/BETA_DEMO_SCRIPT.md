@@ -1,6 +1,6 @@
 # Beta Demo Script
 
-Use this script for the first Overview360 beta walkthrough. Keep the demo framed as operational audit readiness, not certification or advice.
+Use this script for the first AssureCore beta walkthrough. Keep the demo framed as operational audit readiness, not certification or advice.
 
 ## Setup
 
@@ -45,10 +45,10 @@ Use this script for the first Overview360 beta walkthrough. Keep the demo framed
 
 ## Boundaries to Say Out Loud
 
-- Overview360 organises evidence and highlights operational gaps.
-- Overview360 does not provide legal advice.
-- Overview360 does not provide safety advice.
-- Overview360 does not certify compliance or guarantee audit outcomes.
+- AssureCore organises evidence and highlights operational gaps.
+- AssureCore does not provide legal advice.
+- AssureCore does not provide safety advice.
+- AssureCore does not certify compliance or guarantee audit outcomes.
 - Private evidence files are not public links.
 
 ## Close

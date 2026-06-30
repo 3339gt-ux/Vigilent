@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import LumenLogo from '@/components/brand/LumenLogo';
+import AssureCoreLogo from '@/components/brand/AssureCoreLogo';
 import { useApp } from '@/context/AppContext';
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 import { isDemoMode } from '@/lib/env';
@@ -190,7 +190,7 @@ export default function LoginPage() {
             <>
               <div className="flex flex-col gap-2">
                 <div className="w-12 h-12 flex items-center justify-center">
-                  <LumenLogo iconOnly variant="auto" height={36} />
+                  <AssureCoreLogo iconOnly variant="auto" height={36} />
                 </div>
                 <h1 className="text-3xl font-extrabold tracking-tight mt-4">
                   Set new password
@@ -275,7 +275,7 @@ export default function LoginPage() {
             <>
               <div className="flex flex-col gap-2">
                 <div className="w-12 h-12 flex items-center justify-center">
-                  <LumenLogo iconOnly variant="auto" height={36} />
+                  <AssureCoreLogo iconOnly variant="auto" height={36} />
                 </div>
                 <h1 className="text-3xl font-extrabold tracking-tight mt-4" id="login-heading">
                   Access your workspace
@@ -339,7 +339,7 @@ export default function LoginPage() {
                       className="mt-1 accent-indigo-600 rounded border-border"
                     />
                     <label htmlFor="login-disclaimer-checkbox" className="text-[11px] leading-relaxed text-muted-foreground">
-                      I acknowledge that Overview360 is an audit readiness repository and <strong>does not</strong> generate legal advice, safety statements, or formal claims of compliance.
+                      I acknowledge that AssureCore is an audit readiness repository and <strong>does not</strong> generate legal advice, safety statements, or formal claims of compliance.
                     </label>
                   </div>
                 </div>
@@ -394,7 +394,7 @@ export default function LoginPage() {
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[80px] pointer-events-none"></div>
 
         <div className="flex items-center gap-2 z-10">
-          <LumenLogo variant="official" tone="dark" height={78} />
+          <AssureCoreLogo variant="official" tone="dark" height={78} />
         </div>
 
         <div className="z-10 space-y-6 max-w-lg">
@@ -402,13 +402,13 @@ export default function LoginPage() {
             See it. Manage it.<br />Prove it.
           </h2>
           <blockquote className="border-l-2 border-indigo-500 pl-4 py-1 text-zinc-400 text-sm italic">
-            "Overview360 enabled our depot managers to track CPC cards and forklift inspections in one simple view. We entered our last audit review with clearer evidence gaps."
+            "AssureCore enabled our depot managers to track CPC cards and forklift inspections in one simple view. We entered our last audit review with clearer evidence gaps."
             <cite className="block text-xs text-zinc-500 font-semibold mt-2 not-italic">— Head of Logistics, Apex Freight Group</cite>
           </blockquote>
         </div>
 
         <div className="z-10 text-[10px] text-zinc-500">
-          Overview360 is a continuous evidence monitoring platform. Production security depends on completed Supabase Auth, RLS, and storage configuration.
+          AssureCore is a continuous evidence monitoring platform. Production security depends on completed Supabase Auth, RLS, and storage configuration.
         </div>
       </div>
     </div>

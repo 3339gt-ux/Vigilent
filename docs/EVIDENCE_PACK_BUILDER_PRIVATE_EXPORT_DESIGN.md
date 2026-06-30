@@ -242,7 +242,7 @@ These limits should be configurable in code constants, not user-editable setting
 The full export should extend the Stage 3B metadata structure.
 
 ```text
-Overview360-Evidence-Pack-{safe-pack-name}-{YYYY-MM-DD-HHMM}/
+AssureCore-Evidence-Pack-{safe-pack-name}-{YYYY-MM-DD-HHMM}/
 |-- 00-Pack-Index/
 |   |-- pack-summary.json
 |   |-- pack-summary.csv

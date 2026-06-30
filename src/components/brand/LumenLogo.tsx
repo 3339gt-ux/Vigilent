@@ -1,5 +1,5 @@
 'use client';
 
-import Overview360Logo from './Overview360Logo';
+import AssureCoreLogo from './AssureCoreLogo';
 
-export default Overview360Logo;
+export default AssureCoreLogo;
